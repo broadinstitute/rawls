@@ -1,5 +1,17 @@
 name: rawls-run-azure-e2e-tests
 
+# This workflow can be run on schedule OR dispatched (manually or by another dispatcher workflow)
+# When thw workflow is triggered on schedule, it will use the parameters specified on
+# the RHS of || in init-github-context.extract-inputs step. Otherwise, if the workflow is
+# triggered by a dispatch event, it will use the parameters specified on LHS of || in
+# the init-github-context.extract-inputs step.
+#
+# Ex.
+#
+# echo "student-subjects=${{ toJson(inputs.student-subjects || '["harry.potter@quality.firecloud.org","lavender.brown@quality.firecloud.org"]') }}" >> "$GITHUB_OUTPUT"
+#
+# On schedule: student-subjects output will use '["harry.potter@quality.firecloud.org","lavender.brown@quality.firecloud.org"]'
+# Dispatch event: student-subjects output will use inputs.student-subjects
 on:
   schedule:
     # run twice a day at 10:00 and 22:00 UTC every day of the week
@@ -18,36 +30,37 @@ on:
         type: boolean
       owner-subject:
         description: 'Owner subject (used for creating billing project in E2E testing)'
-        required: false
+        required: true
         default: 'hermione.owner@quality.firecloud.org'
         type: string
       student-subjects:
         description: 'A JSON array of Student subjects used for E2E testing'
-        required: false
+        required: true
+        default: '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]'
         type: string
       service-account:
         description: 'Email address or unique identifier of the Google Cloud service account for which to generate credentials'
-        required: false
+        required: true
         default: 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com'
         type: string
       tenant-id:
-        description: 'Azure tenant ID. The default tenant is DSP Terra Dev'
-        required: false
+        description: 'Azure tenant ID. Set the default tenant ID to match your App deployment on Azure'
+        required: true
         default: 'fad90753-2022-4456-9b0a-c7e5b934e408'
         type: string
       subscription-id:
-        description: 'Azure subscription ID. The default subscription is 8201558-dsp-azure-testing.'
+        description: 'Azure subscription ID. Set the default subscription ID to match your App deployment on Azure'
         required: false
         default: 'f557c728-871d-408c-a28b-eb6b2141a087'
         type: string
       mrg-id:
-        description: 'Azure Managed Resource Group name. The default is staticTestingMrg within subscription 8201558-dsp-azure-testing.'
-        required: false
+        description: 'Azure Managed Resource Group name. Set the default MRG to match your App deployment on Azure'
+        required: true
         default: 'staticTestingMrg'
         type: string
       landing-zone-id:
-        description: 'Landing Zone ID. An existing LZID tag within a given MRG.'
-        required: false
+        description: 'Landing Zone ID. Set the LZID to match your App deployment on Azure'
+        required: true
         default: 'f41c1a97-179b-4a18-9615-5214d79ba600'
         type: string
 
@@ -72,16 +85,16 @@ jobs:
       - name: Get inputs or use defaults
         id: extract-inputs
         run: |
-          echo "branch=${{ inputs.branch || 'develop' }}" >> "$GITHUB_OUTPUT"
-          echo "delete-bee=${{ inputs.delete-bee || false }}" >> "$GITHUB_OUTPUT"
-          echo "owner-subject=${{ inputs.owner-subject       || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
+          echo "branch=${{ inputs.branch                            || 'develop' }}" >> "$GITHUB_OUTPUT"
+          echo "delete-bee=${{ inputs.delete-bee                    || false }}" >> "$GITHUB_OUTPUT"
+          echo "owner-subject=${{ inputs.owner-subject              || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
           echo "student-subjects=${{ toJson(inputs.student-subjects || '["harry.potter@quality.firecloud.org","lavender.brown@quality.firecloud.org"]') }}" >> "$GITHUB_OUTPUT"
-          echo "service-account=${{ inputs.service-account   || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
-          ######### Update the following IDs to match the coordinates of your app deployed in Azure #########
-          echo "tenant-id=${{ inputs.tenant-id               || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
-          echo "subscription-id=${{ inputs.subscription-id   || 'f557c728-871d-408c-a28b-eb6b2141a087' }}" >> "$GITHUB_OUTPUT"
-          echo "mrg-id=${{ inputs.mrg-id                     || 'staticTestingMrg' }}" >> "$GITHUB_OUTPUT"
-          echo "landing-zone-id=${{ inputs.landing-zone-id   || 'f41c1a97-179b-4a18-9615-5214d79ba600' }}" >> "$GITHUB_OUTPUT"
+          echo "service-account=${{ inputs.service-account          || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
+          ######### Set the following IDs to match the Coordinates of your App deployment on Azure #########
+          echo "tenant-id=${{ inputs.tenant-id                      || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
+          echo "subscription-id=${{ inputs.subscription-id          || 'f557c728-871d-408c-a28b-eb6b2141a087' }}" >> "$GITHUB_OUTPUT"
+          echo "mrg-id=${{ inputs.mrg-id                            || 'staticTestingMrg' }}" >> "$GITHUB_OUTPUT"
+          echo "landing-zone-id=${{ inputs.landing-zone-id          || 'f41c1a97-179b-4a18-9615-5214d79ba600' }}" >> "$GITHUB_OUTPUT"
 
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
@@ -95,15 +108,6 @@ jobs:
       - uses: 'actions/checkout@v3'
         with:
           ref: ${{ needs.init-github-context.outputs.branch }}
-
-      - name: Configure the user subjects for the test
-        run: |
-          escapedJSON1=$(echo '${{ needs.init-github-context.outputs.student-subjects }}' | sed 's/"/\"/g')
-          echo "USER_SUBJECTS1={\"owners\": [\"${{ needs.init-github-context.outputs.owner-subject }}\"], \"students\": $escapedJSON1}" >> $GITHUB_ENV
-
-      - name: Echo user subjects used for this test
-        run: |
-          echo ${{ env.USER_SUBJECTS1 }}
 
       - name: Bump the tag to a new version
         uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
