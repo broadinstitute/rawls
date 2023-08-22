@@ -102,7 +102,6 @@ jobs:
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: |
-          echo "delete-bee=${{ needs.init-github-context.outputs.delete-bee }}"
           echo "$GITHUB_CONTEXT"
           echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
@@ -224,7 +223,7 @@ jobs:
   destroy-bee-workflow:
     runs-on: ubuntu-latest
     needs: [rawls-swat-e2e-test-job, delete-billing-project-v2-from-bee-workflow, init-github-context]
-    if: ${{ needs.init-github-context.outputs.delete-bee == 'true' }} # always run to confirm bee is destroyed unless explicitly requested not to
+    if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
