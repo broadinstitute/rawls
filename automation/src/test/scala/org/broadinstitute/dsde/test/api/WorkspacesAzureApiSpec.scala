@@ -10,7 +10,6 @@ import akka.util.ByteString
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   WorkspaceCloudPlatform,
   WorkspaceResponse,
   WorkspaceType,
@@ -169,36 +168,35 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   }
 
   it should "allow listing workspaces" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-      val workspaceName1 = generateWorkspaceName()
-      val workspaceName2 = generateWorkspaceName()
+    implicit val token = ownerAuthToken
+    val projectName = billingProject
+    val workspaceName1 = generateWorkspaceName()
+    val workspaceName2 = generateWorkspaceName()
 
-      try {
-        Rawls.workspaces.create(
-          projectName,
-          workspaceName1,
-          Set.empty,
-          Map("disableAutomaticAppCreation" -> "true")
-        )
-        Rawls.workspaces.create(
-          projectName,
-          workspaceName2,
-          Set.empty,
-          Map("disableAutomaticAppCreation" -> "true")
-        )
+    try {
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName1,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName2,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
 
-        val workspaces = Rawls.workspaces.list().parseJson.convertTo[Seq[WorkspaceListResponse]]
+      val workspaces = Rawls.workspaces.list().parseJson.convertTo[Seq[WorkspaceListResponse]]
 
-        workspaces.length shouldBe 2
-        workspaces.map(_.workspace.name).toSet shouldBe Set(workspaceName1, workspaceName2)
-      } finally {
-        Rawls.workspaces.delete(projectName, workspaceName1)
-        assertNoAccessToWorkspace(projectName, workspaceName1)
+      workspaces.length shouldBe 2
+      workspaces.map(_.workspace.name).toSet shouldBe Set(workspaceName1, workspaceName2)
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName1)
+      assertNoAccessToWorkspace(projectName, workspaceName1)
 
-        Rawls.workspaces.delete(projectName, workspaceName2)
-        assertNoAccessToWorkspace(projectName, workspaceName2)
-      }
+      Rawls.workspaces.delete(projectName, workspaceName2)
+      assertNoAccessToWorkspace(projectName, workspaceName2)
     }
   }
 

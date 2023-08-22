@@ -333,7 +333,7 @@ attachLandingZoneToBillingProject() {
     billingProject=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
     echo "Creating a billing project $billingProject and attaching landing zone (Tenant ID=$tenantId, Subscription ID=$subscriptionId, MRG=$mrgId, Landing Zone ID=$landingZoneId)"
     baseOrchUrl="https://firecloudorch.$bee.bee.envs-terra.bio"
-    echo "$hermione"
+
     apiResponse=$(curl -s -w "%{http_code}"                                   \
       -X POST "${baseOrchUrl}/api/billing/v2"                                 \
       -H 'Accept: */*'                                                        \
