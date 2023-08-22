@@ -76,7 +76,7 @@ jobs:
           echo "branch=${{ inputs.branch || 'develop' }}" >> "$GITHUB_OUTPUT"
           echo "delete-bee=${{ inputs.delete-bee || false }}" >> "$GITHUB_OUTPUT"
           echo "owner-subject=${{ inputs.owner-subject       || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
-          echo "student-subjects=${{ inputs.student-subjects || '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]' }}" >> "$GITHUB_OUTPUT"
+          echo "student-subjects=${{ inputs.student-subjects || toJson('["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]') }}" >> "$GITHUB_OUTPUT"
           echo "service-account=${{ inputs.service-account   || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
           ######### Update the following IDs to match the coordinates of your app deployed in Azure #########
           echo "tenant-id=${{ inputs.tenant-id               || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
@@ -96,6 +96,15 @@ jobs:
       - uses: 'actions/checkout@v3'
         with:
           ref: ${{ needs.init-github-context.outputs.branch }}
+
+      - name: Configure the user subjects for the test
+        run: |
+          escapedJSON1=$(echo '${{ needs.init-github-context.outputs.student-subjects }}' | sed 's/"/\"/g')
+          echo "USER_SUBJECTS1={\"owners\": [\"${{ needs.init-github-context.outputs.owner-subject }}\"], \"students\": $escapedJSON1}" >> $GITHUB_ENV
+
+      - name: Echo user subjects used for this test
+        run: |
+          echo ${{ env.USER_SUBJECTS1 }}
 
       - name: Bump the tag to a new version
         uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
