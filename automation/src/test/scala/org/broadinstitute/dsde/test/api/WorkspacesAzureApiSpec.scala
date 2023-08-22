@@ -9,7 +9,13 @@ import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  WorkspaceCloudPlatform,
+  WorkspaceResponse,
+  WorkspaceType,
+  WorkspaceListResponse
+}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
@@ -159,6 +165,40 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     } finally {
       Rawls.workspaces.delete(projectName, workspaceName)
       assertNoAccessToWorkspace(projectName, workspaceName)
+    }
+  }
+
+  it should "allow listing workspaces" in {
+    implicit val token = owner.makeAuthToken()
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName1 = generateWorkspaceName()
+      val workspaceName2 = generateWorkspaceName()
+
+      try {
+        Rawls.workspaces.create(
+          projectName,
+          workspaceName1,
+          Set.empty,
+          Map("disableAutomaticAppCreation" -> "true")
+        )
+        Rawls.workspaces.create(
+          projectName,
+          workspaceName2,
+          Set.empty,
+          Map("disableAutomaticAppCreation" -> "true")
+        )
+
+        val workspaces = Rawls.workspaces.list().parseJson.convertTo[Seq[WorkspaceListResponse]]
+
+        workspaces.length shouldBe 2
+        workspaces.map(_.workspace.name).toSet shouldBe Set(workspaceName1, workspaceName2)
+      } finally {
+        Rawls.workspaces.delete(projectName, workspaceName1)
+        assertNoAccessToWorkspace(projectName, workspaceName1)
+
+        Rawls.workspaces.delete(projectName, workspaceName2)
+        assertNoAccessToWorkspace(projectName, workspaceName2)
+      }
     }
   }
 

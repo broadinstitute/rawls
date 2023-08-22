@@ -2,16 +2,24 @@ package org.broadinstitute.dsde.rawls.bucketMigration
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
-import cats.implicits.toTraverseOps
+import cats.data.OptionT
+import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, RawlsRequestContext, WorkspaceName}
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationMetadata
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  Workspace,
+  WorkspaceName
+}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
+import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO, val gcsDAO: GoogleServicesDAO)(
@@ -20,6 +28,73 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     extends RoleSupport
     with WorkspaceSupport
     with LazyLogging {
+
+  def getBucketMigrationProgressForWorkspace(
+    workspaceName: WorkspaceName
+  ): Future[Option[MultiregionalBucketMigrationProgress]] =
+    asFCAdmin {
+      for {
+        workspace <- getV2WorkspaceContext(workspaceName)
+        res <- dataSource.inTransaction(getBucketMigrationProgress(workspace))
+      } yield res
+    }
+
+  def getBucketMigrationProgressForBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
+    asFCAdmin {
+      for {
+        workspaces <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
+        }
+        progress <- workspaces.traverse { workspace =>
+          dataSource
+            .inTransaction(getBucketMigrationProgress(workspace))
+            .recover(_ => None)
+            .map(workspace.toWorkspaceName.toString -> _)
+        }
+      } yield progress.toMap
+    }
+
+  private def getBucketMigrationProgress(
+    workspace: Workspace
+  )(dataAccess: DataAccess): ReadWriteAction[Option[MultiregionalBucketMigrationProgress]] = {
+    import dataAccess.driver.api._
+    for {
+      attemptOpt <- dataAccess.multiregionalBucketMigrationQuery
+        .getAttempt(workspace.workspaceIdAsUUID)
+        .value
+      attempt = attemptOpt.getOrElse(
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound,
+                      s"No past migration attempts found for workspace ${workspace.toWorkspaceName}"
+          )
+        )
+      )
+
+      tempTransferJob <-
+        MultiregionalStorageTransferJobs.storageTransferJobs
+          .filter(_.migrationId === attempt.id)
+          .filter(_.sourceBucket === workspace.bucketName)
+          .sortBy(_.created.desc)
+          .result
+          .headOption
+
+      finalTransferJob <-
+        MultiregionalStorageTransferJobs.storageTransferJobs
+          .filter(_.migrationId === attempt.id)
+          .filter(_.destBucket === workspace.bucketName)
+          .sortBy(_.created.desc)
+          .result
+          .headOption
+
+    } yield MultiregionalBucketMigrationProgress(
+      MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
+      attempt.outcome,
+      STSJobProgress.fromMultiregionalStorageTransferJob(tempTransferJob),
+      STSJobProgress.fromMultiregionalStorageTransferJob(finalTransferJob)
+    ).some
+  }
 
   def getBucketMigrationAttemptsForWorkspace(
     workspaceName: WorkspaceName
@@ -47,7 +122,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
               dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
             }
             .map { attempts =>
-              workspace.name -> attempts.mapWithIndex(
+              workspace.toWorkspaceName.toString -> attempts.mapWithIndex(
                 MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration
               )
             }

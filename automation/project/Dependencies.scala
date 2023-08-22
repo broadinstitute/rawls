@@ -58,7 +58,7 @@ object Dependencies {
     "io.circe"            %%  "circe-generic" % "0.14.2"  % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-97814d79a"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-3891e8393"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),
