@@ -284,11 +284,6 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       update3(migrationId, finishedCol, Some(now), outcomeCol, Some(status), messageCol, message)
     }
 
-    final def isPendingMigration(workspace: Workspace): ReadAction[Boolean] =
-      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$finishedCol is null"
-        .as[Int]
-        .map(_.head > 0)
-
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null"
         .as[Int]

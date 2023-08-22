@@ -295,7 +295,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           restartedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
         } yield (failedAttempt, restartedAttempt)
       }
-      
+
       assert(failedAttempt.value.outcome.value.isFailure)
       assert(failedAttempt.value.finished.isDefined)
 
