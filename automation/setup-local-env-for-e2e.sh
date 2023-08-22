@@ -168,11 +168,11 @@ docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN ${DSDE_TOOLBOX_DOCKER_IMAGE}     \
 
 docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN ${DSDE_TOOLBOX_DOCKER_IMAGE}     \
     vault read --format=json ${FC_ACCOUNT_PATH}                              \
-    | jq -r .data.private_key > ${TEST_RESOURCES}/firecloud-account.pem
+    | jq -r .data > ${TEST_RESOURCES}/firecloud-account.pem
 
 docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN ${DSDE_TOOLBOX_DOCKER_IMAGE}     \
     vault read --format=json ${TRIAL_BILLING_ACCOUNT_PATH}                   \
-    | jq -r .data.private_key > ${TEST_RESOURCES}/trial-billing-account.pem
+    | jq -r .data > ${TEST_RESOURCES}/trial-billing-account.pem
 
 cat << EOF > ${TEST_RESOURCES}/users.json
 {
