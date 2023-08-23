@@ -257,14 +257,50 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         for {
           a <- scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)
           b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2.toWorkspaceName)
-          attempt <- getAttempt(minimalTestData.v1Workspace.workspaceIdAsUUID).value
-          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
         }
       }
-      spec.runAndWait(scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)).id shouldBe 1
+    }
+
+  it should "error when a successfully migrated workspace is scheduled again" in
+    spec.withMinimalTestDatabase { _ =>
+      import spec.multiregionalBucketMigrationQuery.{getAttempt, setMigrationFinished}
+      spec.runAndWait(for {
+        _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+        attempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+        _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+      } yield ())
+
+      assertThrows[RawlsExceptionWithErrorReport] {
+        spec.runAndWait(
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+        )
+      }
+    }
+
+  it should "restart a failed bucket migration" in
+    spec.withMinimalTestDatabase { _ =>
+      import spec.multiregionalBucketMigrationQuery.{getAttempt, setMigrationFinished}
+      val (failedAttempt, restartedAttempt) = spec.runAndWait {
+        for {
+          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+          attempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+
+          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Failure("bucket failed"))
+          failedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+
+          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+          restartedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+        } yield (failedAttempt, restartedAttempt)
+      }
+
+      assert(failedAttempt.value.outcome.value.isFailure)
+      assert(failedAttempt.value.finished.isDefined)
+
+      restartedAttempt.value.outcome shouldBe None
+      restartedAttempt.value.finished shouldBe None
     }
 
   "updated" should "automagically get bumped to the current timestamp when the record is updated" in
