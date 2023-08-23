@@ -146,7 +146,6 @@ trait ApiServiceSpec
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   trait ApiServices
       extends AdminApiService
-      with BillingApiService
       with BillingApiServiceV2
       with EntityApiService
       with NotificationsApiService
@@ -403,7 +402,7 @@ trait ApiServiceSpec
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
       sealRoute(
-        adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
+        adminRoutes ~ billingRoutesV2 ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
           submissionRoutes ~ userRoutes ~ workspaceRoutes
       )
     }
