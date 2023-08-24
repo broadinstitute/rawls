@@ -11,6 +11,7 @@ servers:
   - url: /
 tags:
   - name: admin
+  - name: billing
   - name: billing_v2
   - name: entities
   - name: methodconfigs
@@ -72,6 +73,102 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ExecutionEngineVersion'
+  /api/billing/{projectId}/members:
+    get:
+      tags:
+        - billing
+      summary: list members of billing project
+      description: List members of billing project. Owners can view all members, users will only be able to view owners. Deprecated, use v2 version.
+      deprecated: true
+      operationId: listBillingProjectMembers
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RawlsBillingProjectMember'
+        403:
+          description: You must be a project member to view the members of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/{projectId}/{workbenchRole}/{email}:
+    put:
+      tags:
+        - billing
+      summary: add user or group to billing project the caller owns
+      description: Add user or group to billing project the caller owns. Deprecated, use v2 version.
+      deprecated: true
+      operationId: addUserToBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - $ref: '#/components/parameters/workbenchRolePathParam'
+        - name: email
+          in: path
+          description: email of user or group to add
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successfully Added User/Group To Billing Project
+          content: {}
+        403:
+          description: You must be a project owner to add a user to a billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: User not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    delete:
+      tags:
+        - billing
+      summary: remove user or group from billing project the caller owns
+      description: Remove user or group from billing project the caller owns. Deprecated, use v2 version.
+      deprecated: true
+      operationId: removeUserFromBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - $ref: '#/components/parameters/workbenchRolePathParam'
+        - name: email
+          in: path
+          description: email of user or group to remove
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successfully Removed User From Billing Project
+          content: {}
+        403:
+          description: You must be a project owner to add a user to a billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: User not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2:
     get:
       tags:
@@ -3557,9 +3654,98 @@ paths:
           content: {}
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/user/billing:
+    get:
+      tags:
+        - billing
+        - users
+      summary: list billing projects for a user
+      description: List billing projects for a user. Deprecated, use v2 version.
+      deprecated: true
+      operationId: listUserBillingProjects
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                description: list of billing projects for this user
+                items:
+                  $ref: '#/components/schemas/RawlsBillingProjectMembership'
+        404:
+          description: User not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/user/billing/{projectName}:
+    get:
+      tags:
+        - billing
+        - users
+      summary: billing project status
+      description: Billing project status. Deprecated, use v2 API.
+      deprecated: true
+      operationId: billingProjectStatus
+      parameters:
+        - name: projectName
+          in: path
+          description: Name of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectStatus'
+        404:
+          description: Project Not Found
+          content: {}
+        500:
+          description: Internal Server Error
+          content: {}
+    delete:
+      tags:
+        - billing
+        - users
+      summary: delete billing project
+      description: Delete billing project. Deprecated, use v2 version.
+      deprecated: true
+      operationId: deleteBillingProject
+      parameters:
+        - name: projectName
+          in: path
+          description: Name of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successfully delete billing project
+        400:
+          description: Project cannot be deleted because it contains workspaces.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a project owner to delete billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billingAccounts:
     get:
       tags:
+        - billing
         - users
       summary: list billing accounts for a user
       description: list billing accounts for a user
