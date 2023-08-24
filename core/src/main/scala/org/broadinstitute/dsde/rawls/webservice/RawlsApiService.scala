@@ -92,6 +92,7 @@ trait RawlsApiService
     with SubmissionApiService
     with AdminApiService
     with UserApiService
+    with BillingApiService
     with BillingApiServiceV2
     with NotificationsApiService
     with SnapshotApiService
@@ -120,7 +121,7 @@ trait RawlsApiService
   implicit val materializer: Materializer
 
   val baseApiRoutes =
-    workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+    workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 

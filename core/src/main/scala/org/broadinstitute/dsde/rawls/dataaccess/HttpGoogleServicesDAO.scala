@@ -1000,6 +1000,36 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     } yield updated
   }
 
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
+  // V2 workspace projects are managed by rawls SA but the v1 billing google projects are managed by the billing SA.
+  override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+
+    val resMgr = getCloudResourceManagerWithBillingServiceAccountCredential
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+
+    for {
+      _ <- retryWhen500orGoogleError { () =>
+        executeGoogleRequest(
+          billingManager
+            .projects()
+            .updateBillingInfo(s"projects/${googleProject.value}", new ProjectBillingInfo().setBillingEnabled(false))
+        )
+      }
+      _ <- retryWithRecoverWhen500orGoogleError { () =>
+        executeGoogleRequest(resMgr.projects().delete(googleProject.value))
+      } {
+        case e: GoogleJsonResponseException
+            if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) =>
+          new Empty()
+        // stop trying to delete an already deleted project
+      }
+    } yield {
+      // nothing
+    }
+  }
+
   /**
    * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
    * @param googleProjectId project to update

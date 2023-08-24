@@ -17,7 +17,10 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext
 }
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
-import org.broadinstitute.dsde.rawls.user.UserService.syncBillingProjectOwnerPolicyToGoogleAndGetEmail
+import org.broadinstitute.dsde.rawls.user.UserService.{
+  deleteGoogleProjectIfChild,
+  syncBillingProjectOwnerPolicyToGoogleAndGetEmail
+}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -64,7 +67,12 @@ class GoogleBillingProjectLifecycle(
 
   override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[Option[UUID]] = Future.successful(None)
+  ): Future[Option[UUID]] =
+    // Note: GoogleBillingProjectLifecycleSpec does not test that this method is called because the method
+    // lives in a companion object (which makes straight mocking impossible), and the method will be removed
+    // once workspace migration is complete. Note also that the more "integration" level test BillingApiServiceV2Spec
+    // does verify that code in this method is executed when a Google-based project is deleted.
+    deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx).map(_ => None)
 
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext

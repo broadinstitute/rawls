@@ -46,7 +46,18 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   val testConf = ConfigFactory.load()
 
-  "UserApi" should "return the list of billing accounts the user has access to" in withTestDataApiServices { services =>
+  "UserApi" should "get a valid billing project status" in withTestDataApiServices { services =>
+    val projectStatus = RawlsBillingProjectStatus(testData.billingProject.projectName, CreationStatuses.Ready)
+    Get(s"/user/billing/${projectStatus.projectName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectStatusFormat
+        assertResult(projectStatus)(responseAs[RawlsBillingProjectStatus])
+      }
+  }
+
+  it should "return the list of billing accounts the user has access to" in withTestDataApiServices { services =>
     Get("/user/billingAccounts") ~>
       sealRoute(services.userRoutes) ~>
       check {
@@ -93,6 +104,52 @@ class UserApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.userRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
+      }
+  }
+
+  it should "list a user's billing projects ordered a-z" in withTestDataApiServices { services =>
+    Get("/user/billing") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+        responseAs[List[RawlsBillingProjectMembership]] should contain theSameElementsInOrderAs List(
+          RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+          RawlsBillingProjectMembership(testData.billingProject.projectName,
+                                        ProjectRoles.Owner,
+                                        CreationStatuses.Ready
+          ),
+          RawlsBillingProjectMembership(testData.testProject2.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+          RawlsBillingProjectMembership(testData.testProject3.projectName, ProjectRoles.Owner, CreationStatuses.Ready)
+        )
+      }
+  }
+
+  it should "get 400 when workspace exists" in withTestDataApiServices { services =>
+    // Before test, verify there is a workspace exists for this billing project
+    runAndWait(workspaceQuery.countByNamespace(testData.billingProject.projectName)) should be > 0
+
+    Delete(s"/user/billing/${testData.billingProject.projectName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest)(status)
+        val responseString = Unmarshal(response.entity).to[String].futureValue
+        assert(responseString.contains("Project cannot be deleted because it contains workspaces."))
+      }
+  }
+
+  it should "delete the billing project successfully" in withTestDataApiServices { services =>
+    // No workspace exists for this billing project
+    runAndWait(workspaceQuery.countByNamespace(testData.testProject1.projectName)) shouldEqual 0
+
+    Delete(s"/user/billing/${testData.testProject1.projectName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent)(status)
+        runAndWait(rawlsBillingProjectQuery.load(testData.testProject1.projectName)) shouldBe empty
       }
   }
 

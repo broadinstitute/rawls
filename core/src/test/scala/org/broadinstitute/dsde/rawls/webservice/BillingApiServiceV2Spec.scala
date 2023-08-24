@@ -855,9 +855,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "DELETE /billing/v2/{projectName}" should "return 204 when the project can be deleted" in withEmptyDatabaseAndApiServices {
+  "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {
     services =>
       val project = createProject("project")
+      // wow there are a lot of sam calls in delete billing project
       when(
         services.samDAO.userHasAction(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -867,9 +868,43 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       ).thenReturn(Future.successful(true))
       when(
+        services.samDAO.listAllResourceMemberIds(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
+      when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))
+        .thenReturn(Future.successful("petSAJson"))
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(
+        Future.successful(
+          Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
+        )
+      )
+      when(
+        services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
+                                                    any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(Future.successful())
+      when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      )
+        .thenReturn(Future.successful())
+      when(
+        services.samDAO.deleteResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(project.googleProjectId.value),
           ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       )
@@ -882,6 +917,50 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
             status
           }
         }
+
+      verify(services.samDAO).deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
+                                                          any[RawlsRequestContext]
+      )
+      verify(services.samDAO).deleteResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+        ArgumentMatchers.eq(project.googleProjectId.value),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+  }
+  it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        ArgumentMatchers.eq(SamBillingProjectActions.deleteBillingProject),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    ).thenReturn(Future.successful(true))
+    when(
+      services.samDAO.listResourceChildren(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    )
+      .thenReturn(Future.successful(Seq.empty[SamFullyQualifiedResourceId]))
+    when(
+      services.samDAO.deleteResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    )
+      .thenReturn(Future.successful())
+
+    Delete(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.NoContent, responseAs[String]) {
+          status
+        }
+      }
 
   }
 

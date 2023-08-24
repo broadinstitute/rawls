@@ -253,6 +253,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
 
+  def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
+
   def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project]
 
   def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
