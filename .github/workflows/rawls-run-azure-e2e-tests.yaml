@@ -43,26 +43,6 @@ on:
         required: true
         default: 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com'
         type: string
-      tenant-id:
-        description: 'Azure tenant ID. Set the default tenant ID to match your App deployment on Azure'
-        required: true
-        default: 'fad90753-2022-4456-9b0a-c7e5b934e408'
-        type: string
-      subscription-id:
-        description: 'Azure subscription ID. Set the default subscription ID to match your App deployment on Azure'
-        required: false
-        default: 'f557c728-871d-408c-a28b-eb6b2141a087'
-        type: string
-      mrg-id:
-        description: 'Azure Managed Resource Group name. Set the default MRG to match your App deployment on Azure'
-        required: true
-        default: 'staticTestingMrg'
-        type: string
-      landing-zone-id:
-        description: 'Landing Zone ID. Set the LZID to match your App deployment on Azure'
-        required: true
-        default: 'f41c1a97-179b-4a18-9615-5214d79ba600'
-        type: string
 
 env:
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-dev'
@@ -77,10 +57,6 @@ jobs:
       student-subjects: ${{ steps.extract-inputs.outputs.student-subjects }}
       owner-subject: ${{ steps.extract-inputs.outputs.owner-subject }}
       service-account: ${{ steps.extract-inputs.outputs.service-account }}
-      tenant-id: ${{ steps.extract-inputs.outputs.tenant-id }}
-      subscription-id: ${{ steps.extract-inputs.outputs.subscription-id }}
-      mrg-id: ${{ steps.extract-inputs.outputs.mrg-id }}
-      landing-zone-id: ${{ steps.extract-inputs.outputs.landing-zone-id }}
     steps:
       - name: Get inputs or use defaults
         id: extract-inputs
@@ -91,10 +67,10 @@ jobs:
           echo "student-subjects=${{ toJson(inputs.student-subjects || '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]') }}" >> "$GITHUB_OUTPUT"
           echo "service-account=${{ inputs.service-account          || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
           ######### Set the following IDs to match the Coordinates of your App deployment on Azure #########
-          echo "tenant-id=${{ inputs.tenant-id                      || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
-          echo "subscription-id=${{ inputs.subscription-id          || 'f557c728-871d-408c-a28b-eb6b2141a087' }}" >> "$GITHUB_OUTPUT"
-          echo "mrg-id=${{ inputs.mrg-id                            || 'staticTestingMrg' }}" >> "$GITHUB_OUTPUT"
-          echo "landing-zone-id=${{ inputs.landing-zone-id          || 'f41c1a97-179b-4a18-9615-5214d79ba600' }}" >> "$GITHUB_OUTPUT"
+          # echo "tenant-id=${{ inputs.tenant-id                      || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
+          # echo "subscription-id=${{ inputs.subscription-id          || 'f557c728-871d-408c-a28b-eb6b2141a087' }}" >> "$GITHUB_OUTPUT"
+          # echo "mrg-id=${{ inputs.mrg-id                            || 'staticTestingMrg' }}" >> "$GITHUB_OUTPUT"
+          # echo "landing-zone-id=${{ inputs.landing-zone-id          || 'f41c1a97-179b-4a18-9615-5214d79ba600' }}" >> "$GITHUB_OUTPUT"
 
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
@@ -188,10 +164,6 @@ jobs:
           inputs: '{
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
-            "tenant-id": "${{ needs.init-github-context.outputs.tenant-id }}",
-            "subscription-id": "${{ needs.init-github-context.outputs.subscription-id }}",
-            "mrg-id": "${{ needs.init-github-context.outputs.mrg-id }}",
-            "landing-zone-id": "${{ needs.init-github-context.outputs.landing-zone-id }}",
             "billing-project-creator": "${{ needs.init-github-context.outputs.owner-subject }}",
             "service-account": "${{ needs.init-github-context.outputs.service-account }}"
           }'
