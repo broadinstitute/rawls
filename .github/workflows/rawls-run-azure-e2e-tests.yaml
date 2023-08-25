@@ -201,7 +201,7 @@ jobs:
             "test-command": "${{ env.rawls_test_command }}",
             "java-version": "17",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
-            "e2e-env": ${{ env.E2E_ENV }},
+            "e2e-env": "${{ env.E2E_ENV }}",
             "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
           }'
 
