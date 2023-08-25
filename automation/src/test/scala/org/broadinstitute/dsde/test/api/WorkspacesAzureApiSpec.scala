@@ -43,7 +43,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   implicit val system = ActorSystem()
 
   override def beforeAll(): Unit = {
-    val bee = PipelineInjector(PipelineInjector.pipelineEnv())
+    val bee = PipelineInjector(PipelineInjector.e2eEnv())
     billingProject = bee.billingProject
     bee.Owners.getUserCredential("hermione") match {
       case Some(owner) =>

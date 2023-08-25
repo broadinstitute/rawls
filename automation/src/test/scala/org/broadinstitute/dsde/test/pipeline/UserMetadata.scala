@@ -8,7 +8,7 @@ import io.circe.generic.semiauto._
   * Represents metadata associated with a user.
   *
   * @param email  The email address associated with the user.
-  * @param type   An instance of UserType (e.g., "Owner or Regular).
+  * @param type   An instance of UserType (e.g., Owner or Student).
   * @param bearer The Bearer token to assert authorization.
   *               
   * @example
@@ -22,12 +22,12 @@ import io.circe.generic.semiauto._
   *   },
   *   {
   *     "email": "harry.potter@quality.firecloud.org",
-  *     "type": "regular",
+  *     "type": "student",
   *     "bearer": "yada yada 2"
   *   },
   *   {
   *     "email": "ron.weasley@quality.firecloud.org",
-  *     "type": "regular",
+  *     "type": "student",
   *     "bearer": "yada yada 3"
   *   }
   * ]

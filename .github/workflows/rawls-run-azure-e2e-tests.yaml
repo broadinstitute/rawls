@@ -48,6 +48,7 @@ env:
   RUN_NAME_SUFFIX: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
+  E2E_ENV: 'azure_e2e.env'
 
 jobs:
   init-github-context:
@@ -200,7 +201,7 @@ jobs:
             "test-command": "${{ env.rawls_test_command }}",
             "java-version": "17",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
-            "pipeline-inject": "RAWLS_AZURE_E2E",
+            "e2e-env": ${{ env.E2E_ENV }},
             "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
           }'
 
