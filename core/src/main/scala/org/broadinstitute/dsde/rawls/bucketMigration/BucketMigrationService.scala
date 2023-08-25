@@ -2,10 +2,8 @@ package org.broadinstitute.dsde.rawls.bucketMigration
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
-import cats.data.OptionT
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
@@ -18,8 +16,8 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO, val gcsDAO: GoogleServicesDAO)(
@@ -133,61 +131,74 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
   def migrateWorkspaceBucket(workspaceName: WorkspaceName): Future[MultiregionalBucketMigrationMetadata] =
     asFCAdmin {
       logger.info(s"Scheduling Workspace '$workspaceName' for bucket migration")
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspaceName)
-      }
+      for {
+        workspaceOpt <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.findByName(workspaceName)
+        }
+        workspace = workspaceOpt.getOrElse(throw new NoSuchWorkspaceException(workspaceName.toString))
+        location <- getBucketLocation(workspace)
+
+        metadata <- dataSource.inTransaction { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
+        }
+      } yield metadata
     }
 
   def migrateAllWorkspaceBuckets(
     workspaceNames: Iterable[WorkspaceName]
   ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
     asFCAdmin {
-      dataSource
-        .inTransaction { dataAccess =>
-          for {
-            errorsOrMigrationAttempts <- workspaceNames.toList.traverse { workspaceName =>
-              MonadThrow[ReadWriteAction].attempt {
-                dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspaceName)
-              }
-            }
-          } yield errorsOrMigrationAttempts
+      for {
+        workspaces <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.listByNames(workspaceNames.toList)
         }
-        .map(raiseFailedMigrationAttempts)
+
+        res <- migrateWorkspaces(workspaces.toList)
+      } yield res
     }
 
   def migrateWorkspaceBucketsInBillingProject(
     billingProjectName: RawlsBillingProjectName
   ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
     asFCAdmin {
-      dataSource
-        .inTransaction { dataAccess =>
-          for {
-            workspaces <- dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
-            errorsOrMigrationAttempts <- workspaces.traverse { workspace =>
-              MonadThrow[ReadWriteAction].attempt {
-                dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace.toWorkspaceName)
-              }
-            }
-          } yield errorsOrMigrationAttempts
+      for {
+        workspaces <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
         }
-        .map(raiseFailedMigrationAttempts)
+
+        res <- migrateWorkspaces(workspaces.toList)
+      } yield res
     }
 
-  private def raiseFailedMigrationAttempts(
-    errorsOrMigrationAttempts: Seq[Either[Throwable, MultiregionalBucketMigrationMetadata]]
-  ): Seq[MultiregionalBucketMigrationMetadata] = {
-    val (errors, migrationAttempts) = errorsOrMigrationAttempts.partitionMap(identity)
-    if (errors.nonEmpty) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest,
-                    "One or more workspace buckets could not be scheduled for migration",
-                    errors.map(ErrorReport.apply)
+  private def migrateWorkspaces(workspaces: List[Workspace]): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
+    for {
+      workspacesWithBucketLocation <- workspaces.traverse(workspace => getBucketLocation(workspace).map(workspace -> _))
+      migrationErrorsOrAttempts <- dataSource.inTransaction { dataAccess =>
+        workspacesWithBucketLocation.traverse { case (workspace, location) =>
+          MonadThrow[ReadWriteAction].attempt {
+            dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
+          }
+        }
+      }
+    } yield {
+      val (errors, migrationAttempts) = migrationErrorsOrAttempts.partitionMap(identity)
+      if (errors.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest,
+                      "One or more workspace buckets could not be scheduled for migration",
+                      errors.map(ErrorReport.apply)
+          )
         )
-      )
-    } else {
-      migrationAttempts
+      } else {
+        migrationAttempts
+      }
     }
-  }
+
+  private def getBucketLocation(workspace: Workspace): Future[Option[String]] =
+    gcsDAO.getBucket(workspace.bucketName, workspace.googleProjectId.some).map {
+      case Left(_)       => None
+      case Right(bucket) => Option(bucket.getLocation)
+    }
 }
 
 object BucketMigrationService {

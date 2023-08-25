@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.data.OptionT
-import cats.implicits.catsSyntaxFunction1FlatMap
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferOperation
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.Success
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{unsafeFromEither, Outcome}
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationStep.MultiregionalBucketMigrationStep
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
@@ -289,22 +288,20 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         .as[Int]
         .map(_.head > 0)
 
-    final def scheduleAndGetMetadata: WorkspaceName => ReadWriteAction[MultiregionalBucketMigrationMetadata] =
-      (schedule _) >=> getMetadata
+    final def scheduleAndGetMetadata
+      : (Workspace, Option[String]) => ReadWriteAction[MultiregionalBucketMigrationMetadata] =
+      schedule(_, _).flatMap(getMetadata)
 
-    final def schedule(workspaceName: WorkspaceName): ReadWriteAction[Long] =
+    final def schedule(workspace: Workspace, location: Option[String]): ReadWriteAction[Long] =
       for {
-        workspaceOpt <- workspaceQuery.findByName(workspaceName)
-        workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt, NoSuchWorkspaceException(workspaceName))
-
         maybePastBucketMigration <- getAttempt(workspace.workspaceIdAsUUID).value
         id <- maybePastBucketMigration match {
-          case None          => scheduleFirstMigrationAttempt(workspace)
+          case None          => scheduleFirstMigrationAttempt(workspace, location)
           case Some(attempt) => restartMigrationAttempt(attempt, workspace.toWorkspaceName)
         }
       } yield id
 
-    private def scheduleFirstMigrationAttempt(workspace: Workspace): ReadWriteAction[Long] =
+    private def scheduleFirstMigrationAttempt(workspace: Workspace, location: Option[String]): ReadWriteAction[Long] =
       for {
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
@@ -318,6 +315,15 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
           new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest,
                         s"'${workspace.toWorkspaceName}' bucket cannot be migrated as it is not a Google workspace."
+            )
+          )
+        }
+
+        _ <- MonadThrow[ReadWriteAction].raiseWhen(!location.getOrElse("").equals("US")) {
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              s"workspace ${workspace.toWorkspaceName} bucket ${workspace.bucketName} is not in the US multi-region and is therefore ineligible for migration"
             )
           )
         }
