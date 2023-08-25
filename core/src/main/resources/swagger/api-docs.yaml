@@ -4021,7 +4021,7 @@ paths:
       tags:
         - workspaces_v2
       summary: Delete workspace
-      description: Starts a job to delete a workspace and all of its contents.
+      description: Starts a job to delete a workspace and all of its contents. Note that this is an in-progress API and currently unsupported.
       operationId: deleteWorkspaceV2
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
