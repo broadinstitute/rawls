@@ -136,7 +136,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           dataAccess.workspaceQuery.findByName(workspaceName)
         }
         workspace = workspaceOpt.getOrElse(throw new NoSuchWorkspaceException(workspaceName.toString))
-        (_, location) <- checkBucketLocation(workspace)
+        location <- getBucketLocation(workspace)
 
         metadata <- dataSource.inTransaction { dataAccess =>
           dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
@@ -172,7 +172,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
 
   private def migrateWorkspaces(workspaces: List[Workspace]): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
     for {
-      workspacesWithBucketLocation <- workspaces.traverse(checkBucketLocation)
+      workspacesWithBucketLocation <- workspaces.traverse(workspace => getBucketLocation(workspace).map(workspace -> _))
       migrationErrorsOrAttempts <- dataSource.inTransaction { dataAccess =>
         workspacesWithBucketLocation.traverse { case (workspace, location) =>
           MonadThrow[ReadWriteAction].attempt {
@@ -194,10 +194,10 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       }
     }
 
-  private def checkBucketLocation(workspace: Workspace): Future[(Workspace, Option[String])] =
+  private def getBucketLocation(workspace: Workspace): Future[Option[String]] =
     gcsDAO.getBucket(workspace.bucketName, workspace.googleProjectId.some).map {
-      case Left(_)       => workspace -> None
-      case Right(bucket) => workspace -> Option(bucket.getLocation)
+      case Left(_)       => None
+      case Right(bucket) => Option(bucket.getLocation)
     }
 }
 
