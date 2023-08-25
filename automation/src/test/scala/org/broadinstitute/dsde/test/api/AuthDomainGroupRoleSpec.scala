@@ -61,7 +61,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
 
@@ -120,7 +120,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
@@ -146,7 +146,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
@@ -175,13 +175,13 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
@@ -206,7 +206,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
 
@@ -238,7 +238,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
 
@@ -248,7 +248,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
@@ -276,7 +276,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             Sam.user.addUserToPolicy(groupName, GroupRole.Member.toString, student.email)(projectOwnerToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
 
@@ -309,14 +309,14 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Gr
             Sam.user.addUserToPolicy(groupName, GroupRole.Member.toString, student.email)(projectOwnerToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
 
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+            Rawls.billingV2.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
               projectOwnerToken
             )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
