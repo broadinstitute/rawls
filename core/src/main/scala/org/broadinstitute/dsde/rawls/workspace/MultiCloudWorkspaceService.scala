@@ -116,7 +116,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         case RawlsWorkspace => workspaceService.deleteWorkspace(workspaceName)
         case McWorkspace    => deleteMultiCloudWorkspace(workspace)
       }
-    } yield result.gcpContext.flatMap(_.bucketName)
+    } yield result.gcpContext.map(_.bucketName)
 
   def deleteMultiCloudOrRawlsWorkspaceV2(workspaceName: WorkspaceName,
                                          workspaceService: WorkspaceService
@@ -129,7 +129,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
 
       _ = workspace.state match {
-        case WorkspaceState.Ready => true
+        case WorkspaceState.Ready | WorkspaceState.CreateFailed | WorkspaceState.DeleteFailed | WorkspaceState.UpdateFailed => true
         case WorkspaceState.Deleting =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.Conflict, "Workspace is already being deleted.")

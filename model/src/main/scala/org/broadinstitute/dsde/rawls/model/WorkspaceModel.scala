@@ -148,7 +148,7 @@ object WorkspaceVersions {
     )
 }
 
-case class GcpWorkspaceDeletionContext(bucketName: Option[String])
+case class GcpWorkspaceDeletionContext(bucketName: String)
 case class WorkspaceDeletionResult(
   // TODO this is optional for backwards-compatibility with our existing synchronous deletion code
   // once we move fully async, make non-optional
@@ -158,7 +158,7 @@ case class WorkspaceDeletionResult(
 
 object WorkspaceDeletionResult {
   def fromGcpBucketName(bucketName: String) =
-    WorkspaceDeletionResult(None, Some(GcpWorkspaceDeletionContext(Some(bucketName))))
+    WorkspaceDeletionResult(None, Some(GcpWorkspaceDeletionContext(bucketName)))
 }
 
 case class WorkspaceRequest(

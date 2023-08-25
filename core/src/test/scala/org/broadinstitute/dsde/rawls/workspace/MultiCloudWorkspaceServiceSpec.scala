@@ -1354,7 +1354,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           lastModified = DateTime.now,
           createdBy = "fake",
           attributes = Map.empty,
-          WorkspaceState.CreateFailed
+          WorkspaceState.Creating
         )
         Await.result(insertWorkspaceWithBillingProject(testData.azureBillingProject, alreadyDeletingWs), Duration.Inf)
 
