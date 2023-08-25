@@ -52,6 +52,10 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     when(mockSamDAO.getUserStatus(adminCtx))
       .thenReturn(Future.successful(Some(SamUserStatusResponse("userId", adminUser, true))))
 
+    val bucket = mock[Bucket]
+    when(bucket.getLocation).thenReturn("US")
+    when(mockGcsDAO.getBucket(any(), any())(any())).thenReturn(Future.successful(Right(bucket)))
+
     BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(adminCtx)
   }
 
