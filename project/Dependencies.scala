@@ -68,7 +68,7 @@ object Dependencies {
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.28.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.46"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
-  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.9.0"
+  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.15" % "test"
@@ -81,14 +81,14 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.1.0"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "85a080a"
+  val workbenchLibsHash = "e42c23c"
 
-  val workbenchModelV  = s"0.18-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.27-${workbenchLibsHash}"
-  val workbenchNotificationsV = s"0.5-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.30-${workbenchLibsHash}"
-  val workbenchOauth2V = s"0.4-${workbenchLibsHash}"
-  val workbenchOpenTelemetryV = s"0.5-$workbenchLibsHash"
+  val workbenchModelV  = s"0.19-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.29-${workbenchLibsHash}"
+  val workbenchNotificationsV = s"0.6-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.32-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.5-${workbenchLibsHash}"
+  val workbenchOpenTelemetryV = s"0.6-$workbenchLibsHash"
 
   def excludeWorkbenchGoogle = ExclusionRule("org.broadinstitute.dsde.workbench", "workbench-google_2.13")
 
@@ -106,7 +106,7 @@ object Dependencies {
 
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.2" % "test"
 
-  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.9-${workbenchLibsHash}"
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
 

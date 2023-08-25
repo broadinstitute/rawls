@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.unsafe.implicits.global
-import cats.implicits.{catsSyntaxApply, catsSyntaxOptionId, toFoldableOps}
+import cats.implicits.{catsSyntaxApplyOps, catsSyntaxOptionId, toFoldableOps}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
