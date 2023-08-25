@@ -136,10 +136,10 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           dataAccess.workspaceQuery.findByName(workspaceName)
         }
         workspace = workspaceOpt.getOrElse(throw new NoSuchWorkspaceException(workspaceName.toString))
-        _ <- checkBucketLocation(workspace)
+        (_, location) <- checkBucketLocation(workspace)
 
         metadata <- dataSource.inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace)
+          dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
         }
       } yield metadata
     }
@@ -172,16 +172,16 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
 
   private def migrateWorkspaces(workspaces: List[Workspace]): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
     for {
-      _ <- workspaces.traverse(checkBucketLocation)
-      errorsOrMigrationAttempts <- dataSource.inTransaction { dataAccess =>
-        workspaces.traverse { workspace =>
+      workspacesWithBucketLocation <- workspaces.traverse(checkBucketLocation)
+      migrationErrorsOrAttempts <- dataSource.inTransaction { dataAccess =>
+        workspacesWithBucketLocation.traverse { case (workspace, location) =>
           MonadThrow[ReadWriteAction].attempt {
-            dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace)
+            dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
           }
         }
       }
     } yield {
-      val (errors, migrationAttempts) = errorsOrMigrationAttempts.partitionMap(identity)
+      val (errors, migrationAttempts) = migrationErrorsOrAttempts.partitionMap(identity)
       if (errors.nonEmpty) {
         throw new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest,
@@ -194,22 +194,10 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       }
     }
 
-  private def checkBucketLocation(workspace: Workspace): Future[Unit] =
+  private def checkBucketLocation(workspace: Workspace): Future[(Workspace, Option[String])] =
     gcsDAO.getBucket(workspace.bucketName, workspace.googleProjectId.some).map {
-      case Left(_) =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.NotFound,
-                      s"workspace ${workspace.toWorkspaceName} bucket ${workspace.bucketName} not found"
-          )
-        )
-      case Right(bucket) =>
-        if (!bucket.getLocation.equals("US"))
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              s"workspace ${workspace.toWorkspaceName} bucket ${workspace.bucketName} is not in the US multi-region and is therefore ineligible for migration"
-            )
-          )
+      case Left(_)       => workspace -> None
+      case Right(bucket) => workspace -> Option(bucket.getLocation)
     }
 }
 
