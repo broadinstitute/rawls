@@ -45,7 +45,8 @@ on:
         type: string
 
 env:
-  BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-dev'
+  RUN_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
 
 jobs:
@@ -101,7 +102,11 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
-          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+          inputs: '{
+            "repository": "${{ github.event.repository.full_name }}",
+            "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
+            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
+          }'
 
       - name: Render Rawls version
         id: render-rawls-version
@@ -162,6 +167,7 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
+            "run-name": "${{ env.RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "billing-project-creator": "${{ needs.init-github-context.outputs.owner-subject }}",
@@ -191,6 +197,7 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
+            "run-name": "${{ env.RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
@@ -199,7 +206,6 @@ jobs:
             "java-version": "17",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "pipeline-inject": "RAWLS_AZURE_E2E",
-            "service-account": "${{ needs.init-github-context.outputs.service-account }}",
             "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
           }'
 
@@ -216,6 +222,7 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
+            "run-name": "${{ env.RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "billing-project-owner": "${{ needs.init-github-context.outputs.owner-subject }}",
