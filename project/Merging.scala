@@ -15,7 +15,7 @@ object Merging {
     case PathList("javax", "ws", "rs", _ @_*)                  => MergeStrategy.first
     case "version.conf"                                        => MergeStrategy.concat
     case "logback.xml"                                         => MergeStrategy.first
-    case x if x.endsWith("kotlin_module")                      => MergeStrategy.preferProject
+    case x if x.endsWith("kotlin_module")                      => MergeStrategy.first
     case x if x.endsWith("io.netty.versions.properties")       => MergeStrategy.concat
     case x if x.endsWith("arrow-git.properties")               => MergeStrategy.concat
     case x                                                     => oldStrategy(x)
