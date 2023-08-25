@@ -45,7 +45,7 @@ on:
         type: string
 
 env:
-  RUN_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  RUN_NAME_SUFFIX: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
 
@@ -67,11 +67,6 @@ jobs:
           echo "owner-subject=${{ inputs.owner-subject              || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
           echo "student-subjects=${{ toJson(inputs.student-subjects || '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]') }}" >> "$GITHUB_OUTPUT"
           echo "service-account=${{ inputs.service-account          || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
-          ######### Set the following IDs to match the Coordinates of your App deployment on Azure #########
-          # echo "tenant-id=${{ inputs.tenant-id                      || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
-          # echo "subscription-id=${{ inputs.subscription-id          || 'f557c728-871d-408c-a28b-eb6b2141a087' }}" >> "$GITHUB_OUTPUT"
-          # echo "mrg-id=${{ inputs.mrg-id                            || 'staticTestingMrg' }}" >> "$GITHUB_OUTPUT"
-          # echo "landing-zone-id=${{ inputs.landing-zone-id          || 'f41c1a97-179b-4a18-9615-5214d79ba600' }}" >> "$GITHUB_OUTPUT"
 
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
@@ -167,7 +162,7 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "${{ env.RUN_NAME }}",
+            "run-name": "attach-landing-zone-to-bee-${{ env.RUN_NAME_SUFFIX }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "billing-project-creator": "${{ needs.init-github-context.outputs.owner-subject }}",
@@ -197,7 +192,7 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "${{ env.RUN_NAME }}",
+            "run-name": "rawls-swat-tests-${{ env.RUN_NAME_SUFFIX }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
@@ -222,7 +217,7 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "${{ env.RUN_NAME }}",
+            "run-name": "delete-billing-project-v2-from-bee-${{ env.RUN_NAME_SUFFIX }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "billing-project-owner": "${{ needs.init-github-context.outputs.owner-subject }}",
