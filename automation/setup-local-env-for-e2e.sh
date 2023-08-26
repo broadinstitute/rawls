@@ -43,7 +43,7 @@ set -e
 
 SCRIPT_DIR=$(pwd)
 
-echo "export SCRIPT_DIR=\"${SCRIPT_DIR}\"" > e2e.env
+echo "export SCRIPT_DIR=\"${SCRIPT_DIR}\"" > ${TEST_RESOURCES}/e2e.env
 
 # Required values
 usersEnv=""
@@ -151,8 +151,8 @@ fi
 
 TEST_RESOURCES="${SCRIPT_DIR}/src/test/resources"
 
-echo "export PIPELINE_ENV=${usersEnv}" >> e2e.env
-echo "export BEE_ENV=\"${bee}\"" >> e2e.env
+echo "export E2E_ENV=${usersEnv}" >> ${TEST_RESOURCES}/e2e.env
+echo "export BEE_ENV=\"${bee}\"" >> ${TEST_RESOURCES}/e2e.env
 
 VAULT_TOKEN=$(cat $HOME/.vault-token)
 DSDE_TOOLBOX_DOCKER_IMAGE=broadinstitute/dsde-toolbox:latest
@@ -232,49 +232,49 @@ FC_ID=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN                         \
     vault read --format=json ${FC_SECRETS_PATH}                             \
     | jq -r .data.firecloud_id)
 
-echo "export FC_ID=${FC_ID}" >> e2e.env
+echo "export FC_ID=${FC_ID}" >> ${TEST_RESOURCES}/e2e.env
 
 QA_EMAIL=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN                      \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${FC_USERS_PATH}                               \
     | jq -r .data.service_acct_email)
 
-echo "export QA_EMAIL=${QA_EMAIL}" >> e2e.env
+echo "export QA_EMAIL=${QA_EMAIL}" >> ${TEST_RESOURCES}/e2e.env
 
 TRIAL_BILLING_CLIENT_ID=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN       \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${TRIAL_BILLING_ACCOUNT_PATH}                  \
     | jq -r .data.client_email)
 
-echo "export TRIAL_BILLING_CLIENT_ID=${TRIAL_BILLING_CLIENT_ID}" >> e2e.env
+echo "export TRIAL_BILLING_CLIENT_ID=${TRIAL_BILLING_CLIENT_ID}" >> ${TEST_RESOURCES}/e2e.env
 
 ORCH_STORAGE_SIGNING_SA=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN       \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${RAWLS_ACCOUNT_PATH}                          \
     | jq -r .data.client_email)
 
-echo "export ORCH_STORAGE_SIGNING_SA=${ORCH_STORAGE_SIGNING_SA}" >> e2e.env
+echo "export ORCH_STORAGE_SIGNING_SA=${ORCH_STORAGE_SIGNING_SA}" >> ${TEST_RESOURCES}/e2e.env
 
 BILLING_ACCOUNT_ID=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN            \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${FC_SECRETS_PATH}                             \
     | jq -r .data.trial_billing_account)
 
-echo "export BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}" >> e2e.env
+echo "export BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}" >> ${TEST_RESOURCES}/e2e.env
 
 AUTO_USERS_PASSWD=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN             \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${FC_USERS_PATH}                                    \
     | jq -r .data.automation_users_passwd)
 
-echo "export AUTO_USERS_PASSWD=${AUTO_USERS_PASSWD}" >> e2e.env
+echo "export AUTO_USERS_PASSWD=${AUTO_USERS_PASSWD}" >> ${TEST_RESOURCES}/e2e.env
 
 USERS_PASSWD=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN                  \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${FC_USERS_PATH}                                    \
     | jq -r .data.users_passwd)
 
-echo "export USERS_PASSWD=${USERS_PASSWD}" >> e2e.env
+echo "export USERS_PASSWD=${USERS_PASSWD}" >> ${TEST_RESOURCES}/e2e.env
 
 # Function to obtain user tokens
 obtainUserTokens() {
@@ -326,7 +326,7 @@ obtainUserTokens() {
       exit 1
     fi
 
-    echo "export $usersEnv=\"${USERS_METADATA_JSON_B64}\"" >> e2e.env
+    echo "export $usersEnv=\"${USERS_METADATA_JSON_B64}\"" >> ${TEST_RESOURCES}/e2e.env
 }
 
 attachLandingZoneToBillingProject() {
@@ -404,7 +404,7 @@ attachLandingZoneToBillingProject() {
       fi
     fi
 
-    echo "export BILLING_PROJECT=\"${billingProject}\"" >> e2e.env
+    echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/e2e.env
 }
 
 obtainUserTokens
@@ -412,10 +412,10 @@ obtainUserTokens
 if [ -z "$billingProject" ]; then
   attachLandingZoneToBillingProject
 else
-  echo "export BILLING_PROJECT=\"${billingProject}\"" >> e2e.env
+  echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/e2e.env
 fi
 
-source e2e.env
+source ${TEST_RESOURCES}/e2e.env
 
 # Read the template file and perform the substitution
 template="application.bee.conf.template"

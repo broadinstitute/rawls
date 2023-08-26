@@ -238,6 +238,7 @@ jobs:
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{ "bee-name": "${{ env.BEE_NAME }}" }'
+          wait-for-completion: false
 
   notify-slack-on-failure:
     runs-on: ubuntu-latest
