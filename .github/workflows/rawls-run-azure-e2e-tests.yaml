@@ -44,6 +44,7 @@ on:
         default: 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com'
         type: string
 
+# E2E_ENV is the name of a .env file that contains envvars for E2E tests
 env:
   RUN_NAME_SUFFIX: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
@@ -174,15 +175,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [init-github-context, create-bee-workflow, params-gen, attach-landing-zone-to-bee-workflow]
     steps:
-      - name: 'Pull Azure Coordinates from cache'
-        uses: actions/download-artifact@v3
-        with:
-          name: azure-coordinates-cache-attach-landing-zone-to-bee-${{ env.RUN_NAME_SUFFIX }}
-
-      - name: 'Find azure_coordinates.env'
-        run: |
-          ls -l
-
       - name: Configure the user subjects for the test
         run: |
           escapedJSON=$(echo '${{ needs.init-github-context.outputs.student-subjects }}' | sed 's/"/\"/g')
