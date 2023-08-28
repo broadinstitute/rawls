@@ -11,20 +11,20 @@
 #
 # Use Case 1 (Create a random billing project and attach it to default Landing Zone):
 #
-# $0 --usersEnv USERS_METADATA_B64 --bee rawls-593017852-dev-1
+# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-dev-1
 #
 # Replace rawls-593017852-dev-1 with the name of an existing BEE environment you want your tests to run against
 #
 # Use Case 2 (Reuse a billing project that already exists in the BEE environment):
 #
-# $0 --usersEnv USERS_METADATA_B64 --bee rawls-593017852-dev-1 --billingProject tmp-billing-project-44302a2c-5
+# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-dev-1 --billingProject tmp-billing-project-44302a2c-5
 #
 # Replace rawls-593017852-dev-1 with the name of an existing BEE environment you want your tests to run against
 # Replace tmp-billing-project-44302a2c-5 with the name of a valid billing project in the BEE environment
 #
 # Use Case 3 (Create a random billing project and attach it to new Landing Zone):
 #
-# $0 --usersEnv USERS_METADATA_B64 --bee rawls-593017852-dev-1 \
+# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-dev-1 \
 #    --tenantId fad90753-2022-4456-9b0a-c7e5b934e408           \
 #    --subscriptionId f557c728-871d-408c-a28b-eb6b2141a087     \
 #    --mrgId staticTestingMrg                                  \
@@ -32,24 +32,25 @@
 #
 # Replace rawls-593017852-dev-1 with the name of an existing BEE environment you want your tests to run against
 # Replace (tenantId, subscriptionId, mrgId, landingZoneId) with new coordinates
+# Please refer to https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
 #
 # This script generates a e2e.env file. You can run tests locally as follows.
 #
-# source e2e.env
+# source ${TEST_RESOURCES}/$e2eEnv
 # sbt "testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest"
 #
 
 set -e
 
 SCRIPT_DIR=$(pwd)
-
-echo "export SCRIPT_DIR=\"${SCRIPT_DIR}\"" > ${TEST_RESOURCES}/e2e.env
+TEST_RESOURCES=${SCRIPT_DIR}/src/test/resources
 
 # Required values
-usersEnv=""
+e2eEnv=""
 bee=""
 # Optional values
 billingProject=""
+# Azure Coordinates can be found here: https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
 tenantId="fad90753-2022-4456-9b0a-c7e5b934e408"
 subscriptionId="f557c728-871d-408c-a28b-eb6b2141a087"
 mrgId="staticTestingMrg"
@@ -57,8 +58,8 @@ landingZoneId="f41c1a97-179b-4a18-9615-5214d79ba600"
 
 # Function to display usage/help message
 usage() {
-    echo "Usage: $0 --usersEnv <value> --bee <value> [--billingProject <value>] [--tenantId <value>] [--subscriptionId <value>] [--landingZoneId <value>]"
-    echo "  --usersEnv: The name of the environment variable that stores the Base64-encoded User Data in JSON format (ex: [{\"email\":\"hermione.owner@quality.firecloud.org\",\"type\":\"owner\",\"bearer\":\"yadayada\"},{\"email\":\"harry.potter@quality.firecloud.org\",\"type\":\"student\",\"bearer\":\"yadayada2\"}])."
+    echo "Usage: $0 --e2eEnv <value> --bee <value> [--billingProject <value>] [--tenantId <value>] [--subscriptionId <value>] [--landingZoneId <value>]"
+    echo "  --e2eEnv: The name of the .env file that contains envvars for E2E tests (e.g. The Base64-encoded User Data in JSON format (ex: [{\"email\":\"hermione.owner@quality.firecloud.org\",\"type\":\"owner\",\"bearer\":\"yadayada\"},{\"email\":\"harry.potter@quality.firecloud.org\",\"type\":\"student\",\"bearer\":\"yadayada2\"}]) is stored in USERS_METADATA_B64 envvar."
     echo "  --bee: The name of an existing BEE environment."
     echo "  --billingProject: The name of an existing billing project in the given BEE environment. If not specified, a random billing project will be created and attached to the landing zone (optional: the attachLandingZoneToBillingProject method will be skipped, the landing zone must already been attached to the specified billing project)."
     echo "  --tenantId: Azure tenant ID (optional, default: fad90753-2022-4456-9b0a-c7e5b934e408)."
@@ -71,20 +72,20 @@ usage() {
     echo "#"
     echo "# Use Case 1 (Create a random billing project and attach it to default Landing Zone):"
     echo "#"
-    echo "# $0 --usersEnv USERS_METADATA_B64 --bee rawls-593017852-1-dev"
+    echo "# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-1-dev"
     echo "#"
     echo "# Replace rawls-593017852-1-dev with the name of an existing BEE environment you want your tests to run against"
     echo "#"
     echo "# Use Case 2 (Reuse a billing project that already exists in the BEE environment):"
     echo "#"
-    echo "# $0 --usersEnv USERS_METADATA_B64 --bee rawls-593017852-1-dev --billingProject tmp-billing-project-44302a2c-5"
+    echo "# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-1-dev --billingProject tmp-billing-project-44302a2c-5"
     echo "#"
     echo "# Replace rawls-593017852-1-dev with the name of an existing BEE environment you want your tests to run against"
     echo "# Replace tmp-billing-project-44302a2c-5 with the name of a valid billing project in the BEE environment"
     echo "#"
     echo "# Use Case 3 (Create a random billing project and attach it to new Landing Zone):"
     echo "#"
-    echo "# $0 --usersEnv USERS_METADATA_B64 --bee rawls-593017852-1-dev \\"
+    echo "# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-1-dev \\"
     echo "#    --tenantId fad90753-2022-4456-9b0a-c7e5b934e408           \\"
     echo "#    --subscriptionId f557c728-871d-408c-a28b-eb6b2141a087     \\"
     echo "#    --mrgId staticTestingMrg                                  \\"
@@ -92,10 +93,11 @@ usage() {
     echo "#"
     echo "# Replace rawls-593017852-1-dev with the name of an existing BEE environment you want your tests to run against"
     echo "# Replace (tenantId, subscriptionId, mrgId, landingZoneId) with new coordinates"
+    echo "# Please refer to https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml"
     echo "#"
-    echo "# This script generates a e2e.env file. You can run tests locally as follows."
+    echo "# This script generates a \$e2eEnv file. You can run tests locally as follows."
     echo "#"
-    echo "# source e2e.env"
+    echo "# source ${TEST_RESOURCES}/\$e2eEnv"
     echo "# sbt \"testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest\""
     echo "#"
     exit 1
@@ -104,8 +106,8 @@ usage() {
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --usersEnv)
-            usersEnv="$2"
+        --e2eEnv)
+            e2eEnv="$2"
             shift 2
             ;;
         --bee)
@@ -143,16 +145,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check if required arguments are provided
-if [ -z "$usersEnv" ] || [ -z "$bee" ]; then
-    echo "Usage: $0 --usersEnv <value> --bee <value> [--tenantId <value>] [--subscriptionId <value>] [--mrgId <value>] [--landingZoneId <value>]"
+if [ -z "$e2eEnv" ] || [ -z "$bee" ]; then
+    echo "Usage: $0 --e2eEnv <value> --bee <value> [--tenantId <value>] [--subscriptionId <value>] [--mrgId <value>] [--landingZoneId <value>]"
     echo "Use '$0 --help' to see all available options."
     exit 1
 fi
 
-TEST_RESOURCES="${SCRIPT_DIR}/src/test/resources"
-
-echo "export E2E_ENV=${usersEnv}" >> ${TEST_RESOURCES}/e2e.env
-echo "export BEE_ENV=\"${bee}\"" >> ${TEST_RESOURCES}/e2e.env
+echo "export SCRIPT_DIR=\"${SCRIPT_DIR}\"" > ${TEST_RESOURCES}/$e2eEnv
+echo "export E2E_ENV=${e2eEnv}" >> ${TEST_RESOURCES}/$e2eEnv
+echo "export BEE_ENV=\"${bee}\"" >> ${TEST_RESOURCES}/$e2eEnv
 
 VAULT_TOKEN=$(cat $HOME/.vault-token)
 DSDE_TOOLBOX_DOCKER_IMAGE=broadinstitute/dsde-toolbox:latest
@@ -232,49 +233,49 @@ FC_ID=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN                         \
     vault read --format=json ${FC_SECRETS_PATH}                             \
     | jq -r .data.firecloud_id)
 
-echo "export FC_ID=${FC_ID}" >> ${TEST_RESOURCES}/e2e.env
+echo "export FC_ID=${FC_ID}" >> ${TEST_RESOURCES}/$e2eEnv
 
 QA_EMAIL=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN                      \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${FC_USERS_PATH}                               \
     | jq -r .data.service_acct_email)
 
-echo "export QA_EMAIL=${QA_EMAIL}" >> ${TEST_RESOURCES}/e2e.env
+echo "export QA_EMAIL=${QA_EMAIL}" >> ${TEST_RESOURCES}/$e2eEnv
 
 TRIAL_BILLING_CLIENT_ID=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN       \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${TRIAL_BILLING_ACCOUNT_PATH}                  \
     | jq -r .data.client_email)
 
-echo "export TRIAL_BILLING_CLIENT_ID=${TRIAL_BILLING_CLIENT_ID}" >> ${TEST_RESOURCES}/e2e.env
+echo "export TRIAL_BILLING_CLIENT_ID=${TRIAL_BILLING_CLIENT_ID}" >> ${TEST_RESOURCES}/$e2eEnv
 
 ORCH_STORAGE_SIGNING_SA=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN       \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${RAWLS_ACCOUNT_PATH}                          \
     | jq -r .data.client_email)
 
-echo "export ORCH_STORAGE_SIGNING_SA=${ORCH_STORAGE_SIGNING_SA}" >> ${TEST_RESOURCES}/e2e.env
+echo "export ORCH_STORAGE_SIGNING_SA=${ORCH_STORAGE_SIGNING_SA}" >> ${TEST_RESOURCES}/$e2eEnv
 
 BILLING_ACCOUNT_ID=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN            \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
     vault read --format=json ${FC_SECRETS_PATH}                             \
     | jq -r .data.trial_billing_account)
 
-echo "export BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}" >> ${TEST_RESOURCES}/e2e.env
+echo "export BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}" >> ${TEST_RESOURCES}/$e2eEnv
 
 AUTO_USERS_PASSWD=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN             \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
-    vault read --format=json ${FC_USERS_PATH}                                    \
+    vault read --format=json ${FC_USERS_PATH}                               \
     | jq -r .data.automation_users_passwd)
 
-echo "export AUTO_USERS_PASSWD=${AUTO_USERS_PASSWD}" >> ${TEST_RESOURCES}/e2e.env
+echo "export AUTO_USERS_PASSWD=${AUTO_USERS_PASSWD}" >> ${TEST_RESOURCES}/$e2eEnv
 
 USERS_PASSWD=$(docker run --rm -e VAULT_TOKEN=$VAULT_TOKEN                  \
     ${DSDE_TOOLBOX_DOCKER_IMAGE}                                            \
-    vault read --format=json ${FC_USERS_PATH}                                    \
+    vault read --format=json ${FC_USERS_PATH}                               \
     | jq -r .data.users_passwd)
 
-echo "export USERS_PASSWD=${USERS_PASSWD}" >> ${TEST_RESOURCES}/e2e.env
+echo "export USERS_PASSWD=${USERS_PASSWD}" >> ${TEST_RESOURCES}/$e2eEnv
 
 # Function to obtain user tokens
 obtainUserTokens() {
@@ -326,7 +327,7 @@ obtainUserTokens() {
       exit 1
     fi
 
-    echo "export $usersEnv=\"${USERS_METADATA_JSON_B64}\"" >> ${TEST_RESOURCES}/e2e.env
+    echo "export USERS_METADATA_B64=\"${USERS_METADATA_JSON_B64}\"" >> ${TEST_RESOURCES}/$e2eEnv
 }
 
 attachLandingZoneToBillingProject() {
@@ -404,7 +405,7 @@ attachLandingZoneToBillingProject() {
       fi
     fi
 
-    echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/e2e.env
+    echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/$e2eEnv
 }
 
 obtainUserTokens
@@ -412,10 +413,10 @@ obtainUserTokens
 if [ -z "$billingProject" ]; then
   attachLandingZoneToBillingProject
 else
-  echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/e2e.env
+  echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/$e2eEnv
 fi
 
-source ${TEST_RESOURCES}/e2e.env
+source ${TEST_RESOURCES}/$e2eEnv
 
 # Read the template file and perform the substitution
 template="application.bee.conf.template"
