@@ -342,6 +342,9 @@ trait WorkspaceComponent {
     ): ReadAction[Option[Workspace]] =
       loadWorkspace(findByNameQuery(workspaceName), attributeSpecs)
 
+    def listByNames(workspaceNames: List[WorkspaceName]): ReadAction[Seq[Workspace]] =
+      loadWorkspaces(findByNamesQuery(workspaceNames))
+
     def findV2WorkspaceByName(workspaceName: WorkspaceName,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =
@@ -538,6 +541,9 @@ trait WorkspaceComponent {
 
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
+
+    private def findByNamesQuery(workspaceNames: List[WorkspaceName]): WorkspaceQueryType =
+      filter(rec => rec.name.inSetBind(workspaceNames.map(_.name)) && rec.namespace.inSetBind(workspaceNames.map(_.namespace)))
 
     private def findV2WorkspaceByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec =>
