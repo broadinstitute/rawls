@@ -196,7 +196,6 @@ jobs:
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "rawls-swat-tests-${{ env.RUN_NAME_SUFFIX }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
