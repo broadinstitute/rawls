@@ -540,7 +540,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .map(_.memberEmails)
 
   // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
-  def deleteWorkspace(workspaceName: WorkspaceName): Future[Option[String]] =
+  def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] =
     traceWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
         traceWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap { maybeMcWorkspace =>
@@ -631,7 +631,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
-  ): Future[Option[String]] =
+  ): Future[WorkspaceDeletionResult] =
     for {
       _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
@@ -755,8 +755,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
 
       if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-        Option(workspaceContext.bucketName)
-      } else None
+        WorkspaceDeletionResult.fromGcpBucketName(workspaceContext.bucketName)
+      } else WorkspaceDeletionResult(None, None)
     }
 
   private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
