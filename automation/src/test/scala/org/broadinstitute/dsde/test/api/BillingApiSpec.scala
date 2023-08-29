@@ -10,12 +10,7 @@ import org.scalatest.matchers.should.Matchers
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
 @BillingsTest
-class BillingApiSpec
-  extends AnyFreeSpec
-    with MethodFixtures
-    with Matchers
-    with TestReporterFixture
-    with LazyLogging {
+class BillingApiSpec extends AnyFreeSpec with MethodFixtures with Matchers with TestReporterFixture with LazyLogging {
 
   "A user with a billing account" - {
     "can create a new billing project with v2 api" in {

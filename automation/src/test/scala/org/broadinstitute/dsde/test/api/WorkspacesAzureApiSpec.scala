@@ -12,9 +12,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   WorkspaceCloudPlatform,
+  WorkspaceListResponse,
   WorkspaceResponse,
-  WorkspaceType,
-  WorkspaceListResponse
+  WorkspaceType
 }
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
