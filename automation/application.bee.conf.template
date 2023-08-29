@@ -1,17 +1,8 @@
 # To run against a local UI, set baseUrl = "http://local.broadinstitute.org/"
-
-
-
-
-
-
-
-
-
 fireCloud {
   baseUrl = "https://firecloudui.${BEE_ENV}.bee.envs-terra.bio/"
 
-  
+
   orchApiUrl = "https://firecloudorch.${BEE_ENV}.bee.envs-terra.bio/"
   rawlsApiUrl = "https://rawls.${BEE_ENV}.bee.envs-terra.bio/"
   samApiUrl = "https://sam.${BEE_ENV}.bee.envs-terra.bio/"
