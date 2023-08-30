@@ -923,7 +923,9 @@ object MultiregionalBucketMigrationActor {
       _ <- inTransaction { _ =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.sourceBucket, job.googleProject))
-          .insert((transferJob.getName, migration.id, dstBucket.value, srcBucket.value, workspace.googleProjectId.value.some))
+          .insert(
+            (transferJob.getName, migration.id, dstBucket.value, srcBucket.value, workspace.googleProjectId.value.some)
+          )
       }
     } yield transferJob
 
@@ -940,7 +942,11 @@ object MultiregionalBucketMigrationActor {
       operation <- liftF {
         import OptionT.{fromOption, liftF}
         for {
-          job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, transferJob.googleProject.getOrElse(googleProject)))
+          job <- liftF(
+            storageTransferService.getTransferJob(transferJob.jobName,
+                                                  transferJob.googleProject.getOrElse(googleProject)
+            )
+          )
           operationName <- fromOption[IO](Option(job.getLatestOperationName))
           if !operationName.isBlank
           operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
@@ -1045,7 +1051,9 @@ object MultiregionalBucketMigrationActor {
           }
           _ <- liftIO {
             for {
-              serviceAccount <- storageTransferService.getStsServiceAccount(transferJob.googleProject.getOrElse(googleProject))
+              serviceAccount <- storageTransferService.getStsServiceAccount(
+                transferJob.googleProject.getOrElse(googleProject)
+              )
               serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
               _ <- storageService
@@ -1055,7 +1063,7 @@ object MultiregionalBucketMigrationActor {
                       StorageRole.ObjectViewer -> serviceAccountList
                   ),
                   bucketSourceOptions =
-                    if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(transferJob.googleProject.getOrElse(googleProject).value))
+                    if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
                     else List.empty
                 )
                 .compile
