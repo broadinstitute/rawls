@@ -1144,7 +1144,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield Succeeded
     }
 
-  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
+  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets in the workspace's Google project" in
     runMigrationTest {
       for {
         // just need a unique migration id
@@ -1170,6 +1170,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.migrationId shouldBe migration.id
         transferJob.sourceBucket shouldBe workspaceBucketName
         transferJob.destBucket shouldBe tmpBucketName
+        transferJob.googleProject shouldBe Option(GoogleProject(testData.workspace.googleProjectId.value))
       }
     }
 
