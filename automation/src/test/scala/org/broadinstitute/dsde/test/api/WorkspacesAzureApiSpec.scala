@@ -11,9 +11,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
   WorkspaceCloudPlatform,
+  WorkspaceListResponse,
   WorkspaceResponse,
-  WorkspaceType,
-  WorkspaceListResponse
+  WorkspaceType
 }
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.service.test.CleanUp

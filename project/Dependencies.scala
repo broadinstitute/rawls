@@ -71,7 +71,7 @@ object Dependencies {
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.15" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.16" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
@@ -126,10 +126,10 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.885-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.890-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.181-SNAPSHOT")
+  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.185-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.93-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-d606036")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-8740f99-SNAP"

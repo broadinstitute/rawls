@@ -6,6 +6,7 @@ import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -384,6 +385,9 @@ trait WorkspaceComponent {
           }
       }
 
+    def updateState(workspaceId: UUID, state: WorkspaceState): WriteAction[Int] =
+      findByIdQuery(workspaceId).map(_.state).update(state.toString)
+
     def updateLastModified(workspaceId: UUID) = {
       val currentTime = new Timestamp(new Date().getTime)
       findByIdQuery(workspaceId).map(_.lastModified).update(currentTime)
@@ -543,7 +547,9 @@ trait WorkspaceComponent {
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
 
     private def findByNamesQuery(workspaceNames: List[WorkspaceName]): WorkspaceQueryType =
-      filter(rec => rec.name.inSetBind(workspaceNames.map(_.name)) && rec.namespace.inSetBind(workspaceNames.map(_.namespace)))
+      filter(rec =>
+        rec.name.inSetBind(workspaceNames.map(_.name)) && rec.namespace.inSetBind(workspaceNames.map(_.namespace))
+      )
 
     private def findV2WorkspaceByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec =>
