@@ -1,9 +1,13 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.datarepo.model.{DatasetSummaryModel, SnapshotModel, SnapshotSourceModel}
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.mock.MockDataRepoDAO
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceDescriptionField,
   DataReferenceName,
@@ -72,13 +76,16 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
             .attributes(new DataRepoSnapshotAttributes())
         )
 
+      val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
       val workspace = minimalTestData.workspace
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         mockSamDAO,
         mockWorkspaceManagerDAO,
-        "fake-terra-data-repo-dev"
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
       )(testContext)
 
       Await.result(
@@ -136,13 +143,15 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
             .attributes(new DataRepoSnapshotAttributes())
         )
 
+      val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
       val workspace = minimalTestData.workspace
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         mockSamDAO,
         mockWorkspaceManagerDAO,
-        "fake-terra-data-repo-dev"
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
       )(testContext)
 
       val snapshotUUID = UUID.randomUUID()
@@ -490,11 +499,14 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         resList
       }
 
+    val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
     SnapshotService.constructor(
       slickDataSource,
       mockSamDAO,
       mockWorkspaceManagerDAO,
-      "fake-terra-data-repo-dev"
+      "fake-terra-data-repo-dev",
+      mockDataRepoDAO
     )(testContext)
 
   }

@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   SnapshotListResponse,
+  Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceName
 }
@@ -20,6 +22,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 
 import java.util.UUID
 import scala.annotation.tailrec
+import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
@@ -28,16 +31,18 @@ object SnapshotService {
   def constructor(dataSource: SlickDataSource,
                   samDAO: SamDAO,
                   workspaceManagerDAO: WorkspaceManagerDAO,
-                  terraDataRepoUrl: String
+                  terraDataRepoUrl: String,
+                  dataRepoDAO: DataRepoDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SnapshotService =
-    new SnapshotService(ctx, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl)
+    new SnapshotService(ctx, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl, dataRepoDAO)
 }
 
 class SnapshotService(protected val ctx: RawlsRequestContext,
                       val dataSource: SlickDataSource,
                       val samDAO: SamDAO,
                       workspaceManagerDAO: WorkspaceManagerDAO,
-                      terraDataRepoInstanceName: String
+                      terraDataRepoInstanceName: String,
+                      dataRepoDAO: DataRepoDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends FutureSupport
     with WorkspaceSupport
@@ -53,6 +58,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       if (!workspaceStubExists(wsid, ctx)) {
         workspaceManagerDAO.createWorkspace(wsid, ctx)
       }
+      validateProtectedStatus(workspaceContext, snapshot)
       // create the requested snapshot reference
       val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(wsid,
                                                                             snapshot.snapshotId,
@@ -63,6 +69,19 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                                                                             ctx
       )
       Future.successful(snapshotRef)
+    }
+
+  def validateProtectedStatus(workspaceContext: Workspace, snapshot: NamedDataRepoSnapshot): Unit =
+    // logically it might make more sense to check if the snapshot is protected before the workspace
+    // but that is a more expensive check
+    // check if workspace is protected
+    if (!workspaceContext.bucketName.startsWith("fc-secure")) {
+      // if not, check if snapshot is protected
+      val sources = dataRepoDAO.getSnapshot(snapshot.snapshotId, ctx.userInfo.accessToken).getSource
+      sources.filter(source => source.getDataset.isSecureMonitoringEnabled) match {
+        case Nil => // this is fine
+        case _   => throw new RawlsException("Unable to add protected snapshot to unprotected workspace.")
+      }
     }
 
   def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {

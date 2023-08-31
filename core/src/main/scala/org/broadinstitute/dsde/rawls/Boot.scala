@@ -510,7 +510,8 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        conf.getString("dataRepo.terraInstanceName")
+        conf.getString("dataRepo.terraInstanceName"),
+        dataRepoDAO
       )
 
       val spendReportingBigQueryService =
