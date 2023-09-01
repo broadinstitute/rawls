@@ -71,6 +71,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       Future.successful(snapshotRef)
     }
 
+  // Ideally this would rely on Terra Policy Service, but until TPS is enabled for GCP
+  // We'll have to use this workaround for identifying protected status
   def validateProtectedStatus(workspaceContext: Workspace, snapshot: NamedDataRepoSnapshot): Unit =
     // logically it might make more sense to check if the snapshot is protected before the workspace
     // but that is a more expensive check
@@ -78,9 +80,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     if (!workspaceContext.bucketName.startsWith("fc-secure")) {
       // if not, check if snapshot is protected
       val sources = dataRepoDAO.getSnapshot(snapshot.snapshotId, ctx.userInfo.accessToken).getSource
-      if(sources.exists(_.getDataset.isSecureMonitoringEnabled)) {
+      if (sources.exists(_.getDataset.isSecureMonitoringEnabled)) {
         throw new RawlsException("Unable to add protected snapshot to unprotected workspace.")
-      }
       }
     }
 
