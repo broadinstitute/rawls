@@ -78,9 +78,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     if (!workspaceContext.bucketName.startsWith("fc-secure")) {
       // if not, check if snapshot is protected
       val sources = dataRepoDAO.getSnapshot(snapshot.snapshotId, ctx.userInfo.accessToken).getSource
-      sources.filter(source => source.getDataset.isSecureMonitoringEnabled) match {
-        case Nil => // this is fine
-        case _   => throw new RawlsException("Unable to add protected snapshot to unprotected workspace.")
+      if(sources.exists(_.getDataset.isSecureMonitoringEnabled)) {
+        throw new RawlsException("Unable to add protected snapshot to unprotected workspace.")
+      }
       }
     }
 
