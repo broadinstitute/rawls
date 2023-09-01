@@ -80,7 +80,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   }
 
   it should "allow access to WorkspaceManager API" in {
-    // implicit val token = owner.makeAuthToken()
     implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 

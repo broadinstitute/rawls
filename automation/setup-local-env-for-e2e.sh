@@ -330,7 +330,7 @@ obtainUserTokens() {
     echo "export USERS_METADATA_B64=\"${USERS_METADATA_JSON_B64}\"" >> ${TEST_RESOURCES}/$e2eEnv
 }
 
-attachLandingZoneToBillingProject() {
+attachBillingProjectToLandingZone() {
     billingProject=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
     echo "Creating a billing project $billingProject and attaching landing zone (Tenant ID=$tenantId, Subscription ID=$subscriptionId, MRG=$mrgId, Landing Zone ID=$landingZoneId)"
     baseOrchUrl="https://firecloudorch.$bee.bee.envs-terra.bio"
@@ -411,7 +411,7 @@ attachLandingZoneToBillingProject() {
 obtainUserTokens
 
 if [ -z "$billingProject" ]; then
-  attachLandingZoneToBillingProject
+  attachBillingProjectToLandingZone
 else
   echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/$e2eEnv
 fi
