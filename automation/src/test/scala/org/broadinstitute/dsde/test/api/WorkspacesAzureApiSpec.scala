@@ -214,8 +214,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       response.workspace.name should be(workspaceName)
       response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
 
-      // nonOwner is not a member of the workspace, should not be able to write
-      // val userToken = nonOwner.makeAuthToken()
       val userToken = nonOwnerAuthToken
       eventually {
         intercept[Exception] {
