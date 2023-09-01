@@ -315,7 +315,7 @@ class HttpWorkspaceManagerDAOSpec
     val workspaceApi = mock[WorkspaceApi]
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
-    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, testContext)
+    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, UUID.randomUUID().toString, testContext)
 
     verify(workspaceApi).deleteWorkspaceV2(any[DeleteWorkspaceV2Request],
                                            ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID)

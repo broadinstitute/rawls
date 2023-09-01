@@ -514,7 +514,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       // kick off the deletion job w/WSM
       deletionJobResult <- traceWithParent("deleteWorkspaceInWSM", ctx)(_ =>
-        Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, ctx))
+        Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, UUID.randomUUID().toString, ctx))
       )
       deletionJobId = deletionJobResult.getJobReport.getId
       _ <- traceWithParent("pollWorkspaceDeletionInWSM", ctx) { _ =>

@@ -267,7 +267,7 @@ class MockWorkspaceManagerDAO(
 
   override def throwWhenUnavailable(): Unit = ()
 
-  override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult =
+  override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
     new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString))
 
   override def getDeleteWorkspaceV2Result(workspaceId: UUID,

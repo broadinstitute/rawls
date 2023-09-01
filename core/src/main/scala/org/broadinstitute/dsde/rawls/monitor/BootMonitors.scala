@@ -8,12 +8,7 @@ import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
-import org.broadinstitute.dsde.rawls.coordination.{
-  CoordinatedDataSourceAccess,
-  CoordinatedDataSourceActor,
-  DataSourceAccess,
-  UncoordinatedDataSourceAccess
-}
+import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
@@ -21,23 +16,15 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{
-  MethodConfigResolver,
-  SubmissionMonitorConfig,
-  SubmissionSupervisor,
-  WorkflowSubmissionActor
-}
+import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor, PpwWorkspaceMigrationActor}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
-  BPMBillingProjectDeleteRunner,
-  CloneWorkspaceContainerRunner,
-  LandingZoneCreationStatusRunner
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{BPMBillingProjectDeleteRunner, CloneWorkspaceContainerRunner, LandingZoneCreationStatusRunner}
 import org.broadinstitute.dsde.rawls.util
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
@@ -68,6 +55,8 @@ object BootMonitors extends LazyLogging {
                    importServiceDAO: HttpImportServiceDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
                    billingProfileManagerDAO: BillingProfileManagerDAO,
+                   leonardoDAO: LeonardoDAO,
+                   workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -215,7 +204,9 @@ object BootMonitors extends LazyLogging {
       samDAO,
       workspaceManagerDAO,
       billingProfileManagerDAO,
-      gcsDAO
+      gcsDAO,
+      leonardoDAO,
+      workspaceRepository
     )
 
     startFastPassMonitor(system, conf, slickDataSource, googleIamDAO, googleStorageDAO)
@@ -437,7 +428,9 @@ object BootMonitors extends LazyLogging {
     samDAO: SamDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     billingProfileManagerDAO: BillingProfileManagerDAO,
-    gcsDAO: GoogleServicesDAO
+    gcsDAO: GoogleServicesDAO,
+    leonardoDAO: LeonardoDAO,
+    workspaceRepository: WorkspaceRepository
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
@@ -446,6 +439,7 @@ object BootMonitors extends LazyLogging {
         config,
         dataSource,
         Map(
+          JobType.WorkspaceDelete -> new WorkspaceDeletionRunner(samDAO, workspaceManagerDAO, workspaceRepository, leonardoDAO, gcsDAO, system),
           JobType.AzureLandingZoneResult ->
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->

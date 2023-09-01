@@ -18,5 +18,4 @@ case class WorkspaceManagerResourceMonitorRecordDao(dataSource: SlickDataSource)
 
   def delete(job: WorkspaceManagerResourceMonitorRecord): Future[Boolean] =
     dataSource.inTransaction(_.WorkspaceManagerResourceMonitorRecordQuery.delete(job))
-
 }

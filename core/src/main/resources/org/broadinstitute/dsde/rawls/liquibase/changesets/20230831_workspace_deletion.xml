@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_WORKSPACE_DELETION_HISTORY">
+        <createTable tableName="WORKSPACE_DELETION_HISTORY"
+                     remarks="Records the history and progress of workspace deletion attempts">
+            <column name="ID" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="WORKSPACE_ID"
+                    type="BINARY(16)"
+                    remarks="ID of the WORKSPACE being deleted.">
+                <constraints nullable="false"/>
+            </column>
+            <column name="APP_DELETION_STARTED"
+                    type="DATETIME"
+                    remarks="When the system started the deletion of workspace apps">
+                <constraints nullable="true"/>
+            </column>
+            <column name="APP_DELETION_FINISHED"
+                    type="DATETIME"
+                    remarks="When the system finished the deletion of workspace apps">
+                <constraints nullable="true"/>
+            </column>
+            <column name="RUNTIME_DELETION_STARTED"
+                    type="DATETIME"
+                    remarks="When the system started the deletion of workspace runtimes">
+                <constraints nullable="true"/>
+            </column>
+            <column name="RUNTIME_DELETION_FINISHED"
+                    type="DATETIME"
+                    remarks="When the system finished the deletion of workspace runtimes">
+                <constraints nullable="true"/>
+            </column>
+            <column name="WSM_DELETION_STARTED"
+                    type="DATETIME"
+                    remarks="When the system started the deletion of WSM records">
+                <constraints nullable="true"/>
+            </column>
+            <column name="WSM_DELETION_FINISHED"
+                    type="DATETIME"
+                    remarks="When the system finished the deletion of WSM records">
+                <constraints nullable="true"/>
+            </column>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>
