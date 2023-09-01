@@ -152,16 +152,16 @@ jobs:
           project_name=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
           echo "project_name=${project_name}" >> $GITHUB_OUTPUT
 
-  # Azure Coordinates are defined in the following workflow:
+  # Azure Managed App Coordinates are defined in the following workflow:
   #   https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
-  attach-landing-zone-to-bee-workflow:
+  attach-billing-project-to-landing-zone-workflow:
     runs-on: ubuntu-latest
     needs: [init-github-context, create-bee-workflow, params-gen]
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
-          workflow: attach-landing-zone-to-bee.yaml
+          workflow: attach-billing-project-to-landing-zone.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
@@ -175,7 +175,7 @@ jobs:
 
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
-    needs: [init-github-context, create-bee-workflow, params-gen, attach-landing-zone-to-bee-workflow]
+    needs: [init-github-context, create-bee-workflow, params-gen, attach-billing-project-to-landing-zone-workflow]
     steps:
       - name: Configure the user subjects for the test
         run: |
