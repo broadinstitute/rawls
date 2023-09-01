@@ -2012,6 +2012,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
     val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")
     val v1WsName2 = WorkspaceName(billingProject.projectName.value, "myV1Workspace2")
+    val adWsName = WorkspaceName(billingProject.projectName.value, "myADWorkspace")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
@@ -2086,7 +2087,17 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       WorkspaceType.RawlsWorkspace,
       WorkspaceState.Ready
     )
-
+    val adWorkspace = Workspace(
+      adWsName.namespace,
+      adWsName.name,
+      UUID.randomUUID().toString,
+      "fc-secure-bucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "testUser",
+      Map.empty
+    )
     override def save() =
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
@@ -2094,6 +2105,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         // TODO (CA-1235): Remove these after PPW Migration is complete
         workspaceQuery.createOrUpdate(v1Workspace),
         workspaceQuery.createOrUpdate(v1Workspace2),
+        workspaceQuery.createOrUpdate(adWorkspace),
         rawlsBillingProjectQuery.create(billingProject)
       )
   }

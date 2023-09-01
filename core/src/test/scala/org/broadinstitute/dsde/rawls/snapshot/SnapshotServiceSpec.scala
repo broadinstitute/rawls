@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{DatasetSummaryModel, SnapshotModel, SnapshotSourceModel}
 import bio.terra.workspace.model._
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -11,13 +12,11 @@ import org.broadinstitute.dsde.rawls.mock.MockDataRepoDAO
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceDescriptionField,
   DataReferenceName,
-  GoogleProjectId,
   NamedDataRepoSnapshot,
   RawlsRequestContext,
   SamResourceAction,
   SamResourceTypeNames,
-  SamUserStatusResponse,
-  UserInfo
+  SamUserStatusResponse
 }
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -79,6 +78,190 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
 
       val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      Await.result(
+        snapshotService.createSnapshot(workspace.toWorkspaceName,
+                                       NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                                             Option(DataReferenceDescriptionField("foo")),
+                                                             UUID.randomUUID()
+                                       )
+        ),
+        Duration.Inf
+      )
+
+      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(
+        any[UUID],
+        any[UUID],
+        any[DataReferenceName],
+        any[Option[DataReferenceDescriptionField]],
+        any[String],
+        any[CloningInstructionsEnum],
+        any[RawlsRequestContext]
+      )
+    }
+
+    "not create a protected snapshot reference in an unprotected workspace" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                 any[String],
+                                 any[SamResourceAction],
+                                 any[RawlsRequestContext]
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        mockSamDAO.getUserStatus(any[RawlsRequestContext])
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
+
+      val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        mockWorkspaceManagerDAO.createDataRepoSnapshotReference(
+          any[UUID],
+          any[UUID],
+          any[DataReferenceName],
+          any[Option[DataReferenceDescriptionField]],
+          any[String],
+          any[CloningInstructionsEnum],
+          any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(
+          new DataRepoSnapshotResource()
+            .metadata(
+              new ResourceMetadata()
+                .resourceId(UUID.randomUUID())
+                .workspaceId(UUID.randomUUID())
+                .name("foo")
+                .description("")
+                .cloningInstructions(CloningInstructionsEnum.NOTHING)
+            )
+            .attributes(new DataRepoSnapshotAttributes())
+        )
+
+      val mockDataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
+      when(
+        mockDataRepoDAO.getSnapshot(
+          any[UUID],
+          any[OAuth2BearerToken]
+        )
+      )
+        .thenReturn(
+          new SnapshotModel()
+            .id(java.util.UUID.randomUUID())
+            .name("snapshot")
+            .description("snapshot description")
+            .source(
+              java.util.List
+                .of(new SnapshotSourceModel().dataset(new DatasetSummaryModel().secureMonitoringEnabled(true)))
+            )
+        )
+
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      intercept[RawlsException] {
+        Await.result(
+          snapshotService.createSnapshot(workspace.toWorkspaceName,
+                                         NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                                               Option(DataReferenceDescriptionField("foo")),
+                                                               UUID.randomUUID()
+                                         )
+          ),
+          Duration.Inf
+        )
+      }
+
+      verify(mockWorkspaceManagerDAO, times(0)).createDataRepoSnapshotReference(
+        any[UUID],
+        any[UUID],
+        any[DataReferenceName],
+        any[Option[DataReferenceDescriptionField]],
+        any[String],
+        any[CloningInstructionsEnum],
+        any[RawlsRequestContext]
+      )
+    }
+
+    "create a protected snapshot reference in a protected workspace" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                 any[String],
+                                 any[SamResourceAction],
+                                 any[RawlsRequestContext]
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        mockSamDAO.getUserStatus(any[RawlsRequestContext])
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
+
+      val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        mockWorkspaceManagerDAO.createDataRepoSnapshotReference(
+          any[UUID],
+          any[UUID],
+          any[DataReferenceName],
+          any[Option[DataReferenceDescriptionField]],
+          any[String],
+          any[CloningInstructionsEnum],
+          any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(
+          new DataRepoSnapshotResource()
+            .metadata(
+              new ResourceMetadata()
+                .resourceId(UUID.randomUUID())
+                .workspaceId(UUID.randomUUID())
+                .name("foo")
+                .description("")
+                .cloningInstructions(CloningInstructionsEnum.NOTHING)
+            )
+            .attributes(new DataRepoSnapshotAttributes())
+        )
+
+      val mockDataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
+      when(
+        mockDataRepoDAO.getSnapshot(
+          any[UUID],
+          any[OAuth2BearerToken]
+        )
+      )
+        .thenReturn(
+          new SnapshotModel()
+            .id(java.util.UUID.randomUUID())
+            .name("snapshot")
+            .description("snapshot description")
+            .source(
+              java.util.List
+                .of(new SnapshotSourceModel().dataset(new DatasetSummaryModel().secureMonitoringEnabled(true)))
+            )
+        )
+
+      val workspace = minimalTestData.adWorkspace
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
