@@ -135,4 +135,5 @@
     <include file="changesets/20230802_more_precise_updated_multiregional_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230810_add_workspace_state_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230810_track_mrb_sts_progress.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230829_mrb_add_sts_project.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
