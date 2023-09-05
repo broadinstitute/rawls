@@ -64,26 +64,12 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
                            workspace: Workspace
   ): Future[Unit] =
     for {
-      keepBindings <- dataSource.inTransaction { dataAccess =>
-        for {
-          _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
-          // TODO (CA-1236): Remove after PPW migration is complete, we won't need to track on workspace namespace anymore, since google project will be per workspace
-          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(
-            workspace.namespace,
-            userEmail
-          )
-        } yield keepBindings
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
       }
-      // TODO (CA-1236): Clean up the if statement once PPW migration is complete. There will be no more V1 workspaces so this will be dead code
-      // only remove google bindings if there are no workspaces left in the namespace (i.e. project) or the workspace is V2
-      _ <-
-        if (keepBindings) {
-          Future.successful(())
-        } else {
-          googleServicesDAO.removePolicyBindings(
+      _ <- googleServicesDAO.removePolicyBindings(
             workspace.googleProjectId,
             Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email))
           )
-        }
     } yield ()
 }

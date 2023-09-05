@@ -258,7 +258,7 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
 
     def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
-      workspaceQuery.withBillingProject(billingProject).read
+      workspaceQuery.withBillingProject(billingProject).withVersion(WorkspaceVersions.V2).read
 
     def getTags(queryString: Option[String],
                 limit: Option[Int] = None,
