@@ -1221,15 +1221,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  def getServiceAccountRawlsUser(): Future[RawlsUser] =
-    getRawlsUserForCreds(getBucketServiceAccountCredential)
-
   def getRawlsUserForCreds(creds: Credential): Future[RawlsUser] = {
     implicit val service = GoogleInstrumentedService.Groups
     val oauth2 = new Builder(httpTransport, jsonFactory, null).setApplicationName(appName).build()
     Future {
       creds.refreshToken()
-      val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken))
+      val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken), logRequest = false)
       RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
     }
   }
