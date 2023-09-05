@@ -209,7 +209,7 @@ object MultiregionalBucketMigrationActor {
   val storageTransferJobs = MultiregionalStorageTransferJobs.storageTransferJobs
 
   final def restartMigration: MigrateAction[Unit] =
-    restartFailuresLike(FailureModes.noBucketPermissionsFailure, FailureModes.gcsUnavailableFailure) |
+    restartFailuresLike(FailureModes.noBucketPermissionsFailure, FailureModes.gcsUnavailableFailure, FailureModes.bucketNotFoundFailure) |
       reissueFailedStsJobs
 
   final def startMigration: MigrateAction[Unit] =
@@ -618,22 +618,25 @@ object MultiregionalBucketMigrationActor {
     }
 
   def restartFailuresLike(failureMessage: String, others: String*): MigrateAction[Unit] =
-    retryFailuresLike(
-      (dataAccess, migrationId) => {
-        import dataAccess.multiregionalBucketMigrationQuery._
-        update3(
-          migrationId,
-          finishedCol,
-          Option.empty[Timestamp],
-          outcomeCol,
-          Option.empty[String],
-          messageCol,
-          Option.empty[String]
-        )
-      },
-      failureMessage,
-      others: _*
-    )
+    for {
+      _ <- getLogger[MigrateAction].info(s"restarting failures like $failureMessage")
+      _ <- retryFailuresLike(
+        (dataAccess, migrationId) => {
+          import dataAccess.multiregionalBucketMigrationQuery._
+          update3(
+            migrationId,
+            finishedCol,
+            Option.empty[Timestamp],
+            outcomeCol,
+            Option.empty[String],
+            messageCol,
+            Option.empty[String]
+          )
+        },
+        failureMessage,
+        others: _*
+      )
+    } yield ()
 
   def reissueFailedStsJobs: MigrateAction[Unit] =
     retryFailuresLike(
@@ -728,6 +731,7 @@ object MultiregionalBucketMigrationActor {
               )
             }
 
+            _ <- getLogger[IO].info(s"polling on $destBucketName to be created")
             // Don't need a requester pays project for the bucket in the new region
             // as requester pays if enabled at the end of the migration, if at all.
             bucket <- env.storageService.getBucket(
@@ -1284,7 +1288,7 @@ object MultiregionalBucketMigrationActor {
 
               case RetryKnownFailures =>
                 List(
-                  restartFailuresLike(FailureModes.stsRateLimitedFailure, FailureModes.gcsUnavailableFailure),
+                  restartFailuresLike(FailureModes.stsRateLimitedFailure, FailureModes.gcsUnavailableFailure, FailureModes.bucketNotFoundFailure),
                   reissueFailedStsJobs
                 )
                   .traverse_(r => runStep(r.foreverM)) // Greedily retry
