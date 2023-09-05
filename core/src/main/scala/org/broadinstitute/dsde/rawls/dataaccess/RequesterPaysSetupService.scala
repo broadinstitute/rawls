@@ -68,8 +68,8 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
         dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
       }
       _ <- googleServicesDAO.removePolicyBindings(
-        workspace.googleProjectId,
-        Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email))
-      )
+            workspace.googleProjectId,
+            Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email))
+          )
     } yield ()
 }
