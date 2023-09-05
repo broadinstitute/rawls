@@ -26,8 +26,8 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       currentTime(),
       "me",
       Map.empty,
-      false,
-      WorkspaceVersions.V1,
+      isLocked = false,
+      WorkspaceVersions.V2,
       GoogleProjectId("google_project_id"),
       None,
       None,
@@ -45,8 +45,8 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
     val saEmail3 = BondServiceAccountEmail("sa3@bar.com")
 
     runAndWait(
-      workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(workspace.namespace, userEmail)
-    ) shouldBe false
+      workspaceRequesterPaysQuery.listAllForUser(workspace.toWorkspaceName, userEmail)
+    ) shouldBe empty
 
     runAndWait(
       workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userEmail, Set(saEmail1, saEmail2))
@@ -59,14 +59,14 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
     ) shouldBe 1
 
     runAndWait(
-      workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(workspace.namespace, userEmail)
-    ) shouldBe true
+      workspaceRequesterPaysQuery.listAllForUser(workspace.toWorkspaceName, userEmail)
+    ) should not be empty
 
     runAndWait(workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)) shouldBe 3
 
     runAndWait(
-      workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(workspace.namespace, userEmail)
-    ) shouldBe false
+      workspaceRequesterPaysQuery.listAllForUser(workspace.toWorkspaceName, userEmail)
+    ) shouldBe empty
 
   }
 }

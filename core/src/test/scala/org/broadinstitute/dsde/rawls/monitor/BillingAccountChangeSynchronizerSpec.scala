@@ -344,7 +344,7 @@ class BillingAccountChangeSynchronizerSpec
         "creator@example.com",
         Map.empty,
         false,
-        WorkspaceVersions.V1,
+        WorkspaceVersions.V2,
         GoogleProjectId(billingProject.projectName.value),
         billingProject.googleProjectNumber,
         originalBillingAccount,
@@ -449,7 +449,7 @@ class BillingAccountChangeSynchronizerSpec
       val finalBillingAccountName = runAndWait {
         for {
           _ <- rawlsBillingProjectQuery.create(testData.billingProject)
-          _ <- workspaceQuery.createOrUpdate(testData.v1Workspace)
+          _ <- workspaceQuery.createOrUpdate(testData.workspace)
 
           mkBillingAccount = () => RawlsBillingAccountName(UUID.randomUUID.toString)
           setBillingAccount = (billingAccount: RawlsBillingAccountName) =>
@@ -542,7 +542,7 @@ class BillingAccountChangeSynchronizerSpec
       runAndWait {
         for {
           _ <- rawlsBillingProjectQuery.create(testData.billingProject)
-          _ <- workspaceQuery.createOrUpdate(testData.v1Workspace)
+          _ <- workspaceQuery.createOrUpdate(testData.workspace)
           _ <- rawlsBillingProjectQuery.updateBillingAccount(
             testData.billingProject.projectName,
             billingAccount = RawlsBillingAccountName(UUID.randomUUID.toString).some,
@@ -570,7 +570,7 @@ class BillingAccountChangeSynchronizerSpec
         for {
           lastChange <- BillingAccountChanges.getLastChange(testData.billingProject.projectName)
           billingProject <- rawlsBillingProjectQuery.load(testData.billingProject.projectName)
-          workspace <- workspaceQuery.findByIdOrFail(testData.v1Workspace.workspaceId)
+          workspace <- workspaceQuery.findByIdOrFail(testData.workspace.workspaceId)
         } yield {
           lastChange.value.googleSyncTime shouldBe defined
           lastChange.value.outcome.value.isFailure shouldBe true
@@ -579,7 +579,7 @@ class BillingAccountChangeSynchronizerSpec
           billingProject.value.message shouldBe defined
 
           workspace.errorMessage shouldBe defined
-          workspace.currentBillingAccountOnGoogleProject shouldBe testData.v1Workspace.currentBillingAccountOnGoogleProject
+          workspace.currentBillingAccountOnGoogleProject shouldBe testData.workspace.currentBillingAccountOnGoogleProject
         }
       }
     }
