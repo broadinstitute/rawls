@@ -1228,6 +1228,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       creds.refreshToken()
       val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken), logRequest = false)
       RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
+    }.recover { case e: GoogleJsonResponseException =>
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.InternalServerError, s"Failed to get token info: ${e.getMessage}")
+      )
     }
   }
 
