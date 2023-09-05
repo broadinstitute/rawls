@@ -42,8 +42,8 @@ trait MethodWiths {
 
   def withMethod[T](method: MethodRepoMethod, userInfo: UserInfo)(
     op: WDL => ReadWriteAction[T]
-  )(implicit executionContext: ExecutionContext): ReadWriteAction[T] =
-    DBIO.from(methodRepoDAO.getMethod(method, userInfo)).asTry.flatMap {
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    val fetchMethod = DBIO.from(methodRepoDAO.getMethod(method, userInfo)).asTry.flatMap {
       case Success(None) =>
         DBIO.failed(
           new RawlsExceptionWithErrorReport(
@@ -61,6 +61,18 @@ trait MethodWiths {
           )
         )
     }
+
+    method.validate match {
+      case Some(_) => fetchMethod
+      case None =>
+        DBIO.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport =
+              ErrorReport(StatusCodes.BadRequest, s"Invalid method request. One or more values in request are invalid.")
+          )
+        )
+    }
+  }
 
   def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(
     op: GatherInputsResult => ReadWriteAction[T]
