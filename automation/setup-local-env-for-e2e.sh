@@ -1,45 +1,5 @@
 #!/usr/bin/env bash
 
-# Use this script to set up your local environment that can be used for running Azure E2E tests against an existing BEE
-# Run from automation/
-
-# Use --help option to see all available options
-#
-# Use Cases
-# =========
-# $0 is the name of this script
-#
-# Use Case 1 (Create a random billing project and attach it to default Landing Zone):
-#
-# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-dev-1
-#
-# Replace rawls-593017852-dev-1 with the name of an existing BEE environment you want your tests to run against
-#
-# Use Case 2 (Reuse a billing project that already exists in the BEE environment):
-#
-# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-dev-1 --billingProject tmp-billing-project-44302a2c-5
-#
-# Replace rawls-593017852-dev-1 with the name of an existing BEE environment you want your tests to run against
-# Replace tmp-billing-project-44302a2c-5 with the name of a valid billing project in the BEE environment
-#
-# Use Case 3 (Create a random billing project and attach it to new Landing Zone):
-#
-# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-dev-1 \
-#    --tenantId fad90753-2022-4456-9b0a-c7e5b934e408           \
-#    --subscriptionId f557c728-871d-408c-a28b-eb6b2141a087     \
-#    --mrgId staticTestingMrg                                  \
-#    --landingZoneId f41c1a97-179b-4a18-9615-5214d79ba600
-#
-# Replace rawls-593017852-dev-1 with the name of an existing BEE environment you want your tests to run against
-# Replace (tenantId, subscriptionId, mrgId, landingZoneId) with new coordinates
-# Please refer to https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
-#
-# This script generates a e2e.env file. You can run tests locally as follows.
-#
-# source ${TEST_RESOURCES}/$e2eEnv
-# sbt "testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest"
-#
-
 set -e
 
 SCRIPT_DIR=$(pwd)
@@ -95,10 +55,12 @@ usage() {
     echo "# Replace (tenantId, subscriptionId, mrgId, landingZoneId) with new coordinates"
     echo "# Please refer to https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml"
     echo "#"
-    echo "# This script generates a \$e2eEnv file. You can run tests locally as follows."
+    echo "# The above script generates a azure_e2e.env file (or whatever filename you configured for the --e2eEnv argument) under the src/test/resources directory. You can run tests locally as follows."
     echo "#"
-    echo "# source ${TEST_RESOURCES}/\$e2eEnv"
+    echo "# source ${TEST_RESOURCES}/azure_e2e.env"
     echo "# sbt \"testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest\""
+    echo "#"
+    echo "# If you are running the test via IntelliJ, in the Run/Debug Configuration use the EnvFile tab to provide the path to the generated .env file."
     echo "#"
     exit 1
 }
