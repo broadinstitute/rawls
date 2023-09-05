@@ -8,52 +8,23 @@ TEST_RESOURCES=${SCRIPT_DIR}/src/test/resources
 # Required values
 e2eEnv=""
 bee=""
-# Optional values
 billingProject=""
-# Azure Coordinates can be found here: https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
-tenantId="fad90753-2022-4456-9b0a-c7e5b934e408"
-subscriptionId="f557c728-871d-408c-a28b-eb6b2141a087"
-mrgId="staticTestingMrg"
-landingZoneId="f41c1a97-179b-4a18-9615-5214d79ba600"
 
 # Function to display usage/help message
 usage() {
     echo "Usage: $0 --e2eEnv <value> --bee <value> [--billingProject <value>] [--tenantId <value>] [--subscriptionId <value>] [--landingZoneId <value>]"
     echo "  --e2eEnv: The name of the .env file that contains envvars for E2E tests (e.g. The Base64-encoded User Data in JSON format (ex: [{\"email\":\"hermione.owner@quality.firecloud.org\",\"type\":\"owner\",\"bearer\":\"yadayada\"},{\"email\":\"harry.potter@quality.firecloud.org\",\"type\":\"student\",\"bearer\":\"yadayada2\"}]) is stored in USERS_METADATA_B64 envvar."
     echo "  --bee: The name of an existing BEE environment."
-    echo "  --billingProject: The name of an existing billing project in the given BEE environment. If not specified, a random billing project will be created and attached to the landing zone (optional: the attachLandingZoneToBillingProject method will be skipped, the landing zone must already been attached to the specified billing project)."
-    echo "  --tenantId: Azure tenant ID (optional, default: fad90753-2022-4456-9b0a-c7e5b934e408)."
-    echo "  --subscriptionId: Azure subscription ID (optional, default: f557c728-871d-408c-a28b-eb6b2141a087)."
-    echo "  --mrgId: Azure Managed Resource Group name (optional, default: staticTestingMrg)."
-    echo "  --landingZoneId: Landing Zone ID. An existing LZID tag within a given MRG (optional, default: f41c1a97-179b-4a18-9615-5214d79ba600)."
+    echo "  --billingProject: The name of a valid billing project in the given BEE environment that has already been attached to Azure Landing Zone.."
     echo ""
-    echo "# Use Cases"
+    echo "# Use Case"
     echo "# ========="
-    echo "#"
-    echo "# Use Case 1 (Create a random billing project and attach it to default Landing Zone):"
-    echo "#"
-    echo "# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-1-dev"
-    echo "#"
-    echo "# Replace rawls-593017852-1-dev with the name of an existing BEE environment you want your tests to run against"
-    echo "#"
-    echo "# Use Case 2 (Reuse a billing project that already exists in the BEE environment):"
     echo "#"
     echo "# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-1-dev --billingProject tmp-billing-project-44302a2c-5"
     echo "#"
     echo "# Replace rawls-593017852-1-dev with the name of an existing BEE environment you want your tests to run against"
     echo "# Replace tmp-billing-project-44302a2c-5 with the name of a valid billing project in the BEE environment"
-    echo "#"
-    echo "# Use Case 3 (Create a random billing project and attach it to new Landing Zone):"
-    echo "#"
-    echo "# $0 --e2eEnv azure_e2e.env --bee rawls-593017852-1-dev \\"
-    echo "#    --tenantId fad90753-2022-4456-9b0a-c7e5b934e408           \\"
-    echo "#    --subscriptionId f557c728-871d-408c-a28b-eb6b2141a087     \\"
-    echo "#    --mrgId staticTestingMrg                                  \\"
-    echo "#    --landingZoneId f41c1a97-179b-4a18-9615-5214d79ba600"
-    echo "#"
-    echo "# Replace rawls-593017852-1-dev with the name of an existing BEE environment you want your tests to run against"
-    echo "# Replace (tenantId, subscriptionId, mrgId, landingZoneId) with new coordinates"
-    echo "# Please refer to https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml"
+    echo "# Please refer to https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-billing-project-to-landing-zone.yaml"
     echo "#"
     echo "# The above script generates a azure_e2e.env file (or whatever filename you configured for the --e2eEnv argument) under the src/test/resources directory. You can run tests locally as follows."
     echo "#"
@@ -80,22 +51,6 @@ while [[ $# -gt 0 ]]; do
             billingProject="$2"
             shift 2
             ;;
-        --tenantId)
-            tenantId="$2"
-            shift 2
-            ;;
-        --subscriptionId)
-            subscriptionId="$2"
-            shift 2
-            ;;
-        --mrgId)
-            mrgId="$2"
-            shift 2
-            ;;
-        --landingZoneId)
-            landingZoneId="$2"
-            shift 2
-            ;;
         --help)
             usage
             ;;
@@ -107,8 +62,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check if required arguments are provided
-if [ -z "$e2eEnv" ] || [ -z "$bee" ]; then
-    echo "Usage: $0 --e2eEnv <value> --bee <value> [--tenantId <value>] [--subscriptionId <value>] [--mrgId <value>] [--landingZoneId <value>]"
+if [[ -z "$e2eEnv" || -z "$bee" || -z "$billingProject" ]]; then
+    echo "Usage: $0 --e2eEnv <value> --bee <value> --billingProject <value> [--tenantId <value>] [--subscriptionId <value>] [--mrgId <value>] [--landingZoneId <value>]"
     echo "Use '$0 --help' to see all available options."
     exit 1
 fi
@@ -116,6 +71,7 @@ fi
 echo "export SCRIPT_DIR=\"${SCRIPT_DIR}\"" > ${TEST_RESOURCES}/$e2eEnv
 echo "export E2E_ENV=${e2eEnv}" >> ${TEST_RESOURCES}/$e2eEnv
 echo "export BEE_ENV=\"${bee}\"" >> ${TEST_RESOURCES}/$e2eEnv
+echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/$e2eEnv
 
 VAULT_TOKEN=$(cat $HOME/.vault-token)
 DSDE_TOOLBOX_DOCKER_IMAGE=broadinstitute/dsde-toolbox:latest
@@ -292,91 +248,7 @@ obtainUserTokens() {
     echo "export USERS_METADATA_B64=\"${USERS_METADATA_JSON_B64}\"" >> ${TEST_RESOURCES}/$e2eEnv
 }
 
-attachBillingProjectToLandingZone() {
-    billingProject=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
-    echo "Creating a billing project $billingProject and attaching landing zone (Tenant ID=$tenantId, Subscription ID=$subscriptionId, MRG=$mrgId, Landing Zone ID=$landingZoneId)"
-    baseOrchUrl="https://firecloudorch.$bee.bee.envs-terra.bio"
-
-    apiResponse=$(curl -s -w "%{http_code}"                                   \
-      -X POST "${baseOrchUrl}/api/billing/v2"                                 \
-      -H 'Accept: */*'                                                        \
-      -H 'Content-Type: application/json'                                     \
-      -H "Authorization: Bearer $hermione"                                    \
-      -d '{
-        "projectName": "'"${billingProject}"'",
-        "managedAppCoordinates": {
-          "tenantId": "'"${tenantId}"'",
-          "subscriptionId": "'"${subscriptionId}"'",
-          "managedResourceGroupId": "'"${mrgId}"'",
-          "landingZoneId": "'"${landingZoneId}"'"
-        }
-      }')
-    httpStatus=$(echo "$apiResponse" | tail -c 4)
-    jsonData=$(echo "$apiResponse")
-    jsonData=${jsonData%$httpStatus}
-    if [[ "$httpStatus" == "201" ]]; then
-      echo "API response: 201 Created The request has been fulfilled and resulted in Azure Billing Project ${billingProject} being created."
-    else
-      echo "API response: $http_status Failed to create the Azure Billing Project ${billingProject}."
-      echo "$jsonData"
-      exit 1
-    fi
-
-    billingProjectStatus=""
-    counter=0
-    while [ "$billingProjectStatus" != "Ready" ] && [ $counter -lt 15 ]; do
-      echo "Checking creation status of Azure Billing Project ${billingProject}."
-      apiResponse=$(curl -s -w "%{http_code}"                                 \
-        -X GET "${baseOrchUrl}/api/billing/v2/${billingProject}"              \
-        -H 'Accept: application/json'                                         \
-        -H "Authorization: Bearer $hermione")
-      httpStatus=$(echo "$apiResponse" | tail -c 4)
-      jsonData=$(echo "$apiResponse")
-      jsonData=${jsonData%$httpStatus}
-      echo "jsonData=$jsonData"
-      if [[ "$httpStatus" == "200" ]]; then
-        echo "API response: 200 OK"
-        echo "$jsonData"
-        billingProjectStatus=$(echo "$jsonData" | jq -r '.status')
-      else
-        echo "API response: $httpStatus Failed to obtain the Azure Billing Project ${billingProject} status."
-        exit 1
-      fi
-      sleep 1
-      counter=$((counter + 1))
-    done
-
-    if [[ "$billingProjectStatus" == "Ready" ]]; then
-      echo "Azure Billing Project ${billingProject} is in Ready status."
-    else
-      echo "Azure Billing Project ${billingProject} not Ready after ${counter} tries."
-      echo "Deleting Azure Billing Project ${billingProject} ..."
-      apiResponse=$(curl -s -w "%{http_code}"                                 \
-        -X DELETE "${baseOrchUrl}/api/billing/v2/${billingProject}"           \
-        -H 'Accept: */*'                                                      \
-        -H "Authorization: Bearer $hermione")
-      httpStatus=$(echo "$apiResponse" | tail -c 4)
-      jsonData=$(echo "$apiResponse")
-      jsonData=${jsonData%$httpStatus}
-      echo "jsonData=$jsonData"
-      if [[ "$httpStatus" == "204" ]]; then
-        echo "API response: 204 Azure Billing Project ${billingProject} has been deleted."
-      else
-        echo "API response: $httpStatus"
-        echo "$jsonData"
-      fi
-    fi
-
-    echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/$e2eEnv
-}
-
 obtainUserTokens
-
-if [ -z "$billingProject" ]; then
-  attachBillingProjectToLandingZone
-else
-  echo "export BILLING_PROJECT=\"${billingProject}\"" >> ${TEST_RESOURCES}/$e2eEnv
-fi
 
 source ${TEST_RESOURCES}/$e2eEnv
 
