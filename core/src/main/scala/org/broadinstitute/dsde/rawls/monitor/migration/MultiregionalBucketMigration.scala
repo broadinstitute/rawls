@@ -696,3 +696,5 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       sqlu"""delete from #$tableName"""
   }
 }
+
+final case class ColumnName[-A](value: String) extends ValueObject

@@ -10,6 +10,8 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{F
 import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.lifted.Query
 import spray.json.{DeserializationException, JsObject, JsString, JsValue, RootJsonFormat}
+import org.broadinstitute.dsde.workbench.model.ValueObject
+import slick.jdbc.SetParameter
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -146,6 +148,13 @@ object MigrationUtils {
           case scala.util.Failure(t) => f(t)
         }
       }
+
+    implicit def setValueObject[A <: ValueObject]: SetParameter[A] =
+      SetParameter((v, pp) => pp.setString(v.value))
+
+    implicit def setOptionValueObject[A <: ValueObject]: SetParameter[Option[A]] =
+      SetParameter((v, pp) => pp.setStringOption(v.map(_.value)))
+
   }
 
   def unsafeFromEither[A](fa: => Either[String, A]): A = fa match {
