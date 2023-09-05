@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
-import cats.implicits.{catsSyntaxApply, toFoldableOps}
+import cats.implicits.{catsSyntaxApplyOps, toFoldableOps}
 import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}

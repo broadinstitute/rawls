@@ -7,7 +7,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, LiftIO}
 import cats.implicits.{
   catsSyntaxApplicativeError,
-  catsSyntaxApply,
+  catsSyntaxApplyOps,
   catsSyntaxOptionId,
   catsSyntaxSemigroup,
   toFlatMapOps,

@@ -148,6 +148,19 @@ object WorkspaceVersions {
     )
 }
 
+case class GcpWorkspaceDeletionContext(bucketName: String)
+case class WorkspaceDeletionResult(
+  // TODO this is optional for backwards-compatibility with our existing synchronous deletion code
+  // once we move fully async, make non-optional
+  jobId: Option[String],
+  gcpContext: Option[GcpWorkspaceDeletionContext]
+)
+
+object WorkspaceDeletionResult {
+  def fromGcpBucketName(bucketName: String) =
+    WorkspaceDeletionResult(None, Some(GcpWorkspaceDeletionContext(bucketName)))
+}
+
 case class WorkspaceRequest(
   namespace: String,
   name: String,
@@ -736,7 +749,8 @@ case class MethodRepoConfigurationExport(
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
-                                 public: Boolean
+                                 public: Boolean,
+                                 policies: Option[List[WorkspacePolicy]] = None
 )
 
 case class AzureManagedAppCoordinates(tenantId: UUID,
@@ -1205,13 +1219,21 @@ class WorkspaceJsonSupport extends JsonSupport {
     WorkspaceBucketOptions
   )
 
+  implicit val GcpWorkspaceDeletionContextFormat: RootJsonFormat[GcpWorkspaceDeletionContext] = jsonFormat1(
+    GcpWorkspaceDeletionContext.apply
+  )
+
+  implicit val WorkspaceDeletionResultFormat: RootJsonFormat[WorkspaceDeletionResult] = jsonFormat2(
+    WorkspaceDeletionResult.apply
+  )
+
   implicit val WorkspaceStateFormat: RootJsonFormat[WorkspaceState] = rawlsEnumerationFormat(WorkspaceState.withName)
 
   implicit val WorkspaceTypeFormat: RootJsonFormat[WorkspaceType] = rawlsEnumerationFormat(WorkspaceType.withName)
 
   implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat21(WorkspaceDetails.apply)
 
-  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat4(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat5(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 

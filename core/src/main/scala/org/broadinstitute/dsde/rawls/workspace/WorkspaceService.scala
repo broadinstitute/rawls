@@ -281,22 +281,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
-  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
-    workspace.workspaceType match {
-      case WorkspaceType.McWorkspace =>
-        Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
-          case Some(mcWorkspace) if mcWorkspace.getAzureContext != null =>
-            Option(WorkspaceCloudPlatform.Azure)
-          case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
-            Option(WorkspaceCloudPlatform.Gcp)
-          case _ =>
-            throw new InvalidCloudContextException(
-              s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
-            )
-        }
-      case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
-    }
-
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,
                    parentContext: RawlsRequestContext = ctx
@@ -323,13 +307,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     span.setStatus(Status.OK)
     span.end()
 
+    val wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
     traceWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val azureInfo: Option[(AzureManagedAppCoordinates, List[WorkspacePolicy])] =
-              getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
-            val cloudPlatform = getCloudPlatform(workspaceContext)
+            val wsmContext = wsmService.getAggregatedWorkspace(workspaceContext, ctx)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -352,7 +335,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               // determine which functions to use for the various part of the response
               def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] =
                 if (options.contains("bucketOptions")) {
-                  azureInfo match {
+                  wsmContext.azureCloudContext match {
                     case None =>
                       traceWithParent("getBucketDetails", s1)(_ =>
                         gcsDAO
@@ -366,7 +349,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 }
               def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
                 traceWithParent("getUserComputePermissions", s1)(_ =>
-                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, cloudPlatform)
+                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
+                                            accessLevel,
+                                            Some(wsmContext.getCloudPlatform)
+                  )
                     .map(Option(_))
                 )
               } else {
@@ -436,12 +422,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   canShare,
                   canCompute,
                   canCatalog,
-                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes, cloudPlatform),
+                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
+                                                           authDomain,
+                                                           useAttributes,
+                                                           Some(wsmContext.getCloudPlatform)
+                  ),
                   stats,
                   bucketDetails,
                   owners,
-                  azureInfo.map(_._1),
-                  azureInfo.map(_._2)
+                  wsmContext.azureCloudContext,
+                  Some(wsmContext.policies)
                 )
                 val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
                 filteredJson
@@ -451,62 +441,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     )
   }
-
-  private def getAzureCloudContextFromWorkspaceManager(workspaceContext: Workspace,
-                                                       parentContext: RawlsRequestContext
-  ): Option[(AzureManagedAppCoordinates, List[WorkspacePolicy])] =
-    workspaceContext.workspaceType match {
-      case WorkspaceType.McWorkspace =>
-        val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", parentContext.tracingSpan.orNull)
-
-        try {
-          val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, ctx)
-          Option(wsmInfo.getAzureContext) match {
-            case Some(azureContext) =>
-              Some(
-                AzureManagedAppCoordinates(UUID.fromString(azureContext.getTenantId),
-                                           UUID.fromString(azureContext.getSubscriptionId),
-                                           azureContext.getResourceGroupId
-                ),
-                Option(wsmInfo.getPolicies)
-                  .map(policies =>
-                    policies.asScala.toList.map(input =>
-                      WorkspacePolicy(
-                        input.getName,
-                        input.getNamespace,
-                        Option(input.getAdditionalData)
-                          .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
-                          .getOrElse(Map.empty)
-                      )
-                    )
-                  )
-                  .getOrElse(List.empty)
-              )
-            case None =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport = ErrorReport(
-                  StatusCodes.NotImplemented,
-                  s"Non-azure MC workspaces not supported [id=${workspaceContext.workspaceId}]"
-                )
-              )
-          }
-        } catch {
-          case e: ApiException =>
-            logger.warn(
-              s"Error retrieving MC workspace from workspace manager [id=${workspaceContext.workspaceId}, code=${e.getCode}]"
-            )
-
-            if (e.getCode == StatusCodes.NotFound.intValue) {
-              span.setStatus(Status.NOT_FOUND)
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, e))
-            } else {
-              span.setStatus(Status.INTERNAL)
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(e.getCode, e))
-            }
-        } finally
-          span.end()
-      case _ => None
-    }
 
   def getWorkspaceById(workspaceId: String,
                        params: WorkspaceFieldSpecs,
@@ -606,7 +540,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .map(_.memberEmails)
 
   // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
-  def deleteWorkspace(workspaceName: WorkspaceName): Future[Option[String]] =
+  def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] =
     traceWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
         traceWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap { maybeMcWorkspace =>
@@ -697,7 +631,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
-  ): Future[Option[String]] =
+  ): Future[WorkspaceDeletionResult] =
     for {
       _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
@@ -821,8 +755,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
 
       if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-        Option(workspaceContext.bucketName)
-      } else None
+        WorkspaceDeletionResult.fromGcpBucketName(workspaceContext.bucketName)
+      } else WorkspaceDeletionResult(None, None)
     }
 
   private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
@@ -1046,7 +980,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
               workspaces.mapFilter { workspace =>
                 try {
-                  val cloudPlatform = getCloudPlatform(workspace)
                   val wsId = UUID.fromString(workspace.workspaceId)
                   val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
                   val accessLevel =
@@ -1055,6 +988,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     } else {
                       highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
                     }
+
+                  val wsmContext =
+                    new AggregatedWorkspaceService(workspaceManagerDAO).getAggregatedWorkspace(workspace, ctx)
+
                   // remove attributes if they were not requested
                   val workspaceDetails =
                     WorkspaceDetails.fromWorkspaceAndOptions(
@@ -1065,7 +1002,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         )
                       ),
                       attributesEnabled,
-                      cloudPlatform
+                      Some(wsmContext.getCloudPlatform)
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -1078,19 +1015,19 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       accessLevel,
                       workspaceDetails,
                       submissionStats,
-                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty
+                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
+                      Some(wsmContext.policies)
                     )
                   )
                 } catch {
                   // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
                   // be reachable when running against the dev environment.
-                  case ex: ApiException
-                      if (WorkspaceType.McWorkspace == workspace.workspaceType) && (ex.getCode == StatusCodes.NotFound.intValue) =>
+                  case ex: AggregateWorkspaceNotFoundException =>
                     logger.warn(
                       s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
                     )
                     None
-                  case ex: InvalidCloudContextException =>
+                  case ex: WorkspaceAggregationException =>
                     logger.error(ex.getMessage)
                     None
                 }
@@ -2845,14 +2782,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
               .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.info("checkWorkspaceCloudPermissions: " + message)
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(
-                StatusCodes.Forbidden,
-                message
+          fastPassServiceConstructor(ctx, dataSource)
+            .syncFastPassesForUserInWorkspace(workspace)
+            .flatMap(_ =>
+              Future.failed(
+                new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.Forbidden,
+                    message
+                  )
+                )
               )
             )
-          )
         } else {
           val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
               .toString()} has all permissions on google project ${workspace.googleProjectId.value} and google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
@@ -3812,5 +3753,4 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
-class InvalidCloudContextException(message: String) extends RawlsException(message)
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

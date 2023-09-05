@@ -85,12 +85,16 @@ class WorkspaceApiSpec
       Sam.user.createResource(servicePerimeterResourceType, createResourceRequest)
       register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, encodedServicePerimeterId)
 
-      Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId, Option(fullyQualifiedServicePerimeterId))
+      Rawls.billingV2.createBillingProject(billingProjectName,
+                                           ServiceTestConfig.Projects.billingAccountId,
+                                           Option(fullyQualifiedServicePerimeterId)
+      )
       register cleanUp Rawls.billingV2.deleteBillingProject(billingProjectName)
       Rawls.workspaces.create(billingProjectName, workspaceName)
       register cleanUp Rawls.workspaces.delete(billingProjectName, workspaceName)
 
-      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      val createdWorkspaceResponse =
+        workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
       createdWorkspaceResponse.workspace.name should be(workspaceName)
     }
 

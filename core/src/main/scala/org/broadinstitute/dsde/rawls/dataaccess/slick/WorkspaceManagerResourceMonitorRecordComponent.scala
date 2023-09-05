@@ -18,6 +18,7 @@ object WorkspaceManagerResourceMonitorRecord {
 
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
+    val WorkspaceDelete: Value = Value("WorkspaceDelete")
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -65,6 +66,18 @@ object WorkspaceManagerResourceMonitorRecord {
       userEmail = Some(userEmail.value),
       Timestamp.from(Instant.now())
     )
+
+  def forWorkspaceDeletion(jobRecordId: UUID,
+                           workspaceId: UUID,
+                           userEmail: RawlsUserEmail
+                          ): WorkspaceManagerResourceMonitorRecord = {
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      JobType.WorkspaceDelete,
+      workspaceId = Some(workspaceId),
+      billingProjectId = None, userEmail = Some(userEmail.value), createdTime = Timestamp.from(Instant.now())
+    )
+  }
 }
 
 trait WorkspaceManagerResourceJobRunner {

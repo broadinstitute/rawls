@@ -8,7 +8,13 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.rpc.Code
-import com.google.storagetransfer.v1.proto.TransferTypes.{ErrorLogEntry, ErrorSummary, TransferJob, TransferOperation}
+import com.google.storagetransfer.v1.proto.TransferTypes.{
+  ErrorLogEntry,
+  ErrorSummary,
+  TransferCounters,
+  TransferJob,
+  TransferOperation
+}
 import io.grpc.{Status, StatusRuntimeException}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -17,7 +23,12 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{FailureModes, MultiregionalStorageTransferJob}
+import org.broadinstitute.dsde.rawls.monitor.migration.{
+  FailureModes,
+  MultiregionalBucketMigration,
+  MultiregionalBucketMigrationStep,
+  MultiregionalStorageTransferJob
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
@@ -80,6 +91,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       name = UUID.randomUUID().toString,
       workspaceId = UUID.randomUUID().toString
     )
+
+    val bucketLocation = "US".some
   }
 
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
@@ -175,6 +188,15 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           .setProjectId("fake-google-project")
           .setStatus(TransferOperation.Status.SUCCESS)
           .setEndTime(timestamp)
+          .setCounters(
+            TransferCounters
+              .newBuilder()
+              .setBytesFoundFromSource(100L)
+              .setBytesCopiedToSink(50L)
+              .setObjectsFoundFromSource(10L)
+              .setObjectsCopiedToSink(6L)
+              .build()
+          )
           .build
       }
   }
@@ -201,7 +223,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
   def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Long] =
     spec.workspaceQuery.createOrUpdate(workspace) *>
-      spec.multiregionalBucketMigrationQuery.schedule(workspace.toWorkspaceName)
+      spec.multiregionalBucketMigrationQuery.schedule(workspace, testData.bucketLocation)
 
   def writeStarted(workspaceId: UUID): ReadWriteAction[Unit] =
     spec.multiregionalBucketMigrationQuery
@@ -221,10 +243,12 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName))
+      spec.runAndWait(
+        spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace, testData.bucketLocation)
+      )
       assertThrows[RawlsExceptionWithErrorReport] {
         spec.runAndWait(
-          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName)
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace, testData.bucketLocation)
         )
       }
     }
@@ -235,16 +259,52 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       import spec.multiregionalBucketMigrationQuery.{getAttempt, scheduleAndGetMetadata, setMigrationFinished}
       spec.runAndWait {
         for {
-          a <- scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)
-          b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2.toWorkspaceName)
-          attempt <- getAttempt(minimalTestData.v1Workspace.workspaceIdAsUUID).value
-          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+          a <- scheduleAndGetMetadata(minimalTestData.v1Workspace, testData.bucketLocation)
+          b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2, testData.bucketLocation)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
         }
       }
-      spec.runAndWait(scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)).id shouldBe 1
+    }
+
+  it should "error when a successfully migrated workspace is scheduled again" in
+    spec.withMinimalTestDatabase { _ =>
+      import spec.multiregionalBucketMigrationQuery.{getAttempt, setMigrationFinished}
+      spec.runAndWait(for {
+        _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace, testData.bucketLocation)
+        attempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+        _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+      } yield ())
+
+      assertThrows[RawlsExceptionWithErrorReport] {
+        spec.runAndWait(
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace, testData.bucketLocation)
+        )
+      }
+    }
+
+  it should "restart a failed bucket migration" in
+    spec.withMinimalTestDatabase { _ =>
+      import spec.multiregionalBucketMigrationQuery.{getAttempt, setMigrationFinished}
+      val (failedAttempt, restartedAttempt) = spec.runAndWait {
+        for {
+          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace, testData.bucketLocation)
+          attempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+
+          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Failure("bucket failed"))
+          failedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+
+          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace, testData.bucketLocation)
+          restartedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
+        } yield (failedAttempt, restartedAttempt)
+      }
+
+      assert(failedAttempt.value.outcome.value.isFailure)
+      assert(failedAttempt.value.finished.isDefined)
+
+      restartedAttempt.value.outcome shouldBe None
+      restartedAttempt.value.finished shouldBe None
     }
 
   "updated" should "automagically get bumped to the current timestamp when the record is updated" in
@@ -1084,7 +1144,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield Succeeded
     }
 
-  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
+  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets in the workspace's Google project" in
     runMigrationTest {
       for {
         // just need a unique migration id
@@ -1110,6 +1170,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.migrationId shouldBe migration.id
         transferJob.sourceBucket shouldBe workspaceBucketName
         transferJob.destBucket shouldBe tmpBucketName
+        transferJob.googleProject shouldBe Option(GoogleProject(testData.workspace.googleProjectId.value))
       }
     }
 
@@ -1147,7 +1208,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield job should not be defined
     }
 
-  "refreshTransferJobs" should "update the state of storage transfer jobs" in
+  "refreshTransferJobs" should "update the state of storage transfer jobs including the STS operation progress" in
     runMigrationTest {
       for {
         migration <- inTransactionT { dataAccess =>
@@ -1161,6 +1222,10 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.migrationId shouldBe migration.id
         transferJob.finished shouldBe defined
         transferJob.outcome.value shouldBe Outcome.Success
+        transferJob.totalBytesToTransfer shouldBe Some(100L)
+        transferJob.bytesTransferred shouldBe Some(50L)
+        transferJob.totalObjectsToTransfer shouldBe Some(10L)
+        transferJob.objectsTransferred shouldBe Some(6L)
       }
     }
 
@@ -1312,7 +1377,12 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     destBucket = null,
     sourceBucket = null,
     finished = null,
-    outcome = null
+    outcome = null,
+    totalBytesToTransfer = null,
+    bytesTransferred = null,
+    totalObjectsToTransfer = null,
+    objectsTransferred = null,
+    googleProject = null
   )
 
   "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
@@ -1328,7 +1398,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             migrationId = before.id,
             destBucket = GcsBucketName("tmp-bucket-name"),
             sourceBucket = GcsBucketName("workspace-bucket"),
-            outcome = Success.some
+            outcome = Success.some,
+            googleProject = GoogleProject("workspace-project").some
           )
         )
 
@@ -1365,7 +1436,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             migrationId = before.id,
             sourceBucket = GcsBucketName("workspace-bucket"),
             destBucket = GcsBucketName("tmp-bucket-name"),
-            outcome = Success.some
+            outcome = Success.some,
+            googleProject = GoogleProject("workspace-project").some
           )
         )
 
@@ -1398,4 +1470,71 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
+  behavior of "MultiregionalBucketMigrationStep"
+
+  it should "convert a MultiregionalBucketMigration to a user-facing migration step" in {
+    import MultiregionalBucketMigrationStep._
+    val nowTimestamp = Timestamp.from(Instant.now())
+    val migration = MultiregionalBucketMigration(
+      id = 1L,
+      workspaceId = UUID.randomUUID(),
+      created = nowTimestamp,
+      started = None,
+      updated = nowTimestamp,
+      finished = None,
+      outcome = None,
+      workspaceBucketIamRemoved = None,
+      tmpBucketName = None,
+      tmpBucketCreated = None,
+      workspaceBucketTransferIamConfigured = None,
+      workspaceBucketTransferJobIssued = None,
+      workspaceBucketTransferred = None,
+      workspaceBucketDeleted = None,
+      finalBucketCreated = None,
+      tmpBucketTransferIamConfigured = None,
+      tmpBucketTransferJobIssued = None,
+      tmpBucketTransferred = None,
+      tmpBucketDeleted = None,
+      requesterPaysEnabled = false
+    )
+
+    fromMultiregionalBucketMigration(migration) shouldBe ScheduledForMigration
+
+    fromMultiregionalBucketMigration(migration.copy(started = nowTimestamp.some)) shouldBe PreparingTransferToTempBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketIamRemoved = nowTimestamp.some)
+    ) shouldBe PreparingTransferToTempBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(tmpBucketCreated = nowTimestamp.some)
+    ) shouldBe PreparingTransferToTempBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketTransferIamConfigured = nowTimestamp.some)
+    ) shouldBe PreparingTransferToTempBucket
+
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketTransferJobIssued = nowTimestamp.some)
+    ) shouldBe TransferringToTempBucket
+
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketTransferred = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketDeleted = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(finalBucketCreated = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(tmpBucketTransferIamConfigured = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+
+    fromMultiregionalBucketMigration(
+      migration.copy(tmpBucketTransferJobIssued = nowTimestamp.some)
+    ) shouldBe TransferringToFinalBucket
+
+    fromMultiregionalBucketMigration(migration.copy(tmpBucketTransferred = nowTimestamp.some)) shouldBe FinishingUp
+    fromMultiregionalBucketMigration(migration.copy(tmpBucketDeleted = nowTimestamp.some)) shouldBe FinishingUp
+
+    fromMultiregionalBucketMigration(migration.copy(finished = nowTimestamp.some)) shouldBe Finished
+  }
 }

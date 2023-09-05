@@ -1305,7 +1305,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                        Some(WorkspaceCloudPlatform.Gcp)
               ),
               Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
-              false
+              false,
+              Some(List.empty)
             ),
             WorkspaceListResponse(
               WorkspaceAccessLevels.Owner,
@@ -1315,7 +1316,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                        Some(WorkspaceCloudPlatform.Gcp)
               ),
               Option(WorkspaceSubmissionStats(None, None, 0)),
-              false
+              false,
+              Some(List.empty)
             )
           )
         ) {
@@ -1382,7 +1384,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                          Some(WorkspaceCloudPlatform.Gcp)
                 ),
                 Option(WorkspaceSubmissionStats(None, None, 8)),
-                false
+                false,
+                Some(List.empty)
               ),
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
@@ -1393,7 +1396,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                   Some(WorkspaceCloudPlatform.Gcp)
                 ),
                 Option(WorkspaceSubmissionStats(None, Option(testDate), 0)),
-                false
+                false,
+                Some(List.empty)
               )
             )
           ) {

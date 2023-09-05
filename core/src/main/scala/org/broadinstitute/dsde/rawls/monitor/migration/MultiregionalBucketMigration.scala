@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.data.OptionT
-import cats.implicits.catsSyntaxFunction1FlatMap
+import com.google.storagetransfer.v1.proto.TransferTypes.TransferOperation
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -15,13 +16,14 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.Success
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{unsafeFromEither, Outcome}
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationStep.MultiregionalBucketMigrationStep
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
-import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder, SetParameter}
-import spray.json.DefaultJsonProtocol._
+import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
+import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -48,8 +50,6 @@ object MultiregionalBucketMigrationMetadata {
       m.finished.map(_.toInstant),
       m.outcome
     )
-
-  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
 }
 
 final case class MultiregionalBucketMigration(id: Long,
@@ -94,6 +94,84 @@ object MultiregionalBucketMigrationFailureModes {
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
+}
+
+object MultiregionalBucketMigrationStep extends Enumeration {
+  type MultiregionalBucketMigrationStep = Value
+  val ScheduledForMigration, PreparingTransferToTempBucket, TransferringToTempBucket, PreparingTransferToFinalBucket,
+    TransferringToFinalBucket, FinishingUp, Finished = Value
+
+  def fromMultiregionalBucketMigration(migration: MultiregionalBucketMigration): MultiregionalBucketMigrationStep =
+    migration match {
+      case m if m.finished.isDefined                                             => Finished
+      case m if m.tmpBucketTransferred.isDefined || m.tmpBucketDeleted.isDefined => FinishingUp
+      case m if m.tmpBucketTransferJobIssued.isDefined                           => TransferringToFinalBucket
+      case m
+          if m.workspaceBucketTransferred.isDefined || m.workspaceBucketDeleted.isDefined || m.finalBucketCreated.isDefined || m.tmpBucketTransferIamConfigured.isDefined =>
+        PreparingTransferToFinalBucket
+      case m if m.workspaceBucketTransferJobIssued.isDefined => TransferringToTempBucket
+      case m
+          if m.started.isDefined || m.workspaceBucketIamRemoved.isDefined || m.tmpBucketCreated.isDefined || m.workspaceBucketTransferIamConfigured.isDefined =>
+        PreparingTransferToTempBucket
+      case _ => ScheduledForMigration
+    }
+}
+final case class STSJobProgress(totalBytesToTransfer: Long,
+                                bytesTransferred: Long,
+                                totalObjectsToTransfer: Long,
+                                objectsTransferred: Long
+)
+
+object STSJobProgress {
+  def fromMultiregionalStorageTransferJob(
+    jobOpt: Option[MultiregionalStorageTransferJob]
+  ): Option[STSJobProgress] = jobOpt.collect { job =>
+    (job.totalBytesToTransfer, job.bytesTransferred, job.totalObjectsToTransfer, job.objectsTransferred) match {
+      case (Some(totalBytesToTransfer),
+            Some(bytesTransferred),
+            Some(totalObjectsToTransfer),
+            Some(objectsTransferred)
+          ) =>
+        STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
+    }
+  }
+
+  def fromTransferOperation(operation: TransferOperation): Option[STSJobProgress] =
+    for {
+      op <- Option(operation)
+      counters <- Option(op.getCounters)
+      totalBytesToTransfer <- Option(counters.getBytesFoundFromSource)
+      bytesTransferred <- Option(counters.getBytesCopiedToSink)
+      totalObjectsToTransfer <- Option(counters.getObjectsFoundFromSource)
+      objectsTransferred <- Option(counters.getObjectsCopiedToSink)
+    } yield STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
+}
+
+final case class MultiregionalBucketMigrationProgress(
+  migrationStep: MultiregionalBucketMigrationStep,
+  outcome: Option[Outcome],
+  tempBucketTransferProgress: Option[STSJobProgress],
+  finalBucketTransferProgress: Option[STSJobProgress]
+)
+
+object MultiregionalBucketMigrationJsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
+  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
+
+  implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
+  implicit object MultiregionalBucketMigrationStepJsonFormat extends RootJsonFormat[MultiregionalBucketMigrationStep] {
+    override def write(obj: MultiregionalBucketMigrationStep) =
+      JsString(obj.toString)
+
+    override def read(json: JsValue): MultiregionalBucketMigrationStep = json match {
+      case JsString(s) => MultiregionalBucketMigrationStep.withName(s)
+      case _           => throw DeserializationException("unsupported migration step found")
+    }
+  }
+
+  implicit val MultiregionalBucketMigrationProgressJsonFormat: RootJsonFormat[MultiregionalBucketMigrationProgress] =
+    jsonFormat4(MultiregionalBucketMigrationProgress.apply)
 }
 
 trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQuery {
@@ -205,48 +283,127 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       update3(migrationId, finishedCol, Some(now), outcomeCol, Some(status), messageCol, message)
     }
 
-    final def isPendingMigration(workspace: Workspace): ReadAction[Boolean] =
-      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$finishedCol is null"
-        .as[Int]
-        .map(_.head > 0)
-
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null"
         .as[Int]
         .map(_.head > 0)
 
-    final def scheduleAndGetMetadata: WorkspaceName => ReadWriteAction[MultiregionalBucketMigrationMetadata] =
-      (schedule _) >=> getMetadata
+    final def scheduleAndGetMetadata
+      : (Workspace, Option[String]) => ReadWriteAction[MultiregionalBucketMigrationMetadata] =
+      schedule(_, _).flatMap(getMetadata)
 
-    final def schedule(workspaceName: WorkspaceName): ReadWriteAction[Long] =
+    final def schedule(workspace: Workspace, location: Option[String]): ReadWriteAction[Long] =
       for {
-        workspaceOpt <- workspaceQuery.findByName(workspaceName)
-        workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt, NoSuchWorkspaceException(workspaceName))
+        maybePastBucketMigration <- getAttempt(workspace.workspaceIdAsUUID).value
+        id <- maybePastBucketMigration match {
+          case None          => scheduleFirstMigrationAttempt(workspace, location)
+          case Some(attempt) => restartMigrationAttempt(attempt, workspace.toWorkspaceName)
+        }
+      } yield id
 
+    private def scheduleFirstMigrationAttempt(workspace: Workspace, location: Option[String]): ReadWriteAction[Long] =
+      for {
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' bucket cannot be migrated as it is locked.")
+            ErrorReport(StatusCodes.BadRequest,
+                        s"'${workspace.toWorkspaceName}' bucket cannot be migrated as it is locked."
+            )
           )
         }
 
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.workspaceType == WorkspaceType.McWorkspace) {
           new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest,
-                        s"'$workspaceName' bucket cannot be migrated as it is not a Google workspace."
+                        s"'${workspace.toWorkspaceName}' bucket cannot be migrated as it is not a Google workspace."
             )
           )
         }
 
-        isPending <- isPendingMigration(workspace)
-        _ <- MonadThrow[ReadWriteAction].raiseWhen(isPending) {
+        _ <- MonadThrow[ReadWriteAction].raiseWhen(!location.getOrElse("").equals("US")) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending bucket migration.")
+            ErrorReport(
+              StatusCodes.BadRequest,
+              s"workspace ${workspace.toWorkspaceName} bucket ${workspace.bucketName} is not in the US multi-region and is therefore ineligible for migration"
+            )
           )
         }
 
         _ <- sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})"
         id <- sql"select LAST_INSERT_ID()".as[Long].head
       } yield id
+
+    private def restartMigrationAttempt(pastAttempt: MultiregionalBucketMigration,
+                                        workspaceName: WorkspaceName
+    ): ReadWriteAction[Long] =
+      for {
+        _ <- MonadThrow[ReadWriteAction].raiseWhen(pastAttempt.outcome.getOrElse(Success).isSuccess) {
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              s"Workspace '$workspaceName' ${if (pastAttempt.outcome.isDefined) "has already had its bucket migrated successfully"
+                else "is already pending bucket migration"}."
+            )
+          )
+        }
+
+        // If the last step completed was issuing the STS job, clear out the timestamp for the relevant
+        // transferJobIssued col and the corresponding bucketTransferIamConfigured col for safe measure.
+        // This will cause the pipeline to issue a new STS job after reconfiguring IAM. We have to do
+        // this or the pipeline will just re-poll on the original failed STS job and the migration will
+        // fail again.
+        //
+        // For all other steps in the migration, just clear out the finished, outcome, and message cols
+        // so that the migration actor will begin migrating the workspace again at the step that failed.
+        _ <- (pastAttempt.workspaceBucketTransferJobIssued,
+              pastAttempt.workspaceBucketTransferred,
+              pastAttempt.tmpBucketTransferJobIssued,
+              pastAttempt.tmpBucketTransferred
+        ) match {
+          case (Some(_), None, _, _) =>
+            // Last completed step was issuing the transfer job from original workspace bucket to the
+            // temp bucket. Pipeline will reconfigure IAM and then issue a new transfer job
+            multiregionalBucketMigrationQuery.update5(
+              pastAttempt.id,
+              finishedCol,
+              Option.empty[Timestamp],
+              messageCol,
+              Option.empty[String],
+              outcomeCol,
+              Option.empty[String],
+              workspaceBucketTransferIamConfiguredCol,
+              Option.empty[Timestamp],
+              workspaceBucketTransferJobIssuedCol,
+              Option.empty[Timestamp]
+            )
+          case (_, _, Some(_), None) =>
+            // Last completed step was issuing the transfer job from temp bucket to the new workspace
+            // bucket. Pipeline will reconfigure IAM and then issue a new transfer job
+            multiregionalBucketMigrationQuery.update5(
+              pastAttempt.id,
+              finishedCol,
+              Option.empty[Timestamp],
+              messageCol,
+              Option.empty[String],
+              outcomeCol,
+              Option.empty[String],
+              tmpBucketTransferIamConfiguredCol,
+              Option.empty[Timestamp],
+              tmpBucketTransferJobIssuedCol,
+              Option.empty[Timestamp]
+            )
+          case _ =>
+            // For all other steps, just clear out finishedCol, messageCol, and outcomeCol to restart
+            // the migration from the failed step
+            multiregionalBucketMigrationQuery.update3(pastAttempt.id,
+                                                      finishedCol,
+                                                      Option.empty[Timestamp],
+                                                      messageCol,
+                                                      Option.empty[String],
+                                                      outcomeCol,
+                                                      Option.empty[String]
+            )
+        }
+      } yield pastAttempt.id
 
     final def getMetadata(migrationId: Long): ReadAction[MultiregionalBucketMigrationMetadata] =
       sql"""

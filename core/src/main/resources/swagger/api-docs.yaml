@@ -24,6 +24,7 @@ tags:
   - name: version
   - name: workflows
   - name: workspaces
+  - name: workspaces_v2
 
 paths:
   /version:
@@ -1018,6 +1019,33 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspace
+      description: get bucket migration progress for workspace
+      operationId: getBucketMigrationProgressForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/bucketMigration/workspaces:
     post:
       tags:
@@ -1064,7 +1092,10 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration metadata
+                  additionalProperties:
+                    $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -1092,6 +1123,35 @@ paths:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/billing/{projectId}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspaces in billing project
+      description: get bucket migration progress for workspaces in billing project
+      operationId: getBucketMigrationProgressForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration progress
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
           content:
             'application/json':
               schema:
@@ -3956,6 +4016,50 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationType'
+  /api/workspaces/v2:
+    delete:
+      tags:
+        - workspaces_v2
+      summary: Delete workspace
+      description: Starts a job to delete a workspace and all of its contents. Note that this is an in-progress API and currently unsupported.
+      operationId: deleteWorkspaceV2
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        202:
+          description: Delete request accepted. Workspace bucket will be deleted within
+            24 hours.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDeletionResult'
+        400:
+          description: Workspace is not in a deletable state.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: Insufficient permissions to delete workspace (must be owner)
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: Workspace is already being deleted.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
@@ -5530,6 +5634,10 @@ components:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
           $ref: '#/components/schemas/WorkspaceSubmissionStats'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
       description: ""
     WorkspaceBucketOptions:
       required:
@@ -5550,6 +5658,22 @@ components:
         - WRITER
         - READER
         - NO ACCESS
+    WorkspaceDeletionResult:
+      type: object
+      description: Workspace deletion metadata
+      properties:
+        gcpContext:
+          $ref: '#/components/schemas/GcpWorkspaceDeletionContext'
+        jobId:
+          type: string
+          description: Deletion job ID
+    GcpWorkspaceDeletionContext:
+      type: object
+      description: Workspace deletion context information for a GCP workspace
+      properties:
+        bucketName:
+          type: string
+          description: Name of the workspace's GCP bucket, if present
     CallMetadata:
       type: object
       properties:
@@ -6196,6 +6320,50 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/WorkspaceName'
+    MultiregionalBucketMigrationProgress:
+      description: Represents the progress of a workspace bucket through the multiregional bucket migration pipeline
+      type: object
+      required:
+        - migrationStep
+      properties:
+        migrationStep:
+          description: User facing step of migration
+          type: string
+          enum:
+            - ScheduledForMigration
+            - PreparingTransferToTempBucket
+            - TransferringToTempBucket
+            - PreparingTransferToFinalBucket
+            - TransferringToFinalBucket
+            - FinishingUp
+            - Finished
+        outcome:
+          $ref: '#/components/schemas/WorkspaceMigrationOutcome'
+        tempBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+        finalBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+    StorageTransferJobProgress:
+      description: Represents the progress of a single Storage Transfer Service job to move a bucket
+      type: object
+      required:
+        - totalBytesToTransfer
+        - bytesTransferred
+        - totalObjectsToTransfer
+        - objectsTransferred
+      properties:
+        totalBytesToTransfer:
+          description: total bytes that this job will transfer
+          type: integer
+        bytesTransferred:
+          description: bytes that this job has transferred so far
+          type: integer
+        totalObjectsToTransfer:
+          description: total objects that this job will transfer
+          type: integer
+        objectsTransferred:
+          description: objects that this job has transferred so far
+          type: integer
   parameters:
     billingProjectIdPathParam:
       name: projectId
