@@ -32,7 +32,7 @@ import scala.language.postfixOps
 import org.broadinstitute.dsde.test.pipeline._
 
 @WorkspacesAzureTest
-class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
+class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // The values of the following vars are injected from the pipeline.
   var billingProject: String = _
   var ownerAuthToken: ProxyAuthToken = _
