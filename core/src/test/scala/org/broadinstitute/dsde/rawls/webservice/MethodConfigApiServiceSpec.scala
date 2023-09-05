@@ -1368,11 +1368,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         check {
           assertResult(StatusCodes.BadRequest)(status)
           val responseString = Unmarshal(response.entity).to[String].futureValue
-          assert(
-            responseString.contains(
-              "Invalid method request. One or more values in request are invalid."
-            )
-          )
+          assert(responseString.contains("Invalid request."))
         }
   }
 

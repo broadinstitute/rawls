@@ -67,8 +67,7 @@ trait MethodWiths {
       case None =>
         DBIO.failed(
           new RawlsExceptionWithErrorReport(
-            errorReport =
-              ErrorReport(StatusCodes.BadRequest, s"Invalid method request. One or more values in request are invalid.")
+            errorReport = ErrorReport(StatusCodes.BadRequest, s"Invalid request.")
           )
         )
     }
