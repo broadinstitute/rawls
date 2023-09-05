@@ -793,7 +793,7 @@ object MultiregionalBucketMigrationActor {
 
         _ <- liftIO {
           for {
-            serviceAccount <- transferService.getStsServiceAccount(googleProject)
+            serviceAccount <- transferService.getStsServiceAccount(GoogleProject(workspace.googleProjectId.value))
             serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
             // STS requires the following to read from the origin bucket and delete objects after
             // transfer
@@ -882,9 +882,7 @@ object MultiregionalBucketMigrationActor {
                                    dstBucket: GcsBucketName
   ): MigrateAction[TransferJob] =
     for {
-      (storageTransferService, googleProject) <- asks { env =>
-        (env.storageTransferService, env.googleProjectToBill)
-      }
+      storageTransferService <- asks(_.storageTransferService)
 
       transferJob <- liftIO {
         for {
@@ -894,7 +892,7 @@ object MultiregionalBucketMigrationActor {
             jobDescription =
               s"""Terra multiregional bucket migration transferring workspace bucket contents from "${srcBucket}" to "${dstBucket}"
                  |(workspace: "${workspace.toWorkspaceName}", "migration: ${migration.id}")"""".stripMargin,
-            projectToBill = googleProject,
+            projectToBill = GoogleProject(workspace.googleProjectId.value),
             srcBucket,
             dstBucket,
             JobTransferSchedule.Immediately,
@@ -924,8 +922,10 @@ object MultiregionalBucketMigrationActor {
 
       _ <- inTransaction { _ =>
         storageTransferJobs
-          .map(job => (job.jobName, job.migrationId, job.destBucket, job.sourceBucket))
-          .insert((transferJob.getName, migration.id, dstBucket.value, srcBucket.value))
+          .map(job => (job.jobName, job.migrationId, job.destBucket, job.sourceBucket, job.googleProject))
+          .insert(
+            (transferJob.getName, migration.id, dstBucket.value, srcBucket.value, workspace.googleProjectId.value.some)
+          )
       }
     } yield transferJob
 
@@ -942,7 +942,11 @@ object MultiregionalBucketMigrationActor {
       operation <- liftF {
         import OptionT.{fromOption, liftF}
         for {
-          job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
+          job <- liftF(
+            storageTransferService.getTransferJob(transferJob.jobName,
+                                                  transferJob.googleProject.getOrElse(googleProject)
+            )
+          )
           operationName <- fromOption[IO](Option(job.getLatestOperationName))
           if !operationName.isBlank
           operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
@@ -1047,7 +1051,9 @@ object MultiregionalBucketMigrationActor {
           }
           _ <- liftIO {
             for {
-              serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
+              serviceAccount <- storageTransferService.getStsServiceAccount(
+                transferJob.googleProject.getOrElse(googleProject)
+              )
               serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
               _ <- storageService
