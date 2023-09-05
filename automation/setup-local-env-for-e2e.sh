@@ -12,7 +12,7 @@ billingProject=""
 
 # Function to display usage/help message
 usage() {
-    echo "Usage: $0 --e2eEnv <value> --bee <value> [--billingProject <value>] [--tenantId <value>] [--subscriptionId <value>] [--landingZoneId <value>]"
+    echo "Usage: $0 --e2eEnv <value> --bee <value> --billingProject <value>"
     echo "  --e2eEnv: The name of the .env file that contains envvars for E2E tests (e.g. The Base64-encoded User Data in JSON format (ex: [{\"email\":\"hermione.owner@quality.firecloud.org\",\"type\":\"owner\",\"bearer\":\"yadayada\"},{\"email\":\"harry.potter@quality.firecloud.org\",\"type\":\"student\",\"bearer\":\"yadayada2\"}]) is stored in USERS_METADATA_B64 envvar."
     echo "  --bee: The name of an existing BEE environment."
     echo "  --billingProject: The name of a valid billing project in the given BEE environment that has already been attached to Azure Landing Zone.."
@@ -63,7 +63,7 @@ done
 
 # Check if required arguments are provided
 if [[ -z "$e2eEnv" || -z "$bee" || -z "$billingProject" ]]; then
-    echo "Usage: $0 --e2eEnv <value> --bee <value> --billingProject <value> [--tenantId <value>] [--subscriptionId <value>] [--mrgId <value>] [--landingZoneId <value>]"
+    echo "Usage: $0 --e2eEnv <value> --bee <value> --billingProject <value>"
     echo "Use '$0 --help' to see all available options."
     exit 1
 fi
