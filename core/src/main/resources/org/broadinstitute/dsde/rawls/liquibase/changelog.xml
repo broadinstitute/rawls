@@ -98,15 +98,7 @@
     <include file="changesets/20211006_add_sharded_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210924_populate_sharded_entity_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20211117_drop_unused.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20211115_v1_workspace_migration_history.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20211129_v1_migration_temporary_bucket.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20211206_v1_migration_google_project.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20211209_v1_migration_final_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220107_update_shard_procedures.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20211208_storage_transfer_service_table.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20211217_v1_migration_buckets_deleted.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20220112_add_updated_and_transfer_job_timestamps_to_workspace_migration.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20220119_add_updated_to_ppw_storage_transfer_jobs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220127_add_workspace_type_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220219_add_workspace_feature_flag_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220303_drop_workspace_shard_state.xml" relativeToChangelogFile="true"/>
@@ -115,15 +107,11 @@
     <include file="changesets/20220505_delete_billing_account_changes.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220513_alter_entity_type_collation.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220517_alter_attribute_name_collation.xml" relativeToChangelogFile="true" />
-    <include file="changesets/20220601_v1_migration_requester_pays_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220615_delete_billing_account_changes_again.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220627_add_submission_root.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20220722_v1_workspace_migration_retries.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220728_add_billing_profile_id.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220802_add_entity_type_normalization.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20220810_separate_iam_and_transfer_jobs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220929_create_workspace_manager_resource_monitor_record.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20221020_alter_migration_retries_fk.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20221011_add_ignore_empty_outputs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20221027_add_default_ignore_empty_outputs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20221116_add_user_email_workspace_manager_resource_monitor_record.xml" relativeToChangelogFile="true"/>
