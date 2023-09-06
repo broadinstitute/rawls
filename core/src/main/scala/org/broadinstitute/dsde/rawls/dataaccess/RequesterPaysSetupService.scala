@@ -56,19 +56,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
   def deleteAllRecordsForWorkspace(workspace: Workspace): Future[Int] = dataSource.inTransaction { dataAccess =>
     dataAccess.workspaceRequesterPaysQuery.deleteAllForWorkspace(workspace.workspaceIdAsUUID)
   }
-
-  def revokeAllUsersFromWorkspace(workspace: Workspace): Future[Seq[BondServiceAccountEmail]] =
-    for {
-      userEmailsToSAEmail <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceRequesterPaysQuery.listAllForWorkspace(workspace.toWorkspaceName)
-      }
-      _ <- userEmailsToSAEmail.toList
-        .traverse { case (userEmail, saEmails) =>
-          IO.fromFuture(IO(revokeEmails(saEmails.toSet, userEmail, workspace)))
-        }
-        .unsafeToFuture()
-    } yield userEmailsToSAEmail.flatMap(_._2).toSeq
-
+  
   private def revokeEmails(emails: Set[BondServiceAccountEmail],
                            userEmail: RawlsUserEmail,
                            workspace: Workspace
