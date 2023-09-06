@@ -163,7 +163,7 @@ jobs:
         with:
           workflow: attach-billing-project-to-landing-zone.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/iv-az-e2e-1
+          ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "attach-billing-project-to-landing-zone-${{ env.RUN_NAME_SUFFIX }}",
@@ -193,7 +193,7 @@ jobs:
         with:
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/iv-az-e2e-1
+          ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "rawls-swat-tests-${{ env.RUN_NAME_SUFFIX }}",
@@ -218,7 +218,7 @@ jobs:
         with:
           workflow: .github/workflows/delete-billing-project-v2-from-bee.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/iv-az-e2e-1
+          ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "delete-billing-project-v2-from-bee-${{ env.RUN_NAME_SUFFIX }}",
