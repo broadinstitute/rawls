@@ -46,6 +46,9 @@ trait WorkspaceRequesterPaysComponent {
     def deleteAllForUser(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): ReadWriteAction[Int] =
       existingRecordsForUserQuery(workspaceName, userEmail).delete
 
+    def deleteAllForWorkspace(workspaceId: UUID): ReadWriteAction[Int] =
+      recordsForWorkspaceQuery(workspaceId).delete
+
     def listAllForUser(workspaceName: WorkspaceName,
                        userEmail: RawlsUserEmail
     ): ReadAction[Seq[BondServiceAccountEmail]] =
@@ -73,6 +76,13 @@ trait WorkspaceRequesterPaysComponent {
       workspaceQuery.filter(ws => ws.namespace === workspaceName.namespace && ws.name === workspaceName.name).map(_.id)
     workspaceRequesterPaysQuery.filter(_.workspaceId in workspaceSubquery).filter(_.userEmail === userEmail.value)
   }
+
+  private def recordsForWorkspaceQuery(
+                                        workspaceId: UUID
+                                      ): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] =
+    for {
+      rp <- workspaceRequesterPaysQuery if rp.workspaceId === workspaceId
+    } yield rp
 
   private def existingRecordsForWorkspaceQuery(
     workspaceName: WorkspaceName

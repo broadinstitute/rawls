@@ -47,6 +47,16 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
       _ <- revokeEmails(emails.toSet, userEmail, workspace)
     } yield emails
 
+  /**
+    * Deletes all requester pays records for a workspace
+    * Since workspaces were migrated to v2, we no longer need to go through and revoke users 1 by 1
+    * when a workspace is deleted, because we're going to be deleting the google project itself anyway.
+    * So we just need to delete all the associated records
+    */
+  def deleteAllRecordsForWorkspace(workspace: Workspace): Future[Int] = dataSource.inTransaction { dataAccess =>
+    dataAccess.workspaceRequesterPaysQuery.deleteAllForWorkspace(workspace.workspaceIdAsUUID)
+  }
+
   def revokeAllUsersFromWorkspace(workspace: Workspace): Future[Seq[BondServiceAccountEmail]] =
     for {
       userEmailsToSAEmail <- dataSource.inTransaction { dataAccess =>
