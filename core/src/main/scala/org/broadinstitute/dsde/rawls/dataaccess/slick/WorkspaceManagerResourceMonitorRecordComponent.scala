@@ -70,14 +70,15 @@ object WorkspaceManagerResourceMonitorRecord {
   def forWorkspaceDeletion(jobRecordId: UUID,
                            workspaceId: UUID,
                            userEmail: RawlsUserEmail
-                          ): WorkspaceManagerResourceMonitorRecord = {
+  ): WorkspaceManagerResourceMonitorRecord =
     WorkspaceManagerResourceMonitorRecord(
       jobRecordId,
       JobType.WorkspaceDelete,
       workspaceId = Some(workspaceId),
-      billingProjectId = None, userEmail = Some(userEmail.value), createdTime = Timestamp.from(Instant.now())
+      billingProjectId = None,
+      userEmail = Some(userEmail.value),
+      createdTime = Timestamp.from(Instant.now())
     )
-  }
 }
 
 trait WorkspaceManagerResourceJobRunner {
