@@ -209,7 +209,10 @@ object MultiregionalBucketMigrationActor {
   val storageTransferJobs = MultiregionalStorageTransferJobs.storageTransferJobs
 
   final def restartMigration: MigrateAction[Unit] =
-    restartFailuresLike(FailureModes.noBucketPermissionsFailure, FailureModes.gcsUnavailableFailure, FailureModes.bucketNotFoundFailure) |
+    restartFailuresLike(FailureModes.noBucketPermissionsFailure,
+                        FailureModes.gcsUnavailableFailure,
+                        FailureModes.bucketNotFoundFailure
+    ) |
       reissueFailedStsJobs
 
   final def startMigration: MigrateAction[Unit] =
@@ -618,25 +621,22 @@ object MultiregionalBucketMigrationActor {
     }
 
   def restartFailuresLike(failureMessage: String, others: String*): MigrateAction[Unit] =
-    for {
-      _ <- getLogger[MigrateAction].info(s"restarting failures like $failureMessage")
-      _ <- retryFailuresLike(
-        (dataAccess, migrationId) => {
-          import dataAccess.multiregionalBucketMigrationQuery._
-          update3(
-            migrationId,
-            finishedCol,
-            Option.empty[Timestamp],
-            outcomeCol,
-            Option.empty[String],
-            messageCol,
-            Option.empty[String]
-          )
-        },
-        failureMessage,
-        others: _*
-      )
-    } yield ()
+    retryFailuresLike(
+      (dataAccess, migrationId) => {
+        import dataAccess.multiregionalBucketMigrationQuery._
+        update3(
+          migrationId,
+          finishedCol,
+          Option.empty[Timestamp],
+          outcomeCol,
+          Option.empty[String],
+          messageCol,
+          Option.empty[String]
+        )
+      },
+      failureMessage,
+      others: _*
+    )
 
   def reissueFailedStsJobs: MigrateAction[Unit] =
     retryFailuresLike(
@@ -1288,7 +1288,10 @@ object MultiregionalBucketMigrationActor {
 
               case RetryKnownFailures =>
                 List(
-                  restartFailuresLike(FailureModes.stsRateLimitedFailure, FailureModes.gcsUnavailableFailure, FailureModes.bucketNotFoundFailure),
+                  restartFailuresLike(FailureModes.stsRateLimitedFailure,
+                                      FailureModes.gcsUnavailableFailure,
+                                      FailureModes.bucketNotFoundFailure
+                  ),
                   reissueFailedStsJobs
                 )
                   .traverse_(r => runStep(r.foreverM)) // Greedily retry
