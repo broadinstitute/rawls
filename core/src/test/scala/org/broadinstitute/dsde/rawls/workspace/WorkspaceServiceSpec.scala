@@ -3078,8 +3078,9 @@ class WorkspaceServiceSpec
     policy.name shouldBe wsmPolicyInput.getName
     policy.namespace shouldBe wsmPolicyInput.getNamespace
     val additionalData = policy.additionalData
-    additionalData.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
-    additionalData.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
+    additionalData.length shouldEqual 2
+    additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
+    additionalData.tail.head.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
   }
 
   it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>

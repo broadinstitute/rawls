@@ -5622,7 +5622,7 @@ components:
         namespace:
           type: string
         additionalData:
-          type: object
+          type: array
     WorkspaceListResponse:
       type: object
       properties:
