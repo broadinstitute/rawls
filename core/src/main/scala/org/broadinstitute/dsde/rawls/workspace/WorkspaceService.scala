@@ -3136,7 +3136,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
     }
 
-
   private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
                                                 parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =

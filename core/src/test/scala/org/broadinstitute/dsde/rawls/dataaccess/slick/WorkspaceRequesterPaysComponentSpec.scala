@@ -51,11 +51,17 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
     ) shouldBe empty
 
     runAndWait(
-      workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userEmail, Set(saEmail1, saEmail2, saEmail3))
+      workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName,
+                                                   userEmail,
+                                                   Set(saEmail1, saEmail2, saEmail3)
+      )
     ) shouldBe 3
 
     runAndWait(
-      workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, user2Email, Set(saEmail1, saEmail2, saEmail3))
+      workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName,
+                                                   user2Email,
+                                                   Set(saEmail1, saEmail2, saEmail3)
+      )
     ) shouldBe 3
 
     runAndWait(
@@ -78,7 +84,10 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
     ) shouldBe empty
 
     runAndWait(
-      workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userEmail, Set(saEmail1, saEmail2, saEmail3))
+      workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName,
+                                                   userEmail,
+                                                   Set(saEmail1, saEmail2, saEmail3)
+      )
     ) shouldBe 3
 
     runAndWait(
@@ -92,7 +101,6 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
     ) shouldBe empty
 
   }
-
 
   "insertAllForUser" should "not insert duplicate records" in withEmptyTestDatabase {
     runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -109,7 +117,6 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userEmail, Set(saEmail1, saEmail2))
     ) shouldBe 0
   }
-
 
   it should "add new records for newly added users" in withEmptyTestDatabase {
     runAndWait(workspaceQuery.createOrUpdate(workspace))

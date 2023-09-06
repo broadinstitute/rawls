@@ -78,8 +78,8 @@ trait WorkspaceRequesterPaysComponent {
   }
 
   private def recordsForWorkspaceQuery(
-                                        workspaceId: UUID
-                                      ): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] =
+    workspaceId: UUID
+  ): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] =
     for {
       rp <- workspaceRequesterPaysQuery if rp.workspaceId === workspaceId
     } yield rp
