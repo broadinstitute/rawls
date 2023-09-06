@@ -176,7 +176,7 @@ class RequesterPaysSetupServiceSpec
       .policies
       .get(minimalTestData.workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
-  
+
   "revokeAllUsersFromWorkspace" should " not unlink all in namespace if all workspaces are no longer requester pays" in withMinimalTestDatabaseAndServices {
     service =>
       val user1SA = BondServiceAccountEmail("bondSA1")
