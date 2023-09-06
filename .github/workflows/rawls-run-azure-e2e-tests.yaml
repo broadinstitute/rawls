@@ -182,10 +182,6 @@ jobs:
           escapedJSON=$(echo '${{ needs.init-github-context.outputs.student-subjects }}' | sed 's/"/\"/g')
           echo "USER_SUBJECTS={\"service_account\":\"${{ needs.init-github-context.outputs.service-account }}\", \"owners\": [\"${{ needs.init-github-context.outputs.owner-subject }}\"], \"students\": $escapedJSON}" >> $GITHUB_ENV
 
-      - name: Echo user subjects used for this test
-        run: |
-          echo ${{ env.USER_SUBJECTS }}
-
       - name: dispatch to terra-github-workflows
         env:
           rawls_test_command: "testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest"
