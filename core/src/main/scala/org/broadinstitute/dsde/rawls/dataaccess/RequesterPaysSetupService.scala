@@ -56,7 +56,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
   def deleteAllRecordsForWorkspace(workspace: Workspace): Future[Int] = dataSource.inTransaction { dataAccess =>
     dataAccess.workspaceRequesterPaysQuery.deleteAllForWorkspace(workspace.workspaceIdAsUUID)
   }
-  
+
   private def revokeEmails(emails: Set[BondServiceAccountEmail],
                            userEmail: RawlsUserEmail,
                            workspace: Workspace
