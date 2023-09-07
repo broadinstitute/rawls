@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, WorkspaceDescription, WsmPolicyInput}
+import bio.terra.workspace.model.{AzureContext, WorkspaceDescription, WsmPolicyInput, WsmPolicyPair}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -61,7 +61,12 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
   it should "combine WSM data with Rawls data for Azure workspaces" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     val azContext = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID().toString)
-    val policies = Seq(new WsmPolicyInput().name("fakepolicy").namespace("fakens"))
+    val policies = Seq(
+      new WsmPolicyInput()
+        .name("fakepolicy")
+        .namespace("fakens")
+        .addAdditionalDataItem(new WsmPolicyPair().key("dataKey").value("dataValue"))
+    )
     when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription()
         .azureContext(
@@ -83,9 +88,11 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
       WorkspacePolicy(
         input.getName,
         input.getNamespace,
-        Option(input.getAdditionalData)
-          .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
-          .getOrElse(Map.empty)
+        Option(
+          input.getAdditionalData.asScala.toList
+            .map(data => Map.apply(data.getKey -> data.getValue))
+        )
+          .getOrElse(List.empty)
       )
     )
   }
