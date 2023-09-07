@@ -210,7 +210,9 @@ object MultiregionalBucketMigrationActor {
   val storageTransferJobs = MultiregionalStorageTransferJobs.storageTransferJobs
 
   final def restartMigration: MigrateAction[Unit] =
-    restartFailuresLike(FailureModes.noBucketPermissionsFailure, FailureModes.gcsUnavailableFailure) |
+    restartFailuresLike(MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure,
+                        MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+    ) |
       reissueFailedStsJobs
 
   final def startMigration: MigrateAction[Unit] =
@@ -663,7 +665,7 @@ object MultiregionalBucketMigrationActor {
           }
         } yield ()).value
       },
-      FailureModes.noObjectPermissionsFailure
+      MultiregionalBucketMigrationFailureModes.noObjectPermissionsFailure
     )
 
   def retryFailuresLike(update: (DataAccess, Long) => ReadWriteAction[Any],
@@ -1293,7 +1295,9 @@ object MultiregionalBucketMigrationActor {
 
               case RetryKnownFailures =>
                 List(
-                  restartFailuresLike(FailureModes.stsRateLimitedFailure, FailureModes.gcsUnavailableFailure),
+                  restartFailuresLike(MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure,
+                                      MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+                  ),
                   reissueFailedStsJobs
                 )
                   .traverse_(r => runStep(r.foreverM)) // Greedily retry
