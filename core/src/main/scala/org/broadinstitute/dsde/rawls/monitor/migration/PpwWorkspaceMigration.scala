@@ -89,8 +89,6 @@ object FailureModes {
     "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
       "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
 
-  val bucketNotFoundFailure: String = "The specified bucket does not exist."
-
   // transfer operations fail midway
   val noObjectPermissionsFailure: String =
     "%PERMISSION_DENIED%project-%@storage-transfer-service.iam.gserviceaccount.com " +
