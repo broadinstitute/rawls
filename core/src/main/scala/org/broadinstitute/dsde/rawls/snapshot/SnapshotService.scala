@@ -22,7 +22,6 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 
 import java.util.UUID
 import scala.annotation.tailrec
-import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
@@ -80,7 +79,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     if (!workspaceContext.bucketName.startsWith("fc-secure")) {
       // if not, check if snapshot is protected
       val sources = dataRepoDAO.getSnapshot(snapshot.snapshotId, ctx.userInfo.accessToken).getSource
-      if (sources.exists(_.getDataset.isSecureMonitoringEnabled)) {
+      if (sources.asScala.exists(_.getDataset.isSecureMonitoringEnabled)) {
         throw new RawlsException("Unable to add protected snapshot to unprotected workspace.")
       }
     }

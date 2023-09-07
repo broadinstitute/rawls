@@ -201,7 +201,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       )
     }
 
-    "create a protected snapshot reference in a protected workspace" in withMinimalTestDatabase { _ =>
+    "create a protected snapshot reference in a protected workspace" in withProtectedWorkspaceTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(
         mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -261,7 +261,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
             )
         )
 
-      val workspace = minimalTestData.adWorkspace
+      val workspace = protectedWorkspaceTestData.protectedWorkspace
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
