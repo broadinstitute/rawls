@@ -732,7 +732,6 @@ object MultiregionalBucketMigrationActor {
               )
             }
 
-            _ <- getLogger[IO].info(s"polling on $destBucketName to be created")
             // Don't need a requester pays project for the bucket in the new region
             // as requester pays if enabled at the end of the migration, if at all.
             bucket <- env.storageService.getBucket(
