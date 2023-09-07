@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
   JobTransferSchedule,
   OperationName
 }
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
@@ -1060,6 +1061,12 @@ object MultiregionalBucketMigrationActor {
               )
               serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
+              retryConfig = RetryPredicates.retryAllConfig.copy(retryable =
+                RetryPredicates.combine(
+                  Seq(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(404))
+                )
+              )
+
               _ <- storageService
                 .removeIamPolicy(
                   transferJob.sourceBucket,
@@ -1068,7 +1075,8 @@ object MultiregionalBucketMigrationActor {
                   ),
                   bucketSourceOptions =
                     if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
-                    else List.empty
+                    else List.empty,
+                  retryConfig = retryConfig
                 )
                 .compile
                 .drain
@@ -1078,7 +1086,8 @@ object MultiregionalBucketMigrationActor {
                   transferJob.destBucket,
                   Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
                       StorageRole.ObjectCreator -> serviceAccountList
-                  )
+                  ),
+                  retryConfig = retryConfig
                 )
                 .compile
                 .drain
