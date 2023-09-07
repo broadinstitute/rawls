@@ -759,7 +759,7 @@ case class AzureManagedAppCoordinates(tenantId: UUID,
                                       landingZoneId: Option[UUID] = None
 )
 
-case class WorkspacePolicy(name: String, namespace: String, additionalData: Map[String, String])
+case class WorkspacePolicy(name: String, namespace: String, additionalData: List[Map[String, String]])
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
