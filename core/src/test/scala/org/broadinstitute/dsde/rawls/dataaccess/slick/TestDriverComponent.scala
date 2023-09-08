@@ -2098,6 +2098,54 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       )
   }
 
+  class ProtectedWorkspaceTestData() extends TestData {
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"),
+                                             CreationStatuses.Ready,
+                                             Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
+                                             None
+    )
+    val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
+    val protectedWsName = WorkspaceName(billingProject.projectName.value, "myProtectedWorkspace")
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
+    val userReader = RawlsUser(
+      UserInfo(RawlsUserEmail("reader-access"),
+               OAuth2BearerToken("token"),
+               123,
+               RawlsUserSubjectId("123456789876543212347")
+      )
+    )
+    val workspace = Workspace(wsName.namespace,
+                              wsName.name,
+                              UUID.randomUUID().toString,
+                              "aBucket",
+                              Some("workflow-collection"),
+                              currentTime(),
+                              currentTime(),
+                              "testUser",
+                              Map.empty
+    )
+    val protectedWorkspace = Workspace(
+      protectedWsName.namespace,
+      protectedWsName.name,
+      UUID.randomUUID().toString,
+      "fc-secure-bucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "testUser",
+      Map.empty
+    )
+
+    override def save() =
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(protectedWorkspace),
+        rawlsBillingProjectQuery.create(billingProject)
+      )
+  }
+
   class LocalEntityProviderTestData() extends TestData {
     val workspaceName = WorkspaceName("namespace", "workspace-with-cache")
     val wsAttrs = Map(AttributeName.withDefaultNS("description") -> AttributeString("a description"))
@@ -2517,6 +2565,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val constantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
   val localEntityProviderTestData = new LocalEntityProviderTestData()
+  val protectedWorkspaceTestData = new ProtectedWorkspaceTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(testData)(testCode)
@@ -2526,6 +2575,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
+
+  def withProtectedWorkspaceTestDatabase[T](testCode: SlickDataSource => T): T =
+    withCustomTestDatabaseInternal(protectedWorkspaceTestData)(testCode(slickDataSource))
 
   def withLocalEntityProviderTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(localEntityProviderTestData)(testCode(slickDataSource))
