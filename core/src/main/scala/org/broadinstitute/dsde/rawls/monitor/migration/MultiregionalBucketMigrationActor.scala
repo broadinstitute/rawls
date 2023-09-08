@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
   JobTransferSchedule,
   OperationName
 }
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
@@ -209,7 +210,9 @@ object MultiregionalBucketMigrationActor {
   val storageTransferJobs = MultiregionalStorageTransferJobs.storageTransferJobs
 
   final def restartMigration: MigrateAction[Unit] =
-    restartFailuresLike(FailureModes.noBucketPermissionsFailure, FailureModes.gcsUnavailableFailure) |
+    restartFailuresLike(MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure,
+                        MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+    ) |
       reissueFailedStsJobs
 
   final def startMigration: MigrateAction[Unit] =
@@ -662,7 +665,7 @@ object MultiregionalBucketMigrationActor {
           }
         } yield ()).value
       },
-      FailureModes.noObjectPermissionsFailure
+      MultiregionalBucketMigrationFailureModes.noObjectPermissionsFailure
     )
 
   def retryFailuresLike(update: (DataAccess, Long) => ReadWriteAction[Any],
@@ -1056,6 +1059,12 @@ object MultiregionalBucketMigrationActor {
               )
               serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
+              retryConfig = RetryPredicates.retryAllConfig.copy(retryable =
+                RetryPredicates.combine(
+                  Seq(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(404))
+                )
+              )
+
               _ <- storageService
                 .removeIamPolicy(
                   transferJob.sourceBucket,
@@ -1064,7 +1073,8 @@ object MultiregionalBucketMigrationActor {
                   ),
                   bucketSourceOptions =
                     if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
-                    else List.empty
+                    else List.empty,
+                  retryConfig = retryConfig
                 )
                 .compile
                 .drain
@@ -1074,7 +1084,8 @@ object MultiregionalBucketMigrationActor {
                   transferJob.destBucket,
                   Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
                       StorageRole.ObjectCreator -> serviceAccountList
-                  )
+                  ),
+                  retryConfig = retryConfig
                 )
                 .compile
                 .drain
@@ -1284,7 +1295,9 @@ object MultiregionalBucketMigrationActor {
 
               case RetryKnownFailures =>
                 List(
-                  restartFailuresLike(FailureModes.stsRateLimitedFailure, FailureModes.gcsUnavailableFailure),
+                  restartFailuresLike(MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure,
+                                      MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+                  ),
                   reissueFailedStsJobs
                 )
                   .traverse_(r => runStep(r.foreverM)) // Greedily retry
