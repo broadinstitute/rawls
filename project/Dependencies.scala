@@ -81,14 +81,14 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.1.0"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "2b9e095"
+  val workbenchLibsHash = "e42c23c"
 
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.29-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.6-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.33-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.32-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.5-${workbenchLibsHash}"
-  val workbenchOpenTelemetryV = s"0.7-$workbenchLibsHash"
+  val workbenchOpenTelemetryV = s"0.6-$workbenchLibsHash"
 
   def excludeWorkbenchGoogle = ExclusionRule("org.broadinstitute.dsde.workbench", "workbench-google_2.13")
 
