@@ -290,15 +290,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       deleteIntermediateOutputFiles,
       useReferenceDisks,
       memoryRetryMultiplier,
-      determineCromwellBackendFromWorkspaceVersion(WorkspaceVersions.fromStringThrows(workspace.workspaceVersion)),
+      highSecurityNetworkCromwellBackend,
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
       ignoreEmptyOutputs
     )
   }
-
-  def determineCromwellBackendFromWorkspaceVersion(workspaceVersion: WorkspaceVersion): CromwellBackend =
-    highSecurityNetworkCromwellBackend
 
   def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit
     executionContext: ExecutionContext

@@ -100,7 +100,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         M.pure(Success.asInstanceOf[Outcome])
       )
 
-      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject, updateBillingProjectOutcome)
+      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject)
       _ <- writeBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
     } yield ()
 
@@ -184,8 +184,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       }
     } yield ()
 
-  def updateWorkspacesBillingAccountInGoogle[F[_]](billingProject: RawlsBillingProject,
-                                                   billingProjectSyncOutcome: Outcome
+  def updateWorkspacesBillingAccountInGoogle[F[_]](
+    billingProject: RawlsBillingProject
   )(implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F]): F[Outcome] =
     for {
       // v2 workspaces have their own google project so we'll need to attempt to set the billing account on each.

@@ -636,7 +636,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
       )
 
-      _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>
+      _ <- traceWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
         requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
             s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceContext.toWorkspaceName}`",
