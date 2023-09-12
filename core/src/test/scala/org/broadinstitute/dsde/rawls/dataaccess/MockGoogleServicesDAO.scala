@@ -303,6 +303,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = Future.successful(permissions)
 
+  def testSAGoogleBucketGetLocation(googleProject: GoogleProject, bucketName: GcsBucketName, saKey: String)(implicit
+    executionContext: ExecutionContext
+  ): Future[Option[String]] = Future.successful(Some("central"))
+
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = Future.successful(permissions)

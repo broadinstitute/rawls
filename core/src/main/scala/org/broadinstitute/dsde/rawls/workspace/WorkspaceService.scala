@@ -2753,7 +2753,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             val code = getStatusCodeHandlingUnknown(t.getStatusCode)
             Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
         }
-
+      bucketLocationResult <- gcsDAO.testSAGoogleBucketGetLocation(GoogleProject(workspace.googleProjectId.value),
+                                                                   GcsBucketName(workspace.bucketName),
+                                                                   petKey
+      )
       _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
         new RawlsException("user has workspace read-only access yet has expected google project permissions")
       }
@@ -2799,6 +2802,29 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               .toString()} has all permissions on google project ${workspace.googleProjectId.value} and google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.info("checkWorkspaceCloudPermissions: " + message)
           Future.successful(())
+        }
+      _ <-
+        if (bucketLocationResult.isEmpty) {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
+              .toString()} was unable to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.warn("checkWorkspaceCloudPermissions: " + message)
+          fastPassServiceConstructor(ctx, dataSource)
+            .syncFastPassesForUserInWorkspace(workspace)
+            .flatMap(_ =>
+              Future.failed(
+                new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.Forbidden,
+                    message
+                  )
+                )
+              )
+            )
+        } else {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
+              .toString()} was able to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.info("checkWorkspaceCloudPermissions: " + message)
+          Future.successful()
         }
     } yield ()
 

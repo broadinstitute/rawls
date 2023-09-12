@@ -621,6 +621,26 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         .unsafeToFuture()
     }
 
+  def testSAGoogleBucketGetLocation(googleProject: GoogleProject, bucketName: GcsBucketName, saKey: String)(implicit
+    executionContext: ExecutionContext
+  ): Future[Option[String]] = {
+    implicit val async = IO.asyncForIO
+    val credentials = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes))
+    val storageServiceResource = GoogleStorageService.fromCredentials(credentials)
+    storageServiceResource
+      .use { storageService =>
+        storageService.getBucket(googleProject, bucketName)
+      }
+      .map(_.map(_.getLocation))
+      .unsafeToFuture()
+      .recoverWith { case t: Throwable =>
+        logger.warn(s"${credentials.getClientEmail} was unable to get bucket location for $googleProject/$bucketName",
+                    t
+        )
+        Future.successful(None)
+      }
+  }
+
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] =
