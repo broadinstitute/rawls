@@ -5,13 +5,14 @@ import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.LeonardoDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
 
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 
 class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: FiniteDuration, timeout: FiniteDuration)(
   implicit val system: ActorSystem
@@ -125,11 +126,6 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
       }
     }
 
-  def when500(throwable: Throwable): Boolean =
-    throwable match {
-      case t: ApiException => t.getCode / 100 == 5
-      case _               => false
-    }
 }
 
 class LeonardoPollingException(message: String) extends WorkspaceDeletionActionFailureException(message)

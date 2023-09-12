@@ -8,11 +8,12 @@ import bio.terra.workspace.model.JobResult
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceManagerOperationFailureException
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.{Failure, Success, Try}
 
 class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
@@ -106,13 +107,6 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
       case t: Throwable => Future.failed(t)
 
     }.flatMap(_ => Future.successful())
-
-  def when500(throwable: Throwable): Boolean =
-    throwable match {
-      case t: ApiException => t.getCode / 100 == 5
-      case _               => false
-    }
-
 }
 
 class WorkspaceManagerPollingOperationException(message: String, val status: StatusEnum) extends Exception(message)
