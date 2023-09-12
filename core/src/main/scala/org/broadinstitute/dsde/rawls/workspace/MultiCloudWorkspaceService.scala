@@ -211,7 +211,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
     *
     * The determination is made by the choice of billing project in the request: if it's an Azure billing
-    * project, this class handles the workspace creation. If not, delegates to the legacy WorksapceService codepath.
+    * project, this class handles the workspace creation. If not, delegates to the legacy WorkspaceService codepath.
     *
     * @param workspaceRequest Incoming workspace creation request
     * @param workspaceService Workspace service that will handle legacy creation requests

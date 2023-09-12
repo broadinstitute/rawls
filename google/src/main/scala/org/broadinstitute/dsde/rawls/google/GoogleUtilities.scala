@@ -64,8 +64,10 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
   ): Future[T] =
     retryExponentially(when500or400orGoogleError)(() => Future(blocking(op())).recover(recover))
 
-  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters): T =
-    executeGoogleCall(request) { response =>
+  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T], logRequest: Boolean = true)(implicit
+    counters: GoogleCounters
+  ): T =
+    executeGoogleCall(request, logRequest) { response =>
       response.parseAs(request.getResponseClass)
     }
 
@@ -86,25 +88,26 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     }
 
   protected def executeGoogleCall[A, B](
-    request: AbstractGoogleClientRequest[A]
+    request: AbstractGoogleClientRequest[A],
+    logRequest: Boolean = true
   )(processResponse: (com.google.api.client.http.HttpResponse) => B)(implicit counters: GoogleCounters): B = {
     val start = System.currentTimeMillis()
     Try {
       request.executeUnparsed()
     } match {
       case Success(response) =>
-        logGoogleRequest(request, start, response)
+        if (logRequest) logGoogleRequest(request, start, response)
         instrumentGoogleRequest(request, start, Right(response))
         try
           processResponse(response)
         finally
           response.disconnect()
       case Failure(httpRegrets: HttpResponseException) =>
-        logGoogleRequest(request, start, httpRegrets)
+        if (logRequest) logGoogleRequest(request, start, httpRegrets)
         instrumentGoogleRequest(request, start, Left(httpRegrets))
         throw httpRegrets
       case Failure(regrets) =>
-        logGoogleRequest(request, start, regrets)
+        if (logRequest) logGoogleRequest(request, start, regrets)
         instrumentGoogleRequest(request, start, Left(regrets))
         throw regrets
     }

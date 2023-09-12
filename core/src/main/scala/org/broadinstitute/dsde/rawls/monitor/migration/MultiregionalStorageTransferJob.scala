@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.sql.Timestamp
 
@@ -19,7 +19,8 @@ final case class MultiregionalStorageTransferJob(id: Long,
                                                  totalBytesToTransfer: Option[Long],
                                                  bytesTransferred: Option[Long],
                                                  totalObjectsToTransfer: Option[Long],
-                                                 objectsTransferred: Option[Long]
+                                                 objectsTransferred: Option[Long],
+                                                 googleProject: Option[GoogleProject]
 )
 
 private[migration] object MultiregionalStorageTransferJob {
@@ -37,7 +38,8 @@ private[migration] object MultiregionalStorageTransferJob {
     Option[Long], // totalBytesToTransfer
     Option[Long], // bytesTransferred
     Option[Long], // totalObjectsToTransfer
-    Option[Long] // objectsTransferred
+    Option[Long], // objectsTransferred,
+    Option[String] // googleProject
   )
 
   def fromRecord(record: RecordType): Either[String, MultiregionalStorageTransferJob] = record match {
@@ -54,7 +56,8 @@ private[migration] object MultiregionalStorageTransferJob {
           totalBytesToTransfer,
           bytesTransferred,
           totalObjectsToTransfer,
-          objectsTransferred
+          objectsTransferred,
+          googleProject
         ) =>
       Outcome.fromFields(outcome, message).map { outcome =>
         MultiregionalStorageTransferJob(
@@ -70,7 +73,8 @@ private[migration] object MultiregionalStorageTransferJob {
           totalBytesToTransfer,
           bytesTransferred,
           totalObjectsToTransfer,
-          objectsTransferred
+          objectsTransferred,
+          googleProject.map(GoogleProject)
         )
       }
   }
@@ -91,7 +95,8 @@ private[migration] object MultiregionalStorageTransferJob {
       job.totalBytesToTransfer,
       job.bytesTransferred,
       job.totalObjectsToTransfer,
-      job.objectsTransferred
+      job.objectsTransferred,
+      job.googleProject.map(_.value)
     )
   }
 }
@@ -119,6 +124,7 @@ object MultiregionalStorageTransferJobs {
     def bytesTransferred = column[Option[Long]]("BYTES_TRANSFERRED")
     def totalObjectsToTransfer = column[Option[Long]]("TOTAL_OBJECTS_TO_TRANSFER")
     def objectsTransferred = column[Option[Long]]("OBJECTS_TRANSFERRED")
+    def googleProject = column[Option[String]]("GOOGLE_PROJECT")
 
     override def * = (
       id,
@@ -134,7 +140,8 @@ object MultiregionalStorageTransferJobs {
       totalBytesToTransfer,
       bytesTransferred,
       totalObjectsToTransfer,
-      objectsTransferred
+      objectsTransferred,
+      googleProject
     ) <> (
       r => MigrationUtils.unsafeFromEither(MultiregionalStorageTransferJob.fromRecord(r)),
       MultiregionalStorageTransferJob.toRecord(_: MultiregionalStorageTransferJob).some

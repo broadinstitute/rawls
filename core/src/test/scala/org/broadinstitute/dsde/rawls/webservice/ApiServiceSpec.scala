@@ -248,7 +248,8 @@ trait ApiServiceSpec
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
-      mockServer.mockServerBaseUrl
+      mockServer.mockServerBaseUrl,
+      dataRepoDAO
     )
 
     override val genomicsServiceConstructor = GenomicsService.constructor(

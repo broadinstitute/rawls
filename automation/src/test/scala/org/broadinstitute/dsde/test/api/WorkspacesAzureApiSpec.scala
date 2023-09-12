@@ -10,17 +10,15 @@ import akka.util.ByteString
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   WorkspaceCloudPlatform,
   WorkspaceListResponse,
   WorkspaceResponse,
   WorkspaceType
 }
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -31,48 +29,58 @@ import spray.json._
 import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
+import org.broadinstitute.dsde.test.pipeline._
 
 @WorkspacesAzureTest
-class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
-  val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
-  val nonOwner: Credentials = UserPool.chooseStudent
-
-  private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
-    UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
-    UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
-    "staticTestingMrg",
-    Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
-  )
+class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
+  // The values of the following vars are injected from the pipeline.
+  var billingProject: String = _
+  var ownerAuthToken: ProxyAuthToken = _
+  var nonOwnerAuthToken: ProxyAuthToken = _
 
   private val wsmUrl = RawlsConfig.wsmUrl
 
   implicit val system = ActorSystem()
 
+  override def beforeAll(): Unit = {
+    val bee = PipelineInjector(PipelineInjector.e2eEnv())
+    billingProject = bee.billingProject
+    bee.Owners.getUserCredential("hermione") match {
+      case Some(owner) =>
+        ownerAuthToken = owner.makeAuthToken
+      case _ => ()
+    }
+    bee.chooseStudent match {
+      case Some(student) =>
+        nonOwnerAuthToken = student.makeAuthToken
+      case _ => ()
+    }
+  }
+
   "Rawls" should "allow creation and deletion of azure workspaces" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-      val workspaceName = generateWorkspaceName()
-      Rawls.workspaces.create(
-        projectName,
-        workspaceName,
-        Set.empty,
-        Map("disableAutomaticAppCreation" -> "true")
-      )
-      try {
-        val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-        response.workspace.name should be(workspaceName)
-        response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
-        response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
-        response.accessLevel should be(Some(ProjectOwner))
-      } finally {
-        Rawls.workspaces.delete(projectName, workspaceName)
-        assertNoAccessToWorkspace(projectName, workspaceName)
-      }
+    implicit val token = ownerAuthToken
+    val projectName = billingProject
+    val workspaceName = generateWorkspaceName()
+    Rawls.workspaces.create(
+      projectName,
+      workspaceName,
+      Set.empty,
+      Map("disableAutomaticAppCreation" -> "true")
+    )
+    try {
+      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+      response.workspace.name should be(workspaceName)
+      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+      response.accessLevel should be(Some(ProjectOwner))
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
     }
   }
 
   it should "allow access to WorkspaceManager API" in {
-    implicit val token = owner.makeAuthToken()
+    implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
     withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
@@ -81,171 +89,167 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   }
 
   it should "allow cloning of azure workspaces" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-      val workspaceName = generateWorkspaceName()
-      val workspaceCloneName = generateWorkspaceName()
+    implicit val token = ownerAuthToken
+    val projectName = billingProject
+    val workspaceName = generateWorkspaceName()
+    val workspaceCloneName = generateWorkspaceName()
 
-      val analysesDir = "analyses"
-      val analysesFilename = analysesDir + "/testFile.txt"
-      val analysesContents = "hello world"
+    val analysesDir = "analyses"
+    val analysesFilename = analysesDir + "/testFile.txt"
+    val analysesContents = "hello world"
 
-      val nonAnalysesFilename = "willNotClone.txt"
-      val nonAnalysesContents = "user upload content"
+    val nonAnalysesFilename = "willNotClone.txt"
+    val nonAnalysesContents = "user upload content"
 
-      Rawls.workspaces.create(
+    Rawls.workspaces.create(
+      projectName,
+      workspaceName,
+      Set.empty,
+      Map("disableAutomaticAppCreation" -> "true")
+    )
+    try {
+      val sasUrl = getSasUrl(projectName, workspaceName, token)
+
+      // Upload the blob that will be cloned
+      uploadBlob(sasUrl, analysesFilename, analysesContents)
+      val downloadContents = downloadBlob(sasUrl, analysesFilename)
+      withClue(s"testing uploaded blob ${analysesFilename}") {
+        downloadContents shouldBe analysesContents
+      }
+
+      // Upload the blob that should not be cloned
+      uploadBlob(sasUrl, nonAnalysesFilename, nonAnalysesContents)
+      val downloadNonAnalysesContents = downloadBlob(sasUrl, nonAnalysesFilename)
+      withClue(s"testing uploaded blob ${nonAnalysesFilename}") {
+        downloadNonAnalysesContents shouldBe nonAnalysesContents
+      }
+
+      Rawls.workspaces.clone(
         projectName,
         workspaceName,
+        projectName,
+        workspaceCloneName,
         Set.empty,
+        Some(analysesDir),
         Map("disableAutomaticAppCreation" -> "true")
       )
       try {
-        val sasUrl = getSasUrl(projectName, workspaceName, token)
+        val clonedResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceCloneName))
+        clonedResponse.workspace.name should equal(workspaceCloneName)
+        clonedResponse.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+        clonedResponse.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+        clonedResponse.accessLevel should be(Some(ProjectOwner))
 
-        // Upload the blob that will be cloned
-        uploadBlob(sasUrl, analysesFilename, analysesContents)
-        val downloadContents = downloadBlob(sasUrl, analysesFilename)
-        withClue(s"testing uploaded blob ${analysesFilename}") {
-          downloadContents shouldBe analysesContents
+        withClue(s"Verifying container cloning has completed") {
+          awaitCond(
+            isCloneCompleted(projectName, workspaceCloneName),
+            60 seconds,
+            2 seconds
+          )
         }
 
-        // Upload the blob that should not be cloned
-        uploadBlob(sasUrl, nonAnalysesFilename, nonAnalysesContents)
-        val downloadNonAnalysesContents = downloadBlob(sasUrl, nonAnalysesFilename)
-        withClue(s"testing uploaded blob ${nonAnalysesFilename}") {
-          downloadNonAnalysesContents shouldBe nonAnalysesContents
+        val cloneSasUrl = getSasUrl(projectName, workspaceCloneName, token)
+        val downloadCloneContents = downloadBlob(cloneSasUrl, analysesFilename)
+        withClue(s"testing blob ${analysesFilename} cloned") {
+          downloadCloneContents shouldBe analysesContents
         }
-
-        Rawls.workspaces.clone(
-          projectName,
-          workspaceName,
-          projectName,
-          workspaceCloneName,
-          Set.empty,
-          Some(analysesDir),
-          Map("disableAutomaticAppCreation" -> "true")
-        )
-        try {
-          val clonedResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceCloneName))
-          clonedResponse.workspace.name should equal(workspaceCloneName)
-          clonedResponse.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
-          clonedResponse.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
-          clonedResponse.accessLevel should be(Some(ProjectOwner))
-
-          withClue(s"Verifying container cloning has completed") {
-            awaitCond(
-              isCloneCompleted(projectName, workspaceCloneName),
-              60 seconds,
-              2 seconds
-            )
-          }
-
-          val cloneSasUrl = getSasUrl(projectName, workspaceCloneName, token)
-          val downloadCloneContents = downloadBlob(cloneSasUrl, analysesFilename)
-          withClue(s"testing blob ${analysesFilename} cloned") {
-            downloadCloneContents shouldBe analysesContents
-          }
-          withClue(s"testing blob ${nonAnalysesFilename} did not clone") {
-            verifyBlobNotCloned(cloneSasUrl, nonAnalysesFilename)
-          }
-        } finally {
-          Rawls.workspaces.delete(projectName, workspaceCloneName)
-          assertNoAccessToWorkspace(projectName, workspaceCloneName)
+        withClue(s"testing blob ${nonAnalysesFilename} did not clone") {
+          verifyBlobNotCloned(cloneSasUrl, nonAnalysesFilename)
         }
       } finally {
-        Rawls.workspaces.delete(projectName, workspaceName)
-        assertNoAccessToWorkspace(projectName, workspaceName)
+        Rawls.workspaces.delete(projectName, workspaceCloneName)
+        assertNoAccessToWorkspace(projectName, workspaceCloneName)
       }
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
     }
   }
 
   it should "allow listing workspaces" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-      val workspaceName1 = generateWorkspaceName()
-      val workspaceName2 = generateWorkspaceName()
+    implicit val token = ownerAuthToken
+    val projectName = billingProject
+    val workspaceName1 = generateWorkspaceName()
+    val workspaceName2 = generateWorkspaceName()
 
-      try {
-        Rawls.workspaces.create(
-          projectName,
-          workspaceName1,
-          Set.empty,
-          Map("disableAutomaticAppCreation" -> "true")
-        )
-        Rawls.workspaces.create(
-          projectName,
-          workspaceName2,
-          Set.empty,
-          Map("disableAutomaticAppCreation" -> "true")
-        )
+    try {
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName1,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName2,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
 
-        val workspaces = Rawls.workspaces.list().parseJson.convertTo[Seq[WorkspaceListResponse]]
+      val workspaces = Rawls.workspaces.list().parseJson.convertTo[Seq[WorkspaceListResponse]]
 
-        workspaces.length shouldBe 2
-        workspaces.map(_.workspace.name).toSet shouldBe Set(workspaceName1, workspaceName2)
-      } finally {
-        Rawls.workspaces.delete(projectName, workspaceName1)
-        assertNoAccessToWorkspace(projectName, workspaceName1)
+      workspaces.length shouldBe 2
+      workspaces.map(_.workspace.name).toSet shouldBe Set(workspaceName1, workspaceName2)
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName1)
+      assertNoAccessToWorkspace(projectName, workspaceName1)
 
-        Rawls.workspaces.delete(projectName, workspaceName2)
-        assertNoAccessToWorkspace(projectName, workspaceName2)
-      }
+      Rawls.workspaces.delete(projectName, workspaceName2)
+      assertNoAccessToWorkspace(projectName, workspaceName2)
     }
   }
 
   it should "allow sharing a workspace" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-      val workspaceName = generateWorkspaceName()
-      Rawls.workspaces.create(
+    implicit val token = ownerAuthToken
+    val projectName = billingProject
+    val workspaceName = generateWorkspaceName()
+    Rawls.workspaces.create(
+      projectName,
+      workspaceName,
+      Set.empty,
+      Map("disableAutomaticAppCreation" -> "true")
+    )
+    try {
+      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+      response.workspace.name should be(workspaceName)
+      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+
+      val userToken = nonOwnerAuthToken
+      eventually {
+        intercept[Exception] {
+          getSasUrl(projectName, workspaceName, userToken)
+        }
+      }
+
+      // Make nonOwner a writer
+      Orchestration.workspaces.updateAcl(
         projectName,
         workspaceName,
-        Set.empty,
-        Map("disableAutomaticAppCreation" -> "true")
+        nonOwnerAuthToken.userData.email,
+        WorkspaceAccessLevel.Writer,
+        Some(false),
+        Some(false)
       )
-      try {
-        val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-        response.workspace.name should be(workspaceName)
-        response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      // Verify can get a Sas URL to write to workspace
+      getSasUrl(projectName, workspaceName, userToken)
 
-        // nonOwner is not a member of the workspace, should not be able to write
-        val userToken = nonOwner.makeAuthToken()
-        eventually {
-          intercept[Exception] {
-            getSasUrl(projectName, workspaceName, userToken)
-          }
+      // Remove write access
+      Orchestration.workspaces.updateAcl(
+        projectName,
+        workspaceName,
+        nonOwnerAuthToken.userData.email,
+        WorkspaceAccessLevel.NoAccess,
+        Some(false),
+        Some(false)
+      )
+      eventually {
+        intercept[Exception] {
+          getSasUrl(projectName, workspaceName, userToken)
         }
-
-        // Make nonOwner a writer
-        Orchestration.workspaces.updateAcl(
-          projectName,
-          workspaceName,
-          nonOwner.email,
-          WorkspaceAccessLevel.Writer,
-          Some(false),
-          Some(false)
-        )
-        // Verify can get a Sas URL to write to workspace
-        getSasUrl(projectName, workspaceName, userToken)
-
-        // Remove write access
-        Orchestration.workspaces.updateAcl(
-          projectName,
-          workspaceName,
-          nonOwner.email,
-          WorkspaceAccessLevel.NoAccess,
-          Some(false),
-          Some(false)
-        )
-        eventually {
-          intercept[Exception] {
-            getSasUrl(projectName, workspaceName, userToken)
-          }
-        }
-      } finally {
-        Rawls.workspaces.delete(projectName, workspaceName)
-        assertNoAccessToWorkspace(projectName, workspaceName)
       }
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
     }
   }
 

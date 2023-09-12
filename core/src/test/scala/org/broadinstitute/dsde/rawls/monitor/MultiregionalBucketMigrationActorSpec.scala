@@ -237,18 +237,18 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
   "isMigrating" should "return false when a workspace is not being migrated" in
     spec.withMinimalTestDatabase { _ =>
       spec.runAndWait(
-        spec.multiregionalBucketMigrationQuery.isMigrating(spec.minimalTestData.v1Workspace)
+        spec.multiregionalBucketMigrationQuery.isMigrating(spec.minimalTestData.workspace)
       ) shouldBe false
     }
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
       spec.runAndWait(
-        spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace, testData.bucketLocation)
+        spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace, testData.bucketLocation)
       )
       assertThrows[RawlsExceptionWithErrorReport] {
         spec.runAndWait(
-          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace, testData.bucketLocation)
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace, testData.bucketLocation)
         )
       }
     }
@@ -259,8 +259,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       import spec.multiregionalBucketMigrationQuery.{getAttempt, scheduleAndGetMetadata, setMigrationFinished}
       spec.runAndWait {
         for {
-          a <- scheduleAndGetMetadata(minimalTestData.v1Workspace, testData.bucketLocation)
-          b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2, testData.bucketLocation)
+          a <- scheduleAndGetMetadata(minimalTestData.workspace, testData.bucketLocation)
+          b <- scheduleAndGetMetadata(minimalTestData.workspace2, testData.bucketLocation)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
@@ -662,7 +662,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -690,7 +689,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -752,7 +750,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         migrationId <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             migrationId <- createAndScheduleWorkspace(testData.workspace)
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
@@ -777,7 +774,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -805,7 +801,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -847,7 +842,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -926,7 +920,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -999,7 +992,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -1075,7 +1067,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -1104,7 +1095,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -1144,7 +1134,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield Succeeded
     }
 
-  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
+  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets in the workspace's Google project" in
     runMigrationTest {
       for {
         // just need a unique migration id
@@ -1170,6 +1160,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.migrationId shouldBe migration.id
         transferJob.sourceBucket shouldBe workspaceBucketName
         transferJob.destBucket shouldBe tmpBucketName
+        transferJob.googleProject shouldBe Option(GoogleProject(testData.workspace.googleProjectId.value))
       }
     }
 
@@ -1291,7 +1282,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         migrationId <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -1380,7 +1370,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     totalBytesToTransfer = null,
     bytesTransferred = null,
     totalObjectsToTransfer = null,
-    objectsTransferred = null
+    objectsTransferred = null,
+    googleProject = null
   )
 
   "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
@@ -1396,7 +1387,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             migrationId = before.id,
             destBucket = GcsBucketName("tmp-bucket-name"),
             sourceBucket = GcsBucketName("workspace-bucket"),
-            outcome = Success.some
+            outcome = Success.some,
+            googleProject = GoogleProject("workspace-project").some
           )
         )
 
@@ -1433,7 +1425,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             migrationId = before.id,
             sourceBucket = GcsBucketName("workspace-bucket"),
             destBucket = GcsBucketName("tmp-bucket-name"),
-            outcome = Success.some
+            outcome = Success.some,
+            googleProject = GoogleProject("workspace-project").some
           )
         )
 

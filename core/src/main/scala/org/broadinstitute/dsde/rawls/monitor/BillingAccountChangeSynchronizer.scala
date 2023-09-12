@@ -100,7 +100,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         M.pure(Success.asInstanceOf[Outcome])
       )
 
-      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject, updateBillingProjectOutcome)
+      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject)
       _ <- writeBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
     } yield ()
 
@@ -184,32 +184,19 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       }
     } yield ()
 
-  def updateWorkspacesBillingAccountInGoogle[F[_]](billingProject: RawlsBillingProject,
-                                                   billingProjectSyncOutcome: Outcome
+  def updateWorkspacesBillingAccountInGoogle[F[_]](
+    billingProject: RawlsBillingProject
   )(implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F]): F[Outcome] =
     for {
-      // v1 workspaces use the v1 billing project's google project and we've already attempted
-      // to update which billing account it uses. We can update, therefore, all workspaces that
-      // use that google project with the outcome of setting the billing account on the v1
-      // billing project.
-      _ <- writeWorkspaceBillingAccountAndErrorMessage(
-        workspaceQuery
-          .withBillingProject(billingProject.projectName)
-          .withGoogleProjectId(billingProject.googleProjectId)
-          .withVersion(WorkspaceVersions.V1),
-        Outcome.toTuple(billingProjectSyncOutcome)._2
-      )
-
-      // v2 workspaces have their own google project so we'll need to attempt to set the
-      // billing account on each.
-      v2Workspaces <- inTransaction {
+      // v2 workspaces have their own google project so we'll need to attempt to set the billing account on each.
+      workspaces <- inTransaction {
         workspaceQuery
           .withBillingProject(billingProject.projectName)
           .withVersion(WorkspaceVersions.V2)
           .read
       }
 
-      v2Outcome <- v2Workspaces.foldMapA { workspace =>
+      outcome <- workspaces.foldMapA { workspace =>
         for {
           attempt <- setGoogleProjectBillingAccount(workspace.googleProjectId).attempt
           updateWorkspaceOutcome = Outcome.fromEither(attempt)
@@ -231,7 +218,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
           )
         } yield updateWorkspaceOutcome
       }
-    } yield v2Outcome
+    } yield outcome
 
   private def setGoogleProjectBillingAccount[F[_]](
     googleProjectId: GoogleProjectId

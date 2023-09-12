@@ -32,12 +32,12 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     * "rawls" workspace with no WSM information.
     *
     * @param workspace The source rawls workspace
-    * @param ctx Rawls request and tracing context. 
+    * @param ctx Rawls request and tracing context.
     *
     * @throws AggregateWorkspaceNotFoundException when the source workspace references a workspace manager
     *                                             record that is not present
     * @throws WorkspaceAggregationException when an error is encountered pulling data from aggregating upstream systems
-    *                                       
+    *
     * @throws InvalidCloudContextException when an aggregated workspace does not have an Azure cloud context
     */
   def getAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace = {
@@ -64,9 +64,11 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
                       WorkspacePolicy(
                         input.getName,
                         input.getNamespace,
-                        Option(input.getAdditionalData)
-                          .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
-                          .getOrElse(Map.empty)
+                        Option(
+                          input.getAdditionalData.asScala.toList
+                            .map(data => Map.apply(data.getKey -> data.getValue))
+                        )
+                          .getOrElse(List.empty)
                       )
                     )
                   )

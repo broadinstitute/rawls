@@ -98,20 +98,11 @@ class BillingRepository(dataSource: SlickDataSource) {
   def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[Unit] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.listWithBillingProject(projectName) map { workspaces =>
-        val (v1Workspaces, v2Workspaces) = workspaces.partition(ws => ws.workspaceVersion == WorkspaceVersions.V1)
-        v2Workspaces map { _ =>
+        workspaces map { _ =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(
               StatusCodes.BadRequest,
               "Project cannot be deleted because it contains workspaces."
-            )
-          )
-        }
-        v1Workspaces map { _ =>
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              "Project cannot be deleted because it contains v1 workspaces. Contact support for help."
             )
           )
         }
