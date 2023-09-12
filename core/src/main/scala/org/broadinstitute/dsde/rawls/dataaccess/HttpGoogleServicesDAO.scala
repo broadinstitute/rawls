@@ -123,6 +123,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   val SingleRegionLocationType: String = "region"
 
+  val REQUESTER_PAYS_ERROR_SUBSTRINGS = Seq("requester pays", "UserProjectMissing")
+
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId]
@@ -621,9 +623,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         .unsafeToFuture()
     }
 
-  def testSAGoogleBucketGetLocation(googleProject: GoogleProject, bucketName: GcsBucketName, saKey: String)(implicit
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
     executionContext: ExecutionContext
-  ): Future[Option[String]] = {
+  ): Future[Boolean] = {
     implicit val async = IO.asyncForIO
     val credentials = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes))
     val storageServiceResource = GoogleStorageService.fromCredentials(credentials)
@@ -631,13 +636,19 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .use { storageService =>
         storageService.getBucket(googleProject, bucketName)
       }
-      .map(_.map(_.getLocation))
+      .map(_.isDefined)
       .unsafeToFuture()
-      .recoverWith { case t: Throwable =>
-        logger.warn(s"${credentials.getClientEmail} was unable to get bucket location for $googleProject/$bucketName",
-                    t
-        )
-        Future.successful(None)
+      .recoverWith {
+        case t: Throwable if REQUESTER_PAYS_ERROR_SUBSTRINGS.exists(t.getMessage.toLowerCase.contains) =>
+          logger.info(
+            s"${credentials.getClientEmail} was unable to get bucket location for $googleProject/$bucketName, but it appears this is a requester-pays bucket"
+          )
+          Future.successful(true)
+        case t: Throwable =>
+          logger.warn(s"${credentials.getClientEmail} was unable to get bucket location for $googleProject/$bucketName",
+                      t
+          )
+          Future.successful(false)
       }
   }
 

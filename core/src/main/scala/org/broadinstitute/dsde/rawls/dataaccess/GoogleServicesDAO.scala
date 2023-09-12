@@ -341,12 +341,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param bucketName Google Bucket
     * @param saKey Pet Service Account Key of the user
     * @param executionContext Execution Context
-    * @return A Future Option. If the Option is Some(String), then the SA was able to get the bucket location,
-    *         and the location is returned. If the Option is None, then the SA was unable to get the bucket location.
+    * @return A Future Boolean. If true, the SA was able to get the bucket location, or the bucket is requester-pays.
+    *         If false, the bucket location could not be retrieved and the bucket is not requester-pays.
     */
-  def testSAGoogleBucketGetLocation(googleProject: GoogleProject, bucketName: GcsBucketName, saKey: String)(implicit
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
     executionContext: ExecutionContext
-  ): Future[Option[String]]
+  ): Future[Boolean]
 
   def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext

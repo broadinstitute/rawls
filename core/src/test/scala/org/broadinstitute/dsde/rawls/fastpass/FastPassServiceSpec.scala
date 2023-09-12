@@ -1347,10 +1347,13 @@ class FastPassServiceSpec
         )
       ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
       when(
-        services.gcsDAO.testSAGoogleBucketGetLocation(any[GoogleProject], any[GcsBucketName], any[String])(
+        services.gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(any[GoogleProject],
+                                                                     any[GcsBucketName],
+                                                                     any[String]
+        )(
           any[ExecutionContext]
         )
-      ).thenReturn(Future.successful(None))
+      ).thenReturn(Future.successful(false))
       val err = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
                      Duration.Inf
@@ -1374,10 +1377,13 @@ class FastPassServiceSpec
         )
       ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
       when(
-        services.gcsDAO.testSAGoogleBucketGetLocation(any[GoogleProject], any[GcsBucketName], any[String])(
+        services.gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(any[GoogleProject],
+                                                                     any[GcsBucketName],
+                                                                     any[String]
+        )(
           any[ExecutionContext]
         )
-      ).thenReturn(Future.successful(None))
+      ).thenReturn(Future.successful(false))
       Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
                    Duration.Inf
       )
