@@ -2804,7 +2804,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           Future.successful(())
         }
       _ <-
-        if (bucketLocationResult.isEmpty) {
+        if (
+          expectedGoogleBucketPermissions.contains(IamPermission("storage.buckets.get")) && bucketLocationResult.isEmpty
+        ) {
           val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
               .toString()} was unable to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.warn("checkWorkspaceCloudPermissions: " + message)

@@ -1337,7 +1337,7 @@ class FastPassServiceSpec
 
   it should "add a FastPass grant when the users bucket permissions are unable to be exercised" in withTestDataServices {
     services =>
-      val storageRole = "storage.foo"
+      val storageRole = "storage.buckets.get"
       when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
         .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
       when(
@@ -1358,6 +1358,30 @@ class FastPassServiceSpec
 
       err.errorReport.message should include("unable to get bucket location")
       verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "not add a FastPass grant when the user doesn't have bucket get permissions" in withTestDataServices {
+    services =>
+      val storageRole = "storage.buckets.notget"
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
+      when(
+        services.gcsDAO.testSAGoogleBucketGetLocation(any[GoogleProject], any[GcsBucketName], any[String])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(None))
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+
+      verify(services.mockFastPassService, never()).syncFastPassesForUserInWorkspace(
         ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
       )
   }
