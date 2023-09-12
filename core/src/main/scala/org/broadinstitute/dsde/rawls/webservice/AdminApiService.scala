@@ -142,34 +142,6 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "workspaces" / "migrations") {
-          post {
-            entity(as[List[WorkspaceName]]) { workspaceNames =>
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .migrateAll(workspaceNames)
-                  .map(StatusCodes.Created -> _)
-              }
-            }
-          }
-        } ~
-        path("admin" / "workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
-          val workspaceName = WorkspaceName(namespace, name)
-          get {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .getWorkspaceMigrationAttempts(workspaceName)
-                .map(ms => StatusCodes.OK -> ms)
-            }
-          } ~
-            post {
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .migrateWorkspace(workspaceName)
-                  .map(StatusCodes.Created -> _)
-              }
-            }
-        } ~
         pathPrefix("admin" / "bucketMigration") {
           pathPrefix("workspaces") {
             pathEndOrSingleSlash {

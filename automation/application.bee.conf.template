@@ -1,0 +1,62 @@
+# To run against a local UI, set baseUrl = "http://local.broadinstitute.org/"
+fireCloud {
+  baseUrl = "https://firecloudui.${BEE_ENV}.bee.envs-terra.bio/"
+
+
+  orchApiUrl = "https://firecloudorch.${BEE_ENV}.bee.envs-terra.bio/"
+  rawlsApiUrl = "https://rawls.${BEE_ENV}.bee.envs-terra.bio/"
+  samApiUrl = "https://sam.${BEE_ENV}.bee.envs-terra.bio/"
+  thurloeApiUrl = "https://thurloe.${BEE_ENV}.bee.envs-terra.bio/"
+  workspaceManagerApiUrl = "https://workspace.${BEE_ENV}.bee.envs-terra.bio/"
+  
+
+  fireCloudId = "${FC_ID}"
+  tcgaAuthDomain = "TCGA-dbGaP-Authorized"
+
+  
+  # fiab integration tests should use TDR alpha environment
+  dataRepoApiUrl = "https://data.alpha.bee.envs-terra.bio/"
+  
+
+  
+  gpAllocApiUrl = "https://gpalloc-qa.dsp-techops.broadinstitute.org/api/"
+  
+  waitForAccessDuration=3m
+}
+
+gcs {
+  appsDomain = "quality.firecloud.org"
+  qaEmail = "${QA_EMAIL}"
+  serviceProject = "broad-dsde-qa"
+  smoketestsProject = "broad-dsde-qa"
+  qaPemFile = "${SCRIPT_DIR}/src/test/resources/firecloud-account.pem"
+  qaJsonFile = "${SCRIPT_DIR}/src/test/resources/firecloud-account.json"
+  trialBillingPemFile = "${SCRIPT_DIR}/src/test/resources/trial-billing-account.pem"
+  trialBillingPemFileClientId = "${TRIAL_BILLING_CLIENT_ID}"
+  orchStorageSigningSA = "${ORCH_STORAGE_SIGNING_SA}"
+  billingAccount = "Broad Institute - 8201528"
+  billingAccountId = "${BILLING_ACCOUNT_ID}"
+  subEmail = "google@quality.firecloud.org"
+  googleAccessPolicy = "891321614892"
+}
+
+users {
+  notSoSecretPassword = "${AUTO_USERS_PASSWD}"
+
+  userDataPath = "${SCRIPT_DIR}/src/test/resources/users.json"
+  # for smoketests
+  smoketestpassword = "${USERS_PASSWD}"
+  smoketestuser = "hermione.owner@quality.firecloud.org"
+}
+
+methods {
+  testMethod = "DO_NOT_CHANGE_test_method"
+  testMethodConfig = "DO_NOT_CHANGE_test1_config"
+  methodConfigNamespace = "automationmethods"
+  snapshotID = 1
+}
+
+chromeSettings {
+  chromedriverHost = "http://hub:4444/wd/hub"
+  chromedriverPath = "/usr/local/bin/chromedriver"
+}

@@ -887,87 +887,7 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/migrations:
-    get:
-      tags:
-        - admin
-        - workspaces
-      summary: list migration attempts for workspace
-      description: list migration attempts for workspace
-      operationId: listMigrations
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
-        403:
-          description: You must be an admin to list migration attempts
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-    post:
-      tags:
-        - admin
-        - workspaces
-      summary: start migration attempt for workspace
-      description: start migration attempt for workspace
-      operationId: startMigration
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      responses:
-        201:
-          description: Workspace scheduled for migration
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
-        403:
-          description: You must be an admin to list migration attempts
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/workspaces/migrations:
-    post:
-      tags:
-        - admin
-        - workspaces
-      summary: batch start workspace migrations
-      description: batch start migration attempts for workspaces
-      operationId: batchStartMigration
-      requestBody:
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/BatchMigrateRequestBody'
-      responses:
-        201:
-          description: Workspace scheduled for migration
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
-        403:
-          description: You must be an admin to list migration attempts
-          content:
-             'application/json':
-               schema:
-                 $ref: '#/components/schemas/ErrorReport'
-        500:
-           $ref: '#/components/responses/RawlsInternalError'
+
   /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -5622,7 +5542,7 @@ components:
         namespace:
           type: string
         additionalData:
-          type: object
+          type: array
     WorkspaceListResponse:
       type: object
       properties:

@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 }
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor, PpwWorkspaceMigrationActor}
+import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
@@ -192,17 +192,6 @@ object BootMonitors extends LazyLogging {
                            importServiceDAO,
                            avroUpsertMonitorConfig,
                            slickDataSource
-    )
-
-    startWorkspaceMigrationActor(system,
-                                 conf,
-                                 gcsDAO,
-                                 googleIamDAO,
-                                 slickDataSource,
-                                 workspaceService,
-                                 googleStorage,
-                                 googleStorageTransferService,
-                                 samDAO
     )
 
     startMultiregonalBucketMigrationActor(system,
@@ -526,31 +515,6 @@ object BootMonitors extends LazyLogging {
 
     }
 
-  private def startWorkspaceMigrationActor(system: ActorSystem,
-                                           config: Config,
-                                           gcsDao: HttpGoogleServicesDAO,
-                                           googleIamDAO: GoogleIamDAO,
-                                           dataSource: SlickDataSource,
-                                           workspaceService: RawlsRequestContext => WorkspaceService,
-                                           storageService: GoogleStorageService[IO],
-                                           storageTransferService: GoogleStorageTransferService[IO],
-                                           samDao: SamDAO
-  ) =
-    config.as[Option[PpwWorkspaceMigrationActor.Config]]("workspace-migration").foreach { actorConfig =>
-      system.spawn(
-        PpwWorkspaceMigrationActor(
-          actorConfig,
-          dataSource,
-          workspaceService,
-          storageService,
-          storageTransferService,
-          gcsDao,
-          googleIamDAO,
-          samDao
-        ).behavior,
-        "WorkspaceMigrationActor"
-      )
-    }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>
