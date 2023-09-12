@@ -97,10 +97,12 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
   private def runWorkspaceDeletionSteps(workspace: Workspace, ctx: RawlsRequestContext, jobControlId: String)(implicit
     executionContext: ExecutionContext
   ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
-    logger.info(s"Starting workspace downstream resource deletion for workspace ID ${workspace.workspaceId}")
+    logger.info(
+      s"Starting downstream resource deletion for workspace ID ${workspace.workspaceId}, jobControlId = ${jobControlId}"
+    )
 
     // run the leo operations in parallel
-    val leoAppsDeletionFuture = leonardoResourceDeletionAction.deleteApps(workspace, ctx) // .startStep(workspace, ctx)
+    val leoAppsDeletionFuture = leonardoResourceDeletionAction.deleteApps(workspace, ctx)
     val leoRuntimesDeletionFuture = leonardoResourceDeletionAction.deleteRuntimes(workspace, ctx)
 
     val result = for {
@@ -112,7 +114,9 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
       _ <- wsmDeletionAction.pollOperation(workspace, jobControlId, ctx)
       _ <- workspaceRepository.deleteWorkspaceRecord(workspace)
     } yield {
-      logger.info(s"Finished workspace downstream resource deletion for workspace ID ${workspace.workspaceId}")
+      logger.info(
+        s"Finished downstream resource deletion for workspace ID ${workspace.workspaceId}, jobControlId = ${jobControlId}"
+      )
       Complete
     }
 

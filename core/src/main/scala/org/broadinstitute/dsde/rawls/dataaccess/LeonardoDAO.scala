@@ -16,17 +16,14 @@ trait LeonardoDAO {
                 appName: String,
                 appType: String,
                 sourceWorkspaceId: Option[UUID]
-               ): Unit
+  ): Unit
 
-  def deleteApps(token: String, workspaceId: String, deleteDisk: Boolean)
+  def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean)
 
-  def listApps(token: String, workspaceId: String): Seq[ListAppResponse]
+  def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse]
 
-  def listAzureRuntimes(token: String, workspaceId: String): Seq[ListRuntimeResponse]
+  def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
 
-  def deleteAzureRuntimes(token: String, workspaceId: String, deleteDisk: Boolean)
-
+  def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean)
 
 }
-
-

@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse,
 
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: FiniteDuration, timeout: FiniteDuration)(
   implicit val system: ActorSystem
@@ -40,30 +40,30 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
   def isComplete[T](workspace: Workspace,
                     ctx: RawlsRequestContext,
                     checker: (Workspace, RawlsRequestContext) => Future[Seq[T]]
-  )(implicit ec: ExecutionContext): Future[Boolean] = {
+  )(implicit ec: ExecutionContext): Future[Unit] = {
     val result: Future[Seq[T]] =
       checker(workspace, ctx).recoverWith {
         case t: ApiException =>
           if (t.getCode == StatusCodes.Forbidden.intValue) {
             // leo gives back a 403 when the workspace is gone
-            logger.warn(s"403 when fetching leo resources for workspace ID ${workspace.workspaceId}, continuing")
+            logger.warn(s"403 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
             Future.successful(Seq.empty)
           } else if (t.getCode == StatusCodes.NotFound.intValue) {
-            logger.warn(s"404 when fetching leo resources for workspace ID ${workspace.workspaceId}, continuing")
+            logger.warn(s"404 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
             Future.successful(Seq.empty)
           } else {
             Future.failed(t)
           }
-        case t: Throwable => return Future.failed(t)
+        case t: Throwable => Future.failed(t)
       }
 
     result.flatMap { resources =>
       if (resources.nonEmpty) {
         Future.failed(
-          new LeonardoPollingException(s"Leo resources still present for workspace ${workspace.workspaceId}")
+          new LeonardoPollingException(s"Leo resources still present [workspaceId=${workspace.workspaceId}]")
         )
       } else {
-        Future.successful(true)
+        Future.successful()
       }
     }
   }
@@ -85,7 +85,9 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
   ): Future[Seq[ListAppResponse]] =
     retry(when500) { () =>
       Future {
-        leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID.toString)
+        blocking {
+          leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+        }
       }
     }
 
@@ -94,7 +96,9 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
   ): Future[Seq[ListRuntimeResponse]] =
     retry(when500) { () =>
       Future {
-        leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID.toString)
+        blocking {
+          leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+        }
       }
     }
 
@@ -102,8 +106,8 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
     retry(when500) { () =>
       Future {
         blocking {
-          logger.info(s"Sending app deletion request for workspace ${workspace.workspaceIdAsUUID}")
-          leonardoDAO.deleteApps(ctx.userInfo.accessToken.token, workspace.workspaceId, deleteDisk = true)
+          logger.info(s"Sending app deletion request [workspaceId=${workspace.workspaceIdAsUUID}]")
+          leonardoDAO.deleteApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID, deleteDisk = true)
         }
       }
     }
@@ -112,8 +116,11 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
     retry(when500) { () =>
       Future {
         blocking {
-          logger.info(s"Sending runtime deletion request for workspace ${workspace.workspaceIdAsUUID}")
-          leonardoDAO.deleteAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceId, deleteDisk = true)
+          logger.info(s"Sending runtime deletion request [workspaceId=${workspace.workspaceIdAsUUID}]")
+          leonardoDAO.deleteAzureRuntimes(ctx.userInfo.accessToken.token,
+                                          workspace.workspaceIdAsUUID,
+                                          deleteDisk = true
+          )
         }
       }
     }
@@ -125,6 +132,6 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
     }
 }
 
-class LeonardoPollingException(message: String) extends RuntimeException(message)
+class LeonardoPollingException(message: String) extends WorkspaceDeletionActionFailureException(message)
 class LeonardoOperationFailureException(message: String, val workspaceId: UUID)
     extends WorkspaceDeletionActionFailureException(message)

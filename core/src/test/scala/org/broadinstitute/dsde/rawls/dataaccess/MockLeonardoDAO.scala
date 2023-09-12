@@ -15,11 +15,11 @@ class MockLeonardoDAO() extends LeonardoDAO {
 
   override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID]): Unit = ()
 
-  override def deleteApps(token: String, workspaceId: String, deleteDisk: Boolean): Unit = ???
+  override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit = ???
 
-  override def listApps(token: String, workspaceId: String): Seq[ListAppResponse] = ???
+  override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = ???
 
-  override def listAzureRuntimes(token: String, workspaceId: String): Seq[ListRuntimeResponse] = ???
+  override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] = ???
 
-  override def deleteAzureRuntimes(token: String, workspaceId: String, deleteDisk: Boolean): Unit = ???
+  override def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit = ???
 }

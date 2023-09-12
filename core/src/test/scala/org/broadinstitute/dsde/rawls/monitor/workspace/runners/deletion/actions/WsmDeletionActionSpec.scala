@@ -99,11 +99,11 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     })
     val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
 
-    action.startStep(azureWorkspace, jobId.toString, ctx)
+    Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
-    verify(wsmDAO).deleteWorkspaceV2(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
-                                     ArgumentMatchers.eq(jobId.toString),
-                                     ArgumentMatchers.eq(ctx)
+    verify(wsmDAO, times(2)).deleteWorkspaceV2(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                               ArgumentMatchers.eq(jobId.toString),
+                                               ArgumentMatchers.eq(ctx)
     )
   }
 

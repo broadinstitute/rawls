@@ -12,10 +12,8 @@ import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceManagerOperationFailureException
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-
-class WorkspaceManagerPollingOperationException(message: String, val status: StatusEnum) extends Exception(message)
 
 class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
                         pollInterval: FiniteDuration,
@@ -57,7 +55,7 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
       case _ =>
         Future.failed(
           new WorkspaceManagerPollingOperationException(
-            s"Polling workspace deletion [workspaceId=${workspace.workspaceId}, jobControlId = ${jobId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+            s"Polling workspace deletion for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus} [workspaceId=${workspace.workspaceId}, jobControlId = ${jobId}] ",
             result.getJobReport.getStatus
           )
         )
@@ -88,23 +86,33 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
       startDeletion(workspace, jobId, ctx)
     }
 
+  private def startDeletion(workspace: Workspace, jobControlId: String, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Unit] =
+    Future {
+      blocking {
+        workspaceManagerDao.deleteWorkspaceV2(workspace.workspaceIdAsUUID, jobControlId, ctx)
+      }
+    }.recoverWith {
+      case t: ApiException =>
+        if (t.getCode == StatusCodes.NotFound.intValue) {
+          logger.warn(
+            s"404 when starting WSM workspace deletion, continuing [workspaceId=${workspace.workspaceId}, jobControlId=${jobControlId}]"
+          )
+          Future.successful()
+        } else {
+          Future.failed(t)
+        }
+      case t: Throwable => Future.failed(t)
+
+    }.flatMap(_ => Future.successful())
+
   def when500(throwable: Throwable): Boolean =
     throwable match {
       case t: ApiException => t.getCode / 100 == 5
       case _               => false
     }
 
-  private def startDeletion(workspace: Workspace, jobId: String, ctx: RawlsRequestContext): Future[Unit] =
-    Try(workspaceManagerDao.deleteWorkspaceV2(workspace.workspaceIdAsUUID, jobId, ctx)) match {
-      case Failure(t: ApiException) =>
-        if (t.getCode == StatusCodes.NotFound.intValue) {
-          logger.warn("404 when starting WSM workspace deletion, continuing")
-          Future.successful()
-        } else {
-          Future.failed(t)
-        }
-      case Failure(t: Throwable) => Future.failed(t)
-      case Success(_)            => Future.successful()
-    }
-
 }
+
+class WorkspaceManagerPollingOperationException(message: String, val status: StatusEnum) extends Exception(message)

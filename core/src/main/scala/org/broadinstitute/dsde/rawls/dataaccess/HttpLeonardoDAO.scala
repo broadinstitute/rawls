@@ -32,17 +32,17 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new RuntimesApi(apiClient)
   }
 
-  override def deleteApps(token: String, workspaceId: String, deleteDisk: Boolean) =
-    getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId, deleteDisk)
+  override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =
+    getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
 
-  override def listApps(token: String, workspaceId: String): Seq[ListAppResponse] =
-    getAppsV2LeonardoApi(token).listAppsV2(workspaceId, null, false, null).asScala.toSeq
+  override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
+    getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null).asScala.toSeq
 
-  override def listAzureRuntimes(token: String, workspaceId: String): Seq[ListRuntimeResponse] =
-    getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId, null, false, null).asScala.toSeq
+  override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
+    getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq
 
-  override def deleteAzureRuntimes(token: String, workspaceId: String, deleteDisk: Boolean): Unit =
-    getRuntimesV2LeonardoApi(token).deleteAllRuntimesV2(workspaceId, deleteDisk)
+  override def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit =
+    getRuntimesV2LeonardoApi(token).deleteAllRuntimesV2(workspaceId.toString, deleteDisk)
 
   override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID] = None): Unit =
     createApp(token, workspaceId, s"wds-$workspaceId", leonardoConfig.wdsType, sourceWorkspaceId)
