@@ -38,7 +38,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMetadata
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -637,8 +636,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
       )
 
-      _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>
-        requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith { case t: Throwable =>
+      _ <- traceWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
+        requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
             s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceContext.toWorkspaceName}`",
             t
@@ -3135,51 +3134,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): ReadAction[Unit] =
     billingProject.servicePerimeter.traverse_ { servicePerimeterName =>
       servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
-    }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationMetadata]] =
-    asFCAdmin {
-      for {
-        workspace <- getWorkspaceContext(workspaceName)
-        attempts <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.getMigrationAttempts(workspace)
-        }
-      } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
-    }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] =
-    asFCAdmin {
-      logger.info(s"Scheduling Workspace '$workspaceName' for migration")
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceMigrationQuery.scheduleAndGetMetadata(workspaceName)
-      }
-    }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def migrateAll(workspaceNames: Iterable[WorkspaceName]): Future[Iterable[WorkspaceMigrationMetadata]] =
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        for {
-          errorsOrMigrationAttempts <- workspaceNames.toList.traverse { workspaceName =>
-            MonadThrow[ReadWriteAction].attempt {
-              dataAccess.workspaceMigrationQuery.scheduleAndGetMetadata(workspaceName)
-            }
-          }
-
-          (errors, migrationAttempts) = errorsOrMigrationAttempts.partitionMap(identity)
-          _ <- MonadThrow[ReadWriteAction].raiseUnless(errors.isEmpty) {
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          "One or more workspaces could not be scheduled for migration",
-                          errors.map(ErrorReport.apply)
-              )
-            )
-          }
-
-        } yield migrationAttempts
-      }
     }
 
   private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,

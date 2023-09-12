@@ -368,7 +368,7 @@ object MultiregionalBucketMigrationActor {
 
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
+          import MigrationUtils.Implicits.setOptionValueObject
           dataAccess.multiregionalBucketMigrationQuery.update2(
             migration.id,
             dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
