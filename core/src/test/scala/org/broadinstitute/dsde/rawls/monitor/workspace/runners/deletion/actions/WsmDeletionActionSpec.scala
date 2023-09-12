@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo,
   Workspace
 }
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceManagerOperationFailureException
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{times, verify, when, RETURNS_SMART_NULLS}
@@ -150,7 +149,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     )
     val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
 
-    intercept[WorkspaceManagerOperationFailureException] {
+    intercept[WorkspaceDeletionActionFailureException] {
       Await.result(action.pollOperation(azureWorkspace, UUID.randomUUID().toString, ctx), Duration.Inf)
     }
   }

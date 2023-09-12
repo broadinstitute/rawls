@@ -136,7 +136,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
     verify(leoDAO, times(2)).listApps(anyString(), any[UUID])
   }
 
-  it should "fail when after exceeding the app deletion poll timeout" in {
+  it should "fail after exceeding the app deletion poll timeout" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
     when(leoDAO.listApps(anyString(), any[UUID])).thenReturn(Seq(new ListAppResponse()))
     val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
@@ -179,7 +179,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
   it should "complete successfully on 404 not found when listing apps" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
     when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
-      throw new ApiException(StatusCodes.NotFound.intValue, "forbidden")
+      throw new ApiException(StatusCodes.NotFound.intValue, "not found")
     )
     val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
 

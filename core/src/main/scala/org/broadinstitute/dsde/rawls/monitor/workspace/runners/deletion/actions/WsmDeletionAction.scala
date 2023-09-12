@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceManagerOperationFailureException
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
@@ -63,19 +63,17 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
     }
   }
 
-  def pollOperation(workspace: Workspace, jobId: String, ctx: RawlsRequestContext)(implicit
+  def pollOperation(workspace: Workspace, jobControlId: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Unit] =
     for {
       result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(pollInterval, timeout) { () =>
-        isComplete(workspace, jobId, ctx)
+        isComplete(workspace, jobControlId, ctx)
       }
     } yield result match {
       case Left(_) =>
-        throw new WorkspaceManagerOperationFailureException(
-          s"Failed deleting workspace in WSM [workspaceId = ${workspace.workspaceId}, jobControlid=${jobId}]",
-          workspace.workspaceIdAsUUID,
-          jobId
+        throw new WorkspaceDeletionActionFailureException(
+          s"Failed deleting workspace in WSM [workspaceId = ${workspace.workspaceId}, jobControlid=${jobControlId}]"
         )
       case Right(_) => ()
     }

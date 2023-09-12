@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion
 
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
@@ -123,3 +124,5 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     result
   }
 }
+
+class WorkspaceDeletionException(message: String) extends RawlsException(message) {}
