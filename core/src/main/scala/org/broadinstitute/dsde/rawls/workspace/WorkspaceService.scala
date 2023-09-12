@@ -44,6 +44,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
@@ -139,6 +140,8 @@ object WorkspaceService {
   val SECURITY_LABEL_KEY = "security"
   val HIGH_SECURITY_LABEL = "high"
   val LOW_SECURITY_LABEL = "low"
+
+  val BUCKET_GET_PERMISSION = "storage.buckets.get"
 
   private[workspace] def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
     case class Call(jobId: Option[String])
@@ -2805,7 +2808,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       _ <-
         if (
-          expectedGoogleBucketPermissions.contains(IamPermission("storage.buckets.get")) && bucketLocationResult.isEmpty
+          expectedGoogleBucketPermissions.contains(IamPermission(BUCKET_GET_PERMISSION)) && bucketLocationResult.isEmpty
         ) {
           val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
               .toString()} was unable to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"

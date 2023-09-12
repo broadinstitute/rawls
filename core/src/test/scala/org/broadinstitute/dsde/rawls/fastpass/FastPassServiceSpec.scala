@@ -26,6 +26,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
@@ -1337,7 +1338,7 @@ class FastPassServiceSpec
 
   it should "add a FastPass grant when the users bucket permissions are unable to be exercised" in withTestDataServices {
     services =>
-      val storageRole = "storage.buckets.get"
+      val storageRole = BUCKET_GET_PERMISSION
       when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
         .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
       when(
@@ -1364,7 +1365,7 @@ class FastPassServiceSpec
 
   it should "not add a FastPass grant when the user doesn't have bucket get permissions" in withTestDataServices {
     services =>
-      val storageRole = "storage.buckets.notget"
+      val storageRole = BUCKET_GET_PERMISSION + "not"
       when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
         .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
       when(
