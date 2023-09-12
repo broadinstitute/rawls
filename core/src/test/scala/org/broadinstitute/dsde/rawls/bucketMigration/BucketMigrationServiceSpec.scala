@@ -83,9 +83,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
     Await.result(
       for {
-        preMigrationAttempts <- adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName)
-        _ <- adminService.migrateWorkspaceBucket(minimalTestData.wsName)
-        postMigrationAttempts <- adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName)
+        preMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName)
+        _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.wsName)
+        postMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName)
       } yield {
         preMigrationAttempts shouldBe List.empty
         postMigrationAttempts should not be empty
@@ -100,11 +100,11 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
       Await.result(
         for {
-          preMigrationAttempts <- adminService.getBucketMigrationAttemptsForBillingProject(
+          preMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForBillingProject(
             minimalTestData.billingProject.projectName
           )
-          _ <- adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName)
-          postMigrationAttempts <- adminService.getBucketMigrationAttemptsForBillingProject(
+          _ <- adminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName)
+          postMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForBillingProject(
             minimalTestData.billingProject.projectName
           )
         } yield {
@@ -131,13 +131,13 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
 
       val exception = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
+        Await.result(adminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
                      Duration.Inf
         )
       }
       exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
       Await
-        .result(adminService.getBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
+        .result(adminService.adminGetBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
                 Duration.Inf
         )
         .foreach {
@@ -153,18 +153,18 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
     runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
 
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
                  Duration.Inf
     ) shouldBe List.empty
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
                  Duration.Inf
     ) shouldBe List.empty
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
                  Duration.Inf
     ) shouldBe List.empty
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(adminService.migrateAllWorkspaceBuckets(
+      Await.result(adminService.adminMigrateAllWorkspaceBuckets(
                      List(minimalTestData.wsName, minimalTestData.wsName2, lockedWorkspace.toWorkspaceName)
                    ),
                    Duration.Inf
@@ -172,13 +172,13 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
                  Duration.Inf
     ) should not be empty
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
                  Duration.Inf
     ) should not be empty
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
                  Duration.Inf
     ) shouldBe List.empty
   }
@@ -188,9 +188,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName), Duration.Inf)
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName), Duration.Inf)
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(nonAdminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName), Duration.Inf)
+      Await.result(nonAdminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
   }
@@ -200,12 +200,12 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
-    Await.result(adminService.getBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
+    Await.result(adminService.adminGetBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
                  Duration.Inf
     )
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.getBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
+        nonAdminService.adminGetBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
         Duration.Inf
       )
     }
@@ -217,10 +217,10 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
-    Await.result(adminService.migrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
+    Await.result(adminService.adminMigrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.migrateWorkspaceBucket(minimalTestData.wsName),
+        nonAdminService.adminMigrateWorkspaceBucket(minimalTestData.wsName),
         Duration.Inf
       )
     }
@@ -236,7 +236,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(adminService.migrateWorkspaceBucket(lockedWorkspace.toWorkspaceName), Duration.Inf)
+      Await.result(adminService.adminMigrateWorkspaceBucket(lockedWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
@@ -251,7 +251,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(mcWorkspace), Duration.Inf)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(adminService.migrateWorkspaceBucket(mcWorkspace.toWorkspaceName), Duration.Inf)
+      Await.result(adminService.adminMigrateWorkspaceBucket(mcWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
@@ -281,13 +281,13 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       )(any())
     ).thenReturn(Future.successful(Right(nonUsBucket)))
 
-    Await.result(adminService.migrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
-    Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+    Await.result(adminService.adminMigrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
                  Duration.Inf
     ) should have size 1
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(adminService.migrateWorkspaceBucket(nonUsWorkspace.toWorkspaceName), Duration.Inf)
+      Await.result(adminService.adminMigrateWorkspaceBucket(nonUsWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
@@ -297,12 +297,12 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
-    Await.result(adminService.migrateAllWorkspaceBuckets(List(minimalTestData.wsName, minimalTestData.wsName2)),
+    Await.result(adminService.adminMigrateAllWorkspaceBuckets(List(minimalTestData.wsName, minimalTestData.wsName2)),
                  Duration.Inf
     )
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.migrateAllWorkspaceBuckets(List(minimalTestData.wsName, minimalTestData.wsName2)),
+        nonAdminService.adminMigrateAllWorkspaceBuckets(List(minimalTestData.wsName, minimalTestData.wsName2)),
         Duration.Inf
       )
     }
@@ -337,16 +337,16 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
       val exception = intercept[RawlsExceptionWithErrorReport] {
         Await.result(
-          adminService.migrateAllWorkspaceBuckets(List(minimalTestData.wsName, nonUsWorkspace.toWorkspaceName)),
+          adminService.adminMigrateAllWorkspaceBuckets(List(minimalTestData.wsName, nonUsWorkspace.toWorkspaceName)),
           Duration.Inf
         )
       }
       exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
-      Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
                    Duration.Inf
       ) should have size 1
-      Await.result(adminService.getBucketMigrationAttemptsForWorkspace(nonUsWorkspace.toWorkspaceName),
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(nonUsWorkspace.toWorkspaceName),
                    Duration.Inf
       ) should have size 0
   }
@@ -356,12 +356,12 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
-    Await.result(adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
+    Await.result(adminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
                  Duration.Inf
     )
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
+        nonAdminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
         Duration.Inf
       )
     }
@@ -410,14 +410,14 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       ).thenReturn(Future.successful(Right(nonUsBucket)))
 
       val exception = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(adminService.migrateWorkspaceBucketsInBillingProject(newProject.projectName), Duration.Inf)
+        Await.result(adminService.adminMigrateWorkspaceBucketsInBillingProject(newProject.projectName), Duration.Inf)
       }
       exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
-      Await.result(adminService.getBucketMigrationAttemptsForWorkspace(usWorkspace.toWorkspaceName),
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(usWorkspace.toWorkspaceName),
                    Duration.Inf
       ) should have size 1
-      Await.result(adminService.getBucketMigrationAttemptsForWorkspace(nonUsWorkspace.toWorkspaceName),
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(nonUsWorkspace.toWorkspaceName),
                    Duration.Inf
       ) should have size 0
   }
@@ -426,11 +426,11 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
-    Await.result(adminService.migrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
-    Await.result(adminService.getBucketMigrationProgressForWorkspace(minimalTestData.wsName), Duration.Inf)
+    Await.result(adminService.adminMigrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
+    Await.result(adminService.adminGetBucketMigrationProgressForWorkspace(minimalTestData.wsName), Duration.Inf)
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.getBucketMigrationProgressForWorkspace(minimalTestData.wsName),
+        nonAdminService.adminGetBucketMigrationProgressForWorkspace(minimalTestData.wsName),
         Duration.Inf
       )
     }
@@ -442,9 +442,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
     Await.result(
       for {
-        _ <- adminService.migrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
+        _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
         _ <- insertSTSJobs(minimalTestData.workspace)
-        progressOpt <- adminService.getBucketMigrationProgressForWorkspace(minimalTestData.workspace.toWorkspaceName)
+        progressOpt <- adminService.adminGetBucketMigrationProgressForWorkspace(minimalTestData.workspace.toWorkspaceName)
       } yield verifyBucketMigrationProgress(progressOpt),
       Duration.Inf
     )
@@ -454,15 +454,15 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
-    Await.result(adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
+    Await.result(adminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
                  Duration.Inf
     )
-    Await.result(adminService.getBucketMigrationProgressForBillingProject(minimalTestData.billingProject.projectName),
+    Await.result(adminService.adminGetBucketMigrationProgressForBillingProject(minimalTestData.billingProject.projectName),
                  Duration.Inf
     )
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.getBucketMigrationProgressForBillingProject(minimalTestData.billingProject.projectName),
+        nonAdminService.adminGetBucketMigrationProgressForBillingProject(minimalTestData.billingProject.projectName),
         Duration.Inf
       )
     }
@@ -475,9 +475,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
       Await.result(
         for {
-          _ <- adminService.migrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
+          _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
           _ <- insertSTSJobs(minimalTestData.workspace)
-          progressMap <- adminService.getBucketMigrationProgressForBillingProject(
+          progressMap <- adminService.adminGetBucketMigrationProgressForBillingProject(
             minimalTestData.billingProject.projectName
           )
         } yield progressMap.map {
