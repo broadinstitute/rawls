@@ -19,6 +19,11 @@ object WorkspaceManagerResourceMonitorRecord {
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
     val WorkspaceDelete: Value = Value("WorkspaceDelete")
+    val PollLeoRuntimeDeletion: Value = Value("PollLeoRuntimeDeletion")
+    val StartLeoAppDeletion: Value = Value("StartLeoAppDeletion")
+    val PollLeoAppDeletion: Value = Value("PollLeoAppDeletion")
+    val StartWsmDeletion: Value = Value("StartWsmDeletion")
+    val PollWsmDeletion: Value = Value("PollWsmDeletion")
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -79,7 +84,20 @@ object WorkspaceManagerResourceMonitorRecord {
       userEmail = Some(userEmail.value),
       createdTime = Timestamp.from(Instant.now())
     )
-}
+
+  def forJobType(jobRecordId: UUID,
+                           workspaceId: UUID,
+                           userEmail: RawlsUserEmail,
+                            jobType: JobType
+                          ): WorkspaceManagerResourceMonitorRecord =
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      jobType,
+      workspaceId = Some(workspaceId),
+      billingProjectId = None,
+      userEmail = Some(userEmail.value),
+      createdTime = Timestamp.from(Instant.now())
+    )}
 
 trait WorkspaceManagerResourceJobRunner {
   // Returns Some(Outcome) if the job has completed

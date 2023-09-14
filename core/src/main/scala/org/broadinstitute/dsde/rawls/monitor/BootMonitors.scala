@@ -8,12 +8,7 @@ import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
-import org.broadinstitute.dsde.rawls.coordination.{
-  CoordinatedDataSourceAccess,
-  CoordinatedDataSourceActor,
-  DataSourceAccess,
-  UncoordinatedDataSourceAccess
-}
+import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
@@ -21,26 +16,14 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{
-  MethodConfigResolver,
-  SubmissionMonitorConfig,
-  SubmissionSupervisor,
-  WorkflowSubmissionActor
-}
+import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor}
+import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
-  LeonardoResourceDeletionAction,
-  WsmDeletionAction
-}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
-  BPMBillingProjectDeleteRunner,
-  CloneWorkspaceContainerRunner,
-  LandingZoneCreationStatusRunner
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{LeonardoResourceDeletionAction, WsmDeletionAction}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{BPMBillingProjectDeleteRunner, CloneWorkspaceContainerRunner, LandingZoneCreationStatusRunner}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -49,7 +32,6 @@ import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleSt
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import spray.json._
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -445,7 +427,6 @@ object BootMonitors extends LazyLogging {
     val deletionConfig = config.getConfig("workspaceManagerResourceMonitor.deletion")
     val leoDeletionAction = new LeonardoResourceDeletionAction(
       leonardoDAO,
-      util.toScalaDuration(deletionConfig.getDuration("leonardoPollInterval")),
       util.toScalaDuration(deletionConfig.getDuration("leonardoJobTimeout"))
     )(system)
     val wsmDeletionAction = new WsmDeletionAction(
@@ -464,6 +445,7 @@ object BootMonitors extends LazyLogging {
                                                                  workspaceRepository,
                                                                  leoDeletionAction,
                                                                  wsmDeletionAction,
+            ???,
                                                                  gcsDAO
           ),
           JobType.AzureLandingZoneResult ->

@@ -6,11 +6,12 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.JobResult
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500
 import org.broadinstitute.dsde.rawls.util.Retry
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceManagerOperationFailureException
+import org.joda.time.DateTime
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{blocking, ExecutionContext, Future}
@@ -24,16 +25,25 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
 ) extends Retry
     with LazyLogging {
 
-  private def jobStatusPredicate(t: Throwable): Boolean =
-    t match {
-      case t: WorkspaceManagerPollingOperationException => t.status == StatusEnum.RUNNING
-      case _                                            => false
-    }
+  def isComplete(workspace: Workspace,
+                 job: WorkspaceManagerResourceMonitorRecord,
+                 ctx: RawlsRequestContext
+  ): Future[Boolean] =
+    isComplete(workspace, job.jobControlId.toString, new DateTime(job.createdTime), DateTime.now, ctx)
 
-  def isComplete(workspace: Workspace, jobId: String, ctx: RawlsRequestContext): Future[Boolean] = {
+  def isComplete(workspace: Workspace,
+                 jobId: String,
+                 jobStartedAt: DateTime,
+                 checkTime: DateTime,
+                 ctx: RawlsRequestContext
+  ): Future[Boolean] = {
     logger.info(
       s"Checking for WSM deletion for workspace ${workspace.workspaceIdAsUUID} [pollInterval = ${pollInterval}, timeout = ${timeout}]"
     )
+    if (checkTime.isAfter(jobStartedAt.plus(timeout.toMillis))) {
+      return Future.failed(new WorkspaceDeletionActionTimeoutException("Job timed out"))
+    }
+
     val result: JobResult = Try(
       workspaceManagerDao.getDeleteWorkspaceV2Result(workspace.workspaceIdAsUUID, jobId, ctx)
     ) match {
@@ -44,40 +54,24 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
           logger.info(
             s"Workspace deletion result status = ${e.getCode} for workspace ID ${workspace.workspaceId}, WSM record is gone. Proceeding with rawls workspace deletion"
           )
-          return Future.successful(false)
+          return Future.successful(true)
         } else {
           return Future.failed(e)
         }
-      case Failure(e) => throw e
+      case Failure(e) => return Future.failed(e)
     }
 
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED => Future.successful(true)
-      case _ =>
+      case StatusEnum.RUNNING   => Future.successful(false)
+      case StatusEnum.FAILED =>
         Future.failed(
-          new WorkspaceManagerPollingOperationException(
-            s"Polling workspace deletion for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus} [workspaceId=${workspace.workspaceId}, jobControlId = ${jobId}] ",
-            result.getJobReport.getStatus
+          new WorkspaceDeletionActionFailureException(
+            s"Polling workspace deletion for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus} [workspaceId=${workspace.workspaceId}, jobControlId = ${jobId}] "
           )
         )
     }
   }
-
-  def pollOperation(workspace: Workspace, jobControlId: String, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Unit] =
-    for {
-      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(pollInterval, timeout) { () =>
-        isComplete(workspace, jobControlId, ctx)
-      }
-    } yield result match {
-      case Left(_) =>
-        throw new WorkspaceDeletionActionFailureException(
-          s"Failed deleting workspace in WSM [workspaceId = ${workspace.workspaceId}, jobControlid=${jobControlId}]"
-        )
-      case Right(_) => ()
-    }
-
   def startStep(workspace: Workspace, jobId: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Unit] =
