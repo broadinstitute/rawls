@@ -63,6 +63,31 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
     }
   }
 
+  def pollDeletionComplete(workspace: Workspace, jobId: String, ctx: RawlsRequestContext)(implicit ec: ExecutionContext
+  ): Boolean = Try(workspaceManagerDao.getDeleteWorkspaceV2Result(workspace.workspaceIdAsUUID, jobId, ctx)) match {
+    case Success(result) => Option(result.getJobReport).map{ report => report.getStatus} match {
+      case Some(StatusEnum.SUCCEEDED) => true
+      case Some(StatusEnum.RUNNING) => false
+      case Some(StatusEnum.FAILED) => throw WorkspaceDeletionActionFailureException(
+        s"Workspace deletion returned status ${StatusEnum.FAILED} [workspaceId=${workspace.workspaceId}, jobControlId = ${jobId}]"
+      )
+      case None =>
+        val message = Option(result.getErrorReport).map { errorReport =>
+          errorReport.getMessage
+        }.getOrElse("No errors reported")
+         throw WorkspaceDeletionActionFailureException(
+          s"Workspace Deletion failed for [workspaceId=${workspace.workspaceId}, jobControlId = $jobId]: $message"
+      )
+    }
+    // WSM will give back a 403 during polling if the workspace is not present or already deleted.
+    case Failure(e: ApiException) if e.getCode == StatusCodes.Forbidden.intValue =>
+        logger.info(
+          s"Workspace deletion result status = ${e.getCode} for workspace ID ${workspace.workspaceId}, WSM record is gone. Proceeding with rawls workspace deletion"
+        )
+        true
+    case Failure(e) => throw e
+  }
+
   def pollOperation(workspace: Workspace, jobControlId: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Unit] =
@@ -72,7 +97,7 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
       }
     } yield result match {
       case Left(_) =>
-        throw new WorkspaceDeletionActionFailureException(
+        throw WorkspaceDeletionActionFailureException(
           s"Failed deleting workspace in WSM [workspaceId = ${workspace.workspaceId}, jobControlid=${jobControlId}]"
         )
       case Right(_) => ()

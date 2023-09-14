@@ -10,6 +10,8 @@ import java.time.Instant
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
+
+
 object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
@@ -18,7 +20,14 @@ object WorkspaceManagerResourceMonitorRecord {
 
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
+
+
+    // FIXME: clean up deletion steps when switching to case class
     val WorkspaceDelete: Value = Value("WorkspaceDelete")
+    val LeoAppDeletionPoll: Value = Value("LeoAppDeletionPoll")
+    val LeoRuntimeDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
+    val WSMWorkspaceDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
+
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -77,6 +86,20 @@ object WorkspaceManagerResourceMonitorRecord {
       workspaceId = Some(workspaceId),
       billingProjectId = None,
       userEmail = Some(userEmail.value),
+      createdTime = Timestamp.from(Instant.now())
+    )
+
+  def workspaceDeleteStep(
+                           record: WorkspaceManagerResourceMonitorRecord,
+                           jobType: JobType,
+                           jobRecordId: UUID
+                         ): WorkspaceManagerResourceMonitorRecord =
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      jobType,
+      workspaceId = record.workspaceId,
+      billingProjectId = record.billingProjectId,
+      userEmail = record.userEmail,
       createdTime = Timestamp.from(Instant.now())
     )
 }
@@ -145,6 +168,8 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
       query.filter(_.workspaceId === workspaceId).result
 
     def getRecords: ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
+
+    def updateJob(job: WorkspaceManagerResourceMonitorRecord): WriteAction[Int] = query.insertOrUpdate(job)
 
   }
 

@@ -13,11 +13,36 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse,
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.util.{Failure, Success}
 
 class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: FiniteDuration, timeout: FiniteDuration)(
   implicit val system: ActorSystem
 ) extends Retry
     with LazyLogging {
+
+
+  def pollOnceForCompletion[T](
+      workspace: Workspace,
+      ctx: RawlsRequestContext,
+      checker: (Workspace, RawlsRequestContext) => Future[Seq[T]])(
+    implicit ec: ExecutionContext
+  ): Future[Boolean] = checker(workspace, ctx).transformWith {
+    case Failure(t: ApiException) =>
+      if (t.getCode == StatusCodes.Forbidden.intValue) {
+        // leo gives back a 403 when the workspace is gone
+        logger.warn(s"403 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
+        Future.successful(true)
+      } else if (t.getCode == StatusCodes.NotFound.intValue) {
+        logger.warn(s"404 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
+        Future.successful(true)
+      } else {
+        Future.failed(t)
+      }
+    case Failure(t) => Future.failed(t)
+    case Success(resources) if resources.nonEmpty => Future.successful(false)
+    case Success(_) => Future.successful(true)
+  }
+
 
   def pollOperation[T](workspace: Workspace,
                        ctx: RawlsRequestContext,
@@ -75,11 +100,11 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, pollInterval: Fin
       case _                           => false
     }
 
-  def pollRuntimeDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
-    pollOperation[ListRuntimeResponse](workspace, ctx, listAzureRuntimes)
+  def pollRuntimeDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Boolean] =
+    pollOnceForCompletion[ListRuntimeResponse](workspace, ctx, listAzureRuntimes)
 
-  def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
-    pollOperation[ListAppResponse](workspace, ctx, listApps)
+  def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Boolean] =
+    pollOnceForCompletion[ListAppResponse](workspace, ctx, listApps)
 
   def listApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
