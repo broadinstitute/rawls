@@ -391,7 +391,7 @@ trait EntityComponent {
         * @param sortFieldName
         * @return
         */
-      private def pageOfEntityIdsSelectQuery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
+      private def paginationSubquery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
         val shardId = determineShard(workspaceId)
 
         val (sortColumns, sortJoin) = sortFieldName match {
@@ -409,7 +409,7 @@ trait EntityComponent {
               // select each attribute column and the referenced entity name
               """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_a.value_json as sort_field_json, sort_e_ref.name as sort_field_ref""",
               // join to attribute and entity (for references) table, grab only the named sort attribute and only the first element of a list
-              sql"""left outer join ENTITY_ATTRIBUTE_#$shardId sort_a on sort_a.owner_id = e.id and sort_a.deleted = e.deleted and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """
+              sql"""left outer join ENTITY_ATTRIBUTE_#$shardId sort_a on sort_a.owner_id = e.id and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """
             )
         }
 
@@ -520,13 +520,13 @@ trait EntityComponent {
           }
 
         // additional joins-to-subquery to provide proper pagination
-        val pageOfEntityIds = concatSqlActions(
-          sql"select s.id from (",
-          pageOfEntityIdsSelectQuery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
+        val paginationJoin = concatSqlActions(
+          sql""" join (""",
+          paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
           filterSql("and", "e"),
           filterByColumn,
           order(""),
-          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) s"
+          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
 
         // standalone query to calculate the count of results that match our filter
@@ -585,25 +585,17 @@ trait EntityComponent {
             /* TODO: it's inefficient to return all columns of e_ref; we only really need the id and the name. We turn it into an
                 EntityRecord, and then very quickly we read that EntityRecord's name and toss the rest of the info. Can we do better?
              */
-
-            // TODO: execute page query, then execute hydrated query
-            def hydratedQuery(entityIds: Seq[Long]) =
-              concatSqlActions(
-                sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
-                               a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
-                               e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
-                               from ENTITY e
-                               left outer join ENTITY_ATTRIBUTE_#$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
-                attrSelectionSql(" and "),
-                sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
-                sql"where e.id in (${entityIds.mkString(",")})",
-                sql" order by field (e.id, ${entityIds.mkString(",")})"
-              )
-
-            for {
-              pageOfEntityIds <- pageOfEntityIds.as[Long]
-              result <- hydratedQuery(pageOfEntityIds).as[EntityAndAttributesResult]
-            } yield result
+            concatSqlActions(
+              sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
+                             a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+                             e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
+                             from ENTITY e
+                             left outer join ENTITY_ATTRIBUTE_#$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
+              attrSelectionSql(" and "),
+              sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
+              paginationJoin,
+              order("p")
+            ).as[EntityAndAttributesResult]
           }
         }
 
