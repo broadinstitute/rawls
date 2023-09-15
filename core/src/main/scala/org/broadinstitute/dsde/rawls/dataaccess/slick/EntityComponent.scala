@@ -1615,11 +1615,6 @@ trait EntityComponent {
             s"entityAttributeRecords is properly ordered? FALSE; length: ${entityAttributeRecords.length}; " +
               s"workspaceId: ${rec.workspaceId}; entityType: ${rec.entityType}; first offender: ${rec.name}"
           )
-          entityAttributeRecords foreach { eaar =>
-            logger.info(s"$eaar")
-          }
-          // TODO: don't actually throw an error; for this commit, we're throwing to see if any unit tests fail
-          throw new RawlsException("EntityAndAttributesResult ordering problem")
         }
       }
       // TEMP: end validation
