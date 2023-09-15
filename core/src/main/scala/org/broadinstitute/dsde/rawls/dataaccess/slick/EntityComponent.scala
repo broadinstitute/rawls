@@ -1572,6 +1572,9 @@ trait EntityComponent {
     // tail-recursive method that validates if all entity ids are contiguous within the Seq[EntityAndAttributesResult]
     // an order of 3,3,3,2,2,2,1,1 is ok
     // an order of 1,2,3,1 is bad, because the 1 is repeated non-contiguously
+    // Returns an Option[EntityRecord]. If the Option is None, the rows are ordered as expected.
+    // if the Option is Some(entityRecord), the entityRecord is the first row that was found to
+    // be non-contiguous.
     @tailrec
     def validateEntityIdOrdering(prevId: Long,
                                  current: EntityAndAttributesResult,
@@ -1602,15 +1605,15 @@ trait EntityComponent {
       }
 
       if (validateOrdering) {
-        val isProperlyOrdered: Option[EntityRecord] =
+        val orderingProblem: Option[EntityRecord] =
           validateEntityIdOrdering(-1, entityAttributeRecords.head, Set.empty[Long], entityAttributeRecords.tail)
 
-        if (isProperlyOrdered.isEmpty) {
+        if (orderingProblem.isEmpty) {
           logger.info(
             s"entityAttributeRecords is properly ordered? TRUE; length: ${entityAttributeRecords.length}"
           )
         } else {
-          val rec = isProperlyOrdered.get
+          val rec = orderingProblem.get
           logger.info(
             s"entityAttributeRecords is properly ordered? FALSE; length: ${entityAttributeRecords.length}; " +
               s"workspaceId: ${rec.workspaceId}; entityType: ${rec.entityType}; first offender: ${rec.name}"
