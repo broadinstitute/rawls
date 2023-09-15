@@ -163,7 +163,7 @@ jobs:
         with:
           workflow: attach-billing-project-to-landing-zone.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/WOR-1228
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "attach-billing-project-to-landing-zone-${{ env.RUN_NAME_SUFFIX }}",
