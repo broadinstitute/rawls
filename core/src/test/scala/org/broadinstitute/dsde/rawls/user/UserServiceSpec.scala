@@ -1425,6 +1425,39 @@ class UserServiceSpec
     verify(repository).getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName)))
   }
 
+  // TODO: This can be removed, along with the filter for no roles, once we've cleaned up old billing projects in WOR-658
+  it should "exclude billing projects with no roles" in {
+    val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
+    val userProject = billingProjectFromName(UUID.randomUUID().toString)
+
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName))))
+      .thenReturn(Future.successful(Seq(ownerProject, userProject)))
+
+    val noRole = SamRolesAndActions(Set.empty, Set.empty)
+    val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
+    val creatorRole =
+      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
+    val userBillingResources = Seq(
+      SamUserResource(ownerProject.projectName.value, noRole, noRole, noRole, Set.empty, Set.empty),
+      SamUserResource(userProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+    )
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
+      .thenReturn(Future.successful(userBillingResources))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq.empty))
+
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    val expected = Seq(
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject, CloudPlatform.GCP)
+    )
+
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
+    verify(repository).getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName)))
+  }
+
   behavior of "addUserToBillingProjectV2"
 
   it should "update billing profile record when a user is added to a billing project" in {
