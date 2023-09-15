@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
+import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
@@ -226,7 +227,7 @@ trait EntityComponent {
     }
   }
 
-  object entityQuery extends TableQuery(new EntityTable(_)) {
+  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
@@ -390,7 +391,7 @@ trait EntityComponent {
         * @param sortFieldName
         * @return
         */
-      private def paginationSubquery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
+      private def pageOfEntityIdsSelectQuery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
         val shardId = determineShard(workspaceId)
 
         val (sortColumns, sortJoin) = sortFieldName match {
@@ -408,7 +409,7 @@ trait EntityComponent {
               // select each attribute column and the referenced entity name
               """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_a.value_json as sort_field_json, sort_e_ref.name as sort_field_ref""",
               // join to attribute and entity (for references) table, grab only the named sort attribute and only the first element of a list
-              sql"""left outer join ENTITY_ATTRIBUTE_#$shardId sort_a on sort_a.owner_id = e.id and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """
+              sql"""left outer join ENTITY_ATTRIBUTE_#$shardId sort_a on sort_a.owner_id = e.id and sort_a.deleted = e.deleted and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """
             )
         }
 
@@ -519,13 +520,13 @@ trait EntityComponent {
           }
 
         // additional joins-to-subquery to provide proper pagination
-        val paginationJoin = concatSqlActions(
-          sql""" join (""",
-          paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
+        val pageOfEntityIds = concatSqlActions(
+          sql"select s.id from (",
+          pageOfEntityIdsSelectQuery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
           filterSql("and", "e"),
           filterByColumn,
           order(""),
-          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) p on p.id = e.id "
+          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) s"
         )
 
         // standalone query to calculate the count of results that match our filter
@@ -584,17 +585,25 @@ trait EntityComponent {
             /* TODO: it's inefficient to return all columns of e_ref; we only really need the id and the name. We turn it into an
                 EntityRecord, and then very quickly we read that EntityRecord's name and toss the rest of the info. Can we do better?
              */
-            concatSqlActions(
-              sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
-                             a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
-                             e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
-                             from ENTITY e
-                             left outer join ENTITY_ATTRIBUTE_#$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
-              attrSelectionSql(" and "),
-              sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
-              paginationJoin,
-              order("p")
-            ).as[EntityAndAttributesResult]
+
+            // TODO: execute page query, then execute hydrated query
+            def hydratedQuery(entityIds: Seq[Long]) =
+              concatSqlActions(
+                sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
+                               a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+                               e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
+                               from ENTITY e
+                               left outer join ENTITY_ATTRIBUTE_#$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
+                attrSelectionSql(" and "),
+                sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
+                sql"where e.id in (${entityIds.mkString(",")})",
+                sql" order by field (e.id, ${entityIds.mkString(",")})"
+              )
+
+            for {
+              pageOfEntityIds <- pageOfEntityIds.as[Long]
+              result <- hydratedQuery(pageOfEntityIds).as[EntityAndAttributesResult]
+            } yield result
           }
         }
 
@@ -993,7 +1002,7 @@ trait EntityComponent {
                                                                    entityQuery,
                                                                    parentContext
           ) map { case (unfilteredCount, filteredCount, pagination) =>
-            (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+            (unfilteredCount, filteredCount, unmarshalEntities(pagination, validateOrdering = true))
           }
       }
     }
@@ -1563,13 +1572,66 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
 
     def unmarshalEntities(
-      entityAttributeRecords: Seq[EntityAndAttributesResult]
+      entityAttributeRecords: Seq[EntityAndAttributesResult],
+      validateOrdering: Boolean = false
     ): Seq[Entity] =
-      unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
+      unmarshalEntitiesWithIds(entityAttributeRecords, validateOrdering).map { case (_, entity) => entity }
+
+    // tail-recursive method that validates if all entity ids are contiguous within the Seq[EntityAndAttributesResult]
+    // an order of 3,3,3,2,2,2,1,1 is ok
+    // an order of 1,2,3,1 is bad, because the 1 is repeated non-contiguously
+    @tailrec
+    def validateEntityIdOrdering(prevId: Long,
+                                 current: EntityAndAttributesResult,
+                                 accum: Set[Long],
+                                 remain: Seq[EntityAndAttributesResult]
+    ): Option[EntityRecord] = {
+      if (prevId != current.entityRecord.id && accum.contains(current.entityRecord.id)) {
+        return Option(current.entityRecord)
+      }
+      if (remain.isEmpty) {
+        // we've iterated through all rows; return
+        return None;
+      }
+      // there are rows left; recurse
+      validateEntityIdOrdering(current.entityRecord.id, remain.head, accum + current.entityRecord.id, remain.tail)
+    }
 
     def unmarshalEntitiesWithIds(
-      entityAttributeRecords: Seq[EntityAndAttributesResult]
+      entityAttributeRecords: Seq[EntityAndAttributesResult],
+      validateOrdering: Boolean = false
     ): Seq[(Long, Entity)] = {
+      // TEMP: inspect how the `entityAttributeRecords` argument is ordered. We are gathering this info
+      // in prep for changing how this method works.
+
+      // short-circuit if empty.
+      if (entityAttributeRecords.isEmpty) {
+        return Seq.empty[(Long, Entity)]
+      }
+
+      if (validateOrdering) {
+        val isProperlyOrdered: Option[EntityRecord] =
+          validateEntityIdOrdering(-1, entityAttributeRecords.head, Set.empty[Long], entityAttributeRecords.tail)
+
+        if (isProperlyOrdered.isEmpty) {
+          logger.info(
+            s"entityAttributeRecords is properly ordered? TRUE; length: ${entityAttributeRecords.length}"
+          )
+        } else {
+          val rec = isProperlyOrdered.get
+          logger.info(
+            s"entityAttributeRecords is properly ordered? FALSE; length: ${entityAttributeRecords.length}; " +
+              s"workspaceId: ${rec.workspaceId}; entityType: ${rec.entityType}; first offender: ${rec.name}"
+          )
+          entityAttributeRecords foreach { eaar =>
+            logger.info(s"$eaar")
+          }
+          // TODO: don't actually throw an error; for this commit, we're throwing to see if any unit tests fail
+          throw new RawlsException("EntityAndAttributesResult ordering problem")
+        }
+      }
+      // TEMP: end validation
+
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below
