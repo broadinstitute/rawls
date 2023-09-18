@@ -32,7 +32,6 @@ import scala.concurrent.{Await, ExecutionContext}
 
 class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers with ScalaFutures {
 
-  private val pollInterval = FiniteDuration(1, TimeUnit.SECONDS)
   private val timeout = FiniteDuration(3, TimeUnit.SECONDS)
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
   implicit val actorSystem: ActorSystem = ActorSystem("WsmDeletionActionSpec")
@@ -63,7 +62,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
   it should "start workspace deletion in WSM" in {
     val jobId = UUID.randomUUID()
     val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    val action = new WsmDeletionAction(wsmDao, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDao, timeout)
 
     Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
@@ -79,7 +78,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     when(wsmDao.deleteWorkspaceV2(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.NotFound.intValue, "not found")
     )
-    val action = new WsmDeletionAction(wsmDao, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDao, timeout)
 
     Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
@@ -104,7 +103,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
         new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
       }
     })
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
@@ -120,7 +119,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     when(wsmDao.deleteWorkspaceV2(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(_ =>
       throw new IllegalStateException("failed")
     )
-    val action = new WsmDeletionAction(wsmDao, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDao, timeout)
 
     intercept[IllegalStateException] {
       Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
@@ -138,7 +137,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
       )
     )
       .thenReturn(new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED)))
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     val result = Await.result(action.isComplete(azureWorkspace, monitorRecord, ctx), Duration.Inf)
 
@@ -154,7 +153,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
       )
     )
       .thenReturn(new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING)))
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     val result = Await.result(action.isComplete(azureWorkspace, monitorRecord, ctx), Duration.Inf)
 
@@ -170,7 +169,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
       )
     )
       .thenAnswer(_ => throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     val result = Await.result(action.isComplete(azureWorkspace, monitorRecord, ctx), Duration.Inf)
 
@@ -186,7 +185,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
       )
     )
       .thenReturn(new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED)))
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     intercept[WorkspaceDeletionActionFailureException] {
       Await.result(action.isComplete(azureWorkspace, monitorRecord, ctx), Duration.Inf)
@@ -202,7 +201,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
       )
     )
       .thenAnswer(_ => throw new ApiException(StatusCodes.ImATeapot.intValue, "teapot"))
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     intercept[ApiException] {
       Await.result(action.isComplete(azureWorkspace, monitorRecord, ctx), Duration.Inf)
@@ -218,7 +217,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
       )
     )
       .thenAnswer(_ => throw new IllegalStateException("failed"))
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO, timeout)
 
     intercept[IllegalStateException] {
       Await.result(action.isComplete(azureWorkspace, monitorRecord, ctx), Duration.Inf)
@@ -228,7 +227,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
   it should "fail if the job timeout is exceeded" in {
     val jobId = UUID.randomUUID().toString
     val checkTime = DateTime.now
-    val action = new WsmDeletionAction(mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS), pollInterval, timeout)
+    val action = new WsmDeletionAction(mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS), timeout)
 
     intercept[WorkspaceDeletionActionTimeoutException] {
       Await.result(action.isComplete(azureWorkspace, jobId, checkTime.minusSeconds(10), checkTime, ctx), Duration.Inf)

@@ -17,10 +17,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
-                        pollInterval: FiniteDuration,
-                        timeout: FiniteDuration
-)(implicit
+class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO, timeout: FiniteDuration)(implicit
   val system: ActorSystem
 ) extends Retry
     with LazyLogging {
@@ -33,15 +30,19 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO,
 
   def isComplete(workspace: Workspace,
                  jobId: String,
-                 jobStartedAt: DateTime,
+                 createdTime: DateTime,
                  checkTime: DateTime,
                  ctx: RawlsRequestContext
   ): Future[Boolean] = {
     logger.info(
-      s"Checking for WSM deletion for workspace ${workspace.workspaceIdAsUUID} [pollInterval = ${pollInterval}, timeout = ${timeout}]"
+      s"Checking WSM deletion status for workspace [workspaceId=${workspace.workspaceId}, jobControlId=${jobId}, createdTime=${createdTime}]"
     )
-    if (checkTime.isAfter(jobStartedAt.plus(timeout.toMillis))) {
-      return Future.failed(new WorkspaceDeletionActionTimeoutException("Job timed out"))
+    if (checkTime.isAfter(createdTime.plus(timeout.toMillis))) {
+      return Future.failed(
+        new WorkspaceDeletionActionTimeoutException(
+          s"Job timed out [workspaceId=${workspace.workspaceId}, jobControlId=${jobId}, createdTime=${createdTime}]"
+        )
+      )
     }
 
     val result: JobResult = Try(

@@ -3,15 +3,29 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{JobType, PollLeoRuntimeDeletion, PollWsmDeletion, StartWsmDeletion}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobType}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
+  JobType,
+  PollLeoRuntimeDeletion,
+  PollWsmDeletion,
+  StartWsmDeletion
+}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobType
+}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace, WorkspaceState}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.UserCtxCreator
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{LeonardoResourceDeletionAction, WsmDeletionAction}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
+  LeonardoResourceDeletionAction,
+  WsmDeletionAction
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
-import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -97,7 +111,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           workspaceRepository.updateState(job.workspaceId.get, WorkspaceState.DeleteFailed).map(_ => Complete)
       }
     } yield {
-      logger.info(s"Finished workspace deletion for workspaceId = ${workspaceId}")
+      logger.info(s"Finished workspace deletion step for workspaceId = ${workspaceId}")
       result
     }
 
@@ -105,8 +119,8 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
 
   private def runWorkspaceDeletionStep(workspace: Workspace,
                                        job: WorkspaceManagerResourceMonitorRecord,
-                                        ctx: RawlsRequestContext,
-                                        jobControlId: String
+                                       ctx: RawlsRequestContext,
+                                       jobControlId: String
   )(implicit
     executionContext: ExecutionContext
   ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
@@ -147,9 +161,18 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
       case JobType.PollWsmDeletion =>
         wsmDeletionAction.isComplete(workspace, job, ctx).flatMap {
           case false => Future.successful(Incomplete)
-          case true => workspaceRepository.deleteWorkspaceRecord(workspace).map(_ => Complete)
+          case true =>
+            logger.info(
+              s"Workspace manager deletion complete, deleting rawls record. [workspaceId=${workspace.workspaceId}, jobControlId=${job.jobControlId}]"
+            )
+            workspaceRepository.deleteWorkspaceRecord(workspace).map(_ => Complete)
         }
-      case _ => Future.failed(new Exception("whoops")) // TODO
+      case _ =>
+        Future.failed(
+          new IllegalArgumentException(
+            s"Invalid job type for deletion [jobType = ${job.jobType}, jobControlId=${job.jobControlId}]"
+          )
+        )
     }
     result
 

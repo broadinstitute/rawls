@@ -616,7 +616,8 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
-          methodConfigResolver
+          methodConfigResolver,
+          workspaceManagerResourceMonitorRecordDao
         )
       } else
         logger.info(

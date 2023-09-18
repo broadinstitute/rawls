@@ -14,10 +14,10 @@ import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
-class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, timeout: FiniteDuration)(
-  implicit val system: ActorSystem
+class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, timeout: FiniteDuration)(implicit
+  val system: ActorSystem
 ) extends Retry
     with LazyLogging {
 
@@ -52,13 +52,23 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, timeout: FiniteDu
     }
   }
 
-  def pollRuntimeDeletion(workspace: Workspace, job: WorkspaceManagerResourceMonitorRecord, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] =
+  def pollRuntimeDeletion(workspace: Workspace, job: WorkspaceManagerResourceMonitorRecord, ctx: RawlsRequestContext)(
+    implicit ec: ExecutionContext
+  ): Future[Boolean] = {
+    logger.info(
+      s"Checking state of leo runtime deletion [workspaceId=${workspace.workspaceId}, jobControlId=${job.jobControlId}, createdTime=${job.createdTime}]"
+    )
     isComplete(workspace, new DateTime(job.createdTime), DateTime.now(), ctx, listAzureRuntimes)
+  }
 
-  def pollAppDeletion(workspace: Workspace, job: WorkspaceManagerResourceMonitorRecord, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Boolean] =
+  def pollAppDeletion(workspace: Workspace, job: WorkspaceManagerResourceMonitorRecord, ctx: RawlsRequestContext)(
+    implicit ec: ExecutionContext
+  ): Future[Boolean] = {
+    logger.info(
+      s"Checking state of leo app deletion [workspaceId=${workspace.workspaceId}, jobControlId=${job.jobControlId}, createdTime=${job.createdTime}]"
+    )
     isComplete(workspace, new DateTime(job.createdTime), DateTime.now(), ctx, listApps)
+  }
 
   def listApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext

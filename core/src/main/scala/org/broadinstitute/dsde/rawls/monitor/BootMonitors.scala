@@ -73,7 +73,8 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
-                   methodConfigResolver: MethodConfigResolver
+                   methodConfigResolver: MethodConfigResolver,
+                   workspaceManagerResourceMonitorRecordDAO: WorkspaceManagerResourceMonitorRecordDao
   )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
     // Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
@@ -196,7 +197,8 @@ object BootMonitors extends LazyLogging {
       billingProfileManagerDAO,
       gcsDAO,
       leonardoDAO,
-      workspaceRepository
+      workspaceRepository,
+      workspaceManagerResourceMonitorRecordDAO
     )
 
     startFastPassMonitor(system, conf, slickDataSource, googleIamDAO, googleStorageDAO)
@@ -420,7 +422,8 @@ object BootMonitors extends LazyLogging {
     billingProfileManagerDAO: BillingProfileManagerDAO,
     gcsDAO: GoogleServicesDAO,
     leonardoDAO: LeonardoDAO,
-    workspaceRepository: WorkspaceRepository
+    workspaceRepository: WorkspaceRepository,
+    workspaceManagerResourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
@@ -431,7 +434,6 @@ object BootMonitors extends LazyLogging {
     )(system)
     val wsmDeletionAction = new WsmDeletionAction(
       workspaceManagerDAO,
-      util.toScalaDuration(deletionConfig.getDuration("workspaceManagerPollInterval")),
       util.toScalaDuration(deletionConfig.getDuration("workspaceManagerJobTimeout"))
     )(system)
 
@@ -445,7 +447,7 @@ object BootMonitors extends LazyLogging {
                                                                  workspaceRepository,
                                                                  leoDeletionAction,
                                                                  wsmDeletionAction,
-            ???,
+            workspaceManagerResourceMonitorRecordDao,
                                                                  gcsDAO
           ),
           JobType.AzureLandingZoneResult ->
