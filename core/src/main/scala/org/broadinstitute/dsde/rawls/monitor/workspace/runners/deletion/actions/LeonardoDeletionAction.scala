@@ -48,6 +48,7 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO, timeout: FiniteDu
       }
 
     result.flatMap { resources =>
+      logger.info(s"Number of resources present = ${resources.length} [workspaceId=${workspace.workspaceId}]")
       Future.successful(resources.isEmpty)
     }
   }

@@ -8,7 +8,12 @@ import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
-import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
+import org.broadinstitute.dsde.rawls.coordination.{
+  CoordinatedDataSourceAccess,
+  CoordinatedDataSourceActor,
+  DataSourceAccess,
+  UncoordinatedDataSourceAccess
+}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
@@ -16,14 +21,26 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
+import org.broadinstitute.dsde.rawls.jobexec.{
+  MethodConfigResolver,
+  SubmissionMonitorConfig,
+  SubmissionSupervisor,
+  WorkflowSubmissionActor
+}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{LeonardoResourceDeletionAction, WsmDeletionAction}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{BPMBillingProjectDeleteRunner, CloneWorkspaceContainerRunner, LandingZoneCreationStatusRunner}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
+  LeonardoResourceDeletionAction,
+  WsmDeletionAction
+}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  BPMBillingProjectDeleteRunner,
+  CloneWorkspaceContainerRunner,
+  LandingZoneCreationStatusRunner
+}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -436,20 +453,24 @@ object BootMonitors extends LazyLogging {
       workspaceManagerDAO,
       util.toScalaDuration(deletionConfig.getDuration("workspaceManagerJobTimeout"))
     )(system)
+    val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
+                                                              workspaceManagerDAO,
+                                                              workspaceRepository,
+                                                              leoDeletionAction,
+                                                              wsmDeletionAction,
+                                                              workspaceManagerResourceMonitorRecordDao,
+                                                              gcsDAO
+    )
+
+    val deletionSteps = workspaceDeletionRunner.DELETION_JOB_TYPES.zipWithIndex.map { case (v, i) =>
+      (v, workspaceDeletionRunner)
+    }.toMap
 
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
         dataSource,
         Map(
-          JobType.WorkspaceDelete -> new WorkspaceDeletionRunner(samDAO,
-                                                                 workspaceManagerDAO,
-                                                                 workspaceRepository,
-                                                                 leoDeletionAction,
-                                                                 wsmDeletionAction,
-            workspaceManagerResourceMonitorRecordDao,
-                                                                 gcsDAO
-          ),
           JobType.AzureLandingZoneResult ->
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
@@ -466,7 +487,7 @@ object BootMonitors extends LazyLogging {
                                            WorkspaceManagerResourceMonitorRecordDao(dataSource)
             )
           )
-        )
+        ) ++ deletionSteps
       )
     )
   }
@@ -498,7 +519,6 @@ object BootMonitors extends LazyLogging {
         )
 
     }
-
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>

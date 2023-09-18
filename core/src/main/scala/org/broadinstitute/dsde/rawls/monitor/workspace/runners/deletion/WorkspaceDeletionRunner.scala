@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace, WorkspaceState}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace, WorkspaceState}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.UserCtxCreator
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
   LeonardoResourceDeletionAction,
@@ -102,7 +102,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
       }
       ctx <- getUserCtx(userEmail)
 
-      result <- runWorkspaceDeletionStep(workspace, job, ctx, job.jobControlId.toString).recoverWith {
+      result <- runWorkspaceDeletionStep(workspace, job, ctx, job.jobControlId.toString, userEmail).recoverWith {
         case t: Throwable =>
           logger.error(
             s"Workspace deletion failed; workspaceId = ${workspaceId}, jobControlId = ${job.jobControlId.toString}",
@@ -111,7 +111,9 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           workspaceRepository.updateState(job.workspaceId.get, WorkspaceState.DeleteFailed).map(_ => Complete)
       }
     } yield {
-      logger.info(s"Finished workspace deletion step for workspaceId = ${workspaceId}")
+      logger.info(
+        s"Finished workspace deletion step ]workspaceId = ${workspaceId}, jobType=${job.jobType}, jobControlId=${job.jobControlId}, status=${result}]"
+      )
       result
     }
 
@@ -120,43 +122,44 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
   private def runWorkspaceDeletionStep(workspace: Workspace,
                                        job: WorkspaceManagerResourceMonitorRecord,
                                        ctx: RawlsRequestContext,
-                                       jobControlId: String
+                                       jobControlId: String,
+                                       userEmail: String
   )(implicit
     executionContext: ExecutionContext
   ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
     logger.info(
-      s"Starting downstream resource deletion for workspace ID ${workspace.workspaceId}, jobControlId = ${jobControlId}"
+      s"Starting downstream resource step for workspace ID ${workspace.workspaceId}, jobControlId = ${jobControlId}"
     )
 
     val result = job.jobType match {
       case JobType.WorkspaceDelete =>
         leonardoResourceDeletionAction
           .deleteRuntimes(workspace, ctx)
-          .flatMap(_ => enqueueRecord(workspace, PollLeoRuntimeDeletion, ctx))
+          .flatMap(_ => enqueueRecord(workspace, PollLeoRuntimeDeletion, userEmail))
           .map(_ => Complete)
       case JobType.PollLeoRuntimeDeletion =>
         leonardoResourceDeletionAction.pollRuntimeDeletion(workspace, job, ctx).flatMap {
           case false => Future.successful(Incomplete)
           case true =>
-            enqueueRecord(workspace, JobType.StartLeoAppDeletion, ctx)
+            enqueueRecord(workspace, JobType.StartLeoAppDeletion, userEmail)
               .map(_ => Complete)
         }
       case JobType.StartLeoAppDeletion =>
         leonardoResourceDeletionAction
           .deleteApps(workspace, ctx)
-          .flatMap(_ => enqueueRecord(workspace, JobType.PollLeoAppDeletion, ctx))
+          .flatMap(_ => enqueueRecord(workspace, JobType.PollLeoAppDeletion, userEmail))
           .map(_ => Complete)
       case JobType.PollLeoAppDeletion =>
         leonardoResourceDeletionAction.pollAppDeletion(workspace, job, ctx).flatMap {
           case false => Future.successful(Incomplete)
           case true =>
-            enqueueRecord(workspace, StartWsmDeletion, ctx)
+            enqueueRecord(workspace, StartWsmDeletion, userEmail)
               .map(_ => Complete)
         }
       case JobType.StartWsmDeletion =>
         wsmDeletionAction
           .startStep(workspace, jobControlId, ctx)
-          .flatMap(_ => enqueueRecord(workspace, PollWsmDeletion, ctx))
+          .flatMap(_ => enqueueRecord(workspace, PollWsmDeletion, userEmail))
           .map(_ => Complete)
       case JobType.PollWsmDeletion =>
         wsmDeletionAction.isComplete(workspace, job, ctx).flatMap {
@@ -178,16 +181,20 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
 
   }
 
-  private def enqueueRecord(workspace: Workspace, jobType: JobType, ctx: RawlsRequestContext): Future[Unit] =
+  private def enqueueRecord(workspace: Workspace, jobType: JobType, userEmail: String): Future[Unit] = {
+    logger.info(
+      s"Enqueuing deletion step [workspaceId=${workspace.workspaceId}, jobType=${jobType}, email=${userEmail}]"
+    )
     workspaceManagerResourceMonitorRecordDao
       .create(
         WorkspaceManagerResourceMonitorRecord.forJobType(
           UUID.randomUUID(),
           workspace.workspaceIdAsUUID,
-          ctx.userInfo.userEmail,
+          RawlsUserEmail(userEmail),
           jobType
         )
       )
+  }
 }
 
 class WorkspaceDeletionException(message: String) extends RawlsException(message) {}
