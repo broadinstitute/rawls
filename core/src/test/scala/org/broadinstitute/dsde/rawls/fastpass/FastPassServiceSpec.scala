@@ -26,6 +26,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
@@ -1331,6 +1332,63 @@ class FastPassServiceSpec
 
       err.errorReport.message should include(storageRole)
       verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "add a FastPass grant when the users bucket permissions are unable to be exercised" in withTestDataServices {
+    services =>
+      val storageRole = BUCKET_GET_PERMISSION
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
+      when(
+        services.gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(any[GoogleProject],
+                                                                     any[GcsBucketName],
+                                                                     any[String]
+        )(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(false))
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+
+      err.errorReport.message should include("unable to get bucket location")
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "not add a FastPass grant when the user doesn't have bucket get permissions" in withTestDataServices {
+    services =>
+      val storageRole = BUCKET_GET_PERMISSION + "not"
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
+      when(
+        services.gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(any[GoogleProject],
+                                                                     any[GcsBucketName],
+                                                                     any[String]
+        )(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(false))
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+
+      verify(services.mockFastPassService, never()).syncFastPassesForUserInWorkspace(
         ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
       )
   }

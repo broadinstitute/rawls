@@ -43,6 +43,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
@@ -138,6 +139,8 @@ object WorkspaceService {
   val SECURITY_LABEL_KEY = "security"
   val HIGH_SECURITY_LABEL = "high"
   val LOW_SECURITY_LABEL = "low"
+
+  val BUCKET_GET_PERMISSION = "storage.buckets.get"
 
   private[workspace] def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
     case class Call(jobId: Option[String])
@@ -2752,7 +2755,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             val code = getStatusCodeHandlingUnknown(t.getStatusCode)
             Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
         }
-
+      bucketLocationResult <- gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(
+        GoogleProject(workspace.googleProjectId.value),
+        GcsBucketName(workspace.bucketName),
+        petKey
+      )
       _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
         new RawlsException("user has workspace read-only access yet has expected google project permissions")
       }
@@ -2798,6 +2805,29 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               .toString()} has all permissions on google project ${workspace.googleProjectId.value} and google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.info("checkWorkspaceCloudPermissions: " + message)
           Future.successful(())
+        }
+      _ <-
+        if (expectedGoogleBucketPermissions.contains(IamPermission(BUCKET_GET_PERMISSION)) && !bucketLocationResult) {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
+              .toString()} was unable to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.warn("checkWorkspaceCloudPermissions: " + message)
+          fastPassServiceConstructor(ctx, dataSource)
+            .syncFastPassesForUserInWorkspace(workspace)
+            .flatMap(_ =>
+              Future.failed(
+                new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.Forbidden,
+                    message
+                  )
+                )
+              )
+            )
+        } else {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
+              .toString()} was able to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.info("checkWorkspaceCloudPermissions: " + message)
+          Future.successful()
         }
     } yield ()
 
