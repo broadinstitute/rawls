@@ -453,19 +453,26 @@ object BootMonitors extends LazyLogging {
       util.toScalaDuration(deletionConfig.getDuration("workspaceManagerPollInterval")),
       util.toScalaDuration(deletionConfig.getDuration("workspaceManagerJobTimeout"))
     )(system)
+    val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
+    val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
+      workspaceManagerDAO,
+      workspaceRepository,
+      leoDeletionAction,
+      wsmDeletionAction,
+      gcsDAO,
+      monitorRecordDao
+    )
+
 
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
         dataSource,
         Map(
-          JobType.WorkspaceDelete -> new WorkspaceDeletionRunner(samDAO,
-                                                                 workspaceManagerDAO,
-                                                                 workspaceRepository,
-                                                                 leoDeletionAction,
-                                                                 wsmDeletionAction,
-                                                                 gcsDAO
-          ),
+          JobType.WorkspaceDeleteInit -> workspaceDeletionRunner,
+          JobType.LeoAppDeletionPoll -> workspaceDeletionRunner,
+          JobType.LeoRuntimeDeletionPoll -> workspaceDeletionRunner,
+          JobType.WSMWorkspaceDeletionPoll -> workspaceDeletionRunner,
           JobType.AzureLandingZoneResult ->
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
@@ -475,12 +482,7 @@ object BootMonitors extends LazyLogging {
             gcsDAO,
             workspaceManagerDAO,
             billingRepo,
-            new BpmBillingProjectLifecycle(samDAO,
-                                           billingRepo,
-                                           billingProfileManagerDAO,
-                                           workspaceManagerDAO,
-                                           WorkspaceManagerResourceMonitorRecordDao(dataSource)
-            )
+            new BpmBillingProjectLifecycle(samDAO, billingRepo, billingProfileManagerDAO, workspaceManagerDAO, monitorRecordDao)
           )
         )
       )

@@ -23,7 +23,7 @@ object WorkspaceManagerResourceMonitorRecord {
 
 
     // FIXME: clean up deletion steps when switching to case class
-    val WorkspaceDelete: Value = Value("WorkspaceDelete")
+    val WorkspaceDeleteInit: Value = Value("WorkspaceDeleteInit")
     val LeoAppDeletionPoll: Value = Value("LeoAppDeletionPoll")
     val LeoRuntimeDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
     val WSMWorkspaceDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
@@ -82,24 +82,10 @@ object WorkspaceManagerResourceMonitorRecord {
   ): WorkspaceManagerResourceMonitorRecord =
     WorkspaceManagerResourceMonitorRecord(
       jobRecordId,
-      JobType.WorkspaceDelete,
+      JobType.WorkspaceDeleteInit,
       workspaceId = Some(workspaceId),
       billingProjectId = None,
       userEmail = Some(userEmail.value),
-      createdTime = Timestamp.from(Instant.now())
-    )
-
-  def workspaceDeleteStep(
-                           record: WorkspaceManagerResourceMonitorRecord,
-                           jobType: JobType,
-                           jobRecordId: UUID
-                         ): WorkspaceManagerResourceMonitorRecord =
-    WorkspaceManagerResourceMonitorRecord(
-      jobRecordId,
-      jobType,
-      workspaceId = record.workspaceId,
-      billingProjectId = record.billingProjectId,
-      userEmail = record.userEmail,
       createdTime = Timestamp.from(Instant.now())
     )
 }

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{LeoAppDeletionPoll, LeoRuntimeDeletionPoll, WSMWorkspaceDeletionPoll}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{LeoAppDeletionPoll, LeoRuntimeDeletionPoll, WSMWorkspaceDeletionPoll, WorkspaceDeleteInit}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -37,12 +37,14 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     with LazyLogging
     with UserCtxCreator {
 
+  val deleteJobTypes = List(JobType.WorkspaceDeleteInit, JobType.LeoRuntimeDeletionPoll, JobType.LeoAppDeletionPoll, JobType.WSMWorkspaceDeletionPoll)
+
   override def apply(job: WorkspaceManagerResourceMonitorRecord)(implicit
     executionContext: ExecutionContext
   ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
-    if (!job.jobType.equals(JobType.WorkspaceDelete))
+    if (!deleteJobTypes.contains(job.jobType)) {
       throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
-
+    }
     val workspaceId = job.workspaceId match {
       case Some(id) => id
       case None =>
@@ -93,40 +95,12 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
 
   }
 
-  private def runWorkspaceDeletionSteps(workspace: Workspace, ctx: RawlsRequestContext, jobControlId: String)(implicit
-    executionContext: ExecutionContext
-  ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
-    logger.info(
-      s"Starting downstream resource deletion for workspace ID ${workspace.workspaceId}, jobControlId = ${jobControlId}"
-    )
-
-    // run the leo operations in parallel
-    val leoAppsDeletionFuture = leonardoResourceDeletionAction.deleteApps(workspace, ctx)
-    val leoRuntimesDeletionFuture = leonardoResourceDeletionAction.deleteRuntimes(workspace, ctx)
-
-    val result = for {
-      _ <- leoAppsDeletionFuture
-      _ <- leonardoResourceDeletionAction.pollAppDeletion(workspace, ctx)
-      _ <- leoRuntimesDeletionFuture
-      _ <- leonardoResourceDeletionAction.pollRuntimeDeletion(workspace, ctx)
-      _ <- wsmDeletionAction.startStep(workspace, jobControlId, ctx)
-      _ <- wsmDeletionAction.pollOperation(workspace, jobControlId, ctx)
-      _ <- workspaceRepository.deleteWorkspaceRecord(workspace)
-    } yield {
-      logger.info(
-        s"Finished downstream resource deletion for workspace ID ${workspace.workspaceId}, jobControlId = ${jobControlId}"
-      )
-      Complete
-    }
-
-    result
-  }
-
 
   def runStep(job: WorkspaceManagerResourceMonitorRecord, workspace: Workspace, ctx: RawlsRequestContext)(implicit
                                                                                                           executionContext: ExecutionContext
   ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus]  =
     job.jobType match {
+      case WorkspaceDeleteInit  => completeStep(job, workspace, ctx)
       case LeoAppDeletionPoll  =>
         leonardoResourceDeletionAction.pollAppDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
@@ -154,20 +128,23 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
         case Failure(e) => Future.failed(e)
       }
       case _ =>
-        // TODO
-        Future.successful(Complete)
+        throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
+
     }
 
   def completeStep(job: WorkspaceManagerResourceMonitorRecord, workspace: Workspace, ctx: RawlsRequestContext)(implicit
                                                                executionContext: ExecutionContext
   ): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
     job.jobType match {
+      case WorkspaceDeleteInit => for {
+        _ <- leonardoResourceDeletionAction.deleteApps(workspace, ctx)
+        _ <- monitorRecordDao.update(job.copy(jobType = LeoAppDeletionPoll))
+      } yield Incomplete
       case LeoAppDeletionPoll => for {
         _ <- leonardoResourceDeletionAction.deleteRuntimes(workspace, ctx)
         _ <- monitorRecordDao.update(job.copy(jobType = LeoRuntimeDeletionPoll))
       } yield Incomplete
       case LeoRuntimeDeletionPoll =>
-        // todo: start wsm deletion
         wsmDeletionAction.startStep(workspace, job.jobControlId.toString, ctx)
         monitorRecordDao.update(job.copy(jobType = WSMWorkspaceDeletionPoll))
           .map(_ => Incomplete)
