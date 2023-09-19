@@ -22,7 +22,7 @@ object WorkspaceManagerResourceMonitorRecord {
     val WorkspaceDeleteInit: Value = Value("WorkspaceDeleteInit")
     val LeoAppDeletionPoll: Value = Value("LeoAppDeletionPoll")
     val LeoRuntimeDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
-    val WSMWorkspaceDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
+    val WSMWorkspaceDeletionPoll: Value = Value("WSMWorkspaceDeletionPoll")
 
     val deleteJobTypes: List[WorkspaceManagerResourceMonitorRecord.JobType.Value] = List(
       JobType.WorkspaceDeleteInit,
