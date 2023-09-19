@@ -496,12 +496,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
-    val previewDate = new DateTime(2023, 9, 13, 0, 0, DateTimeZone.UTC)
+    val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
     val isTestProfile = profile.getCreatedDate() == null || profile.getCreatedDate() == ""
     if (!isTestProfile && DateTime.parse(profile.getCreatedDate()).isBefore(previewDate)) {
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.Forbidden,
-                    "This billing project was created before 9/13/2023 and cannot be used for creating new workspaces."
+                    "This billing project was created before 9/12/2023 and cannot be used for creating new workspaces."
         )
       )
     }

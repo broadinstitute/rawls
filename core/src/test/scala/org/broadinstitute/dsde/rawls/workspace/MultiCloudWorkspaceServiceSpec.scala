@@ -323,7 +323,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
-  it should "throw an exception if the billing profile is too old" in {
+  it should "throw an exception if the billing profile was created before 9/12/2023" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
@@ -346,7 +346,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val thrown = intercept[RawlsExceptionWithErrorReport] {
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(
                      request,
-                     new ProfileModel().id(billingProfileId).createdDate("2023-09-12T22:20:48.949Z")
+                     new ProfileModel().id(billingProfileId).createdDate("2023-09-11T22:20:48.949Z")
                    ),
                    Duration.Inf
       )
@@ -355,7 +355,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
   }
 
-  it should "not throw an exception for billing profiles created after 9/12/2023" in {
+  it should "not throw an exception for billing profiles created 9/12/2023 or later" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
@@ -376,7 +376,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val billingProfileId = UUID.randomUUID()
     Await.result(mcWorkspaceService.createMultiCloudWorkspace(
                    request,
-                   new ProfileModel().id(billingProfileId).createdDate("2023-09-13T22:20:48.949Z")
+                   new ProfileModel().id(billingProfileId).createdDate("2023-09-12T22:20:48.949Z")
                  ),
                  Duration.Inf
     )
