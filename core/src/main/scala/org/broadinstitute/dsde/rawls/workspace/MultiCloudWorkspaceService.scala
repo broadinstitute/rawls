@@ -500,8 +500,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     val isTestProfile = profile.getCreatedDate() == null || profile.getCreatedDate() == ""
     if (!isTestProfile && DateTime.parse(profile.getCreatedDate()).isBefore(previewDate)) {
       throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.Forbidden,
-                    "This billing project was created before 9/12/2023 and cannot be used for creating new workspaces."
+        ErrorReport(
+          StatusCodes.Forbidden,
+          "Azure Terra billing projects created before 9/12/2023, and their associated workspaces, are unable to take advantage of new functionality. This billing project cannot be used for creating new workspaces. Please create a new billing project."
         )
       )
     }
