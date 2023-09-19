@@ -33,9 +33,6 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
   implicit val actorSystem: ActorSystem = ActorSystem("LeonardoAppDeletionActionSpec")
 
-  private val pollInterval = FiniteDuration(1, TimeUnit.SECONDS)
-  private val timeout = FiniteDuration(3, TimeUnit.SECONDS)
-
   private val userInfo = UserInfo(RawlsUserEmail("owner-access"),
                                   OAuth2BearerToken("token"),
                                   123,
@@ -58,7 +55,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
 
   it should "start app deletion" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.deleteApps(azureWorkspace, ctx), Duration.Inf)
 
@@ -77,7 +74,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
         }
       }
     })
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.deleteApps(azureWorkspace, ctx), Duration.Inf)
 
@@ -88,7 +85,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
 
   it should "start runtime deletion" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.deleteRuntimes(azureWorkspace, ctx), Duration.Inf)
 
@@ -107,7 +104,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
         }
       }
     })
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.deleteRuntimes(azureWorkspace, ctx), Duration.Inf)
 
@@ -116,34 +113,26 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
 
   behavior of "pollAppDeletion"
 
-  it should "poll to successful app deletion" in {
+  it should "poll and return false when apps have not finished deleting" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      var times = 0
-
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = {
-        times = times + 1
-        if (times > 1) {
-          Seq.empty
-        } else {
-          Seq(new ListAppResponse())
-        }
-      }
+      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = Seq(new ListAppResponse())
     })
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
 
-    Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
-    verify(leoDAO, times(2)).listApps(anyString(), any[UUID])
+    Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf) shouldBe false
+    verify(leoDAO).listApps(anyString(), any[UUID])
   }
 
-  it should "fail after exceeding the app deletion poll timeout" in {
-    val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    when(leoDAO.listApps(anyString(), any[UUID])).thenReturn(Seq(new ListAppResponse()))
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+  it should "poll and return true when apps have finished deleting" in {
+    val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
+      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = Seq.empty
+    })
 
-    intercept[LeonardoOperationFailureException] {
-      Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
-    }
+    val action = new LeonardoResourceDeletionAction(leoDAO)
+
+    Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf) shouldBe true
+    verify(leoDAO).listApps(anyString(), any[UUID])
   }
 
   it should "retry on 5xx from listapps" in {
@@ -159,7 +148,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
         }
       }
     })
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
 
@@ -171,7 +160,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
     when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden")
     )
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
   }
@@ -181,7 +170,7 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
     when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.NotFound.intValue, "not found")
     )
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
   }
@@ -191,9 +180,9 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
     when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.ImATeapot.intValue, "teapot")
     )
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
-    intercept[LeonardoOperationFailureException] {
+    intercept[ApiException] {
       Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
     }
   }
@@ -201,32 +190,11 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
   it should "not retry on an unrelated exception" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
     when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ => throw new IllegalStateException("exception"))
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
+    val action = new LeonardoResourceDeletionAction(leoDAO)
 
-    intercept[LeonardoOperationFailureException] {
+    intercept[IllegalStateException] {
       Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
     }
   }
 
-  behavior of "pollRuntimeDeletion"
-
-  it should "poll to successful runtime deletion" in {
-    val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      var times = 0
-
-      override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] = {
-        times = times + 1
-        if (times > 1) {
-          Seq.empty
-        } else {
-          Seq(new ListRuntimeResponse())
-        }
-      }
-    })
-    val action = new LeonardoResourceDeletionAction(leoDAO, pollInterval, timeout)
-
-    Await.result(action.pollRuntimeDeletion(azureWorkspace, ctx), Duration.Inf)
-
-    verify(leoDAO, times(2)).listAzureRuntimes(anyString(), any[UUID])
-  }
 }

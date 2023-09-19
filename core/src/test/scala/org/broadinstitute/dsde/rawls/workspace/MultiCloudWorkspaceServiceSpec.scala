@@ -1304,7 +1304,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           } yield {
             deletionResult.jobId shouldBe defined
             jobs.size shouldBe 1
-            jobs.head.jobType shouldBe JobType.WorkspaceDelete
+            jobs.head.jobType shouldBe JobType.WorkspaceDeleteInit
             jobs.head.workspaceId.value.toString shouldBe testData.azureWorkspace.workspaceId
             assertWorkspaceExists(testData.azureWorkspace)
             assertWorkspaceState(testData.azureWorkspace, WorkspaceState.Deleting)
