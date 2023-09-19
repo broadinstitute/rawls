@@ -22,7 +22,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
   ErrorReport,
-  GcpWorkspaceDeletionContext,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -322,6 +321,65 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+  }
+
+  it should "throw an exception if the billing profile is too old" in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty
+    )
+    val billingProfileId = UUID.randomUUID()
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+                     request,
+                     new ProfileModel().id(billingProfileId).createdDate("2023-09-12T22:20:48.949Z")
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    thrown.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+  }
+
+  it should "not throw an exception for billing profiles created after 9/12/2023" in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty
+    )
+    val billingProfileId = UUID.randomUUID()
+    Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+                   request,
+                   new ProfileModel().id(billingProfileId).createdDate("2023-09-13T22:20:48.949Z")
+                 ),
+                 Duration.Inf
+    )
   }
 
   it should "deploy a WDS instance during workspace creation" in {
