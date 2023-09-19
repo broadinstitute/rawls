@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 }
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor}
+import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
@@ -443,26 +443,17 @@ object BootMonitors extends LazyLogging {
     val billingRepo = new BillingRepository(dataSource)
 
     val deletionConfig = config.getConfig("workspaceManagerResourceMonitor.deletion")
-    val leoDeletionAction = new LeonardoResourceDeletionAction(
-      leonardoDAO,
-      util.toScalaDuration(deletionConfig.getDuration("leonardoPollInterval")),
-      util.toScalaDuration(deletionConfig.getDuration("leonardoJobTimeout"))
-    )(system)
-    val wsmDeletionAction = new WsmDeletionAction(
-      workspaceManagerDAO,
-      util.toScalaDuration(deletionConfig.getDuration("workspaceManagerPollInterval")),
-      util.toScalaDuration(deletionConfig.getDuration("workspaceManagerJobTimeout"))
-    )(system)
+    val leoDeletionAction = new LeonardoResourceDeletionAction(leonardoDAO)(system)
+    val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
     val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
     val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
-      workspaceManagerDAO,
-      workspaceRepository,
-      leoDeletionAction,
-      wsmDeletionAction,
-      gcsDAO,
-      monitorRecordDao
+                                                              workspaceManagerDAO,
+                                                              workspaceRepository,
+                                                              leoDeletionAction,
+                                                              wsmDeletionAction,
+                                                              gcsDAO,
+                                                              monitorRecordDao
     )
-
 
     system.actorOf(
       WorkspaceResourceMonitor.props(
@@ -482,7 +473,12 @@ object BootMonitors extends LazyLogging {
             gcsDAO,
             workspaceManagerDAO,
             billingRepo,
-            new BpmBillingProjectLifecycle(samDAO, billingRepo, billingProfileManagerDAO, workspaceManagerDAO, monitorRecordDao)
+            new BpmBillingProjectLifecycle(samDAO,
+                                           billingRepo,
+                                           billingProfileManagerDAO,
+                                           workspaceManagerDAO,
+                                           monitorRecordDao
+            )
           )
         )
       )
@@ -516,7 +512,6 @@ object BootMonitors extends LazyLogging {
         )
 
     }
-
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>

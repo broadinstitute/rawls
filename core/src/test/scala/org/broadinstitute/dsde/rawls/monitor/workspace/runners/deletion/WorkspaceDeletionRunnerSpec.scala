@@ -2,13 +2,24 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobType}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace, WorkspaceState}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunnerSpec.{azureWorkspace, monitorRecord}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{LeonardoOperationFailureException, LeonardoResourceDeletionAction, WsmDeletionAction}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunnerSpec.{
+  azureWorkspace,
+  monitorRecord
+}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
+  LeonardoOperationFailureException,
+  LeonardoResourceDeletionAction,
+  WsmDeletionAction
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
@@ -19,6 +30,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -102,20 +115,20 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
 
   it should "start deletion of leo apps and update job to LeoAppDeletionPoll on init" in {
     val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
-    when (leoDeletion.deleteApps(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful())
+    when(leoDeletion.deleteApps(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful())
     val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
 
     val jobUpdate = monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll)
-    when (recordDao.update(jobUpdate)).thenReturn(Future.successful(1))
+    when(recordDao.update(jobUpdate)).thenReturn(Future.successful(1))
     val runner = new WorkspaceDeletionRunner(
-        mock[SamDAO](RETURNS_SMART_NULLS),
-        mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
-        mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-        leoDeletion,
-        mock[WsmDeletionAction](RETURNS_SMART_NULLS),
-        mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
+      mock[SamDAO](RETURNS_SMART_NULLS),
+      mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+      mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+      leoDeletion,
+      mock[WsmDeletionAction](RETURNS_SMART_NULLS),
+      mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       recordDao
-      )
+    )
     whenReady(runner.runStep(monitorRecord, azureWorkspace, RawlsRequestContext(null, null)))(_ shouldBe Incomplete)
     verify(recordDao).update(jobUpdate)
     verify(leoDeletion).deleteApps(any(), any())(any[ExecutionContext]())
@@ -134,7 +147,12 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     )
-    whenReady(runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll), azureWorkspace, RawlsRequestContext(null, null)))(_ shouldBe Incomplete)
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
     verify(leoDeletion).pollAppDeletion(any(), any())(any[ExecutionContext]())
   }
 
@@ -154,7 +172,12 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       recordDao
     )
-    whenReady(runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll), azureWorkspace, RawlsRequestContext(null, null)))(_ shouldBe Incomplete)
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
     verify(leoDeletion).pollAppDeletion(any(), any())(any[ExecutionContext]())
     verify(recordDao).update(jobUpdate)
     verify(leoDeletion).deleteRuntimes(any(), any())(any[ExecutionContext]())
@@ -173,7 +196,12 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     )
-    whenReady(runner.runStep(monitorRecord.copy(jobType = JobType.LeoRuntimeDeletionPoll), azureWorkspace, RawlsRequestContext(null, null)))(_ shouldBe Incomplete)
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.LeoRuntimeDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
     verify(leoDeletion).pollRuntimeDeletion(any(), any())(any[ExecutionContext]())
   }
 
@@ -202,10 +230,9 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     verify(wsmAction).startStep(any(), any(), any())(any[ExecutionContext]())
   }
 
-
   it should "return incomplete when wsm workspace is not not deleted" in {
     val wsmAction = mock[WsmDeletionAction](RETURNS_SMART_NULLS)
-    when(wsmAction.pollDeletionComplete(any(), any(), any())(any[ExecutionContext]())).thenReturn(false)
+    when(wsmAction.pollForCompletion(any(), any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(false))
 
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
@@ -216,30 +243,39 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     )
-    whenReady(runner.runStep(monitorRecord.copy(jobType = JobType.WSMWorkspaceDeletionPoll), azureWorkspace, RawlsRequestContext(null, null)))(_ shouldBe Incomplete)
-    verify(wsmAction).pollDeletionComplete(any(), any(), any())(any[ExecutionContext]())
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.WSMWorkspaceDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
+    verify(wsmAction).pollForCompletion(any(), any(), any())(any[ExecutionContext]())
   }
 
   it should "delete the rawls record and return Complete after the wsm workspace is deleted" in {
     val wsmAction = mock[WsmDeletionAction](RETURNS_SMART_NULLS)
-    when(wsmAction.pollDeletionComplete(any(), any(), any())(any[ExecutionContext]())).thenReturn(true)
+    when(wsmAction.pollForCompletion(any(), any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(true))
     val repo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(repo.deleteWorkspaceRecord(azureWorkspace)).thenReturn(Future.successful(true))
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
-      mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+      repo,
       mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
       wsmAction,
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     )
-    whenReady(runner.runStep(monitorRecord.copy(jobType = JobType.WSMWorkspaceDeletionPoll), azureWorkspace, RawlsRequestContext(null, null)))(_ shouldBe Complete)
-    verify(wsmAction).pollDeletionComplete(any(), any(), any())(any[ExecutionContext]())
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.WSMWorkspaceDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Complete)
+    verify(wsmAction).pollForCompletion(any(), any(), any())(any[ExecutionContext]())
     verify(repo).deleteWorkspaceRecord(azureWorkspace)
 
   }
-
 
   it should "fail if the workspace is not found" in {
     val workspaceRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
@@ -288,11 +324,48 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(new RawlsRequestContext(null, null)))
+    doReturn(Future.successful(RawlsRequestContext(null, null)))
       .when(runner)
       .getUserCtx(anyString())(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe Complete)
+    verify(workspaceRepo).updateState(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                      ArgumentMatchers.eq(WorkspaceState.DeleteFailed)
+    )
+  }
+
+  it should "mark the workspace as DeleteFailed when a step times out" in {
+    val workspaceRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepo.getWorkspace(ArgumentMatchers.eq(monitorRecord.workspaceId.get)))
+      .thenAnswer(_ => Future.successful(Some(azureWorkspace)))
+    when(workspaceRepo.updateState(ArgumentMatchers.eq(monitorRecord.workspaceId.get), any[WorkspaceState]))
+      .thenAnswer(_ => Future.successful(1))
+
+    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    when(
+      leoDeletion.pollAppDeletion(ArgumentMatchers.eq(azureWorkspace), any[RawlsRequestContext])(
+        any[ExecutionContext]
+      )
+    ).thenAnswer(_ => Future.successful(false))
+    val expiredtime =
+      Instant.ofEpochMilli(Instant.now().toEpochMilli - 600001) // -10 minutes will make operation time out
+    val job = monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll, createdTime = Timestamp.from(expiredtime))
+    val runner = spy(
+      new WorkspaceDeletionRunner(
+        mock[SamDAO](RETURNS_SMART_NULLS),
+        mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+        workspaceRepo,
+        leoDeletion,
+        mock[WsmDeletionAction](RETURNS_SMART_NULLS),
+        mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
+        mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
+      )
+    )
+    doReturn(Future.successful(RawlsRequestContext(null, null)))
+      .when(runner)
+      .getUserCtx(anyString())(ArgumentMatchers.any())
+
+    whenReady(runner(job))(_ shouldBe Complete)
     verify(workspaceRepo).updateState(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
                                       ArgumentMatchers.eq(WorkspaceState.DeleteFailed)
     )

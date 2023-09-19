@@ -10,8 +10,6 @@ import java.time.Instant
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-
-
 object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
@@ -21,12 +19,17 @@ object WorkspaceManagerResourceMonitorRecord {
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
 
-
-    // FIXME: clean up deletion steps when switching to case class
     val WorkspaceDeleteInit: Value = Value("WorkspaceDeleteInit")
     val LeoAppDeletionPoll: Value = Value("LeoAppDeletionPoll")
     val LeoRuntimeDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
     val WSMWorkspaceDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
+
+    val deleteJobTypes: List[WorkspaceManagerResourceMonitorRecord.JobType.Value] = List(
+      JobType.WorkspaceDeleteInit,
+      JobType.LeoRuntimeDeletionPoll,
+      JobType.LeoAppDeletionPoll,
+      JobType.WSMWorkspaceDeletionPoll
+    )
 
   }
 

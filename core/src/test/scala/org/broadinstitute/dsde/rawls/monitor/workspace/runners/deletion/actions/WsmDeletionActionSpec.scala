@@ -31,8 +31,6 @@ import scala.concurrent.{Await, ExecutionContext}
 
 class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers with ScalaFutures {
 
-  private val pollInterval = FiniteDuration(1, TimeUnit.SECONDS)
-  private val timeout = FiniteDuration(3, TimeUnit.SECONDS)
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
   implicit val actorSystem: ActorSystem = ActorSystem("WsmDeletionActionSpec")
   private val userInfo = UserInfo(RawlsUserEmail("owner-access"),
@@ -55,7 +53,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
   it should "start workspace deletion in WSM" in {
     val jobId = UUID.randomUUID()
     val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    val action = new WsmDeletionAction(wsmDao, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDao)
 
     Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
@@ -71,7 +69,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     when(wsmDao.deleteWorkspaceV2(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.NotFound.intValue, "not found")
     )
-    val action = new WsmDeletionAction(wsmDao, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDao)
 
     Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
@@ -96,7 +94,7 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
         new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
       }
     })
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDAO)
 
     Await.result(action.startStep(azureWorkspace, jobId.toString, ctx), Duration.Inf)
 
@@ -106,51 +104,89 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     )
   }
 
-  behavior of "pollOperation"
+  behavior of "polling for completion"
 
-  it should "poll to successful completion" in {
+  it should "succeed with true on a completed job from WSM" in {
     val jobId = UUID.randomUUID()
-    val wsmDAO: WorkspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      var times = 0
+    val result = new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
+    val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenReturn(result)
 
-      override def getDeleteWorkspaceV2Result(workspaceId: UUID,
-                                              jobControlId: String,
-                                              ctx: RawlsRequestContext
-      ): JobResult = {
-        times = times + 1
-        if (times > 1) {
-          new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
-        } else {
-          new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
-        }
-      }
-    })
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+    val action = new WsmDeletionAction(wsmDao)
 
-    Await.result(action.pollOperation(azureWorkspace, jobId.toString, ctx), Duration.Inf)
+    Await.result(action.pollForCompletion(azureWorkspace, jobId.toString, ctx), Duration.Inf) shouldBe true
 
-    verify(wsmDAO, times(2)).getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])
+    verify(wsmDao).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                              ArgumentMatchers.eq(jobId.toString),
+                                              ArgumentMatchers.eq(ctx)
+    )
   }
 
-  it should "complete successfully on 403 forbidden when getting the deletion result" in {
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(_ =>
-      throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden")
-    )
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+  it should "succeed with false on a running job from WSM" in {
+    val jobId = UUID.randomUUID()
+    val result = new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
+    val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenReturn(result)
 
-    Await.result(action.pollOperation(azureWorkspace, UUID.randomUUID().toString, ctx), Duration.Inf)
+    val action = new WsmDeletionAction(wsmDao)
+
+    Await.result(action.pollForCompletion(azureWorkspace, jobId.toString, ctx), Duration.Inf) shouldBe false
+
+    verify(wsmDao).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                              ArgumentMatchers.eq(jobId.toString),
+                                              ArgumentMatchers.eq(ctx)
+    )
   }
 
-  it should "fail on other 4xx when listing apps" in {
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(_ =>
-      throw new ApiException(StatusCodes.ImATeapot.intValue, "teapot")
-    )
-    val action = new WsmDeletionAction(wsmDAO, pollInterval, timeout)
+  it should "fail with on a failed job from WSM" in {
+    val jobId = UUID.randomUUID()
+    val result = new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
+    val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenReturn(result)
+
+    val action = new WsmDeletionAction(wsmDao)
 
     intercept[WorkspaceDeletionActionFailureException] {
-      Await.result(action.pollOperation(azureWorkspace, UUID.randomUUID().toString, ctx), Duration.Inf)
+      Await.result(action.pollForCompletion(azureWorkspace, jobId.toString, ctx), Duration.Inf)
     }
+
+    verify(wsmDao).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                              ArgumentMatchers.eq(jobId.toString),
+                                              ArgumentMatchers.eq(ctx)
+    )
   }
+
+  it should "succeed on a 403 from WSM" in {
+    val jobId = UUID.randomUUID()
+    val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(_ =>
+      throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden")
+    )
+    val action = new WsmDeletionAction(wsmDao)
+
+    Await.result(action.pollForCompletion(azureWorkspace, jobId.toString, ctx), Duration.Inf) shouldBe true
+
+    verify(wsmDao).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                              ArgumentMatchers.eq(jobId.toString),
+                                              ArgumentMatchers.eq(ctx)
+    )
+  }
+
+  it should "retry a 500 from WSM" in {
+    val jobId = UUID.randomUUID()
+    val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext]))
+      .thenAnswer(_ => throw new ApiException(StatusCodes.GatewayTimeout.intValue, "nope"))
+      .thenAnswer(_ => throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
+
+    val action = new WsmDeletionAction(wsmDao)
+
+    Await.result(action.pollForCompletion(azureWorkspace, jobId.toString, ctx), Duration.Inf) shouldBe true
+
+    verify(wsmDao, times(2)).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                                        ArgumentMatchers.eq(jobId.toString),
+                                                        ArgumentMatchers.eq(ctx)
+    )
+  }
+
 }
