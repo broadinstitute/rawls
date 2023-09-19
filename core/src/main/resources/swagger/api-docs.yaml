@@ -4019,7 +4019,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationType'
-  /api/workspaces/v2{workspaceNamespace}/{workspaceName}:
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}:
     delete:
       tags:
         - workspaces_v2
