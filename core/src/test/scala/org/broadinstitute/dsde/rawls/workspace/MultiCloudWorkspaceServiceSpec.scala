@@ -22,7 +22,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
   ErrorReport,
-  GcpWorkspaceDeletionContext,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -322,6 +321,65 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+  }
+
+  it should "throw an exception if the billing profile was created before 9/12/2023" in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty
+    )
+    val billingProfileId = UUID.randomUUID()
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+                     request,
+                     new ProfileModel().id(billingProfileId).createdDate("2023-09-11T22:20:48.949Z")
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    thrown.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+  }
+
+  it should "not throw an exception for billing profiles created 9/12/2023 or later" in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty
+    )
+    val billingProfileId = UUID.randomUUID()
+    Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+                   request,
+                   new ProfileModel().id(billingProfileId).createdDate("2023-09-12T22:20:48.949Z")
+                 ),
+                 Duration.Inf
+    )
   }
 
   it should "deploy a WDS instance during workspace creation" in {
@@ -761,6 +819,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .when(bpmDAO)
       .getBillingProfile(equalTo(testData.azureBillingProfile.getId), any())
 
+    // For testing of old Azure billing projects, can be removed if that code is removed.
+    doReturn(Future.successful(testData.oldAzureBillingProject))
+      .when(mcWorkspaceService)
+      .getBillingProjectContext(equalTo(testData.oldAzureBillingProject.projectName), any())
+    doReturn(Some(testData.oldAzureBillingProfile))
+      .when(bpmDAO)
+      .getBillingProfile(equalTo(testData.oldAzureBillingProfile.getId), any())
+
     doReturn(Future.successful(testData.azureWorkspace))
       .when(mcWorkspaceService)
       .getV2WorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
@@ -852,6 +918,34 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         )
 
         clone shouldBe empty
+      }
+    }
+
+  it should "throw an exception if the billing profile was created before 9/12/2023" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.oldAzureBillingProject.projectName.value, "unsupported")
+        val result = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            for {
+              _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.azureWorkspace)
+              _ <- mcWorkspaceService.cloneMultiCloudWorkspace(
+                mock[WorkspaceService](RETURNS_SMART_NULLS),
+                testData.azureWorkspace.toWorkspaceName,
+                WorkspaceRequest(
+                  cloneName.namespace,
+                  cloneName.name,
+                  Map.empty
+                )
+              )
+            } yield fail(
+              "cloneMultiCloudWorkspace does not fail when a workspace " +
+                "with the same name already exists."
+            ),
+            Duration.Inf
+          )
+        }
+        result.errorReport.statusCode.value shouldBe StatusCodes.Forbidden
       }
     }
 

@@ -478,6 +478,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       .subscriptionId(UUID.randomUUID())
       .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
       .managedResourceGroupId("fake-mrg")
+      .createdDate("2023-09-12T22:20:48.949Z")
 
     val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
     val azureBillingProject = RawlsBillingProject(
@@ -486,6 +487,22 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Option(billingAccountName),
       None,
       billingProfileId = Some(azureBillingProfile.getId.toString)
+    )
+
+    // For testing of old Azure billing projects, can be removed if that code is removed.
+    val oldAzureBillingProfile = new ProfileModel()
+      .id(UUID.randomUUID())
+      .tenantId(UUID.randomUUID())
+      .subscriptionId(UUID.randomUUID())
+      .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
+      .managedResourceGroupId("fake-mrg")
+      .createdDate("2023-09-11T22:20:48.949Z")
+    val oldAzureBillingProject = RawlsBillingProject(
+      RawlsBillingProjectName("old-azure-billing-project"),
+      CreationStatuses.Ready,
+      Option(billingAccountName),
+      None,
+      billingProfileId = Some(oldAzureBillingProfile.getId.toString)
     )
 
     val wsAttrs = Map(
