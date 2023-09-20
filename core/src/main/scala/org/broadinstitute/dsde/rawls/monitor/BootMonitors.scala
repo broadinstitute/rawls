@@ -442,7 +442,6 @@ object BootMonitors extends LazyLogging {
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
-    val deletionConfig = config.getConfig("workspaceManagerResourceMonitor.deletion")
     val leoDeletionAction = new LeonardoResourceDeletionAction(leonardoDAO)(system)
     val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
     val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
