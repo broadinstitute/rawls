@@ -340,6 +340,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                           parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
+    assertBillingProfileCreationDate(profile)
+
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
     val workspaceId = UUID.randomUUID()
@@ -496,6 +498,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
+    assertBillingProfileCreationDate(profile)
+
+    traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
+      createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
+        createdMultiCloudWorkspaceCounter.inc()
+      }
+    )
+  }
+
+  def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
     val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
     val isTestProfile = profile.getCreatedDate() == null || profile.getCreatedDate() == ""
     if (!isTestProfile && DateTime.parse(profile.getCreatedDate()).isBefore(previewDate)) {
@@ -506,12 +518,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
     }
-
-    traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
-      createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
-        createdMultiCloudWorkspaceCounter.inc()
-      }
-    )
   }
 
   /**
