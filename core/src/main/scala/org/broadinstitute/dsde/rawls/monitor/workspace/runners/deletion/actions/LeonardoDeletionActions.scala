@@ -43,11 +43,17 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
 
   def pollRuntimeDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
-  ): Future[Boolean] =
+  ): Future[Boolean] = {
+    logger.info(s"Polling runtime deletion [workspaceId=${workspace.workspaceId}]")
     pollOperation[ListRuntimeResponse](workspace, ctx, listAzureRuntimes)
+  }
 
-  def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Boolean] =
+  def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Boolean] = {
+    logger.info(s"Polling app deletion [workspaceId=${workspace.workspaceId}]")
     pollOperation[ListAppResponse](workspace, ctx, listApps)
+  }
 
   def listApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
@@ -96,6 +102,5 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
 
 }
 
-class LeonardoPollingException(message: String) extends WorkspaceDeletionActionFailureException(message)
 class LeonardoOperationFailureException(message: String, val workspaceId: UUID)
     extends WorkspaceDeletionActionFailureException(message)

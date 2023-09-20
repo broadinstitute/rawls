@@ -44,9 +44,10 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO)(implicit val s
           )
       }
     // WSM will give back a 403 during polling if the workspace is not present or already deleted.
-    case Failure(e: ApiException) if e.getCode == StatusCodes.Forbidden.intValue =>
+    case Failure(e: ApiException)
+        if e.getCode == StatusCodes.Forbidden.intValue || e.getCode == StatusCodes.NotFound.intValue =>
       logger.info(
-        s"Workspace deletion result status = ${e.getCode} for workspace ID ${workspace.workspaceId}, WSM record is gone. Proceeding with rawls workspace deletion"
+        s"Workspace deletion result status = ${e.getCode}, WSM record is gone. Proceeding with rawls workspace deletion [workspaceId=${workspace.workspaceId}, jobControlId=${jobId}]"
       )
       true
     case Failure(e) => throw e
@@ -64,6 +65,9 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO)(implicit val s
   ): Future[Unit] =
     Future {
       blocking {
+        logger.info(
+          s"Starting WSM workspace deletion [workspaceId=${workspace.workspaceId}, jobControlId=${jobControlId}]"
+        )
         workspaceManagerDao.deleteWorkspaceV2(workspace.workspaceIdAsUUID, jobControlId, ctx)
       }
     }.recoverWith {

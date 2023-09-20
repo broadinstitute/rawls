@@ -86,11 +86,11 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
         case Some(ws) => Future.successful(ws)
         case None =>
           logger.error(
-            s"Workspace not found for deletion, id = ${workspaceId.toString}, jobControlId = ${job.jobControlId.toString}"
+            s"Workspace not found for deletion [workspaceId=${workspaceId}, jobControlId = ${job.jobControlId}]"
           )
           Future.failed(
             new WorkspaceDeletionException(
-              s"Workspace not found for deletion, id = ${workspaceId.toString}, jobControlId = ${job.jobControlId.toString}"
+              s"Workspace not found for deletion [workspaceId=${workspaceId}, jobControlId = ${job.jobControlId.toString}, jobType=${job.jobType}]"
             )
           )
       }
@@ -98,13 +98,15 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
 
       result <- runStep(job, workspace, ctx).recoverWith { case t: Throwable =>
         logger.error(
-          s"Workspace deletion failed; workspaceId = ${workspaceId}, jobControlId = ${job.jobControlId.toString}",
+          s"Workspace deletion failed [workspaceId=${workspaceId}, jobControlId=${job.jobControlId}, jobType=${job.jobType}]",
           t
         )
         workspaceRepository.updateState(job.workspaceId.get, WorkspaceState.DeleteFailed).map(_ => Complete)
       }
     } yield {
-      logger.info(s"Finished workspace deletion for workspaceId = ${workspaceId}")
+      logger.info(
+        s"Finished workspace deletion step [workspaceId=${workspaceId}, jobControlId=${job.jobControlId}, jobType=${job.jobType}]"
+      )
       result
     }
 
@@ -118,14 +120,24 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
       case LeoAppDeletionPoll =>
         leonardoResourceDeletionAction.pollAppDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
-            Future.failed(new WorkspaceDeletionException("Workspace deletion failed when deleting leo apps", t))
+            Future.failed(
+              new WorkspaceDeletionException(
+                s"Workspace deletion failed when deleting leo apps [jobControlId=${job.jobControlId}]",
+                t
+              )
+            )
           case Success(false) => Future.successful(checkTimeout(job))
           case Success(true)  => completeStep(job, workspace, ctx)
         }
       case LeoRuntimeDeletionPoll =>
         leonardoResourceDeletionAction.pollRuntimeDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
-            Future.failed(new WorkspaceDeletionException("Workspace deletion failed when deleting leo resources", t))
+            Future.failed(
+              new WorkspaceDeletionException(
+                s"Workspace deletion failed when deleting leo resources [jobControlId=${job.jobControlId}]",
+                t
+              )
+            )
           case Success(false) => Future.successful(checkTimeout(job))
           case Success(true)  => completeStep(job, workspace, ctx)
         }
@@ -181,6 +193,9 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           .update(job.copy(jobType = WSMWorkspaceDeletionPoll))
           .map(_ => Incomplete)
       case WSMWorkspaceDeletionPoll =>
+        logger.info(
+          s"Deleting rawls workspace record [workspaceId=${workspace.workspaceId}, jobControlId=${job.jobControlId}, jobType=${job.jobType}]"
+        )
         workspaceRepository.deleteWorkspaceRecord(workspace).map(_ => Complete)
     }
 
