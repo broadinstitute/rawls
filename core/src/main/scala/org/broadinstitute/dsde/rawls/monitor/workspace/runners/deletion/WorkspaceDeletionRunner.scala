@@ -31,7 +31,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import java.sql.Timestamp
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
   * Orchestrates the deletion of a workspace with downstream resources. The process looks like this:
@@ -142,11 +142,17 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           case Success(true)  => completeStep(job, workspace, ctx)
         }
       case WSMWorkspaceDeletionPoll =>
-        wsmDeletionAction.pollForCompletion(workspace, job.jobControlId.toString, ctx) transformWith {
+        wsmDeletionAction.pollForCompletion(workspace, job.jobControlId.toString, ctx).transformWith {
           case Success(true) =>
             completeStep(job, workspace, ctx)
           case Success(false) => Future.successful(checkTimeout(job))
-          case Failure(e)     => Future.failed(e)
+          case Failure(t) =>
+            Future.failed(
+              new WorkspaceDeletionException(
+                s"Workspace deletion failed when deleting the WSM workspace [jobControlId=${job.jobControlId}]",
+                t
+              )
+            )
         }
       case _ =>
         throw new IllegalArgumentException(
@@ -162,7 +168,6 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
       case WSMWorkspaceDeletionPoll => 30
       case _                        => 0
     }
-    val now = Timestamp.from(Instant.now())
     val expireTime = Timestamp.from(Instant.ofEpochMilli(job.createdTime.getTime + (timeoutIntervalMinutes * 60000)))
     if (Timestamp.from(Instant.now()).after(expireTime)) {
       workspaceRepository.updateState(job.workspaceId.get, WorkspaceState.DeleteFailed)
