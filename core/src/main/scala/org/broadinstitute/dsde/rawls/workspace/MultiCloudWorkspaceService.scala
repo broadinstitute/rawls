@@ -24,14 +24,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   WorkspaceManagerResourceMonitorRecordDao
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
   AttributeString,
   ErrorReport,
-  GcpWorkspaceDeletionContext,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -46,7 +45,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.joda.time.DateTime
+import org.joda.time.{DateTime, DateTimeZone}
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -350,6 +349,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                           parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
+    assertBillingProfileCreationDate(profile)
+
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
     val workspaceId = UUID.randomUUID()
@@ -506,11 +507,26 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
+    assertBillingProfileCreationDate(profile)
+
     traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
       createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
         createdMultiCloudWorkspaceCounter.inc()
       }
     )
+  }
+
+  def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
+    val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
+    val isTestProfile = profile.getCreatedDate() == null || profile.getCreatedDate() == ""
+    if (!isTestProfile && DateTime.parse(profile.getCreatedDate()).isBefore(previewDate)) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.Forbidden,
+          "Azure Terra billing projects created before 9/12/2023, and their associated workspaces, are unable to take advantage of new functionality. This billing project cannot be used for creating new workspaces. Please create a new billing project."
+        )
+      )
+    }
   }
 
   /**
