@@ -48,7 +48,7 @@ trait WorkspaceManagerDAO {
   ): CreateCloudContextResult
   def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
 
-  def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult
+  def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
 
   def getDeleteWorkspaceV2Result(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
 

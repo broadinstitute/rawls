@@ -29,21 +29,27 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 }
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor}
+import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
+  LeonardoResourceDeletionAction,
+  WsmDeletionAction
+}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
   LandingZoneCreationStatusRunner
 }
 import org.broadinstitute.dsde.rawls.util
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import spray.json._
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -68,6 +74,8 @@ object BootMonitors extends LazyLogging {
                    importServiceDAO: HttpImportServiceDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
                    billingProfileManagerDAO: BillingProfileManagerDAO,
+                   leonardoDAO: LeonardoDAO,
+                   workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -204,7 +212,9 @@ object BootMonitors extends LazyLogging {
       samDAO,
       workspaceManagerDAO,
       billingProfileManagerDAO,
-      gcsDAO
+      gcsDAO,
+      leonardoDAO,
+      workspaceRepository
     )
 
     startFastPassMonitor(system, conf, slickDataSource, googleIamDAO, googleStorageDAO)
@@ -426,15 +436,33 @@ object BootMonitors extends LazyLogging {
     samDAO: SamDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     billingProfileManagerDAO: BillingProfileManagerDAO,
-    gcsDAO: GoogleServicesDAO
+    gcsDAO: GoogleServicesDAO,
+    leonardoDAO: LeonardoDAO,
+    workspaceRepository: WorkspaceRepository
   ) = {
     val billingRepo = new BillingRepository(dataSource)
+
+    val leoDeletionAction = new LeonardoResourceDeletionAction(leonardoDAO)(system)
+    val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
+    val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
+    val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
+                                                              workspaceManagerDAO,
+                                                              workspaceRepository,
+                                                              leoDeletionAction,
+                                                              wsmDeletionAction,
+                                                              gcsDAO,
+                                                              monitorRecordDao
+    )
 
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
         dataSource,
         Map(
+          JobType.WorkspaceDeleteInit -> workspaceDeletionRunner,
+          JobType.LeoAppDeletionPoll -> workspaceDeletionRunner,
+          JobType.LeoRuntimeDeletionPoll -> workspaceDeletionRunner,
+          JobType.WSMWorkspaceDeletionPoll -> workspaceDeletionRunner,
           JobType.AzureLandingZoneResult ->
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
@@ -448,7 +476,7 @@ object BootMonitors extends LazyLogging {
                                            billingRepo,
                                            billingProfileManagerDAO,
                                            workspaceManagerDAO,
-                                           WorkspaceManagerResourceMonitorRecordDao(dataSource)
+                                           monitorRecordDao
             )
           )
         )
@@ -483,7 +511,6 @@ object BootMonitors extends LazyLogging {
         )
 
     }
-
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>

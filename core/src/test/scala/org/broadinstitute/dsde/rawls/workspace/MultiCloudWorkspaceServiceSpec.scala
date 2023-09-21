@@ -581,7 +581,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                    ctx: RawlsRequestContext
       ): CreatedWorkspace = throw new ApiException(500, "whoops")
 
-      override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult =
+      override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
         throw new ApiException(404, "i've never seen that workspace in my life")
     })
 
@@ -781,7 +781,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   private def verifyWorkspaceCreationRollback(workspaceManagerDAO: MockWorkspaceManagerDAO,
                                               workspaceName: WorkspaceName
   ): Unit = {
-    verify(workspaceManagerDAO).deleteWorkspaceV2(any(), any[RawlsRequestContext])
+    verify(workspaceManagerDAO).deleteWorkspaceV2(any(), anyString(), any[RawlsRequestContext])
     Await.result(slickDataSource.inTransaction(_.workspaceQuery.findByName(workspaceName)), Duration.Inf) shouldBe None
   }
 
@@ -1398,7 +1398,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           } yield {
             deletionResult.jobId shouldBe defined
             jobs.size shouldBe 1
-            jobs.head.jobType shouldBe JobType.WorkspaceDelete
+            jobs.head.jobType shouldBe JobType.WorkspaceDeleteInit
             jobs.head.workspaceId.value.toString shouldBe testData.azureWorkspace.workspaceId
             assertWorkspaceExists(testData.azureWorkspace)
             assertWorkspaceState(testData.azureWorkspace, WorkspaceState.Deleting)
@@ -1587,7 +1587,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
 
       verify(workspaceManagerDAO).getWorkspace(equalTo(testData.azureWorkspace.workspaceIdAsUUID), any())
-      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
+      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
       assertWorkspaceExists(testData.azureWorkspace)
     }
   }
@@ -1622,7 +1622,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )
 
       // rawls workspace should be deleted if WSM returns not found
-      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
+      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
       assertWorkspaceGone(testData.azureWorkspace)
     }
   }
@@ -1651,6 +1651,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     actual.errorReport.statusCode shouldEqual Some(StatusCodes.InternalServerError)
     verify(svc.workspaceManagerDAO, times(0)).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                                anyString(),
                                                                 any[RawlsRequestContext]
     )
   }
@@ -1674,6 +1675,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
     Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO, times(0)).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                                anyString(),
                                                                 any[RawlsRequestContext]
     )
   }
@@ -1700,6 +1702,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     actual.getMessage shouldBe "failure"
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(1)).getDeleteWorkspaceV2Result(
@@ -1731,6 +1734,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     actual.getMessage shouldBe "failure"
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(1)).getDeleteWorkspaceV2Result(
@@ -1770,6 +1774,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
     Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(2)).getDeleteWorkspaceV2Result(
@@ -1808,6 +1813,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
     Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(2)).getDeleteWorkspaceV2Result(

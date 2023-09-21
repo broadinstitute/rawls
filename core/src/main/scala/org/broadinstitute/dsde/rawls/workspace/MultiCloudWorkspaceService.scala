@@ -117,6 +117,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
     } yield result.gcpContext.map(_.bucketName)
 
+  /**
+    * Starts the deletion process for a workspace. For GCP workspaces, the deletion is complete synchronously.
+    * MC workspaces are enqueued for deletion via an entry in the WorkspaceManagerMonitor record table, with
+    * orchestration of the cleanup handed off to the WorkspaceDeletionRunner runner class.
+
+    * @param workspaceName Tuple of namespace + name of the workspace for deletion
+    * @param workspaceService Workspace service to which legacy GCP deletion calls will be delegated
+    * @return Result of the deletion operation, including a job ID for async deletions
+    */
   def deleteMultiCloudOrRawlsWorkspaceV2(workspaceName: WorkspaceName,
                                          workspaceService: WorkspaceService
   ): Future[WorkspaceDeletionResult] =
@@ -532,7 +541,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       // kick off the deletion job w/WSM
       deletionJobResult <- traceWithParent("deleteWorkspaceInWSM", ctx)(_ =>
-        Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, ctx))
+        Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, UUID.randomUUID().toString, ctx))
       )
       deletionJobId = deletionJobResult.getJobReport.getId
       _ <- traceWithParent("pollWorkspaceDeletionInWSM", ctx) { _ =>
