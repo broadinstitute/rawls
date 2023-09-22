@@ -81,7 +81,7 @@ class CloneWorkspaceContainerRunner(
                 val msg = s"Unable to find jobId ${job.jobControlId} in WSM for clone container operation"
                 cloneFail(workspaceId, msg).map(_ => Complete)
               case 401 =>
-                val msg = s"Unable to get job result, user is unauthed ${e.getMessage}"
+                val msg = s"Unable to get job result, user is unauthed with jobId ${job.jobControlId}: ${e.getMessage}"
                 cloneFail(workspaceId, msg).map(_ => Complete)
               case code =>
                 logFailure(s"API call to get clone result failed with status code $code: ${e.getMessage}")
