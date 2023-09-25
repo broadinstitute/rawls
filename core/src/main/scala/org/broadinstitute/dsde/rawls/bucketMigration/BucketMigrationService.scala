@@ -62,7 +62,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
       workspaces
         .traverse {
-          case (workspace, progress @ Some(MultiregionalBucketMigrationProgress(_, Some(_), _, _))) =>
+          case (workspace, progress @ Some(MultiregionalBucketMigrationProgress(_, Some(outcome), _, _))) =>
             dataSource
               .inTransaction(_.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace))
               .map { migrations =>
@@ -70,7 +70,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
                   migrations.exists(
                     _.finished
                       .getOrElse(Timestamp.from(Instant.MIN))
-                      .after(Timestamp.from(Instant.now().minusSeconds(86400 * 7)))
+                      .after(Timestamp.from(Instant.now().minusSeconds(86400 * 7))) || outcome.isFailure
                   )
                 ) Some(workspace -> progress)
                 else None
