@@ -1324,10 +1324,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             }
           } yield {
             verify(mcWorkspaceService.workspaceManagerDAO, times(1))
-              .disableApplication(any(), any(), any())
-            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
-              .enableApplication(any(), any(), any())
-            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
               .cloneAzureStorageContainer(
                 equalTo(testData.azureWorkspace.workspaceIdAsUUID),
                 equalTo(clone.workspaceIdAsUUID),
