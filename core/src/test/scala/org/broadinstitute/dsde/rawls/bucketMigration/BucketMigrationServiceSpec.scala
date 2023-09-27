@@ -608,25 +608,27 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
               multiregionalBucketMigrationQuery.outcomeCol,
               "Failure".some,
               multiregionalBucketMigrationQuery.messageCol,
-              "reason the migration failed".some
+              "error".some
             )
           } yield ()
         },
         Duration.Inf
       )
 
-      val res = Await.result(bucketMigrationService.getEligibleOrMigratingWorkspaces, Duration.Inf)
-      res.map {
-        case (name, None) if name.equals(usWorkspace.toWorkspaceName.toString) =>
-        case (name, Some(migrationProgress)) if name.equals(migratingWorkspace.toWorkspaceName.toString) =>
-          migrationProgress.outcome shouldBe None
-        case (name, Some(migrationProgress)) if name.equals(recentlyMigratedWorkspace.toWorkspaceName.toString) =>
-          migrationProgress.outcome shouldBe Some(Outcome.Success)
-        case (name, Some(migrationProgress))
-            if name.equals(oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString) =>
-          assert(migrationProgress.outcome.getOrElse(fail()).isFailure)
-        case regrets => fail(s"unexpected workspace with progress found: $regrets")
-      }
+      val expectedWorkspaces = List(
+        usWorkspace.toWorkspaceName.toString,
+        migratingWorkspace.toWorkspaceName.toString,
+        recentlyMigratedWorkspace.toWorkspaceName.toString,
+        oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString
+      )
+
+      val returnedWorkspaces = Await.result(bucketMigrationService.getEligibleOrMigratingWorkspaces, Duration.Inf)
+
+      returnedWorkspaces.keys should contain theSameElementsAs expectedWorkspaces
+      returnedWorkspaces(usWorkspace.toWorkspaceName.toString) shouldBe None
+      returnedWorkspaces(migratingWorkspace.toWorkspaceName.toString).get.outcome shouldBe None
+      returnedWorkspaces(recentlyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(Outcome.Success)
+      returnedWorkspaces(oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(Outcome.Failure("error"))
   }
 
   private def insertSTSJobs(workspace: Workspace): Future[Unit] =

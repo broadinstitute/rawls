@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWi
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -70,7 +71,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
                   migrations.exists(
                     _.finished
                       .getOrElse(Timestamp.from(Instant.MIN))
-                      .after(Timestamp.from(Instant.now().minusSeconds(86400 * 7))) || outcome.isFailure
+                      .after(Timestamp.from(Instant.now().minus(7, ChronoUnit.DAYS))) || outcome.isFailure
                   )
                 ) Some(workspace -> progress)
                 else None

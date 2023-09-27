@@ -3999,12 +3999,6 @@ paths:
                   description: workspaceNamespace/workspaceName -> bucket migration progress
                   additionalProperties:
                     $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
-        403:
-          description: You must be an admin to list migration attempts
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
 components:
