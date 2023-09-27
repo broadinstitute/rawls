@@ -628,7 +628,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       returnedWorkspaces(usWorkspace.toWorkspaceName.toString) shouldBe None
       returnedWorkspaces(migratingWorkspace.toWorkspaceName.toString).get.outcome shouldBe None
       returnedWorkspaces(recentlyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(Outcome.Success)
-      returnedWorkspaces(oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(Outcome.Failure("error"))
+      returnedWorkspaces(oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(
+        Outcome.Failure("error")
+      )
   }
 
   private def insertSTSJobs(workspace: Workspace): Future[Unit] =
