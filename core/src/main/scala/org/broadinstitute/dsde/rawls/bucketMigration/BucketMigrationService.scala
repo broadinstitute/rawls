@@ -79,6 +79,29 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       res <- op(workspaces)
     } yield res
 
+  private def asFCAdminWithWorkspaces[T](
+    workspaces: Iterable[WorkspaceName]
+  )(op: Seq[Workspace] => Future[T]): Future[T] =
+    asFCAdmin {
+      for {
+        workspaces <- dataSource.inTransaction(_.workspaceQuery.listByNames(workspaces.toList))
+        res <- op(workspaces)
+      } yield res
+    }
+
+  private def asOwnerWithWorkspaces[T](
+    workspaces: Iterable[WorkspaceName]
+  )(op: Seq[Workspace] => Future[T]): Future[T] =
+    for {
+      workspaces <- dataSource.inTransaction(_.workspaceQuery.listByNames(workspaces.toList))
+      ownsAllWorkspaces <- workspaces.traverse { workspace =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
+      }
+      _ = if (!ownsAllWorkspaces.forall(identity))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "you must own all workspaces"))
+      res <- op(workspaces)
+    } yield res
+
   /**
     * Entrypoints that make necessary authz checks then call relevant method to do the actual work
     */
@@ -176,6 +199,20 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       getBucketMigrationProgressForWorkspaceInternal
     }
 
+  def adminGetBucketMigrationProgressForWorkspaces(
+    workspaces: Iterable[WorkspaceName]
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
+    asFCAdminWithWorkspaces(workspaces) {
+      getBucketMigrationProgressForWorkspacesInternal
+    }
+
+  def getBucketMigrationProgressForWorkspaces(
+    workspaces: Iterable[WorkspaceName]
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
+    asOwnerWithWorkspaces(workspaces) {
+      getBucketMigrationProgressForWorkspacesInternal
+    }
+
   def adminGetBucketMigrationProgressForBillingProject(
     billingProjectName: RawlsBillingProjectName
   ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
@@ -230,25 +267,16 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
   def adminMigrateAllWorkspaceBuckets(
     workspaceNames: Iterable[WorkspaceName]
   ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction(_.workspaceQuery.listByNames(workspaceNames.toList))
-        res <- migrateWorkspaceBuckets(workspaces)
-      } yield res
+    asFCAdminWithWorkspaces(workspaceNames) {
+      migrateWorkspaceBuckets
     }
 
   def migrateAllWorkspaceBuckets(
     workspaceNames: Iterable[WorkspaceName]
   ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
-    for {
-      workspaces <- dataSource.inTransaction(_.workspaceQuery.listByNames(workspaceNames.toList))
-      ownsAllWorkspaces <- workspaces.traverse { workspace =>
-        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
-      }
-      _ = if (!ownsAllWorkspaces.forall(identity))
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "you must own all workspaces"))
-      res <- migrateWorkspaceBuckets(workspaces)
-    } yield res
+    asOwnerWithWorkspaces(workspaceNames) {
+      migrateWorkspaceBuckets
+    }
 
   def adminMigrateWorkspaceBucketsInBillingProject(
     billingProjectName: RawlsBillingProjectName
