@@ -57,6 +57,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                displayName: String,
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
+                                               applicationIds: Seq[String],
                                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(
@@ -66,6 +67,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .spendProfile(spendProfileId)
         .stage(WorkspaceStageModel.MC_WORKSPACE)
         .projectOwnerGroupId(billingProjectNamespace)
+        .applicationIds(applicationIds.asJava)
     )
 
   override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
@@ -201,21 +203,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                            ResourceType.DATA_REPO_SNAPSHOT,
                                            StewardshipType.REFERENCED
     )
-
-  override def enableApplication(workspaceId: UUID,
-                                 applicationId: String,
-                                 ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    getWorkspaceApplicationApi(ctx).enableWorkspaceApplication(
-      workspaceId,
-      applicationId
-    )
-
-  override def disableApplication(workspaceId: UUID,
-                                  applicationId: String,
-                                  ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,

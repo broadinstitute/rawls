@@ -17,6 +17,7 @@ trait WorkspaceManagerDAO {
                                       displayName: String,
                                       spendProfileId: String,
                                       billingProjectNamespace: String,
+                                      applicationIds: Seq[String],
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
@@ -79,14 +80,6 @@ trait WorkspaceManagerDAO {
                                           limit: Int,
                                           ctx: RawlsRequestContext
   ): ResourceList
-  def enableApplication(workspaceId: UUID,
-                        applicationId: String,
-                        ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription
-  def disableApplication(workspaceId: UUID,
-                         applicationId: String,
-                         ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription
 
   /**
     * Creates an Azure storage container in the workspace. This container will be created in the workspace's

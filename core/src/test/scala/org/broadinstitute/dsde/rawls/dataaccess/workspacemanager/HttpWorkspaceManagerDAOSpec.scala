@@ -55,22 +55,6 @@ class HttpWorkspaceManagerDAOSpec
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
   }
 
-  behavior of "enableApplication"
-
-  it should "call the WSM app API" in {
-    val workspaceApplicationApi = mock[WorkspaceApplicationApi]
-    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
-
-    val wsmDao = new HttpWorkspaceManagerDAO(
-      getApiClientProvider(workspaceApplicationApi = workspaceApplicationApi,
-                           controlledAzureResourceApi = controlledAzureResourceApi
-      )
-    )
-
-    wsmDao.enableApplication(workspaceId, "leo", testContext)
-    verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
-  }
-
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
                                            expectedCloningInstructions: CloningInstructionsEnum =
                                              CloningInstructionsEnum.NOTHING,

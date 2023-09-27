@@ -420,13 +420,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.eq(name),
         any(), // spend profile id
         ArgumentMatchers.eq(namespace),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
-      .enableApplication(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_app_id"),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -481,13 +475,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
-    Mockito
-      .verify(workspaceManagerDAO)
-      .enableApplication(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_app_id"),
-        ArgumentMatchers.eq(testContext)
-      )
     Mockito
       .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
@@ -545,13 +532,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.namespace shouldEqual namespace
     Mockito
       .verify(workspaceManagerDAO)
-      .enableApplication(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_app_id"),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(testContext)
@@ -578,6 +558,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                    displayName: String,
                                                    spendProfileId: String,
                                                    billingProjectNamespace: String,
+                                                   applicationIds: Seq[String],
                                                    ctx: RawlsRequestContext
       ): CreatedWorkspace = throw new ApiException(500, "whoops")
 
@@ -637,35 +618,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail on application enable failure and try to rollback workspace creation" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      override def enableApplication(workspaceId: UUID,
-                                     applicationId: String,
-                                     ctx: RawlsRequestContext
-      ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
-    })
-
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
-    }
-
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
-  }
-
   it should "fail on container creation failure and try to rollback workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
       override def createAzureStorageContainer(workspaceId: UUID,
@@ -697,11 +649,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should "still delete from the database when cleaning up the workspace in WSM fails" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      override def enableApplication(workspaceId: UUID,
-                                     applicationId: String,
-                                     ctx: RawlsRequestContext
-      ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
-
       override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
         throw new ApiException(500, "no take backsies")
     })
@@ -774,6 +721,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any(),
         ArgumentMatchers.any()
       )
   }

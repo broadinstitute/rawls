@@ -625,6 +625,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                                                   workspaceRequest.name,
                                                                   spendProfileId,
                                                                   workspaceRequest.namespace,
+                                                                  Seq(wsmConfig.leonardoWsmApplicationId),
                                                                   ctx
               )
             )
@@ -649,10 +650,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("enableLeoInWSM", parentContext)(_ =>
-        Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, ctx))
-      )
       containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createAzureStorageContainer(

@@ -202,6 +202,7 @@ class MockWorkspaceManagerDAO(
                                                displayName: String,
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
+                                               applicationIds: Seq[String],
                                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
@@ -221,18 +222,6 @@ class MockWorkspaceManagerDAO(
                                                     jobControlId: String,
                                                     ctx: RawlsRequestContext
   ): CreateCloudContextResult = mockCreateAzureCloudContextResult()
-
-  override def enableApplication(workspaceId: UUID,
-                                 applicationId: String,
-                                 ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
-
-  override def disableApplication(workspaceId: UUID,
-                                  applicationId: String,
-                                  ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
