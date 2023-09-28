@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{DatasetSummaryModel, SnapshotModel, SnapshotSourceModel}
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
@@ -32,48 +33,64 @@ import scala.jdk.CollectionConverters._
 
 class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSugar with TestDriverComponent {
 
+  // create a mockito-powered SamDAO that always returns true for permission checks and returns
+  // a test-fixture user info object
+  private def defaultMockSamDao() = {
+    val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+
+    when(
+      mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                               any[String],
+                               any[SamResourceAction],
+                               any[RawlsRequestContext]
+      )
+    ).thenReturn(Future.successful(true))
+    when(
+      mockSamDAO.getUserStatus(any[RawlsRequestContext])
+    ).thenReturn(
+      Future.successful(
+        Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+      )
+    )
+
+    mockSamDAO
+  }
+
+  // create a mockito-powered WorkspaceManagerDAO that always returns success for creating
+  // a snapshot reference. Tests can add more responses/expectations to the mock returned by this method.
+  private def defaultMockWorkspaceManagerDao() = {
+    val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(
+      mockWorkspaceManagerDAO.createDataRepoSnapshotReference(
+        any[UUID],
+        any[UUID],
+        any[DataReferenceName],
+        any[Option[DataReferenceDescriptionField]],
+        any[String],
+        any[CloningInstructionsEnum],
+        any[RawlsRequestContext]
+      )
+    )
+      .thenReturn(
+        new DataRepoSnapshotResource()
+          .metadata(
+            new ResourceMetadata()
+              .resourceId(UUID.randomUUID())
+              .workspaceId(UUID.randomUUID())
+              .name("foo")
+              .description("")
+              .cloningInstructions(CloningInstructionsEnum.NOTHING)
+          )
+          .attributes(new DataRepoSnapshotAttributes())
+      )
+    mockWorkspaceManagerDAO
+  }
+
   "SnapshotService" should {
     "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { _ =>
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(
-        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                                 any[String],
-                                 any[SamResourceAction],
-                                 any[RawlsRequestContext]
-        )
-      ).thenReturn(Future.successful(true))
-      when(
-        mockSamDAO.getUserStatus(any[RawlsRequestContext])
-      ).thenReturn(
-        Future.successful(
-          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
-        )
-      )
+      val mockSamDAO = defaultMockSamDao()
 
-      val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-      when(
-        mockWorkspaceManagerDAO.createDataRepoSnapshotReference(
-          any[UUID],
-          any[UUID],
-          any[DataReferenceName],
-          any[Option[DataReferenceDescriptionField]],
-          any[String],
-          any[CloningInstructionsEnum],
-          any[RawlsRequestContext]
-        )
-      )
-        .thenReturn(
-          new DataRepoSnapshotResource()
-            .metadata(
-              new ResourceMetadata()
-                .resourceId(UUID.randomUUID())
-                .workspaceId(UUID.randomUUID())
-                .name("foo")
-                .description("")
-                .cloningInstructions(CloningInstructionsEnum.NOTHING)
-            )
-            .attributes(new DataRepoSnapshotAttributes())
-        )
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
 
       val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
 
@@ -87,6 +104,51 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockDataRepoDAO
       )(testContext)
 
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      // call createSnapshot on the service
+      Await.result(
+        snapshotService.createSnapshot(workspace.toWorkspaceName,
+                                       NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
+        ),
+        Duration.Inf
+      )
+
+      // assert that the service called WSM's createDataRepoSnapshotReference
+      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+        ArgumentMatchers.eq(snapshotUuid),
+        ArgumentMatchers.eq(snapRefName),
+        ArgumentMatchers.eq(snapRefDescription),
+        any[String],
+        any[CloningInstructionsEnum],
+        any[RawlsRequestContext]
+      )
+    }
+
+    "create a WSM workspace if one doesn't exist when creating a snapshot reference" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = defaultMockSamDao()
+
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      when(
+        mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])
+      ).thenAnswer(_ => new ApiException(404, "Workspace does not exist"))
+
+      val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      // call createSnapshot on the service
       Await.result(
         snapshotService.createSnapshot(workspace.toWorkspaceName,
                                        NamedDataRepoSnapshot(DataReferenceName("foo"),
@@ -97,15 +159,59 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         Duration.Inf
       )
 
-      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(
-        any[UUID],
-        any[UUID],
-        any[DataReferenceName],
-        any[Option[DataReferenceDescriptionField]],
-        any[String],
-        any[CloningInstructionsEnum],
+      // assert that the service checked to see if the workspace exists
+      verify(mockWorkspaceManagerDAO, times(1)).getWorkspace(
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
         any[RawlsRequestContext]
       )
+
+      // assert that the service called WSM's createWorkspace
+      verify(mockWorkspaceManagerDAO, times(1)).createWorkspace(
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+        any[RawlsRequestContext]
+      )
+    }
+
+    "not create a WSM workspace if one already exists when creating a snapshot reference" in withMinimalTestDatabase {
+      _ =>
+        val mockSamDAO = defaultMockSamDao()
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshot(workspace.toWorkspaceName,
+                                         NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                                               Option(DataReferenceDescriptionField("foo")),
+                                                               UUID.randomUUID()
+                                         )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO, times(1)).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service DID NOT call WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
+          any[UUID],
+          any[RawlsRequestContext]
+        )
     }
 
     "not create a protected snapshot reference in an unprotected workspace" in withMinimalTestDatabase { _ =>
