@@ -649,6 +649,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should "still delete from the database when cleaning up the workspace in WSM fails" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
+      override def createAzureStorageContainer(workspaceId: UUID,
+                                               storageContainerName: String,
+                                               ctx: RawlsRequestContext
+      ): CreatedControlledAzureStorageContainer =
+        throw new ApiException(500, "error")
+
       override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
         throw new ApiException(500, "no take backsies")
     })
