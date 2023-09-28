@@ -46,6 +46,12 @@ on:
 
 # E2E_ENV is the name of a .env file that contains envvars for E2E tests
 env:
+  RAWLS_BUILD_RUN_NAME: 'rawls-build-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  RAWLS_SWAT_TESTS_RUN_NAME: 'rawls-swat-tests-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  BEE_CREATE_RUN_NAME: 'bee-create-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  BEE_DESTROY_RUN_NAME: 'bee-destroy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  ATTACH_BP_TO_LZ_RUN_NAME: 'attach-billing-project-to-landing-zone-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+  DEL_BP_V2_RUN_NAME: 'delete-billing-project-v2-from-bee-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   RUN_NAME_SUFFIX: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
@@ -93,16 +99,18 @@ jobs:
           WITH_V: true
 
       - name: dispatch build to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
+          run-name: "${{ env.RAWLS_BUILD_RUN_NAME }}"
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/iv-upgrade-workflow-dispatch-to-support-run-name
           token: ${{ env.TOKEN }}
           inputs: '{
+            "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
             "repository": "${{ github.event.repository.full_name }}",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
-            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
+            "rawls-release-tag": "${{ steps.tag.outputs.tag }}",
           }'
 
       - name: Render Rawls version
@@ -125,13 +133,15 @@ jobs:
           echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
 
       - name: dispatch to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
+          run-name: "${{ env.BEE_CREATE_RUN_NAME }}"
           workflow: bee-create
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/iv-upgrade-workflow-dispatch-to-support-run-name
           token: ${{ env.TOKEN }}
           inputs: '{
+            "run-name": "${{ env.BEE_CREATE_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
             "version-template": "dev",
@@ -159,14 +169,15 @@ jobs:
     needs: [init-github-context, create-bee-workflow, params-gen]
     steps:
       - name: dispatch to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
+          run-name: "${{ env.ATTACH_BP_TO_LZ_RUN_NAME }}"
           workflow: attach-billing-project-to-landing-zone.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "attach-billing-project-to-landing-zone-${{ env.RUN_NAME_SUFFIX }}",
+            "run-name": "${{ env.ATTACH_BP_TO_LZ_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "billing-project-creator": "${{ needs.init-github-context.outputs.owner-subject }}",
@@ -185,14 +196,15 @@ jobs:
       - name: dispatch to terra-github-workflows
         env:
           rawls_test_command: "testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest"
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
+          run-name: "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}"
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "rawls-swat-tests-${{ env.RUN_NAME_SUFFIX }}",
+            "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
@@ -210,14 +222,15 @@ jobs:
     if: always()
     steps:
       - name: dispatch to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
+          run-name: "${{ env.DEL_BP_V2_RUN_NAME }}"
           workflow: .github/workflows/delete-billing-project-v2-from-bee.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
-            "run-name": "delete-billing-project-v2-from-bee-${{ env.RUN_NAME_SUFFIX }}",
+            "run-name": "${{ env.DEL_BP_V2_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "billing-project-owner": "${{ needs.init-github-context.outputs.owner-subject }}",
@@ -231,13 +244,17 @@ jobs:
     if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
     steps:
       - name: dispatch to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
+          run-name: "${{ env.BEE_DESTROY_RUN_NAME }}"
           workflow: bee-destroy
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/iv-upgrade-workflow-dispatch-to-support-run-name
           token: ${{ env.TOKEN }}
-          inputs: '{ "bee-name": "${{ env.BEE_NAME }}" }'
+          inputs: '{
+            "run-name": "${{ env.BEE_DESTROY_RUN_NAME }}",
+            "bee-name": "${{ env.BEE_NAME }}"
+          }'
           wait-for-completion: false
 
   notify-slack-on-failure:
