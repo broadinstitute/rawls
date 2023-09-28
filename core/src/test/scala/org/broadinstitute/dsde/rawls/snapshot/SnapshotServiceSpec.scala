@@ -104,23 +104,24 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockDataRepoDAO
       )(testContext)
 
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
       // call createSnapshot on the service
       Await.result(
         snapshotService.createSnapshot(workspace.toWorkspaceName,
-                                       NamedDataRepoSnapshot(DataReferenceName("foo"),
-                                                             Option(DataReferenceDescriptionField("foo")),
-                                                             UUID.randomUUID()
-                                       )
+                                       NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
         ),
         Duration.Inf
       )
 
       // assert that the service called WSM's createDataRepoSnapshotReference
       verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(
-        any[UUID],
-        any[UUID],
-        any[DataReferenceName],
-        any[Option[DataReferenceDescriptionField]],
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+        ArgumentMatchers.eq(snapshotUuid),
+        ArgumentMatchers.eq(snapRefName),
+        ArgumentMatchers.eq(snapRefDescription),
         any[String],
         any[CloningInstructionsEnum],
         any[RawlsRequestContext]
@@ -160,13 +161,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // assert that the service checked to see if the workspace exists
       verify(mockWorkspaceManagerDAO, times(1)).getWorkspace(
-        any[UUID],
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
         any[RawlsRequestContext]
       )
 
       // assert that the service called WSM's createWorkspace
       verify(mockWorkspaceManagerDAO, times(1)).createWorkspace(
-        any[UUID],
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
         any[RawlsRequestContext]
       )
     }
@@ -202,7 +203,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
         // assert that the service checked to see if the workspace exists
         verify(mockWorkspaceManagerDAO, times(1)).getWorkspace(
-          any[UUID],
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
           any[RawlsRequestContext]
         )
 
