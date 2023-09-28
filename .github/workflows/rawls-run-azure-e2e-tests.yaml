@@ -110,7 +110,7 @@ jobs:
             "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
             "repository": "${{ github.event.repository.full_name }}",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
-            "rawls-release-tag": "${{ steps.tag.outputs.tag }}",
+            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
           }'
 
       - name: Render Rawls version
