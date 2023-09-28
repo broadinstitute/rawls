@@ -629,7 +629,7 @@ paths:
                   additionalProperties:
                     $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
-          description: You must be an admin to list migration attempts
+          description: You must be an owner to list migration attempts
           content:
             'application/json':
               schema:
@@ -654,7 +654,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
-          description: You must be an admin to start migration attempts
+          description: You must be an owner to start migration attempts
           content:
             'application/json':
               schema:
@@ -683,7 +683,7 @@ paths:
                   additionalProperties:
                     $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
-          description: You must be an admin to list migration attempts
+          description: You must be an owner to list migration attempts
           content:
             'application/json':
               schema:
@@ -4083,7 +4083,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
-          description: You must be an admin to list migration attempts
+          description: You must be an owner to list migration attempts
           content:
             'application/json':
               schema:
@@ -4107,7 +4107,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
-          description: You must be an admin to start migration attempts
+          description: You must be an owner to start migration attempts
           content:
             'application/json':
               schema:
@@ -4134,7 +4134,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
-          description: You must be an admin to list migration attempts
+          description: You must be an owner to list migration attempts
           content:
             'application/json':
               schema:
@@ -4163,7 +4163,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
-          description: You must be an admin to start migration attempts
+          description: You must be an owner to start migration attempts
           content:
             'application/json':
               schema:
