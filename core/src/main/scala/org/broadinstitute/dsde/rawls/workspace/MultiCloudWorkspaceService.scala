@@ -53,6 +53,7 @@ import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
+import scala.jdk.CollectionConverters._
 
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
@@ -609,27 +610,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
       _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
-        workspaceRequest.protectedData match {
-          case Some(true) =>
-            Future(
-              workspaceManagerDAO.createProtectedWorkspaceWithSpendProfile(workspaceId,
-                                                                           workspaceRequest.name,
-                                                                           spendProfileId,
-                                                                           workspaceRequest.namespace,
-                                                                           ctx
-              )
-            )
-          case _ =>
-            Future(
-              workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId,
-                                                                  workspaceRequest.name,
-                                                                  spendProfileId,
-                                                                  workspaceRequest.namespace,
-                                                                  Seq(wsmConfig.leonardoWsmApplicationId),
-                                                                  ctx
-              )
-            )
-        }
+        Future(
+          workspaceManagerDAO.createWorkspaceWithSpendProfile(
+            workspaceId,
+            workspaceRequest.name,
+            spendProfileId,
+            workspaceRequest.namespace,
+            Seq(wsmConfig.leonardoWsmApplicationId),
+            buildPolicyInputs(workspaceRequest),
+            ctx
+          )
+        )
       }
       _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
       cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
@@ -683,6 +674,23 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
     }
   }
+
+  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest) =
+    workspaceRequest.protectedData match {
+      case Some(true) =>
+        Some(
+          new WsmPolicyInputs()
+            .inputs(
+              Seq(
+                new WsmPolicyInput()
+                  .name("protected-data")
+                  .namespace("terra")
+                  .additionalData(List().asJava)
+              ).asJava
+            )
+        )
+      case _ => None
+    }
 
   private def getCloudContextCreationStatus(workspaceId: UUID,
                                             jobControlId: String,

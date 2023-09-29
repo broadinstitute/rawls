@@ -51,6 +51,7 @@ import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
+import scala.jdk.CollectionConverters._
 
 class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with OptionValues with TestDriverComponent {
 
@@ -420,7 +421,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.eq(name),
         any(), // spend profile id
         ArgumentMatchers.eq(namespace),
-        any(),
+        any[Seq[String]],
+        any[Option[WsmPolicyInputs]],
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -559,6 +561,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                    spendProfileId: String,
                                                    billingProjectNamespace: String,
                                                    applicationIds: Seq[String],
+                                                   policyInputs: Option[WsmPolicyInputs],
                                                    ctx: RawlsRequestContext
       ): CreatedWorkspace = throw new ApiException(500, "whoops")
 
@@ -712,11 +715,25 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     Mockito
       .verify(workspaceManagerDAO)
-      .createProtectedWorkspaceWithSpendProfile(
+      .createWorkspaceWithSpendProfile(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq("fake_name"),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any[Seq[String]],
+        ArgumentMatchers.eq(
+          Some(
+            new WsmPolicyInputs()
+              .inputs(
+                Seq(
+                  new WsmPolicyInput()
+                    .name("protected-data")
+                    .namespace("terra")
+                    .additionalData(List().asJava)
+                ).asJava
+              )
+          )
+        ),
         ArgumentMatchers.eq(testContext)
       )
 
@@ -728,6 +745,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
         any(),
+        ArgumentMatchers.eq(None),
         ArgumentMatchers.any()
       )
   }

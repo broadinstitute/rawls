@@ -259,7 +259,7 @@ class HttpWorkspaceManagerDAOSpec
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
 
-  behavior of "createProtectedWorkspaceWithSpendProfile"
+  behavior of "createWorkspaceWithSpendProfile"
 
   it should "call the WSM workspace API" in {
     val workspaceApi = mock[WorkspaceApi]
@@ -279,14 +279,17 @@ class HttpWorkspaceManagerDAOSpec
       .displayName(testData.azureWorkspace.name)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .applicationIds(Seq("exampleApp").asJava)
       .policies(policyInputs)
       .projectOwnerGroupId(billingProjectId)
 
-    wsmDao.createProtectedWorkspaceWithSpendProfile(
+    wsmDao.createWorkspaceWithSpendProfile(
       testData.azureWorkspace.workspaceIdAsUUID,
       testData.azureWorkspace.name,
       testData.azureBillingProfile.getId.toString,
       billingProjectId,
+      Seq("exampleApp"),
+      Some(policyInputs),
       testContext
     )
 

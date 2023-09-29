@@ -18,15 +18,11 @@ trait WorkspaceManagerDAO {
                                       spendProfileId: String,
                                       billingProjectNamespace: String,
                                       applicationIds: Seq[String],
+                                      policyInputs: Option[WsmPolicyInputs],
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
-  def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                               displayName: String,
-                                               spendProfileId: String,
-                                               billingProjectNamespace: String,
-                                               ctx: RawlsRequestContext
-  ): CreatedWorkspace
+
 
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
