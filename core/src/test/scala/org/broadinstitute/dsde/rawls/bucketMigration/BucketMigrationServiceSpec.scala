@@ -171,13 +171,13 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   }
 
   it should "schedule a single workspace and return past migration attempts" in withMinimalTestDatabase { _ =>
-    val service = mockBucketMigrationServiceForAdminUser()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     Await.result(
       for {
-        preMigrationAttempts <- service.getBucketMigrationAttemptsForWorkspaceInternal(minimalTestData.workspace)
-        _ <- service.migrateWorkspaceBucketInternal(minimalTestData.workspace)
-        postMigrationAttempts <- service.getBucketMigrationAttemptsForWorkspaceInternal(minimalTestData.workspace)
+        preMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName)
+        _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.wsName)
+        postMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName)
       } yield {
         preMigrationAttempts shouldBe List.empty
         postMigrationAttempts should not be empty
@@ -186,33 +186,34 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     )
   }
 
-  it should "schedule multiple workspaces and return the migration attempts" in withMinimalTestDatabase { _ =>
-    val service = mockBucketMigrationServiceForAdminUser()
+  it should "schedule all workspaces in a billing project and return the migration attempts" in withMinimalTestDatabase {
+    _ =>
+      val adminService = mockBucketMigrationServiceForAdminUser()
 
-    Await.result(
-      for {
-        preMigrationAttempts <- service.getBucketMigrationAttemptsForWorkspacesInternal(
-          Seq(minimalTestData.workspace, minimalTestData.workspace2)
-        )
-        _ <- service.migrateWorkspaceBuckets(Seq(minimalTestData.workspace, minimalTestData.workspace2))
-        postMigrationAttempts <- service.getBucketMigrationAttemptsForWorkspacesInternal(
-          Seq(minimalTestData.workspace, minimalTestData.workspace2)
-        )
-      } yield {
-        preMigrationAttempts.foreach { case (_, attempts) =>
-          attempts shouldBe List.empty
-        }
-        postMigrationAttempts.foreach { case (_, attempts) =>
-          attempts should not be empty
-        }
-      },
-      Duration.Inf
-    )
+      Await.result(
+        for {
+          preMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForBillingProject(
+            minimalTestData.billingProject.projectName
+          )
+          _ <- adminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName)
+          postMigrationAttempts <- adminService.adminGetBucketMigrationAttemptsForBillingProject(
+            minimalTestData.billingProject.projectName
+          )
+        } yield {
+          preMigrationAttempts.foreach { case (_, attempts) =>
+            attempts shouldBe List.empty
+          }
+          postMigrationAttempts.foreach { case (_, attempts) =>
+            attempts should not be empty
+          }
+        },
+        Duration.Inf
+      )
   }
 
   it should "schedule any eligible workspaces in a billing project for migration and return any failures" in withMinimalTestDatabase {
     _ =>
-      val service = mockBucketMigrationServiceForAdminUser()
+      val adminService = mockBucketMigrationServiceForAdminUser()
 
       val lockedWorkspace =
         minimalTestData.workspace.copy(name = "lockedWorkspace",
@@ -223,20 +224,57 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
       val exception = intercept[RawlsExceptionWithErrorReport] {
         Await.result(
-          service.migrateWorkspaceBuckets(Seq(minimalTestData.workspace, lockedWorkspace)),
+          adminService.adminMigrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
           Duration.Inf
         )
       }
       exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
       Await
         .result(
-          service.getBucketMigrationAttemptsForWorkspacesInternal(Seq(minimalTestData.workspace, lockedWorkspace)),
+          adminService.adminGetBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
           Duration.Inf
         )
         .foreach {
           case (name, attempts) if name.equals(lockedWorkspace.toWorkspaceName.toString) => attempts shouldBe List.empty
           case (_, attempts)                                                             => attempts should not be empty
         }
+  }
+
+  it should "schedule all workspaces and return any errors that occur" in withMinimalTestDatabase { _ =>
+    val adminService = mockBucketMigrationServiceForAdminUser()
+
+    val lockedWorkspace =
+      minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
+    runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
+
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+                 Duration.Inf
+    ) shouldBe List.empty
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
+                 Duration.Inf
+    ) shouldBe List.empty
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
+                 Duration.Inf
+    ) shouldBe List.empty
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(adminService.adminMigrateAllWorkspaceBuckets(
+                     List(minimalTestData.wsName, minimalTestData.wsName2, lockedWorkspace.toWorkspaceName)
+                   ),
+                   Duration.Inf
+      )
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+                 Duration.Inf
+    ) should not be empty
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
+                 Duration.Inf
+    ) should not be empty
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
+                 Duration.Inf
+    ) shouldBe List.empty
   }
 
   behavior of "asFCAdminWithWorkspace"
@@ -397,23 +435,23 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     )
   }
 
-  behavior of "migrateWorkspaceBucketInternal"
+  behavior of "adminMigrateWorkspaceBucket"
 
   it should "fail when a workspace is locked" in withMinimalTestDatabase { _ =>
-    val service = mockBucketMigrationServiceForAdminUser()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     val lockedWorkspace =
       minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
     runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.migrateWorkspaceBucketInternal(lockedWorkspace), Duration.Inf)
+      Await.result(adminService.adminMigrateWorkspaceBucket(lockedWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "fail for McWorkspaces" in withMinimalTestDatabase { _ =>
-    val service = mockBucketMigrationServiceForAdminUser()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     val mcWorkspace = minimalTestData.workspace.copy(name = "mcWorkspace",
                                                      workspaceType = WorkspaceType.McWorkspace,
@@ -422,15 +460,14 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(mcWorkspace), Duration.Inf)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.migrateWorkspaceBucketInternal(mcWorkspace), Duration.Inf)
+      Await.result(adminService.adminMigrateWorkspaceBucket(mcWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "fail for non-US multiregion buckets" in withMinimalTestDatabase { _ =>
-    val service = mockBucketMigrationServiceForAdminUser()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
-    val usWorkspace = minimalTestData.workspace
     val nonUsWorkspace = minimalTestData.workspace.copy(name = "nonUsWorkspace",
                                                         workspaceId = UUID.randomUUID.toString,
                                                         bucketName = "nonUsBucket"
@@ -440,35 +477,36 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     val usBucket = mock[Bucket]
     when(usBucket.getLocation).thenReturn("US")
     when(
-      service.gcsDAO.getBucket(ArgumentMatchers.eq(usWorkspace.bucketName),
-                               ArgumentMatchers.eq(usWorkspace.googleProjectId.some)
+      adminService.gcsDAO.getBucket(ArgumentMatchers.eq(minimalTestData.workspace.bucketName),
+                                    ArgumentMatchers.eq(minimalTestData.workspace.googleProjectId.some)
       )(any())
     ).thenReturn(Future.successful(Right(usBucket)))
 
     val nonUsBucket = mock[Bucket]
     when(nonUsBucket.getLocation).thenReturn("northamerica-northeast1")
     when(
-      service.gcsDAO.getBucket(ArgumentMatchers.eq(nonUsWorkspace.bucketName),
-                               ArgumentMatchers.eq(nonUsWorkspace.googleProjectId.some)
+      adminService.gcsDAO.getBucket(ArgumentMatchers.eq(nonUsWorkspace.bucketName),
+                                    ArgumentMatchers.eq(nonUsWorkspace.googleProjectId.some)
       )(any())
     ).thenReturn(Future.successful(Right(nonUsBucket)))
 
-    Await.result(service.migrateWorkspaceBucketInternal(usWorkspace), Duration.Inf)
-    Await.result(service.getBucketMigrationAttemptsForWorkspaceInternal(usWorkspace), Duration.Inf) should have size 1
+    Await.result(adminService.adminMigrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
+    Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+                 Duration.Inf
+    ) should have size 1
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.migrateWorkspaceBucketInternal(nonUsWorkspace), Duration.Inf)
+      Await.result(adminService.adminMigrateWorkspaceBucket(nonUsWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
-  behavior of "migrateWorkspaceBuckets"
+  behavior of "adminMigrateAllWorkspaceBuckets"
 
   it should "throw an exception if a non-US bucket is scheduled, but still schedule any eligible workspaces" in withMinimalTestDatabase {
     _ =>
-      val service = mockBucketMigrationServiceForAdminUser()
+      val adminService = mockBucketMigrationServiceForAdminUser()
 
-      val usWorkspace = minimalTestData.workspace
       val nonUsWorkspace = minimalTestData.workspace.copy(name = "nonUsWorkspace",
                                                           workspaceId = UUID.randomUUID.toString,
                                                           bucketName = "nonUsBucket"
@@ -478,69 +516,127 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       val usBucket = mock[Bucket]
       when(usBucket.getLocation).thenReturn("US")
       when(
-        service.gcsDAO.getBucket(ArgumentMatchers.eq(usWorkspace.bucketName),
-                                 ArgumentMatchers.eq(usWorkspace.googleProjectId.some)
+        adminService.gcsDAO.getBucket(ArgumentMatchers.eq(minimalTestData.workspace.bucketName),
+                                      ArgumentMatchers.eq(minimalTestData.workspace.googleProjectId.some)
         )(any())
       ).thenReturn(Future.successful(Right(usBucket)))
 
       val nonUsBucket = mock[Bucket]
       when(nonUsBucket.getLocation).thenReturn("northamerica-northeast1")
       when(
-        service.gcsDAO.getBucket(ArgumentMatchers.eq(nonUsWorkspace.bucketName),
-                                 ArgumentMatchers.eq(nonUsWorkspace.googleProjectId.some)
+        adminService.gcsDAO.getBucket(ArgumentMatchers.eq(nonUsWorkspace.bucketName),
+                                      ArgumentMatchers.eq(nonUsWorkspace.googleProjectId.some)
         )(any())
       ).thenReturn(Future.successful(Right(nonUsBucket)))
 
       val exception = intercept[RawlsExceptionWithErrorReport] {
         Await.result(
-          service.migrateWorkspaceBuckets(Seq(usWorkspace, nonUsWorkspace)),
+          adminService.adminMigrateAllWorkspaceBuckets(List(minimalTestData.wsName, nonUsWorkspace.toWorkspaceName)),
           Duration.Inf
         )
       }
       exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
-      Await.result(service.getBucketMigrationAttemptsForWorkspaceInternal(usWorkspace), Duration.Inf) should have size 1
-      Await.result(service.getBucketMigrationAttemptsForWorkspaceInternal(nonUsWorkspace),
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
+                   Duration.Inf
+      ) should have size 1
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(nonUsWorkspace.toWorkspaceName),
                    Duration.Inf
       ) should have size 0
   }
 
-  behavior of "getBucketMigrationProgressForWorkspaceInternal"
+  behavior of "adminMigrateWorkspaceBucketsInBillingProject"
+
+  it should "throw an exception if a non-US bucket is scheduled, but still schedule any eligible workspaces" in withMinimalTestDatabase {
+    _ =>
+      val adminService = mockBucketMigrationServiceForAdminUser()
+      val newProjectName = "new-project"
+      val newProject = minimalTestData.billingProject.copy(projectName = RawlsBillingProjectName(newProjectName))
+      val nonUsWorkspace = minimalTestData.workspace.copy(name = "nonUsWorkspace",
+                                                          namespace = newProjectName,
+                                                          workspaceId = UUID.randomUUID.toString,
+                                                          bucketName = "nonUsBucket"
+      )
+      val usWorkspace = minimalTestData.workspace.copy(name = "usWorkspace",
+                                                       namespace = newProjectName,
+                                                       workspaceId = UUID.randomUUID.toString,
+                                                       bucketName = "usBucket"
+      )
+
+      runAndWait(
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.create(newProject)
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(nonUsWorkspace)
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(usWorkspace)
+        } yield (),
+        Duration.Inf
+      )
+
+      val usBucket = mock[Bucket]
+      when(usBucket.getLocation).thenReturn("US")
+      when(
+        adminService.gcsDAO.getBucket(ArgumentMatchers.eq(usWorkspace.bucketName),
+                                      ArgumentMatchers.eq(usWorkspace.googleProjectId.some)
+        )(any())
+      ).thenReturn(Future.successful(Right(usBucket)))
+
+      val nonUsBucket = mock[Bucket]
+      when(nonUsBucket.getLocation).thenReturn("northamerica-northeast1")
+      when(
+        adminService.gcsDAO.getBucket(ArgumentMatchers.eq(nonUsWorkspace.bucketName),
+                                      ArgumentMatchers.eq(nonUsWorkspace.googleProjectId.some)
+        )(any())
+      ).thenReturn(Future.successful(Right(nonUsBucket)))
+
+      val exception = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(adminService.adminMigrateWorkspaceBucketsInBillingProject(newProject.projectName), Duration.Inf)
+      }
+      exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(usWorkspace.toWorkspaceName),
+                   Duration.Inf
+      ) should have size 1
+      Await.result(adminService.adminGetBucketMigrationAttemptsForWorkspace(nonUsWorkspace.toWorkspaceName),
+                   Duration.Inf
+      ) should have size 0
+  }
+
+  behavior of "adminGetBucketMigrationProgressForWorkspace"
 
   it should "return the progress of a bucket migration" in withMinimalTestDatabase { _ =>
-    val service = mockBucketMigrationServiceForAdminUser()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     Await.result(
       for {
-        _ <- service.migrateWorkspaceBucketInternal(minimalTestData.workspace)
+        _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
         _ <- insertSTSJobs(minimalTestData.workspace)
-        progressOpt <- service.getBucketMigrationProgressForWorkspaceInternal(
-          minimalTestData.workspace
+        progressOpt <- adminService.adminGetBucketMigrationProgressForWorkspace(
+          minimalTestData.workspace.toWorkspaceName
         )
       } yield verifyBucketMigrationProgress(progressOpt),
       Duration.Inf
     )
   }
 
-  behavior of "getBucketMigrationProgressForWorkspacesInternal"
+  behavior of "adminGetBucketMigrationProgressForBillingProject"
 
   it should "return the progress of a bucket migration for workspaces that have been migrated" in withMinimalTestDatabase {
     _ =>
-      val service = mockBucketMigrationServiceForAdminUser()
+      val adminService = mockBucketMigrationServiceForAdminUser()
 
       Await.result(
         for {
-          _ <- service.migrateWorkspaceBucketInternal(minimalTestData.workspace)
+          _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
           _ <- insertSTSJobs(minimalTestData.workspace)
-          progressMap <- service.getBucketMigrationProgressForWorkspacesInternal(
-            Seq(minimalTestData.workspace, minimalTestData.workspace2)
+          progressMap <- adminService.adminGetBucketMigrationProgressForBillingProject(
+            minimalTestData.billingProject.projectName
           )
-        } yield {
-          progressMap.keys should contain theSameElementsAs List(minimalTestData.wsName.toString,
-                                                                 minimalTestData.wsName2.toString
-          )
-          verifyBucketMigrationProgress(progressMap(minimalTestData.wsName.toString))
-          progressMap(minimalTestData.wsName2.toString) shouldBe None
+        } yield progressMap.map {
+          case (wsName, progressOpt) if wsName.equals(minimalTestData.workspace.toWorkspaceName.toString) =>
+            verifyBucketMigrationProgress(progressOpt)
+          case (unmigratedWsName, Some(progress)) =>
+            fail(s"Found unexpected bucket migration progress $progress for unmigrated workspace $unmigratedWsName")
+          case (_, _) =>
         },
         Duration.Inf
       )
