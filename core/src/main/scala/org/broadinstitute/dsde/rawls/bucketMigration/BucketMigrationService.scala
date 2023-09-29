@@ -101,10 +101,15 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       // partition workspaces by whether they have any past migration attempts
       (scheduledWorkspaces, unscheduledWorkspaces) = workspacesWithProgressOpt.partition(_._2.isDefined)
 
-      eligibleWorkspacesWithEmptyProgress <- getEligibleUnmigratedWorkspacesWithEmptyProgress(unscheduledWorkspaces.map(_._1))
-      migratingOrRecentlyFinishedWorkspacesWithProgress <- getMigratingOrRecentlyFinishedWorkspacesWithProgress(scheduledWorkspaces)
-    } yield (migratingOrRecentlyFinishedWorkspacesWithProgress ++ eligibleWorkspacesWithEmptyProgress).map { case (workspace, progressOpt) =>
-      workspace.toWorkspaceName.toString -> progressOpt
+      eligibleWorkspacesWithEmptyProgress <- getEligibleUnmigratedWorkspacesWithEmptyProgress(
+        unscheduledWorkspaces.map(_._1)
+      )
+      migratingOrRecentlyFinishedWorkspacesWithProgress <- getMigratingOrRecentlyFinishedWorkspacesWithProgress(
+        scheduledWorkspaces
+      )
+    } yield (migratingOrRecentlyFinishedWorkspacesWithProgress ++ eligibleWorkspacesWithEmptyProgress).map {
+      case (workspace, progressOpt) =>
+        workspace.toWorkspaceName.toString -> progressOpt
     }.toMap
   }
 
