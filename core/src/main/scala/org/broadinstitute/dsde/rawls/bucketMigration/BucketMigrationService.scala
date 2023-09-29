@@ -33,7 +33,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
   /**
     * Helper functions to enforce appropriate authz and load workspace(s) if authz passes
     */
-  def asFCAdminWithWorkspace[T](workspaceName: WorkspaceName)(op: Workspace => Future[T]): Future[T] =
+  private def asFCAdminWithWorkspace[T](workspaceName: WorkspaceName)(op: Workspace => Future[T]): Future[T] =
     asFCAdmin {
       for {
         workspace <- getV2WorkspaceContext(workspaceName)
@@ -41,13 +41,13 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       } yield res
     }
 
-  def asOwnerWithWorkspace[T](workspaceName: WorkspaceName)(op: Workspace => Future[T]): Future[T] =
+  private def asOwnerWithWorkspace[T](workspaceName: WorkspaceName)(op: Workspace => Future[T]): Future[T] =
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
       res <- op(workspace)
     } yield res
 
-  def asFCAdminWithBillingProjectWorkspaces[T](
+  private def asFCAdminWithBillingProjectWorkspaces[T](
     billingProject: RawlsBillingProjectName
   )(op: Seq[Workspace] => Future[T]): Future[T] =
     asFCAdmin {
@@ -57,7 +57,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       } yield res
     }
 
-  def asOwnerWithBillingProjectWorkspaces[T](
+  private def asOwnerWithBillingProjectWorkspaces[T](
     billingProject: RawlsBillingProjectName
   )(op: Seq[Workspace] => Future[T]): Future[T] =
     for {
