@@ -44,7 +44,8 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       workspaces <- dataSource.inTransaction(_.workspaceQuery.listV2WorkspacesByIds(workspaceIds))
     } yield workspaces
 
-    def getEligibleUnmigratedWorkspaces(
+    // Only return workspaces with US multiregion buckets
+    def getEligibleUnmigratedWorkspacesWithEmptyProgress(
       workspaces: Seq[Workspace]
     ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
       workspaces
@@ -58,7 +59,8 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           }
         }
 
-    def getMigratingOrRecentlyFinishedWorkspaces(
+    // Only return workspaces that are in progress, completed migration within the last 7 days, or failed to migrate
+    def getMigratingOrRecentlyFinishedWorkspacesWithProgress(
       workspaces: Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]
     ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
       workspaces
@@ -96,11 +98,12 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           .map(workspace -> _)
       }
 
+      // partition workspaces by whether they have any past migration attempts
       (scheduledWorkspaces, unscheduledWorkspaces) = workspacesWithProgressOpt.partition(_._2.isDefined)
 
-      eligibleWorkspaces <- getEligibleUnmigratedWorkspaces(unscheduledWorkspaces.map(_._1))
-      migratingOrRecentlyFinishedWorkspaces <- getMigratingOrRecentlyFinishedWorkspaces(scheduledWorkspaces)
-    } yield (migratingOrRecentlyFinishedWorkspaces ++ eligibleWorkspaces).map { case (workspace, progressOpt) =>
+      eligibleWorkspacesWithEmptyProgress <- getEligibleUnmigratedWorkspacesWithEmptyProgress(unscheduledWorkspaces.map(_._1))
+      migratingOrRecentlyFinishedWorkspacesWithProgress <- getMigratingOrRecentlyFinishedWorkspacesWithProgress(scheduledWorkspaces)
+    } yield (migratingOrRecentlyFinishedWorkspacesWithProgress ++ eligibleWorkspacesWithEmptyProgress).map { case (workspace, progressOpt) =>
       workspace.toWorkspaceName.toString -> progressOpt
     }.toMap
   }
