@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -13,12 +14,11 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   SnapshotListResponse,
-  Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -47,41 +47,47 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     with WorkspaceSupport
     with LazyLogging {
 
-  def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataRepoSnapshotResource] =
+  def createSnapshot(workspaceName: WorkspaceName,
+                     snapshotIdentifiers: NamedDataRepoSnapshot
+  ): Future[DataRepoSnapshotResource] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap { workspaceContext =>
-      val wsid = workspaceContext.workspaceIdAsUUID // to avoid UUID parsing multiple times
-      // create the stub workspace in WSM if it does not already exist
-      if (!workspaceStubExists(wsid, ctx)) {
-        workspaceManagerDAO.createWorkspace(wsid, workspaceContext.workspaceType, ctx)
+    ).flatMap { rawlsWorkspace =>
+      val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
+      val snapshot =
+        new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
+      val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
+      val aggregatedWorkspaceService = new AggregatedWorkspaceService(workspaceManagerDAO)
+
+      // prevent snapshots from disallowed platforms
+      snapshotValidator.validateSnapshotPlatform()
+
+      // prevent disallowed access across workspace or dataset protection boundaries
+      snapshotValidator.validateProtectedStatus()
+
+      try {
+        // if there's an existing WSM workspace, make sure its platform is compatible
+        // with that of the snapshot's dataset.
+        val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
+        snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
+      } catch {
+        case _: AggregateWorkspaceNotFoundException =>
+          // create the stub workspace in WSM if it does not already exist
+          workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
       }
-      validateProtectedStatus(workspaceContext, snapshot)
+
       // create the requested snapshot reference
-      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(wsid,
-                                                                            snapshot.snapshotId,
-                                                                            snapshot.name,
-                                                                            snapshot.description,
-                                                                            terraDataRepoInstanceName,
-                                                                            CloningInstructionsEnum.NOTHING,
-                                                                            ctx
+      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(
+        wsid,
+        snapshotIdentifiers.snapshotId,
+        snapshotIdentifiers.name,
+        snapshotIdentifiers.description,
+        terraDataRepoInstanceName,
+        CloningInstructionsEnum.NOTHING,
+        ctx
       )
       Future.successful(snapshotRef)
-    }
-
-  // Ideally this would rely on Terra Policy Service, but until TPS is enabled for GCP
-  // We'll have to use this workaround for identifying protected status
-  private def validateProtectedStatus(workspaceContext: Workspace, snapshot: NamedDataRepoSnapshot): Unit =
-    // logically it might make more sense to check if the snapshot is protected before the workspace
-    // but that is a more expensive check
-    // check if workspace is protected
-    if (!workspaceContext.bucketName.startsWith("fc-secure")) {
-      // if not, check if snapshot is protected
-      val sources = dataRepoDAO.getSnapshot(snapshot.snapshotId, ctx.userInfo.accessToken).getSource
-      if (sources.asScala.exists(_.getDataset.isSecureMonitoringEnabled)) {
-        throw new RawlsException("Unable to add protected snapshot to unprotected workspace.")
-      }
     }
 
   def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
@@ -249,9 +255,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, ctx)
     }
   }
-
-  private def workspaceStubExists(workspaceId: UUID, ctx: RawlsRequestContext): Boolean =
-    Try(workspaceManagerDAO.getWorkspace(workspaceId, ctx)).isSuccess
 
   private def validateSnapshotId(snapshotId: String): UUID =
     Try(UUID.fromString(snapshotId)) match {
