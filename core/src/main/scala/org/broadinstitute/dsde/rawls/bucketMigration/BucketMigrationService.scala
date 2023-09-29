@@ -94,14 +94,14 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     billingProjectName: RawlsBillingProjectName
   ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
     asFCAdminWithBillingProjectWorkspaces(billingProjectName) {
-      getBucketMigrationProgressForBillingProjectInternal
+      getBucketMigrationProgressForWorkspacesInternal
     }
 
   def getBucketMigrationProgressForBillingProject(
     billingProjectName: RawlsBillingProjectName
   ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
     asOwnerWithBillingProjectWorkspaces(billingProjectName) {
-      getBucketMigrationProgressForBillingProjectInternal
+      getBucketMigrationProgressForWorkspacesInternal
     }
   def adminGetBucketMigrationAttemptsForWorkspace(
     workspaceName: WorkspaceName
@@ -121,14 +121,14 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     billingProjectName: RawlsBillingProjectName
   ): Future[Map[String, List[MultiregionalBucketMigrationMetadata]]] =
     asFCAdminWithBillingProjectWorkspaces(billingProjectName) {
-      getBucketMigrationAttemptsForBillingProjectInternal
+      getBucketMigrationAttemptsForWorkspacesInternal
     }
 
   def getBucketMigrationAttemptsForBillingProject(
     billingProjectName: RawlsBillingProjectName
   ): Future[Map[String, List[MultiregionalBucketMigrationMetadata]]] =
     asOwnerWithBillingProjectWorkspaces(billingProjectName) {
-      getBucketMigrationAttemptsForBillingProjectInternal
+      getBucketMigrationAttemptsForWorkspacesInternal
     }
 
   def adminMigrateWorkspaceBucket(workspaceName: WorkspaceName): Future[MultiregionalBucketMigrationMetadata] =
@@ -186,7 +186,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
   ): Future[Option[MultiregionalBucketMigrationProgress]] =
     dataSource.inTransaction(getBucketMigrationProgress(workspace))
 
-  private def getBucketMigrationProgressForBillingProjectInternal(workspaces: Seq[Workspace]) =
+  private def getBucketMigrationProgressForWorkspacesInternal(workspaces: Seq[Workspace]) =
     workspaces
       .traverse { workspace =>
         dataSource
@@ -243,7 +243,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       }
     } yield attempts.mapWithIndex(MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration)
 
-  private def getBucketMigrationAttemptsForBillingProjectInternal(workspaces: Seq[Workspace]) =
+  private def getBucketMigrationAttemptsForWorkspacesInternal(workspaces: Seq[Workspace]) =
     for {
       attempts <- workspaces.traverse { workspace =>
         dataSource
