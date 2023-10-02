@@ -1132,6 +1132,38 @@ paths:
                  $ref: '#/components/schemas/ErrorReport'
         500:
            $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/getProgress:
+    post:
+      tags:
+        - admin
+      summary: fetch bucket migration progress for multiple Google workspaces
+      description: fetch bucket migration progress for multiple Google workspaces
+      operationId: adminGetBucketMigrationProgressForWorkspaceList
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/bucketMigration/billing/{projectId}:
     get:
       tags:
@@ -4293,9 +4325,41 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: workspaceNamespace/workspaceName -> bucket migration progress
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
                   additionalProperties:
                     $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/bucketMigration/getProgress:
+    post:
+      tags:
+        - workspaces_v2
+      summary: fetch bucket migration progress for multiple Google workspaces
+      description: fetch bucket migration progress for multiple Google workspaces
+      operationId: getBucketMigrationProgressForWorkspaceList
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an owner of all requested workspaces
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
 components:
@@ -6554,7 +6618,7 @@ components:
             description: Supplementary failure information
             type: string
     BatchMigrateRequestBody:
-      description: List of workspace names to migrate
+      description: List of workspace names
       type: array
       items:
         $ref: '#/components/schemas/WorkspaceName'
