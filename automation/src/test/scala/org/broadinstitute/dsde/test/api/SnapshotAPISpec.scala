@@ -54,7 +54,8 @@ class SnapshotAPISpec
   "TDR Snapshot integration" - {
     // as of this writing, hermione.owner is the user with access to snapshots
 
-    "should be able to contact Data Repo" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    // ignore - this test is only valid as an integration test, and we are moving assertions away from integration tests
+    "should be able to contact Data Repo" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
       // status API is unauthenticated, but all our utility methods expect a token.
       // so, we'll send a token to the unauthenticated API to make this code path easier.
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
@@ -66,7 +67,14 @@ class SnapshotAPISpec
       }
     }
 
-    "should allow snapshot references to be added to workspaces" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    // ignore - covered by:
+    // SnapshotServiceSpec:
+    //  - "create a new snapshot reference to a TDR snapshot"
+    //  - "create a WSM workspace if one doesn't exist when creating a snapshot reference"
+    //  - "not create a WSM workspace if one already exists when creating a snapshot reference"
+    // SnapshotApiServiceSpec:
+    //  - "return 200 when a user lists all snapshots in a workspace"
+    "should allow snapshot references to be added to workspaces" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -112,7 +120,11 @@ class SnapshotAPISpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should report the same tables/columns via metadata API as TDR reports" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    // ignore - covered by
+    // DataRepoEntityProviderSpec:
+    //  - "return entity type metadata in the golden path"
+    //  - "return an empty Map if data repo snapshot has no tables"
+    "should report the same tables/columns via metadata API as TDR reports" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
       val numSnapshotsToVerify = 2
 
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
