@@ -1149,6 +1149,89 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       )
   }
 
+  behavior of "adminGetBucketMigrationProgressForWorkspaces"
+
+  it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
+    val (adminService, nonAdminService) = mockAdminEnforcementTest()
+    Await.result(adminService.adminMigrateAllWorkspaceBuckets(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+      Duration.Inf
+    )
+    Await.result(
+      adminService.adminGetBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+      Duration.Inf
+    )
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        nonAdminService.adminGetBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+        Duration.Inf
+      )
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+  }
+
+  it should "return the progress of a bucket migration for workspaces that have been migrated" in withMinimalTestDatabase {
+    _ =>
+      val adminService = mockBucketMigrationServiceForAdminUser()
+
+      Await.result(
+        for {
+          _ <- adminService.adminMigrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
+          _ <- insertSTSJobs(minimalTestData.workspace)
+          progressMap <- adminService.adminGetBucketMigrationProgressForWorkspaces(
+            Seq(minimalTestData.workspace.toWorkspaceName, minimalTestData.workspace2.toWorkspaceName)
+          )
+        } yield {
+          progressMap.keys should contain theSameElementsAs Seq(minimalTestData.workspace.toWorkspaceName.toString, minimalTestData.workspace2.toWorkspaceName.toString)
+          verifyBucketMigrationProgress(progressMap(minimalTestData.workspace.toWorkspaceName.toString))
+          progressMap(minimalTestData.workspace2.toWorkspaceName.toString) shouldBe None
+        },
+        Duration.Inf
+      )
+  }
+
+  behavior of "getBucketMigrationProgressForWorkspaces"
+
+  it should "be limited to users that own all requested workspaces" in withMinimalTestDatabase { _ =>
+    val (ownerService, nonOwnerService) = mockOwnerEnforcementTest()
+    Await.result(ownerService.migrateAllWorkspaceBuckets(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+      Duration.Inf
+    )
+    Await.result(
+      ownerService.getBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+      Duration.Inf
+    )
+
+    when(nonOwnerService.samDAO.userHasAction(SamResourceTypeNames.workspace, minimalTestData.workspace.workspaceId, SamWorkspaceActions.own, nonOwnerService.ctx)).thenReturn(Future.successful(true))
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        nonOwnerService.getBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+        Duration.Inf
+      )
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+
+  }
+
+  it should "return the progress of a bucket migration for workspaces that have been migrated" in withMinimalTestDatabase {
+    _ =>
+      val ownerService = mockBucketMigrationServiceForOwner()
+
+      Await.result(
+        for {
+          _ <- ownerService.migrateWorkspaceBucket(minimalTestData.workspace.toWorkspaceName)
+          _ <- insertSTSJobs(minimalTestData.workspace)
+          progressMap <- ownerService.getBucketMigrationProgressForWorkspaces(
+            Seq(minimalTestData.workspace.toWorkspaceName, minimalTestData.workspace2.toWorkspaceName)
+          )
+        } yield {
+          progressMap.keys should contain theSameElementsAs Seq(minimalTestData.workspace.toWorkspaceName.toString, minimalTestData.workspace2.toWorkspaceName.toString)
+          verifyBucketMigrationProgress(progressMap(minimalTestData.workspace.toWorkspaceName.toString))
+          progressMap(minimalTestData.workspace2.toWorkspaceName.toString) shouldBe None
+        },
+        Duration.Inf
+      )
+  }
+
   private def insertSTSJobs(workspace: Workspace): Future[Unit] =
     slickDataSource.inTransaction { dataAccess =>
       import dataAccess.driver.api._
