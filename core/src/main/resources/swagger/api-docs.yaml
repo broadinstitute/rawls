@@ -625,7 +625,7 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: workspaceNamespace/workspaceName -> bucket migration metadata. bucket migration metadata is an empty list for workspaces that have not been scheduled for migration before
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration metadata where the metadata is an empty list for workspaces that have not been scheduled for migration before.
                   additionalProperties:
                     $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
@@ -697,7 +697,7 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: workspaceNamespace/workspaceName -> bucket migration progress. bucket migration progress is null if workspace has not been scheduled for migration before
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
                   additionalProperties:
                     $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
@@ -1045,7 +1045,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         400:
-          description: Some or all workspaces in billing project were ineligible for migration.
+          description: This workspace is ineligible for migration.
           content:
             'application/json':
               schema:
@@ -1150,7 +1150,7 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: workspaceNamespace/workspaceName -> bucket migration metadata. bucket migration metadata is an empty list for workspaces that have not been scheduled for migration before
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration metadata where the metadata is an empty list for workspaces that have not been scheduled for migration before.
                   additionalProperties:
                     $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
@@ -1222,7 +1222,7 @@ paths:
                 type: array
                 items:
                   type: object
-                  description: workspaceNamespace/workspaceName -> bucket migration progress. bucket migration progress is null if workspace has not been scheduled for migration before
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
                   additionalProperties:
                     $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
@@ -4191,7 +4191,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         400:
-          description: Some or all workspaces in billing project were ineligible for migration.
+          description: This workspace is ineligible for migration.
           content:
             'application/json':
               schema:
