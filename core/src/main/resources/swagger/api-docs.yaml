@@ -660,7 +660,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         400:
-          description: Some or all workspaces in billing project were ineligible for migration.
+          description: Some or all workspaces in billing project were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
           content:
             'application/json':
               schema:
@@ -1119,7 +1119,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         400:
-          description: Some or all workspaces provided were ineligible for migration.
+          description: Some or all workspaces provided were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
           content:
             'application/json':
               schema:
@@ -1185,7 +1185,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         400:
-          description: Some or all workspaces in billing project were ineligible for migration.
+          description: Some or all workspaces in billing project were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
           content:
             'application/json':
               schema:
@@ -4265,7 +4265,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         400:
-          description: Some or all workspaces in billing project were ineligible for migration.
+          description: Some or all workspaces in billing project were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
           content:
             'application/json':
               schema:
