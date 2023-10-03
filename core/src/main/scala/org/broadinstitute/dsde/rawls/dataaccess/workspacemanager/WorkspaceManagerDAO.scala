@@ -17,15 +17,12 @@ trait WorkspaceManagerDAO {
                                       displayName: String,
                                       spendProfileId: String,
                                       billingProjectNamespace: String,
+                                      applicationIds: Seq[String],
+                                      policyInputs: Option[WsmPolicyInputs],
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
-  def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                               displayName: String,
-                                               spendProfileId: String,
-                                               billingProjectNamespace: String,
-                                               ctx: RawlsRequestContext
-  ): CreatedWorkspace
+
 
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
@@ -79,14 +76,6 @@ trait WorkspaceManagerDAO {
                                           limit: Int,
                                           ctx: RawlsRequestContext
   ): ResourceList
-  def enableApplication(workspaceId: UUID,
-                        applicationId: String,
-                        ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription
-  def disableApplication(workspaceId: UUID,
-                         applicationId: String,
-                         ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription
 
   /**
     * Creates an Azure storage container in the workspace. This container will be created in the workspace's

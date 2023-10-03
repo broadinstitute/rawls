@@ -10,6 +10,8 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsBillingProjectName,
   RawlsRequestContext,
+  SamResourceTypeNames,
+  SamWorkspaceRoles,
   Workspace,
   WorkspaceName
 }
@@ -18,7 +20,12 @@ import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO, val gcsDAO: GoogleServicesDAO)(
   val ctx: RawlsRequestContext
@@ -26,6 +33,85 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     extends RoleSupport
     with WorkspaceSupport
     with LazyLogging {
+
+  def getEligibleOrMigratingWorkspaces: Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] = {
+    def getOwnedWorkspaces: Future[Seq[Workspace]] = for {
+      userWorkspaces <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
+      workspaceIds = userWorkspaces
+        .filter(_.hasRole(SamWorkspaceRoles.owner))
+        .map(workspaceResource => Try(UUID.fromString(workspaceResource.resourceId)))
+        .flatMap(_.toOption)
+      workspaces <- dataSource.inTransaction(_.workspaceQuery.listV2WorkspacesByIds(workspaceIds))
+    } yield workspaces
+
+    // Only return workspaces with US multiregion buckets
+    def getEligibleUnmigratedWorkspacesWithEmptyProgress(
+      workspaces: Seq[Workspace]
+    ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
+      workspaces
+        .traverse { workspace =>
+          getBucketLocation(workspace).map(workspace -> _)
+        }
+        .map {
+          _.collect {
+            case (workspace, Some(location)) if location.equals("US") =>
+              (workspace, Option.empty[MultiregionalBucketMigrationProgress])
+          }
+        }
+
+    // Only return workspaces that are in progress, completed migration within the last 7 days, or failed to migrate
+    def getMigratingOrRecentlyFinishedWorkspacesWithProgress(
+      workspaces: Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]
+    ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
+      workspaces
+        .traverse {
+          case (workspace, progress @ Some(MultiregionalBucketMigrationProgress(_, Some(outcome), _, _))) =>
+            dataSource
+              .inTransaction(_.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace))
+              .map { migrations =>
+                if (
+                  migrations.exists(
+                    _.finished
+                      .getOrElse(Timestamp.from(Instant.MIN))
+                      .after(Timestamp.from(Instant.now().minus(7, ChronoUnit.DAYS))) || outcome.isFailure
+                  )
+                ) Some(workspace -> progress)
+                else None
+              }
+          case unfinishedWorkspaceWithProgress @ (_, Some(MultiregionalBucketMigrationProgress(_, None, _, _))) =>
+            Future.successful(unfinishedWorkspaceWithProgress.some)
+          case _ =>
+            Future.successful(
+              None
+            )
+        }
+        .map(_.flatten)
+
+    for {
+      workspaces <- getOwnedWorkspaces
+
+      // get migration progress if it exists
+      workspacesWithProgressOpt <- workspaces.traverse { workspace =>
+        dataSource
+          .inTransaction(getBucketMigrationProgress(workspace))
+          .recover(_ => None)
+          .map(workspace -> _)
+      }
+
+      // partition workspaces by whether they have any past migration attempts
+      (scheduledWorkspaces, unscheduledWorkspaces) = workspacesWithProgressOpt.partition(_._2.isDefined)
+
+      eligibleWorkspacesWithEmptyProgress <- getEligibleUnmigratedWorkspacesWithEmptyProgress(
+        unscheduledWorkspaces.map(_._1)
+      )
+      migratingOrRecentlyFinishedWorkspacesWithProgress <- getMigratingOrRecentlyFinishedWorkspacesWithProgress(
+        scheduledWorkspaces
+      )
+    } yield (migratingOrRecentlyFinishedWorkspacesWithProgress ++ eligibleWorkspacesWithEmptyProgress).map {
+      case (workspace, progressOpt) =>
+        workspace.toWorkspaceName.toString -> progressOpt
+    }.toMap
+  }
 
   def getBucketMigrationProgressForWorkspace(
     workspaceName: WorkspaceName
