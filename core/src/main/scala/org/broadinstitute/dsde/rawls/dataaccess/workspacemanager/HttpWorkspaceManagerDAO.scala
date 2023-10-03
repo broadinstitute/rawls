@@ -6,7 +6,13 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceDescriptionField,
+  DataReferenceName,
+  RawlsRequestContext,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
@@ -50,8 +56,16 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
     getWorkspaceApi(ctx).getWorkspace(workspaceId, null) // use default value for role
 
-  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
-    getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
+  override def createWorkspace(workspaceId: UUID,
+                               workspaceType: WorkspaceType,
+                               ctx: RawlsRequestContext
+  ): CreatedWorkspace = {
+    val stage = workspaceType match {
+      case WorkspaceType.RawlsWorkspace => WorkspaceStageModel.RAWLS_WORKSPACE
+      case WorkspaceType.McWorkspace    => WorkspaceStageModel.MC_WORKSPACE
+    }
+    getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).stage(stage))
+  }
 
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
