@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.WorkspaceDescription
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -9,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ErrorReport,
+  GoogleProjectId,
   RawlsRequestContext,
   Workspace,
   WorkspacePolicy,
@@ -28,8 +30,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     * Given a workspace, aggregates any available workpsace information form
     * workspace manager (WSM).
     *
-    * * If the provided workspace is not of type "MC", returns the provided
-    * "rawls" workspace with no WSM information.
+    * If the provided workspace is not of type "MC", returns the provided "rawls" workspace with no WSM information.
     *
     * @param workspace The source rawls workspace
     * @param ctx Rawls request and tracing context.
@@ -38,46 +39,42 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     *                                             record that is not present
     * @throws WorkspaceAggregationException when an error is encountered pulling data from aggregating upstream systems
     *
-    * @throws InvalidCloudContextException when an aggregated workspace does not have an Azure cloud context
+    * @throws InvalidCloudContextException when an aggregated workspace does not have info for exactly one cloud context
     */
   def getAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace = {
     val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", ctx.tracingSpan.orNull)
 
     workspace.workspaceType match {
-      case WorkspaceType.RawlsWorkspace => AggregatedWorkspace(workspace, None, List.empty)
+      case WorkspaceType.RawlsWorkspace =>
+        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), None, List.empty)
       case WorkspaceType.McWorkspace =>
         try {
           val wsmInfo = workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)
-          Option(wsmInfo.getAzureContext) match {
-            case Some(azureContext) =>
+          (Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext)) match {
+            case (None, Some(azureContext)) =>
               AggregatedWorkspace(
                 workspace,
+                googleProjectId = None,
                 Some(
                   AzureManagedAppCoordinates(UUID.fromString(azureContext.getTenantId),
                                              UUID.fromString(azureContext.getSubscriptionId),
                                              azureContext.getResourceGroupId
                   )
                 ),
-                Option(wsmInfo.getPolicies)
-                  .map(policies =>
-                    policies.asScala.toList.map(input =>
-                      WorkspacePolicy(
-                        input.getName,
-                        input.getNamespace,
-                        Option(
-                          input.getAdditionalData.asScala.toList
-                            .map(data => Map.apply(data.getKey -> data.getValue))
-                        )
-                          .getOrElse(List.empty)
-                      )
-                    )
-                  )
-                  .getOrElse(List.empty)
+                convertPolicies(wsmInfo)
               )
-            case None =>
+            case (Some(gcpContext), None) =>
+              AggregatedWorkspace(
+                workspace,
+                Some(GoogleProjectId(gcpContext.getProjectId)),
+                azureCloudContext = None,
+                convertPolicies(wsmInfo)
+              )
+            case (_, _) =>
               throw new InvalidCloudContextException(
-                ErrorReport(StatusCodes.NotImplemented,
-                            s"Unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
+                ErrorReport(
+                  StatusCodes.NotImplemented,
+                  s"Unexpected state, expected exactly one set of cloud metadata for workspace ${workspace.workspaceId}"
                 )
               )
           }
@@ -92,6 +89,23 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
           span.end()
     }
   }
+
+  private def convertPolicies(wsmInfo: WorkspaceDescription): List[WorkspacePolicy] =
+    Option(wsmInfo.getPolicies)
+      .map(policies =>
+        policies.asScala.toList.map(input =>
+          WorkspacePolicy(
+            input.getName,
+            input.getNamespace,
+            Option(
+              input.getAdditionalData.asScala.toList
+                .map(data => Map.apply(data.getKey -> data.getValue))
+            )
+              .getOrElse(List.empty)
+          )
+        )
+      )
+      .getOrElse(List.empty)
 }
 
 class InvalidCloudContextException(errorReport: ErrorReport) extends WorkspaceAggregationException(errorReport)

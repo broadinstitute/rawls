@@ -3,10 +3,11 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, WorkspaceDescription, WsmPolicyInput, WsmPolicyPair}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
+  GoogleProjectId,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -18,18 +19,17 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.when
+import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
-import org.mockito.Mockito._
 
-import scala.language.postfixOps
 import java.util.UUID
 import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
 class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
 
-  private val gcpWorkspace = Workspace(
+  private val rawlsWorkspace = Workspace(
     "test-namespace",
     "test-name",
     "aWorkspaceId",
@@ -41,7 +41,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     Map.empty
   )
 
-  private val azWorkspace = Workspace.buildReadyMcWorkspace(
+  private val mcWorkspace = Workspace.buildReadyMcWorkspace(
     "fake",
     "fakews",
     UUID.randomUUID.toString,
@@ -58,7 +58,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
 
   behavior of "getAggregatedWorkspace"
 
-  it should "combine WSM data with Rawls data for Azure workspaces" in {
+  it should "combine WSM data with Rawls data for Azure MC workspaces" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     val azContext = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID().toString)
     val policies = Seq(
@@ -79,9 +79,9 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     )
     val svc = new AggregatedWorkspaceService(wsmDao)
 
-    val aggregatedWorkspace = svc.getAggregatedWorkspace(azWorkspace, defaultRequestContext)
+    val aggregatedWorkspace = svc.getAggregatedWorkspace(mcWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.baseWorkspace shouldBe azWorkspace
+    aggregatedWorkspace.baseWorkspace shouldBe mcWorkspace
     aggregatedWorkspace.azureCloudContext shouldBe Some(azContext)
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Azure
     aggregatedWorkspace.policies shouldBe policies.map(input =>
@@ -97,13 +97,49 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     )
   }
 
-  it should "not reach out to WSM for GCP workspaces" in {
+  it should "combine WSM data with Rawls data for GCP MC workspaces" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val googleProjectId = GoogleProjectId("project-id")
+    val policies = Seq(
+      new WsmPolicyInput()
+        .name("fakepolicy")
+        .namespace("fakens")
+        .addAdditionalDataItem(new WsmPolicyPair().key("dataKey").value("dataValue"))
+    )
+    when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+      new WorkspaceDescription()
+        .gcpContext(
+          new GcpContext().projectId(googleProjectId.toString())
+        )
+        .policies(policies.asJava)
+    )
+    val svc = new AggregatedWorkspaceService(wsmDao)
+
+    val aggregatedWorkspace = svc.getAggregatedWorkspace(mcWorkspace, defaultRequestContext)
+
+    aggregatedWorkspace.baseWorkspace shouldBe mcWorkspace
+    aggregatedWorkspace.googleProjectId shouldBe Some(googleProjectId)
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
+    aggregatedWorkspace.policies shouldBe policies.map(input =>
+      WorkspacePolicy(
+        input.getName,
+        input.getNamespace,
+        Option(
+          input.getAdditionalData.asScala.toList
+            .map(data => Map.apply(data.getKey -> data.getValue))
+        )
+          .getOrElse(List.empty)
+      )
+    )
+  }
+
+  it should "not reach out to WSM for legacy GCP Rawls workspaces" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     val svc = new AggregatedWorkspaceService(wsmDao)
 
-    val aggregatedWorkspace = svc.getAggregatedWorkspace(gcpWorkspace, defaultRequestContext)
+    val aggregatedWorkspace = svc.getAggregatedWorkspace(rawlsWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.baseWorkspace shouldBe gcpWorkspace
+    aggregatedWorkspace.baseWorkspace shouldBe rawlsWorkspace
     aggregatedWorkspace.azureCloudContext shouldBe None
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
     verify(wsmDao, times(0)).getWorkspace(any[UUID], any[RawlsRequestContext])
@@ -116,7 +152,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val svc = new AggregatedWorkspaceService(wsmDao)
 
     intercept[AggregateWorkspaceNotFoundException] {
-      svc.getAggregatedWorkspace(azWorkspace, defaultRequestContext)
+      svc.getAggregatedWorkspace(mcWorkspace, defaultRequestContext)
     }
 
     verify(wsmDao).getWorkspace(any[UUID], any[RawlsRequestContext])
@@ -129,7 +165,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val svc = new AggregatedWorkspaceService(wsmDao)
 
     intercept[WorkspaceAggregationException] {
-      svc.getAggregatedWorkspace(azWorkspace, defaultRequestContext)
+      svc.getAggregatedWorkspace(mcWorkspace, defaultRequestContext)
     }
 
     verify(wsmDao).getWorkspace(any[UUID], any[RawlsRequestContext])
@@ -143,7 +179,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val svc = new AggregatedWorkspaceService(wsmDao)
 
     intercept[InvalidCloudContextException] {
-      svc.getAggregatedWorkspace(azWorkspace, defaultRequestContext)
+      svc.getAggregatedWorkspace(mcWorkspace, defaultRequestContext)
     }
   }
 }
