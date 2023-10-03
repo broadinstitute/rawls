@@ -22,8 +22,6 @@ trait WorkspaceManagerDAO {
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
-
-
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
                      displayName: String,
