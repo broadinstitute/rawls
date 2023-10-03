@@ -4278,7 +4278,26 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-
+    get:
+      tags:
+        - workspaces_v2
+      summary: get workspaces eligible for bucket migration and their migration progress if it exists
+      description: get workspaces eligible for bucket migration and their migration progress if it exists
+      operationId: getEligibleWorkspacesForBucketMigrationWithProgress
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration progress
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:

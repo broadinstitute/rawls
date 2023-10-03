@@ -76,7 +76,13 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                     .map(StatusCodes.Created -> _)
                 }
               }
-            }
+            } ~
+              get {
+                complete {
+                  bucketMigrationServiceConstructor(ctx).getEligibleOrMigratingWorkspaces
+                    .map(StatusCodes.OK -> _)
+                }
+              }
           }
       }
     }
