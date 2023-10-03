@@ -12,17 +12,24 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
+  SamResourceRole,
+  SamResourceTypeNames,
+  SamRolesAndActions,
+  SamUserResource,
   SamUserStatusResponse,
+  SamWorkspaceRoles,
   UserInfo,
   Workspace,
   WorkspaceType
 }
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.{
   MultiregionalBucketMigrationProgress,
   MultiregionalBucketMigrationStep,
   MultiregionalStorageTransferJobs,
   STSJobProgress
 }
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
@@ -31,6 +38,8 @@ import org.scalatest.matchers.must.Matchers.not
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar.mock
 
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
@@ -488,6 +497,139 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
           case (_, _) =>
         },
         Duration.Inf
+      )
+  }
+
+  behavior of "getEligibleOrMigratingWorkspaces"
+
+  it should "return owned workspaces either with US multi-region buckets or that are currently or recently migrated" in withMinimalTestDatabase {
+    _ =>
+      def makeSamUserResponse(workspaceId: String, role: SamResourceRole): SamUserResource = SamUserResource(
+        workspaceId,
+        SamRolesAndActions(Set(role), Set.empty),
+        SamRolesAndActions(Set.empty, Set.empty),
+        SamRolesAndActions(Set.empty, Set.empty),
+        Set.empty,
+        Set.empty
+      )
+
+      def makeWorkspace(name: String, creator: String): Workspace = Workspace(
+        minimalTestData.billingProject.projectName.value,
+        name,
+        UUID.randomUUID().toString,
+        UUID.randomUUID().toString,
+        None,
+        DateTime.now(),
+        DateTime.now(),
+        creator,
+        Map.empty
+      )
+
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      val gcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val userCtx = getRequestContext("user@example.com")
+      val bucketMigrationService = BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)(userCtx)
+
+      val nonOwnedWorkspace =
+        makeWorkspace("nonOwnedWorkspace", "notThisUser@example.com")
+      val usWorkspace = makeWorkspace("usWorkspace", userCtx.userInfo.userEmail.value)
+      val nonUSWorkspace = makeWorkspace("nonUSWorkspace", userCtx.userInfo.userEmail.value)
+      val migratingWorkspace = makeWorkspace("migratingWorkspace", userCtx.userInfo.userEmail.value)
+      val recentlyMigratedWorkspace = makeWorkspace("recentlyMigratedWorkspace", userCtx.userInfo.userEmail.value)
+      val oldSuccessfullyMigratedWorkspace =
+        makeWorkspace("oldSuccessfullyMigratedWorkspace", userCtx.userInfo.userEmail.value)
+      val oldUnsuccessfullyMigratedWorkspace =
+        makeWorkspace("oldUnsuccessfullyMigratedWorkspace", userCtx.userInfo.userEmail.value)
+
+      val samResources = Seq(
+        makeSamUserResponse(nonOwnedWorkspace.workspaceId, SamWorkspaceRoles.writer),
+        makeSamUserResponse(usWorkspace.workspaceId, SamWorkspaceRoles.owner),
+        makeSamUserResponse(nonUSWorkspace.workspaceId, SamWorkspaceRoles.owner),
+        makeSamUserResponse(migratingWorkspace.workspaceId, SamWorkspaceRoles.owner),
+        makeSamUserResponse(recentlyMigratedWorkspace.workspaceId, SamWorkspaceRoles.owner),
+        makeSamUserResponse(oldSuccessfullyMigratedWorkspace.workspaceId, SamWorkspaceRoles.owner),
+        makeSamUserResponse(oldUnsuccessfullyMigratedWorkspace.workspaceId, SamWorkspaceRoles.owner)
+      )
+      when(samDAO.listUserResources(SamResourceTypeNames.workspace, userCtx))
+        .thenReturn(Future.successful(samResources))
+
+      val usBucket = mock[Bucket]
+      when(usBucket.getLocation).thenReturn("US")
+      val nonUSBucket = mock[Bucket]
+      when(nonUSBucket.getLocation).thenReturn("us-central1")
+      when(gcsDAO.getBucket(any(), any())(any())).thenReturn(Future.successful(Right(usBucket)))
+      when(gcsDAO.getBucket(ArgumentMatchers.eq(nonUSWorkspace.bucketName), any())(any()))
+        .thenReturn(Future.successful(Right(nonUSBucket)))
+
+      Await.result(
+        slickDataSource.inTransaction { dataAccess =>
+          for {
+            _ <- dataAccess.workspaceQuery.createOrUpdate(nonOwnedWorkspace)
+            _ <- dataAccess.workspaceQuery.createOrUpdate(usWorkspace)
+            _ <- dataAccess.workspaceQuery.createOrUpdate(nonUSWorkspace)
+            _ <- dataAccess.workspaceQuery.createOrUpdate(migratingWorkspace)
+            _ <- dataAccess.workspaceQuery.createOrUpdate(recentlyMigratedWorkspace)
+            _ <- dataAccess.workspaceQuery.createOrUpdate(oldSuccessfullyMigratedWorkspace)
+            _ <- dataAccess.workspaceQuery.createOrUpdate(oldUnsuccessfullyMigratedWorkspace)
+
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(migratingWorkspace, "US".some)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(recentlyMigratedWorkspace, "US".some)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(oldSuccessfullyMigratedWorkspace, "US".some)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(oldUnsuccessfullyMigratedWorkspace, "US".some)
+
+            recentlyMigratedAttempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(recentlyMigratedWorkspace.workspaceIdAsUUID)
+              .value
+            oldSuccessfullyMigratedAttempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(oldSuccessfullyMigratedWorkspace.workspaceIdAsUUID)
+              .value
+            oldUnsuccessfullyMigratedAttempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(oldUnsuccessfullyMigratedWorkspace.workspaceIdAsUUID)
+              .value
+
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              recentlyMigratedAttempt.getOrElse(fail()).id,
+              multiregionalBucketMigrationQuery.finishedCol,
+              Timestamp.from(Instant.now().minusSeconds(86400)).some,
+              multiregionalBucketMigrationQuery.outcomeCol,
+              "Success".some
+            )
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              oldSuccessfullyMigratedAttempt.getOrElse(fail()).id,
+              multiregionalBucketMigrationQuery.finishedCol,
+              Timestamp.from(Instant.now().minusSeconds(86400 * 10)).some,
+              multiregionalBucketMigrationQuery.outcomeCol,
+              "Success".some
+            )
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update3(
+              oldUnsuccessfullyMigratedAttempt.getOrElse(fail()).id,
+              multiregionalBucketMigrationQuery.finishedCol,
+              Timestamp.from(Instant.now().minusSeconds(86400 * 10)).some,
+              multiregionalBucketMigrationQuery.outcomeCol,
+              "Failure".some,
+              multiregionalBucketMigrationQuery.messageCol,
+              "error".some
+            )
+          } yield ()
+        },
+        Duration.Inf
+      )
+
+      val expectedWorkspaces = List(
+        usWorkspace.toWorkspaceName.toString,
+        migratingWorkspace.toWorkspaceName.toString,
+        recentlyMigratedWorkspace.toWorkspaceName.toString,
+        oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString
+      )
+
+      val returnedWorkspaces = Await.result(bucketMigrationService.getEligibleOrMigratingWorkspaces, Duration.Inf)
+
+      returnedWorkspaces.keys should contain theSameElementsAs expectedWorkspaces
+      returnedWorkspaces(usWorkspace.toWorkspaceName.toString) shouldBe None
+      returnedWorkspaces(migratingWorkspace.toWorkspaceName.toString).get.outcome shouldBe None
+      returnedWorkspaces(recentlyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(Outcome.Success)
+      returnedWorkspaces(oldUnsuccessfullyMigratedWorkspace.toWorkspaceName.toString).get.outcome shouldBe Some(
+        Outcome.Failure("error")
       )
   }
 
