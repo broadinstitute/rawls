@@ -1,0 +1,14 @@
+name: 'Billing Project Promotion Tests - WIP'
+description: "Prototype billing project testing flow that fires on Rawls promotion"
+
+on: workflow_dispatch
+
+jobs:
+  create-billing-project:
+    runs-on: ubuntu-latest
+    container:
+      image: gcr.io/broad-dsp-gcr-public/azure-workspace-tools:960c6a7
+    steps:
+      - name: Create the billing project
+        run: python billing_project.py
+
