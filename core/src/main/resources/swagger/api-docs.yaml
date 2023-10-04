@@ -6601,10 +6601,6 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WorkspaceMigrationSuccess'
         - $ref: '#/components/schemas/WorkspaceMigrationFailure'
-      properties:
-        failure:
-          description: Supplementary failure information
-          type: string
     WorkspaceMigrationSuccess:
         type: string
         enum:
