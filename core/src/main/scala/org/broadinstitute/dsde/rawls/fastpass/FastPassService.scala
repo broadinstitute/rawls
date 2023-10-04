@@ -1,20 +1,16 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
+import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
-  openTelemetryTags,
-  policyBindingsQuotaLimit,
-  removeFastPassGrants,
-  RemovalFailure,
-  SAdomain,
-  UserAndPetEmails
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService._
 import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
   FastPassGrant,
   GoogleProjectId,
   RawlsRequestContext,
@@ -30,20 +26,20 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
 import spray.json._
 
-import java.time.{OffsetDateTime, ZoneOffset}
 import java.time.temporal.ChronoUnit
+import java.time.{OffsetDateTime, ZoneOffset}
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 import scala.util.matching.Regex
+import scala.util.{Failure, Success}
 
 object FastPassService extends LazyLogging {
   def constructor(config: FastPassConfig,
@@ -296,6 +292,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     dataSource
       .inTransaction { implicit dataAccess =>
         for {
+          isMigrating <- dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspace)
+          _ = if (isMigrating) {
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Conflict,
+                          s"Workspace ${workspace.toWorkspaceName} has an in-progress bucket migration."
+              )
+            )
+          }
           rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
           samUserInfo <- DBIO.from(
             samDAO.getUserIdInfo(email, RawlsRequestContext(rawlsServiceAccountUserInfo)).map {
