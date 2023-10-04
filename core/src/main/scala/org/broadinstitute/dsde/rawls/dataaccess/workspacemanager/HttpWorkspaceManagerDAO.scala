@@ -57,39 +57,21 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                displayName: String,
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
+                                               applicationIds: Seq[String],
+                                               policyInputs: Option[WsmPolicyInputs],
                                                ctx: RawlsRequestContext
-  ): CreatedWorkspace =
-    getWorkspaceApi(ctx).createWorkspace(
-      new CreateWorkspaceRequestBody()
-        .id(workspaceId)
-        .displayName(displayName)
-        .spendProfile(spendProfileId)
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .projectOwnerGroupId(billingProjectNamespace)
-    )
-
-  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                                        displayName: String,
-                                                        spendProfileId: String,
-                                                        billingProjectNamespace: String,
-                                                        ctx: RawlsRequestContext
   ): CreatedWorkspace = {
-    val policyInputs = new WsmPolicyInputs()
-    val protectedPolicyInput = new WsmPolicyInput()
-    protectedPolicyInput.name("protected-data")
-    protectedPolicyInput.namespace("terra")
-    protectedPolicyInput.additionalData(List().asJava)
+    val request = new CreateWorkspaceRequestBody()
+      .id(workspaceId)
+      .displayName(displayName)
+      .spendProfile(spendProfileId)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .projectOwnerGroupId(billingProjectNamespace)
+      .applicationIds(applicationIds.asJava)
 
-    policyInputs.addInputsItem(protectedPolicyInput)
-    getWorkspaceApi(ctx).createWorkspace(
-      new CreateWorkspaceRequestBody()
-        .id(workspaceId)
-        .displayName(displayName)
-        .spendProfile(spendProfileId)
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .policies(policyInputs)
-        .projectOwnerGroupId(billingProjectNamespace)
-    )
+    policyInputs.map(request.policies)
+
+    getWorkspaceApi(ctx).createWorkspace(request)
   }
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,
@@ -201,21 +183,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                            ResourceType.DATA_REPO_SNAPSHOT,
                                            StewardshipType.REFERENCED
     )
-
-  override def enableApplication(workspaceId: UUID,
-                                 applicationId: String,
-                                 ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    getWorkspaceApplicationApi(ctx).enableWorkspaceApplication(
-      workspaceId,
-      applicationId
-    )
-
-  override def disableApplication(workspaceId: UUID,
-                                  applicationId: String,
-                                  ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,

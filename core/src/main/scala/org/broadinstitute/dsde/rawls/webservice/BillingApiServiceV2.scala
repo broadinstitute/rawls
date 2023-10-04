@@ -7,6 +7,7 @@ import akka.http.scaladsl.unmarshalling.Unmarshaller
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -25,11 +26,13 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+  import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
   import spray.json.DefaultJsonProtocol._
 
   val userServiceConstructor: RawlsRequestContext => UserService
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator
+  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
   implicit def aggregationKeyParameterUnmarshaller: Unmarshaller[String, SpendReportingAggregationKeyWithSub] =
     Unmarshaller.strict { parameter =>
@@ -196,6 +199,34 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                           .map(_ => StatusCodes.OK)
                       }
                     }
+                }
+            } ~
+            pathPrefix("bucketMigration") {
+              val billingProjectName = RawlsBillingProjectName(projectId)
+              pathEndOrSingleSlash {
+                post {
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .migrateWorkspaceBucketsInBillingProject(billingProjectName)
+                      .map(StatusCodes.Created -> _)
+                  }
+                } ~
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .getBucketMigrationAttemptsForBillingProject(billingProjectName)
+                        .map(ms => StatusCodes.OK -> ms)
+                    }
+                  }
+              } ~
+                path("progress") {
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .getBucketMigrationProgressForBillingProject(billingProjectName)
+                        .map(StatusCodes.OK -> _)
+                    }
+                  }
                 }
             }
         } ~
