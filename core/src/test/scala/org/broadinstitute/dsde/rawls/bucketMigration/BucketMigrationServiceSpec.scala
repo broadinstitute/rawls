@@ -1154,7 +1154,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
     val (adminService, nonAdminService) = mockAdminEnforcementTest()
     Await.result(adminService.adminMigrateAllWorkspaceBuckets(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
-      Duration.Inf
+                 Duration.Inf
     )
     Await.result(
       adminService.adminGetBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
@@ -1162,7 +1162,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     )
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        nonAdminService.adminGetBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
+        nonAdminService.adminGetBucketMigrationProgressForWorkspaces(
+          Seq(minimalTestData.wsName, minimalTestData.wsName2)
+        ),
         Duration.Inf
       )
     }
@@ -1181,7 +1183,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
             Seq(minimalTestData.workspace.toWorkspaceName, minimalTestData.workspace2.toWorkspaceName)
           )
         } yield {
-          progressMap.keys should contain theSameElementsAs Seq(minimalTestData.workspace.toWorkspaceName.toString, minimalTestData.workspace2.toWorkspaceName.toString)
+          progressMap.keys should contain theSameElementsAs Seq(minimalTestData.workspace.toWorkspaceName.toString,
+                                                                minimalTestData.workspace2.toWorkspaceName.toString
+          )
           verifyBucketMigrationProgress(progressMap(minimalTestData.workspace.toWorkspaceName.toString))
           progressMap(minimalTestData.workspace2.toWorkspaceName.toString) shouldBe None
         },
@@ -1194,14 +1198,20 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   it should "be limited to users that own all requested workspaces" in withMinimalTestDatabase { _ =>
     val (ownerService, nonOwnerService) = mockOwnerEnforcementTest()
     Await.result(ownerService.migrateAllWorkspaceBuckets(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
-      Duration.Inf
+                 Duration.Inf
     )
     Await.result(
       ownerService.getBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
       Duration.Inf
     )
 
-    when(nonOwnerService.samDAO.userHasAction(SamResourceTypeNames.workspace, minimalTestData.workspace.workspaceId, SamWorkspaceActions.own, nonOwnerService.ctx)).thenReturn(Future.successful(true))
+    when(
+      nonOwnerService.samDAO.userHasAction(SamResourceTypeNames.workspace,
+                                           minimalTestData.workspace.workspaceId,
+                                           SamWorkspaceActions.own,
+                                           nonOwnerService.ctx
+      )
+    ).thenReturn(Future.successful(true))
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
         nonOwnerService.getBucketMigrationProgressForWorkspaces(Seq(minimalTestData.wsName, minimalTestData.wsName2)),
@@ -1224,7 +1234,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
             Seq(minimalTestData.workspace.toWorkspaceName, minimalTestData.workspace2.toWorkspaceName)
           )
         } yield {
-          progressMap.keys should contain theSameElementsAs Seq(minimalTestData.workspace.toWorkspaceName.toString, minimalTestData.workspace2.toWorkspaceName.toString)
+          progressMap.keys should contain theSameElementsAs Seq(minimalTestData.workspace.toWorkspaceName.toString,
+                                                                minimalTestData.workspace2.toWorkspaceName.toString
+          )
           verifyBucketMigrationProgress(progressMap(minimalTestData.workspace.toWorkspaceName.toString))
           progressMap(minimalTestData.workspace2.toWorkspaceName.toString) shouldBe None
         },
