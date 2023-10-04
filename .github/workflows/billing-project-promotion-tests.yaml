@@ -1,7 +1,10 @@
 name: 'Billing Project Promotion Tests - WIP'
 description: "Prototype billing project testing flow that fires on Rawls promotion"
 
-on: workflow_dispatch
+on:
+  push:
+    branches:
+      - "arh-wor-1222-bp-test-action"
 
 jobs:
   create-billing-project:
