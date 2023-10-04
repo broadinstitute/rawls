@@ -3,7 +3,7 @@ name: rawls-build-tag-publish-and-run-tests
 on:
   pull_request:
     branches:
-      - iv-migrate-e2e-to-workflow-dispatch-v4
+      - develop
     paths-ignore: ['**.md']
   push:
     branches:
