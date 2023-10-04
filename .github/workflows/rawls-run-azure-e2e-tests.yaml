@@ -77,7 +77,8 @@ jobs:
 
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
-    needs: [init-github-context]
+    needs:
+      - init-github-context
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -122,7 +123,8 @@ jobs:
 
   create-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [rawls-build-tag-publish-job]
+    needs:
+      - rawls-build-tag-publish-job
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -165,7 +167,10 @@ jobs:
   #   https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
   attach-billing-project-to-landing-zone-workflow:
     runs-on: ubuntu-latest
-    needs: [init-github-context, create-bee-workflow, params-gen]
+    needs:
+      - init-github-context
+      - create-bee-workflow
+      - params-gen
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -185,7 +190,11 @@ jobs:
 
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
-    needs: [init-github-context, create-bee-workflow, params-gen, attach-billing-project-to-landing-zone-workflow]
+    needs:
+      - init-github-context
+      - create-bee-workflow
+      - params-gen
+      - attach-billing-project-to-landing-zone-workflow
     steps:
       - name: Configure the user subjects for the test
         run: |
@@ -217,7 +226,10 @@ jobs:
 
   delete-billing-project-v2-from-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [init-github-context, params-gen, rawls-swat-e2e-test-job]
+    needs:
+      - init-github-context
+      - params-gen
+      - rawls-swat-e2e-test-job
     if: always()
     steps:
       - name: dispatch to terra-github-workflows
@@ -239,7 +251,10 @@ jobs:
 
   destroy-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [init-github-context, rawls-swat-e2e-test-job, delete-billing-project-v2-from-bee-workflow]
+    needs:
+      - init-github-context
+      - rawls-swat-e2e-test-job
+      - delete-billing-project-v2-from-bee-workflow
     if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
     steps:
       - name: dispatch to terra-github-workflows
@@ -258,8 +273,13 @@ jobs:
 
   notify-slack-on-failure:
     runs-on: ubuntu-latest
-    needs: [init-github-context, rawls-build-tag-publish-job, create-bee-workflow, rawls-swat-e2e-test-job, destroy-bee-workflow] # Want to notify regardless of which step fails
-    if: ${{ failure() }}
+    needs:
+      - init-github-context
+      - rawls-build-tag-publish-job
+      - create-bee-workflow
+      - rawls-swat-e2e-test-job
+      - destroy-bee-workflow
+    if: ${{ failure() }} # Want to notify regardless of which step fails
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
