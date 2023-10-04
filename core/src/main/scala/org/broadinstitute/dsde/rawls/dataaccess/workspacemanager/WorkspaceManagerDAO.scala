@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
 
@@ -12,7 +13,7 @@ trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
 
   def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
-  def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace
+  def createWorkspace(workspaceId: UUID, workspaceType: WorkspaceType, ctx: RawlsRequestContext): CreatedWorkspace
   def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                       displayName: String,
                                       spendProfileId: String,

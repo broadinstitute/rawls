@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -19,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -55,7 +55,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       val wsid = workspaceContext.workspaceIdAsUUID // to avoid UUID parsing multiple times
       // create the stub workspace in WSM if it does not already exist
       if (!workspaceStubExists(wsid, ctx)) {
-        workspaceManagerDAO.createWorkspace(wsid, ctx)
+        workspaceManagerDAO.createWorkspace(wsid, workspaceContext.workspaceType, ctx)
       }
       validateProtectedStatus(workspaceContext, snapshot)
       // create the requested snapshot reference
@@ -72,7 +72,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
 
   // Ideally this would rely on Terra Policy Service, but until TPS is enabled for GCP
   // We'll have to use this workaround for identifying protected status
-  def validateProtectedStatus(workspaceContext: Workspace, snapshot: NamedDataRepoSnapshot): Unit =
+  private def validateProtectedStatus(workspaceContext: Workspace, snapshot: NamedDataRepoSnapshot): Unit =
     // logically it might make more sense to check if the snapshot is protected before the workspace
     // but that is a more expensive check
     // check if workspace is protected
@@ -108,7 +108,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     }
 
   // AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
-  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
+  private def massageSnapshots(references: ResourceList): SnapshotListResponse = {
     val snapshots = references.getResources.asScala.map { r =>
       val massaged = new DataRepoSnapshotResource
       massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
@@ -127,7 +127,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
       // to having no references, so return the empty list.
       case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 =>
-        new SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
+        SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
       // but if we hit a different error, it's a valid error; rethrow it
       case Failure(ex: bio.terra.workspace.client.ApiException) =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
