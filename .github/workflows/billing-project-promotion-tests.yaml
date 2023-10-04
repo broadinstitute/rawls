@@ -1,5 +1,4 @@
 name: 'Billing Project Promotion Tests - WIP'
-description: "Prototype billing project testing flow that fires on Rawls promotion"
 
 on:
   push:
