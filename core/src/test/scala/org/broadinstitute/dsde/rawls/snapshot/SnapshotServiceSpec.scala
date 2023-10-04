@@ -17,7 +17,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamResourceAction,
   SamResourceTypeNames,
-  SamUserStatusResponse
+  SamUserStatusResponse,
+  WorkspaceType
 }
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -168,6 +169,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // assert that the service called WSM's createWorkspace
       verify(mockWorkspaceManagerDAO, times(1)).createWorkspace(
         ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+        ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
         any[RawlsRequestContext]
       )
     }
@@ -210,6 +212,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         // assert that the service DID NOT call WSM's createWorkspace
         verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
           any[UUID],
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
           any[RawlsRequestContext]
         )
     }

@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import bio.terra.workspace.model.WsmPolicyInput
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -22,7 +21,6 @@ import spray.json._
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object Attributable {

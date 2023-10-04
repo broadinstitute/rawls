@@ -1,51 +1,58 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, Workspace, WorkspaceCloudPlatform}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  GoogleProjectId,
+  Workspace,
+  WorkspaceCloudPlatform
+}
 import org.joda.time.DateTime
 import org.scalatest.flatspec.AnyFlatSpec
-
-import scala.language.postfixOps
+import org.scalatest.matchers.must.Matchers.include
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import java.util.UUID
+import scala.language.postfixOps
 
 class AggregatedWorkspaceSpec extends AnyFlatSpec {
-  private val gcpWorkspace = Workspace(
-    "test-namespace",
-    "test-name",
-    "aWorkspaceId",
-    "aBucket",
-    Some("workflow-collection"),
-    new DateTime(),
-    new DateTime(),
-    "test",
-    Map.empty
+  private val rawlsWorkspace = Workspace(
+    namespace = "test-namespace",
+    name = "test-name",
+    workspaceId = "aWorkspaceId",
+    bucketName = "aBucket",
+    workflowCollectionName = Some("workflow-collection"),
+    createdDate = new DateTime(),
+    lastModified = new DateTime(),
+    createdBy = "test",
+    attributes = Map.empty
   )
 
-  private val azWorkspace = Workspace.buildReadyMcWorkspace(
-    "fake",
-    "fakews",
-    UUID.randomUUID.toString,
-    DateTime.now(),
-    DateTime.now(),
-    "fake",
-    Map.empty
+  private val mcWorkspace = Workspace.buildReadyMcWorkspace(
+    namespace = "fake",
+    name = "fakews",
+    workspaceId = UUID.randomUUID.toString,
+    createdDate = DateTime.now(),
+    lastModified = DateTime.now(),
+    createdBy = "fake",
+    attributes = Map.empty
   )
 
   behavior of "getCloudPlatform"
 
-  it should "return GCP for rawls workspaces" in {
-    val ws = AggregatedWorkspace(gcpWorkspace, None, List.empty)
+  it should "return GCP for a rawls workspace" in {
+    val ws =
+      AggregatedWorkspace(rawlsWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
 
     val cp = ws.getCloudPlatform
 
     cp shouldBe WorkspaceCloudPlatform.Gcp
   }
 
-  it should "return Azure for Azure workspaces" in {
-    val ws = AggregatedWorkspace(azWorkspace,
+  it should "return Azure for an Azure MC workspace" in {
+    val ws = AggregatedWorkspace(mcWorkspace,
+                                 googleProjectId = None,
                                  Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
-                                 List.empty
+                                 policies = List.empty
     )
 
     val cp = ws.getCloudPlatform
@@ -53,11 +60,37 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     cp shouldBe WorkspaceCloudPlatform.Azure
   }
 
-  it should "raise for MC workspaces that do not have an azure cloud context" in {
-    val ws = AggregatedWorkspace(azWorkspace, None, List.empty)
+  it should "return Gcp for a Gcp MC workspace" in {
+    val ws = AggregatedWorkspace(mcWorkspace,
+                                 Some(GoogleProjectId("project-id")),
+                                 azureCloudContext = None,
+                                 policies = List.empty
+    )
 
-    intercept[InvalidCloudContextException] {
+    val cp = ws.getCloudPlatform
+    cp shouldBe WorkspaceCloudPlatform.Gcp
+  }
+
+  it should "raise for an MC workspace that has cloud info for multiple clouds" in {
+    val ws = AggregatedWorkspace(
+      mcWorkspace,
+      Some(GoogleProjectId("project-id")),
+      Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
+      policies = List.empty
+    )
+
+    val thrown = intercept[InvalidCloudContextException] {
       ws.getCloudPlatform
     }
+    thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
+  }
+
+  it should "raise for an MC workspace that has no cloud info" in {
+    val ws = AggregatedWorkspace(mcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
+
+    val thrown = intercept[InvalidCloudContextException] {
+      ws.getCloudPlatform
+    }
+    thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
   }
 }
