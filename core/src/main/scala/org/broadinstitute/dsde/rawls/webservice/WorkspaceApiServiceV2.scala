@@ -27,25 +27,62 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
     requireUserInfo(Option(span)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(span))
       pathPrefix("workspaces" / "v2") {
-        path(Segment / Segment) { (workspaceNamespace, workspaceName) =>
+        path(Segment / Segment) { (namespace, name) =>
+          val workspaceName = WorkspaceName(namespace, name)
           delete {
             complete {
               val workspaceService = workspaceServiceConstructor(ctx)
               val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
               mcWorkspaceService
-                .deleteMultiCloudOrRawlsWorkspaceV2(WorkspaceName(workspaceNamespace, workspaceName), workspaceService)
+                .deleteMultiCloudOrRawlsWorkspaceV2(workspaceName, workspaceService)
                 .map(result => StatusCodes.Accepted -> JsObject(Map("result" -> result.toJson)))
 
             }
-          }
+          } ~
+            pathPrefix("bucketMigration") {
+              pathEndOrSingleSlash {
+                get {
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .getBucketMigrationAttemptsForWorkspace(workspaceName)
+                      .map(ms => StatusCodes.OK -> ms)
+                  }
+                } ~
+                  post {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .migrateWorkspaceBucket(workspaceName)
+                        .map(StatusCodes.Created -> _)
+                    }
+                  }
+              } ~
+                path("progress") {
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .getBucketMigrationProgressForWorkspace(workspaceName)
+                        .map(StatusCodes.OK -> _)
+                    }
+                  }
+                }
+            }
         } ~
           path("bucketMigration") {
-            get {
-              complete {
-                bucketMigrationServiceConstructor(ctx).getEligibleOrMigratingWorkspaces
-                  .map(StatusCodes.OK -> _)
+            post {
+              entity(as[List[WorkspaceName]]) { workspaceNames =>
+                complete {
+                  bucketMigrationServiceConstructor(ctx)
+                    .migrateAllWorkspaceBuckets(workspaceNames)
+                    .map(StatusCodes.Created -> _)
+                }
               }
-            }
+            } ~
+              get {
+                complete {
+                  bucketMigrationServiceConstructor(ctx).getEligibleOrMigratingWorkspaces
+                    .map(StatusCodes.OK -> _)
+                }
+              }
           }
       }
     }
