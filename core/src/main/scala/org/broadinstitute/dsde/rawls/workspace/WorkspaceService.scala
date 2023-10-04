@@ -5,7 +5,7 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
-import cats.{Applicative, ApplicativeThrow, MonadThrow}
+import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
@@ -314,7 +314,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val wsmContext = wsmService.getAggregatedWorkspace(workspaceContext, ctx)
+            val wsmContext = wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -992,7 +992,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     }
 
                   val wsmContext =
-                    new AggregatedWorkspaceService(workspaceManagerDAO).getAggregatedWorkspace(workspace, ctx)
+                    new AggregatedWorkspaceService(workspaceManagerDAO).optimizedFetchAggregatedWorkspace(workspace,
+                                                                                                          ctx
+                    )
 
                   // remove attributes if they were not requested
                   val workspaceDetails =
