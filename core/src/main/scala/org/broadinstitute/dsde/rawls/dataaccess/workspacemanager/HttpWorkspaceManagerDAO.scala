@@ -158,7 +158,11 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   ): DataRepoSnapshotResource = {
     val snapshot = new DataRepoSnapshotAttributes().instanceName(instanceName).snapshot(snapshotId.toString)
     val commonFields =
-      new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      new ReferenceResourceCommonFields()
+        .name(name.value)
+        // Note: that we're ignoring the passed in `cloningInstructions` is a known issue, addressed as part of
+        // https://github.com/broadinstitute/rawls/pull/2081
+        .cloningInstructions(CloningInstructionsEnum.NOTHING)
     description.map(d => commonFields.description(d.value))
     val request = new CreateDataRepoSnapshotReferenceRequestBody().snapshot(snapshot).metadata(commonFields)
     getReferencedGcpResourceApi(ctx).createDataRepoSnapshotReference(request, workspaceId)
