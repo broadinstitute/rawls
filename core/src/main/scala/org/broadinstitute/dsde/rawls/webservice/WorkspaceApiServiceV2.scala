@@ -69,20 +69,35 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                 }
             }
         } ~
-          path("bucketMigration") {
-            post {
-              entity(as[List[WorkspaceName]]) { workspaceNames =>
-                complete {
-                  bucketMigrationServiceConstructor(ctx)
-                    .migrateAllWorkspaceBuckets(workspaceNames)
-                    .map(StatusCodes.Created -> _)
+          pathPrefix("bucketMigration") {
+            pathEndOrSingleSlash {
+              post {
+                entity(as[List[WorkspaceName]]) { workspaceNames =>
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .migrateAllWorkspaceBuckets(workspaceNames)
+                      .map(StatusCodes.Created -> _)
+                  }
                 }
-              }
+              } ~
+                get {
+                  complete {
+                    bucketMigrationServiceConstructor(ctx).getEligibleOrMigratingWorkspaces
+                      .map(StatusCodes.OK -> _)
+                  }
+                }
             } ~
-              get {
-                complete {
-                  bucketMigrationServiceConstructor(ctx).getEligibleOrMigratingWorkspaces
-                    .map(StatusCodes.OK -> _)
+              pathPrefix("getProgress") {
+                pathEndOrSingleSlash {
+                  post {
+                    entity(as[List[WorkspaceName]]) { workspaceNames =>
+                      complete {
+                        bucketMigrationServiceConstructor(ctx)
+                          .getBucketMigrationProgressForWorkspaces(workspaceNames)
+                          .map(StatusCodes.OK -> _)
+                      }
+                    }
+                  }
                 }
               }
           }

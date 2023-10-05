@@ -155,6 +155,19 @@ trait AdminApiService extends UserInfoDirectives {
                 }
               }
             } ~
+              pathPrefix("getProgress") {
+                pathEndOrSingleSlash {
+                  post {
+                    entity(as[List[WorkspaceName]]) { workspaceNames =>
+                      complete {
+                        bucketMigrationServiceConstructor(ctx)
+                          .adminGetBucketMigrationProgressForWorkspaces(workspaceNames)
+                          .map(StatusCodes.OK -> _)
+                      }
+                    }
+                  }
+                }
+              } ~
               pathPrefix(Segment / Segment) { (namespace, name) =>
                 val workspaceName = WorkspaceName(namespace, name)
                 pathEndOrSingleSlash {
