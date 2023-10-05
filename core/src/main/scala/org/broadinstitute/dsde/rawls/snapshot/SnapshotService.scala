@@ -34,7 +34,14 @@ object SnapshotService {
                   terraDataRepoUrl: String,
                   dataRepoDAO: DataRepoDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SnapshotService =
-    new SnapshotService(ctx, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl, dataRepoDAO)
+    new SnapshotService(ctx,
+                        dataSource,
+                        samDAO,
+                        workspaceManagerDAO,
+                        terraDataRepoUrl,
+                        dataRepoDAO,
+                        new AggregatedWorkspaceService(workspaceManagerDAO)
+    )
 }
 
 class SnapshotService(protected val ctx: RawlsRequestContext,
@@ -42,7 +49,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                       val samDAO: SamDAO,
                       workspaceManagerDAO: WorkspaceManagerDAO,
                       terraDataRepoInstanceName: String,
-                      dataRepoDAO: DataRepoDAO
+                      dataRepoDAO: DataRepoDAO,
+                      aggregatedWorkspaceService: AggregatedWorkspaceService
 )(implicit protected val executionContext: ExecutionContext)
     extends FutureSupport
     with WorkspaceSupport
@@ -59,7 +67,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       val snapshot =
         new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
       val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
-      val aggregatedWorkspaceService = new AggregatedWorkspaceService(workspaceManagerDAO)
 
       // prevent snapshots from disallowed platforms
       snapshotValidator.validateSnapshotPlatform()
