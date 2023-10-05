@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   SnapshotListResponse,
   WorkspaceAttributeSpecs,
+  WorkspaceCloudPlatform,
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
@@ -73,7 +74,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
       } catch {
         case _: AggregateWorkspaceNotFoundException =>
-          // create the stub workspace in WSM if it does not already exist
+          // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
+          // and then create a stub workspace
+          snapshotValidator.validateWorkspacePlatformCompatibility(WorkspaceCloudPlatform.Gcp)
           workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
       }
 
