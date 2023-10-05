@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
 import bio.terra.datarepo.model.{CloudPlatform, DatasetSummaryModel, SnapshotModel}
+import org.broadinstitute.dsde.rawls.RawlsException
 
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
@@ -13,11 +14,21 @@ class WrappedSnapshot(snapshot: SnapshotModel) {
   private def snapshotDataset(): DatasetSummaryModel = getOnlyElement(snapshot.getSource.asScala.toList).getDataset
 
   private def getOnlyElement[A](list: List[A]): A = list match {
-    case head :: Nil => head
-    case _           => throw new NoSuchElementException(s"Expected exactly one element, but found ${list.size}")
+    case onlyElement :: Nil => onlyElement
+    case _                  => throw new NoSuchElementException(s"Expected exactly one element, but found ${list.size}")
   }
 
-  def isProtected: Boolean = snapshotDataset().isSecureMonitoringEnabled()
+  def isProtected: Boolean = Option(snapshotDataset().isSecureMonitoringEnabled)
+    .getOrElse(
+      throw new RawlsException(
+        s"Snapshot ${snapshot.getId}'s DatasetSummaryModel had null value for secure monitoring; cannot continue"
+      )
+    )
 
-  def platform: CloudPlatform = snapshotDataset().getCloudPlatform
+  def platform: CloudPlatform = Option(snapshotDataset().getCloudPlatform)
+    .getOrElse(
+      throw new RawlsException(
+        s"Snapshot ${snapshot.getId}'s DatasetSummaryModel had null value for cloud platform; cannot continue"
+      )
+    )
 }
