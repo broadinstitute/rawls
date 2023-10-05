@@ -8,7 +8,14 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService._
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
+  openTelemetryTags,
+  policyBindingsQuotaLimit,
+  removeFastPassGrants,
+  RemovalFailure,
+  SAdomain,
+  UserAndPetEmails
+}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   FastPassGrant,
