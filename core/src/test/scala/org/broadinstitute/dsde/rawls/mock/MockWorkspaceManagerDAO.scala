@@ -9,12 +9,7 @@ import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
-import org.broadinstitute.dsde.rawls.model.{
-  DataReferenceDescriptionField,
-  DataReferenceName,
-  ErrorReport,
-  RawlsRequestContext
-}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
