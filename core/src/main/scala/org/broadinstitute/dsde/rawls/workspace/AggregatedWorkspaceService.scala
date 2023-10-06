@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
+import bio.terra.workspace.model.{WorkspaceDescription, WorkspaceStageModel}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -29,6 +29,9 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   /**
    * Given a workspace, aggregates any available workspace information from workspace manager (WSM).
    *
+   * If the WSM workspace is a legacy Rawls workspace, it is assumed to be GCP, and the googleProjectId from the
+   * provided workspace will be echo'd back out.
+   *
    * @param workspace The source rawls workspace
    * @param ctx       Rawls request and tracing context.
    * @throws AggregateWorkspaceNotFoundException when the source workspace references a workspace manager
@@ -40,8 +43,14 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", ctx.tracingSpan.orNull)
     try {
       val wsmInfo = workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)
-      (Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext)) match {
-        case (None, Some(azureContext)) =>
+      (wsmInfo.getStage, Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext)) match {
+        case (WorkspaceStageModel.RAWLS_WORKSPACE, _, _) =>
+          AggregatedWorkspace(workspace,
+                              Some(workspace.googleProjectId),
+                              azureCloudContext = None,
+                              policies = List.empty
+          )
+        case (WorkspaceStageModel.MC_WORKSPACE, None, Some(azureContext)) =>
           AggregatedWorkspace(
             workspace,
             googleProjectId = None,
@@ -53,14 +62,14 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
             ),
             convertPolicies(wsmInfo)
           )
-        case (Some(gcpContext), None) =>
+        case (WorkspaceStageModel.MC_WORKSPACE, Some(gcpContext), None) =>
           AggregatedWorkspace(
             workspace,
             Some(GoogleProjectId(gcpContext.getProjectId)),
             azureCloudContext = None,
             convertPolicies(wsmInfo)
           )
-        case (_, _) =>
+        case (_, _, _) =>
           throw new InvalidCloudContextException(
             ErrorReport(
               StatusCodes.NotImplemented,
@@ -88,7 +97,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   def optimizedFetchAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace =
     workspace.workspaceType match {
       case WorkspaceType.RawlsWorkspace =>
-        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), None, List.empty)
+        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
       case WorkspaceType.McWorkspace =>
         fetchAggregatedWorkspace(workspace, ctx)
     }

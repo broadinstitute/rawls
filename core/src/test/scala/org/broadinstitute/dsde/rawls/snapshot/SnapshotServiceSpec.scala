@@ -67,7 +67,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
   private def defaultMockWorkspaceManagerDao() = {
     val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
     when(mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
-      .thenReturn(new WorkspaceDescription().gcpContext(new GcpContext().projectId("project-id")))
+      .thenReturn(new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE))
     when(
       mockWorkspaceManagerDAO.createDataRepoSnapshotReference(
         any[UUID],
@@ -487,6 +487,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // stub an Azure workspace
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       val azureWorkspaceDescription = new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
         .azureContext(
           new AzureContext()
             .tenantId(UUID.randomUUID().toString)
