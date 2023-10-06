@@ -28,7 +28,8 @@ class MockWorkspaceManagerDAO(
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
 
-  def mockGetWorkspaceResponse(workspaceId: UUID) = new WorkspaceDescription().id(workspaceId)
+  def mockGetWorkspaceResponse(workspaceId: UUID) =
+    new WorkspaceDescription().id(workspaceId).gcpContext(new GcpContext().projectId("some-project-id"))
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId)
   def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.getOrElse(
     (workspaceId, referenceId),
