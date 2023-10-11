@@ -31,7 +31,7 @@ import scala.language.postfixOps
 
 class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
 
-  private val rawlsWorkspace = Workspace(
+  private val legacyRawlsWorkspace = Workspace(
     namespace = "test-namespace",
     name = "test-name",
     workspaceId = UUID.randomUUID.toString,
@@ -43,7 +43,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     attributes = Map.empty
   )
 
-  private val mcWorkspace = Workspace.buildReadyMcWorkspace(
+  private val mcRawlsWorkspace = Workspace.buildReadyMcWorkspace(
     namespace = "fake",
     name = "fakews",
     workspaceId = UUID.randomUUID.toString,
@@ -71,6 +71,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     )
     when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
         .azureContext(
           new AzureContext()
             .tenantId(azContext.tenantId.toString)
@@ -81,10 +82,11 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     )
     val svc = new AggregatedWorkspaceService(wsmDao)
 
-    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(mcWorkspace, defaultRequestContext)
+    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.baseWorkspace shouldBe mcWorkspace
+    aggregatedWorkspace.baseWorkspace shouldBe mcRawlsWorkspace
     aggregatedWorkspace.azureCloudContext shouldBe Some(azContext)
+    aggregatedWorkspace.googleProjectId shouldBe None
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Azure
     aggregatedWorkspace.policies shouldBe policies.map(input =>
       WorkspacePolicy(
@@ -102,14 +104,19 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
   it should "combine WSM data with Rawls data for GCP MC workspaces" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext]))
-      .thenReturn(new WorkspaceDescription().gcpContext(new GcpContext().projectId("project-id")))
+      .thenReturn(
+        new WorkspaceDescription()
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .gcpContext(new GcpContext().projectId("project-id"))
+      )
     val svc = new AggregatedWorkspaceService(wsmDao)
 
-    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(mcWorkspace, defaultRequestContext)
+    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.baseWorkspace shouldBe mcWorkspace
-    aggregatedWorkspace.googleProjectId shouldBe Some(GoogleProjectId("project-id"))
+    aggregatedWorkspace.baseWorkspace shouldBe mcRawlsWorkspace
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
+    aggregatedWorkspace.azureCloudContext shouldBe None
+    aggregatedWorkspace.googleProjectId shouldBe Some(GoogleProjectId("project-id"))
   }
 
   it should "raise if the workspace is not found by WSM" in {
@@ -119,7 +126,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val svc = new AggregatedWorkspaceService(wsmDao)
 
     intercept[AggregateWorkspaceNotFoundException] {
-      svc.optimizedFetchAggregatedWorkspace(mcWorkspace, defaultRequestContext)
+      svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
     }
 
     verify(wsmDao).getWorkspace(any[UUID], any[RawlsRequestContext])
@@ -132,39 +139,56 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val svc = new AggregatedWorkspaceService(wsmDao)
 
     intercept[WorkspaceAggregationException] {
-      svc.optimizedFetchAggregatedWorkspace(mcWorkspace, defaultRequestContext)
+      svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
     }
 
     verify(wsmDao).getWorkspace(any[UUID], any[RawlsRequestContext])
   }
 
-  it should "raise if the WSM workspace is missing any form of cloud context" in {
+  it should "raise if the WSM workspace is MC and missing any form of cloud context" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
+      new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
     )
     val svc = new AggregatedWorkspaceService(wsmDao)
 
     val thrown = intercept[InvalidCloudContextException] {
-      svc.optimizedFetchAggregatedWorkspace(mcWorkspace, defaultRequestContext)
+      svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
     }
 
     thrown.getMessage should include("expected exactly one set of cloud metadata")
   }
 
-  it should "reach out to WSM for legacy GCP rawls workspaces" in {
+  it should "default to GCP if the WSM workspace is a legacy Rawls workspace" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().gcpContext(new GcpContext().projectId("project-id"))
+      new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE)
     )
     val svc = new AggregatedWorkspaceService(wsmDao)
 
-    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(rawlsWorkspace, defaultRequestContext)
+    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.baseWorkspace shouldBe rawlsWorkspace
-    aggregatedWorkspace.azureCloudContext shouldBe None
+    aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
-    verify(wsmDao).getWorkspace(ArgumentMatchers.eq(rawlsWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
+    aggregatedWorkspace.azureCloudContext shouldBe None
+    aggregatedWorkspace.googleProjectId shouldBe Some(legacyRawlsWorkspace.googleProjectId)
+  }
+
+  it should "reach out to WSM for legacy GCP Rawls workspaces" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+    when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+      new WorkspaceDescription()
+        .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+        .gcpContext(new GcpContext().projectId("project-id"))
+    )
+    val svc = new AggregatedWorkspaceService(wsmDao)
+
+    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
+
+    aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
+    aggregatedWorkspace.azureCloudContext shouldBe None
+    verify(wsmDao).getWorkspace(ArgumentMatchers.eq(legacyRawlsWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
   }
 
   behavior of "optimizedFetchAggregatedWorkspace"
@@ -172,15 +196,16 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
   it should "not reach out to WSM for legacy GCP Rawls workspaces" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().gcpContext(new GcpContext().projectId("project-id"))
+      new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE)
     )
     val svc = new AggregatedWorkspaceService(wsmDao)
 
-    val aggregatedWorkspace = svc.optimizedFetchAggregatedWorkspace(rawlsWorkspace, defaultRequestContext)
+    val aggregatedWorkspace = svc.optimizedFetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.baseWorkspace shouldBe rawlsWorkspace
-    aggregatedWorkspace.azureCloudContext shouldBe None
+    aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
+    aggregatedWorkspace.azureCloudContext shouldBe None
+    aggregatedWorkspace.googleProjectId shouldBe Some(legacyRawlsWorkspace.googleProjectId)
     verify(wsmDao, never()).getWorkspace(any[UUID], any[RawlsRequestContext])
   }
 }

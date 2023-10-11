@@ -6,8 +6,15 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WsmPolicyInput, WsmPolicyPair}
-import cats.implicits.{catsSyntaxOptionId}
+import bio.terra.workspace.model.{
+  AzureContext,
+  GcpContext,
+  WorkspaceDescription,
+  WorkspaceStageModel,
+  WsmPolicyInput,
+  WsmPolicyPair
+}
+import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -40,14 +47,9 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
   BigQueryTableName,
@@ -55,6 +57,7 @@ import org.broadinstitute.dsde.workbench.model.google.{
   GoogleProject,
   IamPermission
 }
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -73,11 +76,11 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Try
-import scala.collection.JavaConverters._
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class WorkspaceServiceSpec
@@ -1310,12 +1313,14 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().azureContext(
-        new AzureContext()
-          .tenantId("fake_tenant_id")
-          .subscriptionId("fake_sub_id")
-          .resourceGroupId("fake_mrg_id")
-      )
+      new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .azureContext(
+          new AzureContext()
+            .tenantId("fake_tenant_id")
+            .subscriptionId("fake_sub_id")
+            .resourceGroupId("fake_mrg_id")
+        )
     )
 
     val workspace = Await.result(
@@ -1347,12 +1352,14 @@ class WorkspaceServiceSpec
         Map.empty
       )
       when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-        new WorkspaceDescription().azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
+        new WorkspaceDescription()
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId("fake_tenant_id")
+              .subscriptionId("fake_sub_id")
+              .resourceGroupId("fake_mrg_id")
+          )
       )
       when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
         throw new ApiException("error")
@@ -1388,12 +1395,14 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().azureContext(
-        new AzureContext()
-          .tenantId("fake_tenant_id")
-          .subscriptionId("fake_sub_id")
-          .resourceGroupId("fake_mrg_id")
-      )
+      new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .azureContext(
+          new AzureContext()
+            .tenantId("fake_tenant_id")
+            .subscriptionId("fake_sub_id")
+            .resourceGroupId("fake_mrg_id")
+        )
     )
     when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
       throw new ApiException(404, "not found")
@@ -2957,6 +2966,7 @@ class WorkspaceServiceSpec
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
         .azureContext(
           new AzureContext()
             .tenantId(managedAppCoordinates.tenantId.toString)
@@ -3126,7 +3136,7 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription() // no azureContext, should be an error
+      new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE) // no azureContext, should be an error
     )
     val workspace = Await.result(
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
@@ -3194,15 +3204,17 @@ class WorkspaceServiceSpec
       // mock external calls
       when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
         .thenReturn(
-          new WorkspaceDescription().azureContext(
-            new AzureContext()
-              .tenantId(UUID.randomUUID.toString)
-              .subscriptionId(UUID.randomUUID.toString)
-              .resourceGroupId(UUID.randomUUID.toString)
-          )
+          new WorkspaceDescription()
+            .stage(WorkspaceStageModel.MC_WORKSPACE)
+            .azureContext(
+              new AzureContext()
+                .tenantId(UUID.randomUUID.toString)
+                .subscriptionId(UUID.randomUUID.toString)
+                .resourceGroupId(UUID.randomUUID.toString)
+            )
         )
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
-        new WorkspaceDescription().gcpContext(new GcpContext())
+        new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE).gcpContext(new GcpContext())
       )
       when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
@@ -3273,7 +3285,9 @@ class WorkspaceServiceSpec
     }
 
     when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
-      .thenReturn(new WorkspaceDescription()) // no azureContext, should not be returned
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
     when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
       new WorkspaceDescription().gcpContext(new GcpContext())
     )
