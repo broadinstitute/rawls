@@ -2,8 +2,10 @@
 <configuration>
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>test.log</file>
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <level>severity</level>
+            </fieldNames>
         </encoder>
     </appender>
 

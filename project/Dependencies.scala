@@ -69,6 +69,7 @@ object Dependencies {
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.46"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
+  val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder"   % "7.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.16" % "test"
@@ -215,6 +216,8 @@ object Dependencies {
     jodaTime,
     jodaConvert,
     scalaLogging,
+    logstashLogback,
+    logbackClassic,
     googleApiClient,
     scalaUri,
     workspaceManager,
@@ -235,6 +238,7 @@ object Dependencies {
     cats,
     mysqlConnector,
     liquibaseCore,
+    logstashLogback,
     logbackClassic,
     akkaActorTyped,
     akkaActorTestKitTyped,
