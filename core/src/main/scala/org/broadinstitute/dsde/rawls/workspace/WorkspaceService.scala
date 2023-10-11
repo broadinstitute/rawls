@@ -1,4 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
+//import net.logstash.logback.argument.StructuredArguments
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
@@ -11,7 +12,7 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -61,6 +62,7 @@ import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+
 
 /**
  * Created by dvoet on 4/27/15.
@@ -892,7 +894,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
+  private def dumpLogs(): Unit = {
+    val errorReport = new ErrorReport(source = "someservice",
+                                      message = "somemessage",
+                                      Some(StatusCodes.NotFound),
+                                      causes = List.empty,
+                                      stackTrace = List.empty,
+                                      exceptionClass = None
+    );
+    val rawlsExceptionWithErrorReport = new RawlsExceptionWithErrorReport(errorReport)
+
+
+
+    logger.info("Call failed", rawlsExceptionWithErrorReport)
+  }
+  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] = {
+    dumpLogs()
     for {
       workspacesForUser <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
       // Filter out non-UUID workspaceIds, which are possible in Sam but not valid in Rawls
@@ -910,6 +927,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         dataAccess.workspaceQuery.getTags(query, limit, Some(v2WorkspaceIdsForUser))
       }
     } yield result
+  }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
 
