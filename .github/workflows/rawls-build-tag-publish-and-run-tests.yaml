@@ -76,6 +76,21 @@ jobs:
           echo "$GITHUB_CONTEXT"
           echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
+  prepare-configs:
+    runs-on: ubuntu-latest
+    outputs:
+      log-results: ${{ steps.prepare-outputs.outputs.log-results }}
+      test-context: ${{ steps.prepare-outputs.outputs.test-context }}
+    steps:
+      - id: prepare-outputs
+        run: |-
+          echo 'log-results=true' >> $GITHUB_OUTPUT
+          if ${{ github.ref_name == 'develop' }}; then
+            echo 'test-context=dev-merge' >> $GITHUB_OUTPUT
+          else
+            echo 'test-context=pr-test' >> $GITHUB_OUTPUT
+          fi
+          
   create-bee-workflow:
     strategy:
       matrix:
