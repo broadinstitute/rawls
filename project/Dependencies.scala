@@ -81,12 +81,12 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.1.0"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "82d1288"
+  val workbenchLibsHash = "3d9bda9"
 
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.29-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.30-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.6-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.33-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.34-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.5-${workbenchLibsHash}"
   val workbenchOpenTelemetryV = s"0.7-$workbenchLibsHash"
 

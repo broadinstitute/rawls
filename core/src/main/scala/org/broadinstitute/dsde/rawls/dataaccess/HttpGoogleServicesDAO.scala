@@ -634,7 +634,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     val storageServiceResource = GoogleStorageService.fromCredentials(credentials)
     storageServiceResource
       .use { storageService =>
-        storageService.getBucket(googleProject, bucketName)
+        storageService.getBucket(googleProject, bucketName, warnOnError = true)
       }
       .map(_.isDefined)
       .unsafeToFuture()
