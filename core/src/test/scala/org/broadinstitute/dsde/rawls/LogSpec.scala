@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory
 import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
 
+// This spec is just asserting on the behavior of the logging libraries we use, but it is provided to lower the barrier
+// to safely make changes to logging configuration, encodings, appenders.
 class LogSpec extends AnyFreeSpec with Assertions with LazyLogging {
 
   // @param loggerName name of the logger to spy on, as specified in logback.xml
