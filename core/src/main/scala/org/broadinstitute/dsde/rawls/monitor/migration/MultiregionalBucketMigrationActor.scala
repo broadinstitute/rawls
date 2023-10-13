@@ -210,8 +210,10 @@ object MultiregionalBucketMigrationActor {
   val storageTransferJobs = MultiregionalStorageTransferJobs.storageTransferJobs
 
   final def restartMigration: MigrateAction[Unit] =
-    restartFailuresLike(MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure,
-                        MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+    restartFailuresLike(
+      MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure,
+      MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure,
+      MultiregionalBucketMigrationFailureModes.stsSANotFoundFailure
     ) |
       reissueFailedStsJobs
 
@@ -1295,8 +1297,10 @@ object MultiregionalBucketMigrationActor {
 
               case RetryKnownFailures =>
                 List(
-                  restartFailuresLike(MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure,
-                                      MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+                  restartFailuresLike(
+                    MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure,
+                    MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure,
+                    MultiregionalBucketMigrationFailureModes.stsSANotFoundFailure
                   ),
                   reissueFailedStsJobs
                 )
