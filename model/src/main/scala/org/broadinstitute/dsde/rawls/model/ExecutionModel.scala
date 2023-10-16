@@ -70,6 +70,7 @@ case class ExecutionServiceCallLogs(
   backendLogs: Option[Map[String, String]] = None
 )
 
+// https://cromwell.readthedocs.io/en/stable/wf_options/Google/
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
   google_project: String,
@@ -85,7 +86,10 @@ case class ExecutionServiceWorkflowOptions(
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty,
-  ignore_empty_outputs: Boolean = false
+  ignore_empty_outputs: Boolean = false,
+  monitoring_script: Option[String] = None,
+  monitoring_image: Option[String] = None,
+  monitoring_image_script: Option[String] = None
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
@@ -143,7 +147,10 @@ case class Submission(
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
   userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false
+  ignoreEmptyOutputs: Boolean = false,
+  monitoringScript: Option[String] = None,
+  monitoringImage: Option[String] = None,
+  monitoringImageScript: Option[String] = None
 )
 
 case class SubmissionListResponse(
@@ -414,7 +421,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat15(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat18(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
@@ -438,7 +445,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat18(Submission)
+  implicit val SubmissionFormat = jsonFormat21(Submission)
 
   implicit val SubmissionRetryFormat = jsonFormat1(SubmissionRetry)
 
