@@ -54,6 +54,48 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   )
   val testContext = RawlsRequestContext(userInfo)
 
+  behavior of "getBillingProfile"
+
+  it should "return the billing profile if present" in {
+    val profileId = UUID.randomUUID()
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val apiProvider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+    when(profileApi.getProfile(any())).thenReturn(new ProfileModel().id(profileId))
+    val billingProfileManagerDAO =
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+
+    val result = billingProfileManagerDAO.getBillingProfile(profileId, testContext)
+
+    result.get.getId shouldBe profileId
+  }
+
+  it should "return None if not present" in {
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val apiProvider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+    when(profileApi.getProfile(any())).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "not found"))
+    val billingProfileManagerDAO =
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+
+    val result = billingProfileManagerDAO.getBillingProfile(UUID.randomUUID(), testContext)
+
+    result shouldBe None
+  }
+
+  it should "throw an exception for other errors" in {
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val apiProvider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+    when(profileApi.getProfile(any())).thenThrow(new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
+    val billingProfileManagerDAO =
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+
+    intercept[BillingProfileNotFoundException] {
+      billingProfileManagerDAO.getBillingProfile(UUID.randomUUID(), testContext)
+    }
+  }
+
   behavior of "getAllBillingProfiles"
 
   it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {

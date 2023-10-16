@@ -21,6 +21,7 @@ import java.util.{Date, UUID}
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 case class BpmAzureReportErrorMessage(message: String, statusCode: Int)
 
@@ -77,6 +78,11 @@ class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExcepti
 
 class BpmAzureSpendReportApiException(val statusCode: Int, message: String, cause: Throwable = null)
     extends Exception(message, cause)
+
+class BillingProfileNotFoundException(billingProfileId: UUID, cause: Throwable)
+    extends RawlsExceptionWithErrorReport(
+      ErrorReport(StatusCodes.NotFound, s"Billing profile not found $billingProfileId", cause)
+    )
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
@@ -141,7 +147,12 @@ class BillingProfileManagerDAOImpl(
   }
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
-    Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
+    Try(Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))) match {
+      case Success(value) => value
+      case Failure(e: ApiException) if e.getCode == StatusCodes.NotFound.intValue =>
+        None
+      case Failure(e) => throw new BillingProfileNotFoundException(billingProfileId, e);
+    }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
     apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)
