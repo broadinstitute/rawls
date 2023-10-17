@@ -32,7 +32,10 @@ case class SubmissionRequest(
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
   userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false
+  ignoreEmptyOutputs: Boolean = false,
+  monitoringScript: Option[String] = None,
+  monitoringImage: Option[String] = None,
+  monitoringImageScript: Option[String] = None
 )
 
 // Cromwell's response to workflow submission
@@ -375,7 +378,10 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
           Option("userComment" -> obj.userComment.toJson),
-          Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson)
+          Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson),
+          Option("monitoringScript" -> obj.monitoringScript.toJson),
+          Option("monitoringImage" -> obj.monitoringImage.toJson),
+          Option("monitoringImageScript" -> obj.monitoringImageScript.toJson)
         ).flatten: _*
       )
 
@@ -399,7 +405,10 @@ trait ExecutionJsonSupport extends JsonSupport {
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
         userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
-        ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean])
+        ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean]),
+        monitoringScript = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
+        monitoringImage = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
+        monitoringImageScript = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }

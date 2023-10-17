@@ -531,7 +531,10 @@ trait SubmissionComponent {
           rootEntityType <- submissionRec.rootEntityType
         } yield ExternalEntityInfo(entityStoreId, rootEntityType),
         userComment = submissionRec.userComment,
-        ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs
+        ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
+        monitoringScript = submissionRec.monitoringScript,
+        monitoringImage = submissionRec.monitoringImage,
+        monitoringImageScript = submissionRec.monitoringImageScript
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,
