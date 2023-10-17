@@ -199,7 +199,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     override def getBucket(googleProject: GoogleProject,
                            bucketName: GcsBucketName,
                            bucketGetOptions: List[Storage.BucketGetOption],
-                           traceId: Option[TraceId]
+                           traceId: Option[TraceId],
+                           warnOnError: Boolean = false
     ): IO[Option[BucketInfo]] =
       IO.pure(BucketInfo.newBuilder(bucketName.value).setRequesterPays(true).build().some)
 
