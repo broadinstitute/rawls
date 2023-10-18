@@ -13,12 +13,12 @@ class WorkspaceRepositorySpec extends AnyFlatSpec with TestDriverComponent {
 
   behavior of "getWorkspace"
   def makeWorkspace(): Workspace = Workspace.buildReadyMcWorkspace("fake-ns",
-                                                      s"test-${UUID.randomUUID().toString}",
-                                                      UUID.randomUUID().toString,
-                                                      DateTime.now(),
-                                                      DateTime.now(),
-                                                      "fake@example.com",
-                                                      Map.empty
+                                                                   s"test-${UUID.randomUUID().toString}",
+                                                                   UUID.randomUUID().toString,
+                                                                   DateTime.now(),
+                                                                   DateTime.now(),
+                                                                   "fake@example.com",
+                                                                   Map.empty
   )
 
   it should "get the workspace if present" in {
@@ -50,6 +50,23 @@ class WorkspaceRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val readback = Await.result(repo.getWorkspace(ws.workspaceIdAsUUID), Duration.Inf)
 
     assertResult(readback.get.state)(WorkspaceState.Deleting)
+  }
+
+  behavior of "setFailedState"
+
+  it should "Update the workspace state and error message" in {
+    val repo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(repo.createWorkspace(ws), Duration.Inf)
+
+    Await.result(repo.setFailedState(ws.workspaceIdAsUUID, WorkspaceState.DeleteFailed, "reason workspace failed"),
+                 Duration.Inf
+    )
+
+    val readback = Await.result(repo.getWorkspace(ws.workspaceIdAsUUID), Duration.Inf)
+
+    assertResult(readback.get.state)(WorkspaceState.DeleteFailed)
+    assertResult(readback.get.errorMessage)(Some("reason workspace failed"))
   }
 
   behavior of "deleteWorkspaceRecord"

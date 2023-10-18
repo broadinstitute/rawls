@@ -388,6 +388,9 @@ trait WorkspaceComponent {
     def updateState(workspaceId: UUID, state: WorkspaceState): WriteAction[Int] =
       findByIdQuery(workspaceId).map(_.state).update(state.toString)
 
+    def updateStateWithErrorMessage(workspaceId: UUID, state: WorkspaceState, errorMessage: String): WriteAction[Int] =
+      findByIdQuery(workspaceId).map(ws => (ws.state, ws.errorMessage)).update(state.toString, errorMessage.some)
+
     def updateLastModified(workspaceId: UUID) = {
       val currentTime = new Timestamp(new Date().getTime)
       findByIdQuery(workspaceId).map(_.lastModified).update(currentTime)
