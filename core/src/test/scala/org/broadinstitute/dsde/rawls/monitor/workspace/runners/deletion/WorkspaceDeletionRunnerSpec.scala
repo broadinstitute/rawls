@@ -96,7 +96,11 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     whenReady(runner(monitorRecord.copy(userEmail = None)))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
-    verify(wsRepo).setFailedState(any(), any(), any())
+    verify(wsRepo).setFailedState(
+      monitorRecord.workspaceId.get,
+      WorkspaceState.DeleteFailed,
+      s"Job to monitor workspace deletion for workspace id = ${monitorRecord.workspaceId.get} created with id ${monitorRecord.jobControlId} but no user email set"
+    )
   }
 
   it should "throw an exception if called with a job type that is not WorkspaceDelete" in {
