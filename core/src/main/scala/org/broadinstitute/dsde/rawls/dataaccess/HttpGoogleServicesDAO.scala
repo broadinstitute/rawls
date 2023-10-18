@@ -161,6 +161,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
     // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
 
+    // it can also take some time for Google to come to a consensus about a bucket's existence when it is newly created.
+    // during this time, we may see intermittent 404s indicating that the bucket we just created doesn't exist. we need to
+    // retry these 404s in this case.
+
     // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
     // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
     googleStorageService
@@ -168,7 +172,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         bucketName,
         roleToIdentities.toMap,
         retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate,
-                                                                RetryPredicates.whenStatusCode(400)
+                                                                RetryPredicates.whenStatusCode(400),
+                                                                RetryPredicates.whenStatusCode(404)
         ),
         bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList
       )
