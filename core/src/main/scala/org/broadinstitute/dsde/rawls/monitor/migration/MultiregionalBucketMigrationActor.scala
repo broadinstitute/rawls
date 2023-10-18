@@ -800,6 +800,13 @@ object MultiregionalBucketMigrationActor {
             serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
             // STS requires the following to read from the origin bucket and delete objects after
             // transfer
+
+            retryConfig = RetryPredicates.retryAllConfig.copy(retryable =
+              RetryPredicates.combine(
+                Seq(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(404))
+              )
+            )
+
             _ <- storageService
               .setIamPolicy(
                 srcBucket,
@@ -808,7 +815,8 @@ object MultiregionalBucketMigrationActor {
                 ),
                 bucketSourceOptions =
                   if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
-                  else List.empty
+                  else List.empty,
+                retryConfig = retryConfig
               )
               .compile
               .drain
@@ -820,7 +828,8 @@ object MultiregionalBucketMigrationActor {
                 dstBucket,
                 Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
                     StorageRole.ObjectCreator -> serviceAccountList
-                )
+                ),
+                retryConfig = retryConfig
               )
               .compile
               .drain
