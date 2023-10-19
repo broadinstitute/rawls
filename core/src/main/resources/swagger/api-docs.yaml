@@ -5703,7 +5703,7 @@ components:
           format: date-time
         cloudPlatform:
           type: string
-          description: The cloud platform of the workspace
+          description: The cloud platform of the workspace. If the workspace is not in the Ready state, the cloud platform may be missing.
           enum:
             - GCP
             - AZURE

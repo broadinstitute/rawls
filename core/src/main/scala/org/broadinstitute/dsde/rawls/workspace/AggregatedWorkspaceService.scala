@@ -7,7 +7,16 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, GoogleProjectId, RawlsRequestContext, Workspace, WorkspacePolicy, WorkspaceState, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  ErrorReport,
+  GoogleProjectId,
+  RawlsRequestContext,
+  Workspace,
+  WorkspacePolicy,
+  WorkspaceState,
+  WorkspaceType
+}
 
 import java.util.UUID
 import scala.jdk.CollectionConverters._

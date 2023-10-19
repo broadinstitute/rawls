@@ -355,7 +355,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 traceWithParent("getUserComputePermissions", s1)(_ =>
                   getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
                                             accessLevel,
-                                            wsmContext.getCloudPlatformHandlingDeleting
+                                            wsmContext.getCloudPlatformHandlingNonReady
                   )
                     .map(Option(_))
                 )
@@ -429,7 +429,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
                                                            authDomain,
                                                            useAttributes,
-                                                           wsmContext.getCloudPlatformHandlingDeleting
+                                                           wsmContext.getCloudPlatformHandlingNonReady
                   ),
                   stats,
                   bucketDetails,

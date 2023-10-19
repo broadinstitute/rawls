@@ -45,27 +45,29 @@ case class AggregatedWorkspace(
     }
   }
 
-  def getCloudPlatformHandlingDeleting: Option[WorkspaceCloudPlatform] = {
+  def getCloudPlatformHandlingNonReady: Option[WorkspaceCloudPlatform] = {
     if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
       return Some(WorkspaceCloudPlatform.Gcp)
     }
 
-    def handleMissingCloudContext(): Option[WorkspaceCloudPlatform] =
-      (googleProjectId, azureCloudContext, baseWorkspace.state) match {
-        case (None, None, WorkspaceState.Deleting) => None
-        case (_, _, _) =>
-          throw new InvalidCloudContextException(
-            ErrorReport(
-              StatusCodes.NotImplemented,
-              s"Expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId} in state ${baseWorkspace.state}"
-            )
+    (googleProjectId, azureCloudContext, baseWorkspace.state) match {
+      case (Some(_), None, _) => Some(WorkspaceCloudPlatform.Gcp)
+      case (None, Some(_), _) => Some(WorkspaceCloudPlatform.Azure)
+      case (Some(_), Some(_), _) =>
+        throw new InvalidCloudContextException(
+          ErrorReport(
+            StatusCodes.NotImplemented,
+            s"Unexpected state, expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId} in state ${baseWorkspace.state}"
           )
-      }
-
-    (googleProjectId, azureCloudContext) match {
-      case (Some(_), None) => Some(WorkspaceCloudPlatform.Gcp)
-      case (None, Some(_)) => Some(WorkspaceCloudPlatform.Azure)
-      case (_, _)          => handleMissingCloudContext()
+        )
+      case (None, None, WorkspaceState.Ready) =>
+        throw new InvalidCloudContextException(
+          ErrorReport(
+            StatusCodes.NotImplemented,
+            s"Unexpected state, no cloud metadata for ready workspace ${baseWorkspace.workspaceId}"
+          )
+        )
+      case (None, None, _) => None // If we aren't in the Ready state, tolerate no cloud context
     }
   }
 }
