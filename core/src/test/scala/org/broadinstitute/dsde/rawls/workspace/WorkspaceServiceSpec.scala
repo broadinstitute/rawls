@@ -3052,9 +3052,6 @@ class WorkspaceServiceSpec
 
     val response = readWorkspace.convertTo[WorkspaceResponse]
 
-    // response.azureContext.get.tenantId.toString shouldEqual managedAppCoordinates.tenantId.toString
-    // response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
-    // response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
     response.workspace.state shouldBe WorkspaceState.Deleting
     response.workspace.cloudPlatform shouldBe None
   }

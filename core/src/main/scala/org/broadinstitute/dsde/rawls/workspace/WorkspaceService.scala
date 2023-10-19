@@ -314,8 +314,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val wsmContext =
-              wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx) // Do we need to protect here?
+            val wsmContext = wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
