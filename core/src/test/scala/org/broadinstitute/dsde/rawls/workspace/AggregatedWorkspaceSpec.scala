@@ -110,7 +110,11 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
 
   it should "return None for a non-ready MC workspace that has no cloud info" in {
     val ws =
-      AggregatedWorkspace(deleteFailedMcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
+      AggregatedWorkspace(deleteFailedMcWorkspace,
+                          googleProjectId = None,
+                          azureCloudContext = None,
+                          policies = List.empty
+      )
 
     val cp = ws.getCloudPlatform
     cp shouldBe None
