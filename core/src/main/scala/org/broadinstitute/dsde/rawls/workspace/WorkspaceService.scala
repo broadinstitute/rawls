@@ -314,7 +314,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val wsmContext = wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx)
+            val wsmContext =
+              wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx) // Do we need to protect here?
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -337,14 +338,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               // determine which functions to use for the various part of the response
               def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] =
                 if (options.contains("bucketOptions")) {
-                  wsmContext.azureCloudContext match {
+                  wsmContext.googleProjectId match {
                     case None =>
+                      noFuture
+                    case _ =>
                       traceWithParent("getBucketDetails", s1)(_ =>
                         gcsDAO
                           .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
                           .map(Option(_))
                       )
-                    case _ => noFuture
                   }
                 } else {
                   noFuture
@@ -353,7 +355,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 traceWithParent("getUserComputePermissions", s1)(_ =>
                   getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
                                             accessLevel,
-                                            Some(wsmContext.getCloudPlatform)
+                                            wsmContext.getCloudPlatformHandlingDeleting
                   )
                     .map(Option(_))
                 )
@@ -427,7 +429,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
                                                            authDomain,
                                                            useAttributes,
-                                                           Some(wsmContext.getCloudPlatform)
+                                                           wsmContext.getCloudPlatformHandlingDeleting
                   ),
                   stats,
                   bucketDetails,
@@ -1006,7 +1008,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         )
                       ),
                       attributesEnabled,
-                      Some(wsmContext.getCloudPlatform)
+                      Some(
+                        wsmContext.getCloudPlatform
+                      ) // catch below will filter out workspaces with missing cloud context
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {

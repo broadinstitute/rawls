@@ -39,6 +39,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
+import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -2999,6 +3000,63 @@ class WorkspaceServiceSpec
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
     response.workspace.state shouldBe WorkspaceState.Ready
+  }
+
+  it should "get the details of an Azure workspace that is deleting" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+
+    val azureWorkspace =
+      Workspace.buildMcWorkspace("test_namespace1",
+                                 "name",
+                                 workspaceId1,
+                                 new DateTime(),
+                                 new DateTime(),
+                                 "testUser1",
+                                 Map.empty,
+                                 WorkspaceState.Deleting
+      )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
+      } yield ()
+    }
+
+    when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
+
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    val readWorkspace = Await.result(services.workspaceService.getWorkspace(
+                                       WorkspaceName(azureWorkspace.namespace, azureWorkspace.name),
+                                       WorkspaceFieldSpecs()
+                                     ),
+                                     Duration.Inf
+    )
+
+    val response = readWorkspace.convertTo[WorkspaceResponse]
+
+    // response.azureContext.get.tenantId.toString shouldEqual managedAppCoordinates.tenantId.toString
+    // response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
+    // response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
+    response.workspace.state shouldBe WorkspaceState.Deleting
+    response.workspace.cloudPlatform shouldBe None
   }
 
   it should "return the policies of an Azure workspace" in withTestDataServices { services =>

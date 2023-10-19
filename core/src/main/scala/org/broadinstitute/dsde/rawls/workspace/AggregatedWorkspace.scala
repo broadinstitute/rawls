@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceCloudPlatform,
   WorkspacePolicy,
+  WorkspaceState,
   WorkspaceType
 }
 
@@ -41,6 +42,30 @@ case class AggregatedWorkspace(
             s"Unexpected state, expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId}"
           )
         )
+    }
+  }
+
+  def getCloudPlatformHandlingDeleting: Option[WorkspaceCloudPlatform] = {
+    if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
+      return Some(WorkspaceCloudPlatform.Gcp)
+    }
+
+    def handleMissingCloudContext(): Option[WorkspaceCloudPlatform] =
+      (googleProjectId, azureCloudContext, baseWorkspace.state) match {
+        case (None, None, WorkspaceState.Deleting) => None
+        case (_, _, _) =>
+          throw new InvalidCloudContextException(
+            ErrorReport(
+              StatusCodes.NotImplemented,
+              s"Expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId} in state ${baseWorkspace.state}"
+            )
+          )
+      }
+
+    (googleProjectId, azureCloudContext) match {
+      case (Some(_), None) => Some(WorkspaceCloudPlatform.Gcp)
+      case (None, Some(_)) => Some(WorkspaceCloudPlatform.Azure)
+      case (_, _)          => handleMissingCloudContext()
     }
   }
 }
