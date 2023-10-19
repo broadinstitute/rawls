@@ -44,7 +44,7 @@ class SnapshotReferenceCreationValidator(val workspaceContext: Workspace, val sn
       case _ =>
         throw new PlatformBoundaryException(
           "Snapshots by reference are not supported across the given cloud boundaries (" +
-            s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform})."
+            s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform.get})."
         )
     }
 
