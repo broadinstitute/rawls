@@ -39,7 +39,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     attributes = Map.empty
   )
 
-  private val deletingMcWorkspace = buildMcWorkspace(
+  private val deleteFailedMcWorkspace = buildMcWorkspace(
     "namespace",
     "name",
     workspaceId = UUID.randomUUID.toString,
@@ -47,7 +47,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     lastModified = DateTime.now(),
     createdBy = "fake",
     attributes = Map.empty,
-    WorkspaceState.Deleting
+    WorkspaceState.DeleteFailed
   )
 
   behavior of "getCloudPlatform"
@@ -86,7 +86,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
 
   it should "raise for an MC workspace that has cloud info for multiple clouds" in {
     val ws = AggregatedWorkspace(
-      deletingMcWorkspace,
+      deleteFailedMcWorkspace,
       Some(GoogleProjectId("project-id")),
       Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
       policies = List.empty
@@ -110,7 +110,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
 
   it should "return None for a non-ready MC workspace that has no cloud info" in {
     val ws =
-      AggregatedWorkspace(deletingMcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
+      AggregatedWorkspace(deleteFailedMcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
 
     val cp = ws.getCloudPlatform
     cp shouldBe None
