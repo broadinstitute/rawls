@@ -29,7 +29,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     attributes = Map.empty
   )
 
-  private val mcWorkspace = Workspace.buildReadyMcWorkspace(
+  private val readyMcWorkspace = Workspace.buildReadyMcWorkspace(
     namespace = "fake",
     name = "fakews",
     workspaceId = UUID.randomUUID.toString,
@@ -39,64 +39,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     attributes = Map.empty
   )
 
-  behavior of "getCloudPlatform"
-
-  it should "return GCP for a rawls workspace" in {
-    val ws =
-      AggregatedWorkspace(rawlsWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
-
-    val cp = ws.getCloudPlatform
-
-    cp shouldBe WorkspaceCloudPlatform.Gcp
-  }
-
-  it should "return Azure for an Azure MC workspace" in {
-    val ws = AggregatedWorkspace(mcWorkspace,
-                                 googleProjectId = None,
-                                 Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
-                                 policies = List.empty
-    )
-
-    val cp = ws.getCloudPlatform
-
-    cp shouldBe WorkspaceCloudPlatform.Azure
-  }
-
-  it should "return Gcp for a Gcp MC workspace" in {
-    val ws = AggregatedWorkspace(mcWorkspace,
-                                 Some(GoogleProjectId("project-id")),
-                                 azureCloudContext = None,
-                                 policies = List.empty
-    )
-
-    val cp = ws.getCloudPlatform
-    cp shouldBe WorkspaceCloudPlatform.Gcp
-  }
-
-  it should "raise for an MC workspace that has cloud info for multiple clouds" in {
-    val ws = AggregatedWorkspace(
-      mcWorkspace,
-      Some(GoogleProjectId("project-id")),
-      Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
-      policies = List.empty
-    )
-
-    val thrown = intercept[InvalidCloudContextException] {
-      ws.getCloudPlatform
-    }
-    thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
-  }
-
-  it should "raise for an MC workspace that has no cloud info" in {
-    val ws = AggregatedWorkspace(mcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
-
-    val thrown = intercept[InvalidCloudContextException] {
-      ws.getCloudPlatform
-    }
-    thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
-  }
-
-  private val deletingWs = buildMcWorkspace(
+  private val deletingMcWorkspace = buildMcWorkspace(
     "namespace",
     "name",
     workspaceId = UUID.randomUUID.toString,
@@ -107,67 +50,69 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     WorkspaceState.Deleting
   )
 
-  behavior of "getCloudPlatformHandlingNonReady"
+  behavior of "getCloudPlatform"
 
   it should "return GCP for a rawls workspace" in {
     val ws =
       AggregatedWorkspace(rawlsWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
 
-    val cp = ws.getCloudPlatformHandlingNonReady
+    val cp = ws.getCloudPlatform
 
     cp shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
   it should "return Azure for an Azure MC workspace" in {
-    val ws = AggregatedWorkspace(mcWorkspace,
+    val ws = AggregatedWorkspace(readyMcWorkspace,
                                  googleProjectId = None,
                                  Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
                                  policies = List.empty
     )
 
-    val cp = ws.getCloudPlatformHandlingNonReady
+    val cp = ws.getCloudPlatform
 
     cp shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
 
   it should "return Gcp for a Gcp MC workspace" in {
-    val ws = AggregatedWorkspace(mcWorkspace,
+    val ws = AggregatedWorkspace(readyMcWorkspace,
                                  Some(GoogleProjectId("project-id")),
                                  azureCloudContext = None,
                                  policies = List.empty
     )
 
-    val cp = ws.getCloudPlatformHandlingNonReady
+    val cp = ws.getCloudPlatform
     cp shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
   it should "raise for an MC workspace that has cloud info for multiple clouds" in {
     val ws = AggregatedWorkspace(
-      deletingWs,
+      deletingMcWorkspace,
       Some(GoogleProjectId("project-id")),
       Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
       policies = List.empty
     )
 
     val thrown = intercept[InvalidCloudContextException] {
-      ws.getCloudPlatformHandlingNonReady
+      ws.getCloudPlatform
     }
     thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
   }
 
   it should "raise for a ready MC workspace that has no cloud info" in {
-    val ws = AggregatedWorkspace(mcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
+    val ws =
+      AggregatedWorkspace(readyMcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
 
     val thrown = intercept[InvalidCloudContextException] {
-      ws.getCloudPlatformHandlingNonReady
+      ws.getCloudPlatform
     }
     thrown.getMessage should include("no cloud metadata for ready workspace")
   }
 
   it should "return None for a non-ready MC workspace that has no cloud info" in {
-    val ws = AggregatedWorkspace(deletingWs, googleProjectId = None, azureCloudContext = None, policies = List.empty)
+    val ws =
+      AggregatedWorkspace(deletingMcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
 
-    val cp = ws.getCloudPlatformHandlingNonReady
+    val cp = ws.getCloudPlatform
     cp shouldBe None
   }
 }

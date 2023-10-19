@@ -355,7 +355,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 traceWithParent("getUserComputePermissions", s1)(_ =>
                   getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
                                             accessLevel,
-                                            wsmContext.getCloudPlatformHandlingNonReady
+                                            wsmContext.getCloudPlatform
                   )
                     .map(Option(_))
                 )
@@ -429,7 +429,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
                                                            authDomain,
                                                            useAttributes,
-                                                           wsmContext.getCloudPlatformHandlingNonReady
+                                                           wsmContext.getCloudPlatform
                   ),
                   stats,
                   bucketDetails,
@@ -1008,9 +1008,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         )
                       ),
                       attributesEnabled,
-                      Some(
-                        wsmContext.getCloudPlatform
-                      ) // catch below will filter out workspaces with missing cloud context
+                      wsmContext.getCloudPlatform
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -1035,6 +1033,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
                     )
                     None
+                  // This catches the case of a MC workspace with no cloud context, filtering out such workspaces
                   case ex: WorkspaceAggregationException =>
                     logger.error(ex.getMessage)
                     None

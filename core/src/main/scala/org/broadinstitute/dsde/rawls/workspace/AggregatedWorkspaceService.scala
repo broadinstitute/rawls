@@ -70,19 +70,27 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
             azureCloudContext = None,
             convertPolicies(wsmInfo)
           )
-        case (WorkspaceStageModel.MC_WORKSPACE, None, None, WorkspaceState.Deleting) =>
-          AggregatedWorkspace(
-            workspace,
-            googleProjectId = None,
-            azureCloudContext = None,
-            convertPolicies(wsmInfo)
-          )
-        case (_, _, _, _) =>
+        case (WorkspaceStageModel.MC_WORKSPACE, Some(_), Some(_), _) =>
           throw new InvalidCloudContextException(
             ErrorReport(
               StatusCodes.NotImplemented,
               s"Unexpected state, expected exactly one set of cloud metadata for workspace ${workspace.workspaceId}"
             )
+          )
+        case (WorkspaceStageModel.MC_WORKSPACE, None, None, WorkspaceState.Ready) =>
+          throw new InvalidCloudContextException(
+            ErrorReport(
+              StatusCodes.NotImplemented,
+              s"Unexpected state, no cloud metadata for ready workspace ${workspace.workspaceId}"
+            )
+          )
+        case (WorkspaceStageModel.MC_WORKSPACE, None, None, _) =>
+          // Tolerate no cloud context for a workspace that is not ready.
+          AggregatedWorkspace(
+            workspace,
+            googleProjectId = None,
+            azureCloudContext = None,
+            convertPolicies(wsmInfo)
           )
       }
     } catch {

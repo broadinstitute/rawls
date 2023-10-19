@@ -28,24 +28,7 @@ case class AggregatedWorkspace(
   policies: List[WorkspacePolicy]
 ) {
 
-  def getCloudPlatform: WorkspaceCloudPlatform = {
-    if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
-      return WorkspaceCloudPlatform.Gcp
-    }
-    (googleProjectId, azureCloudContext) match {
-      case (Some(_), None) => WorkspaceCloudPlatform.Gcp
-      case (None, Some(_)) => WorkspaceCloudPlatform.Azure
-      case (_, _) =>
-        throw new InvalidCloudContextException(
-          ErrorReport(
-            StatusCodes.NotImplemented,
-            s"Unexpected state, expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId}"
-          )
-        )
-    }
-  }
-
-  def getCloudPlatformHandlingNonReady: Option[WorkspaceCloudPlatform] = {
+  def getCloudPlatform: Option[WorkspaceCloudPlatform] = {
     if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
       return Some(WorkspaceCloudPlatform.Gcp)
     }
