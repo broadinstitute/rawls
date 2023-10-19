@@ -1015,15 +1015,21 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   } else {
                     None
                   }
-                  Option(
-                    WorkspaceListResponse(
-                      accessLevel,
-                      workspaceDetails,
-                      submissionStats,
-                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
-                      Some(wsmContext.policies)
-                    )
-                  )
+                  // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
+                  // cloud context will throw a WorkspaceAggregationException, which is handled below)
+                  wsmContext.getCloudPlatform match {
+                    case None => None
+                    case _ =>
+                      Option(
+                        WorkspaceListResponse(
+                          accessLevel,
+                          workspaceDetails,
+                          submissionStats,
+                          workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
+                          Some(wsmContext.policies)
+                        )
+                      )
+                  }
                 } catch {
                   // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
                   // be reachable when running against the dev environment.
@@ -1032,7 +1038,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
                     )
                     None
-                  // This catches the case of a MC workspace with no cloud context, filtering out such workspaces
+                  // This catches the case of a Ready MC workspace with no cloud context, filtering out such workspaces.
                   case ex: WorkspaceAggregationException =>
                     logger.error(ex.getMessage)
                     None
