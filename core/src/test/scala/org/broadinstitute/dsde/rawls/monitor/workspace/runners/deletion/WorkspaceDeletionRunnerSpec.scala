@@ -81,7 +81,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   it should "return a completed status if the user email is None" in {
     val wsRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(wsRepo.getWorkspace(any[UUID])).thenAnswer(_ => Future(Some(azureWorkspace)))
-    when(wsRepo.updateState(any[UUID], any[WorkspaceState])).thenAnswer(_ => Future.successful(1))
+    when(wsRepo.setFailedState(any[UUID], any[WorkspaceState], any[String])).thenAnswer(_ => Future.successful(1))
 
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
@@ -95,6 +95,11 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
 
     whenReady(runner(monitorRecord.copy(userEmail = None)))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
+    )
+    verify(wsRepo).setFailedState(
+      monitorRecord.workspaceId.get,
+      WorkspaceState.DeleteFailed,
+      s"Job to monitor workspace deletion for workspace id = ${monitorRecord.workspaceId.get} created with id ${monitorRecord.jobControlId} but no user email set"
     )
   }
 
@@ -404,7 +409,9 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     val workspaceRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepo.getWorkspace(ArgumentMatchers.eq(monitorRecord.workspaceId.get)))
       .thenAnswer(_ => Future.successful(Some(azureWorkspace)))
-    when(workspaceRepo.updateState(ArgumentMatchers.eq(monitorRecord.workspaceId.get), any[WorkspaceState]))
+    when(
+      workspaceRepo.setFailedState(ArgumentMatchers.eq(monitorRecord.workspaceId.get), any[WorkspaceState], any[String])
+    )
       .thenAnswer(_ => Future.successful(1))
 
     val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
@@ -431,9 +438,13 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       .when(runner)
       .getUserCtx(anyString())(ArgumentMatchers.any())
 
-    whenReady(runner(monitorRecord))(_ shouldBe Complete)
-    verify(workspaceRepo).updateState(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
-                                      ArgumentMatchers.eq(WorkspaceState.DeleteFailed)
+    whenReady(runner(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll)))(_ shouldBe Complete)
+    verify(workspaceRepo).setFailedState(
+      ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+      ArgumentMatchers.eq(WorkspaceState.DeleteFailed),
+      ArgumentMatchers.eq(
+        s"Workspace deletion failed when deleting leo apps [jobControlId=${monitorRecord.jobControlId}]"
+      )
     )
   }
 
@@ -441,7 +452,9 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     val workspaceRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepo.getWorkspace(ArgumentMatchers.eq(monitorRecord.workspaceId.get)))
       .thenAnswer(_ => Future.successful(Some(azureWorkspace)))
-    when(workspaceRepo.updateState(ArgumentMatchers.eq(monitorRecord.workspaceId.get), any[WorkspaceState]))
+    when(
+      workspaceRepo.setFailedState(ArgumentMatchers.eq(monitorRecord.workspaceId.get), any[WorkspaceState], any[String])
+    )
       .thenAnswer(_ => Future.successful(1))
 
     val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
@@ -469,8 +482,12 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       .getUserCtx(anyString())(ArgumentMatchers.any())
 
     whenReady(runner(job))(_ shouldBe Complete)
-    verify(workspaceRepo).updateState(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
-                                      ArgumentMatchers.eq(WorkspaceState.DeleteFailed)
+    verify(workspaceRepo).setFailedState(
+      ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+      ArgumentMatchers.eq(WorkspaceState.DeleteFailed),
+      ArgumentMatchers.eq(
+        s"Timed out while deleting workspace [jobType=${job.jobType}, jobControlId=${job.jobControlId}]"
+      )
     )
   }
 }
