@@ -4134,7 +4134,7 @@ paths:
       tags:
         - workspaces_v2
       summary: Delete workspace
-      description: Starts a job to delete a workspace and all of its contents. Note that this is an in-progress API and currently unsupported.
+      description: Starts a job to delete a workspace and all of its contents.
       operationId: deleteWorkspaceV2
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -5703,7 +5703,7 @@ components:
           format: date-time
         cloudPlatform:
           type: string
-          description: The cloud platform of the workspace
+          description: The cloud platform of the workspace. If the workspace is not in the Ready state, the cloud platform may be missing.
           enum:
             - GCP
             - AZURE

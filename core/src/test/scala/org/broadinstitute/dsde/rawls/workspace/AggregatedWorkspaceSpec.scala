@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   GoogleProjectId,
   Workspace,
-  WorkspaceCloudPlatform
+  WorkspaceCloudPlatform,
+  WorkspaceState
 }
 import org.joda.time.DateTime
 import org.scalatest.flatspec.AnyFlatSpec
@@ -27,7 +29,7 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     attributes = Map.empty
   )
 
-  private val mcWorkspace = Workspace.buildReadyMcWorkspace(
+  private val readyMcWorkspace = Workspace.buildReadyMcWorkspace(
     namespace = "fake",
     name = "fakews",
     workspaceId = UUID.randomUUID.toString,
@@ -35,6 +37,17 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     lastModified = DateTime.now(),
     createdBy = "fake",
     attributes = Map.empty
+  )
+
+  private val deleteFailedMcWorkspace = buildMcWorkspace(
+    "namespace",
+    "name",
+    workspaceId = UUID.randomUUID.toString,
+    createdDate = DateTime.now(),
+    lastModified = DateTime.now(),
+    createdBy = "fake",
+    attributes = Map.empty,
+    WorkspaceState.DeleteFailed
   )
 
   behavior of "getCloudPlatform"
@@ -45,11 +58,11 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
 
     val cp = ws.getCloudPlatform
 
-    cp shouldBe WorkspaceCloudPlatform.Gcp
+    cp shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
   it should "return Azure for an Azure MC workspace" in {
-    val ws = AggregatedWorkspace(mcWorkspace,
+    val ws = AggregatedWorkspace(readyMcWorkspace,
                                  googleProjectId = None,
                                  Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
                                  policies = List.empty
@@ -57,23 +70,23 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
 
     val cp = ws.getCloudPlatform
 
-    cp shouldBe WorkspaceCloudPlatform.Azure
+    cp shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
 
   it should "return Gcp for a Gcp MC workspace" in {
-    val ws = AggregatedWorkspace(mcWorkspace,
+    val ws = AggregatedWorkspace(readyMcWorkspace,
                                  Some(GoogleProjectId("project-id")),
                                  azureCloudContext = None,
                                  policies = List.empty
     )
 
     val cp = ws.getCloudPlatform
-    cp shouldBe WorkspaceCloudPlatform.Gcp
+    cp shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
   it should "raise for an MC workspace that has cloud info for multiple clouds" in {
     val ws = AggregatedWorkspace(
-      mcWorkspace,
+      deleteFailedMcWorkspace,
       Some(GoogleProjectId("project-id")),
       Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
       policies = List.empty
@@ -85,12 +98,25 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
   }
 
-  it should "raise for an MC workspace that has no cloud info" in {
-    val ws = AggregatedWorkspace(mcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
+  it should "raise for a ready MC workspace that has no cloud info" in {
+    val ws =
+      AggregatedWorkspace(readyMcWorkspace, googleProjectId = None, azureCloudContext = None, policies = List.empty)
 
     val thrown = intercept[InvalidCloudContextException] {
       ws.getCloudPlatform
     }
-    thrown.getMessage should include("expected exactly one set of cloud metadata for workspace")
+    thrown.getMessage should include("no cloud metadata for ready workspace")
+  }
+
+  it should "return None for a non-ready MC workspace that has no cloud info" in {
+    val ws =
+      AggregatedWorkspace(deleteFailedMcWorkspace,
+                          googleProjectId = None,
+                          azureCloudContext = None,
+                          policies = List.empty
+      )
+
+    val cp = ws.getCloudPlatform
+    cp shouldBe None
   }
 }

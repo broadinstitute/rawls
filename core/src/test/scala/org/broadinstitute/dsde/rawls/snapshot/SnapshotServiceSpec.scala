@@ -542,6 +542,59 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       )
     }
 
+    "not create a snapshot reference of a GCP snapshot in an Azure workspace with no cloud context" in withDefaultTestDatabase {
+      // stub an Azure workspace
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      val azureWorkspaceDescription = new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .policies(
+          Seq(
+            new WsmPolicyInput()
+              .name("fakepolicy")
+              .namespace("fakens")
+              .addAdditionalDataItem(new WsmPolicyPair().key("dataKey").value("dataValue"))
+          ).asJava
+        )
+
+      when(mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
+        .thenReturn(azureWorkspaceDescription)
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        defaultMockSamDao(),
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        // snapshots are assumed to be GCP unless they belong to a Dataset with the Azure cloudPlatform
+        new MockDataRepoDAO("mockDataRepo")
+      )(testContext)
+
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      val thrown = intercept[RawlsException] {
+        Await.result(
+          snapshotService.createSnapshot(testData.deletingAzureWorkspace.toWorkspaceName,
+                                         NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
+          ),
+          Duration.Inf
+        )
+      }
+
+      assert(
+        thrown.getMessage === "Snapshots by reference are not supported into a workspace with no cloud context (snapshot: gcp, workspace: None)."
+      )
+      verify(mockWorkspaceManagerDAO, never()).createDataRepoSnapshotReference(
+        any[UUID],
+        any[UUID],
+        any[DataReferenceName],
+        any[Option[DataReferenceDescriptionField]],
+        any[String],
+        any[CloningInstructionsEnum],
+        any[RawlsRequestContext]
+      )
+    }
+
     "not create a snapshot reference even if both the snapshot and workspace are Azure" in withDefaultTestDatabase {
       // stub an Azure workspace
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
