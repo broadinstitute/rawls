@@ -598,7 +598,8 @@ object MultiregionalBucketMigrationActor {
             .updateBucketIam(
               bucket,
               bucketPolicies,
-              Option.when(migration.requesterPaysEnabled)(GoogleProjectId(deps.googleProjectToBill.value))
+              Option.when(migration.requesterPaysEnabled)(GoogleProjectId(deps.googleProjectToBill.value)),
+              iamPolicyVersion = 3
             )
             .io *>
             Applicative[IO].whenA(migration.requesterPaysEnabled) {

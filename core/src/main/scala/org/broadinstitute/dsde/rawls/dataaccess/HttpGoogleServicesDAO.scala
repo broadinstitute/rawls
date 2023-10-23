@@ -127,7 +127,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                               userProject: Option[GoogleProjectId]
+                               userProject: Option[GoogleProjectId],
+                               iamPolicyVersion: Int = 1
   ): Future[Unit] = {
     // default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
     // do not have separate permissions that deviate from the bucket-level permissions.
@@ -175,7 +176,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                                                                 RetryPredicates.whenStatusCode(400),
                                                                 RetryPredicates.whenStatusCode(404)
         ),
-        bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList
+        bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList,
+        version = iamPolicyVersion
       )
       .compile
       .drain
