@@ -299,11 +299,12 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     dataSource
       .inTransaction { implicit dataAccess =>
         for {
-          isMigrating <- dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspace)
-          _ = if (isMigrating) {
+          migrationAttempts <- dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
+          _ = if (migrationAttempts.nonEmpty && !migrationAttempts.exists(_.outcome.exists(_.isSuccess))) {
             throw new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Conflict,
-                          s"Workspace ${workspace.toWorkspaceName} has an in-progress bucket migration."
+              ErrorReport(
+                StatusCodes.Conflict,
+                s"Workspace ${workspace.toWorkspaceName} has been scheduled for bucket migration, but it has not succeeded yet."
               )
             )
           }
