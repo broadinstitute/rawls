@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.test.pipeline
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import io.circe.syntax.EncoderOps
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.broadinstitute.dsde.workbench.auth.AuthToken
+// import org.broadinstitute.dsde.workbench.auth.AuthToken
 // import io.circe.generic.semiauto._
 
 /**
@@ -36,7 +36,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
   * }}}
   */
 case class UserMetadata(email: String, `type`: UserType, bearer: String) {
-  def makeAuthToken: AuthToken =
+  def makeAuthToken: ProxyAuthToken =
     ProxyAuthToken(this, (new MockGoogleCredential.Builder()).build())
 }
 
