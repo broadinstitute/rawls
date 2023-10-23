@@ -314,7 +314,9 @@ object MultiregionalBucketMigrationActor {
             bucketOpt <- storageService.getBucket(
               GoogleProject(workspace.googleProjectId.value),
               GcsBucketName(workspace.bucketName),
-              bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING))
+              bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING),
+                                      Storage.BucketGetOption.userProject(workspace.googleProjectId.value)
+              )
             )
 
             bucketInfo <- IO.fromOption(bucketOpt)(noWorkspaceBucketError(migration, workspace))
