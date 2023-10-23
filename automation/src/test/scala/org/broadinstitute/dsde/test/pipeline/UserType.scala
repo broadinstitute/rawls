@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.test.pipeline
 
-import io.circe.Decoder
+import io.circe.{Decoder, Encoder}
 
 /**
   * Enum-like sealed trait representing the user type.
@@ -9,11 +9,11 @@ sealed trait UserType { def title: String }
 
 /**
   * Enum-like user type for title 'Owner', 'Student'
-  * 
+  *
   * The user types assignment came directly from the original test horde users below.
-  * 
+  *
   * @example
-  * 
+  *
   * {
   *   "admins": {
   *     "dumbledore": "dumbledore.admin@quality.firecloud.org",
@@ -77,4 +77,6 @@ object UserType {
     case "student" => Right(Student)
     case other     => Left(s"Unknown user type: $other")
   }
+
+  implicit val userTypeEncoder: Encoder[UserType] = Encoder.encodeString.contramap(_.title)
 }
