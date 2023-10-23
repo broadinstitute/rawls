@@ -812,7 +812,7 @@ trait AttributeComponent {
       def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
         val transactionId = UUID.randomUUID().toString
         insertIntoScratchFunction(transactionId) andThen
-          updateInMasterAction(transactionId) andThen
+          updateInMasterAction(transactionId).withStatementParameters(statementInit = _.setQueryTimeout(1200)) andThen
           clearAttributeScratchTableAction(transactionId)
       }
     }
