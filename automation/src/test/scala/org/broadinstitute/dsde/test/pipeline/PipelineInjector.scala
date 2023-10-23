@@ -1,9 +1,7 @@
 package org.broadinstitute.dsde.test.pipeline
 
-// import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.typesafe.scalalogging.LazyLogging
 import io.circe.parser
-// import org.broadinstitute.dsde.workbench.auth.AuthToken
 
 import java.util.Base64
 import scala.util.Random
@@ -32,7 +30,6 @@ trait PipelineInjector {
           json <- parser.parse(decodedB64)
           seq <- json.as[Seq[UserMetadata]]
         } yield seq
-        // val decoded = decode[Seq[UserMetadata]](new String(Base64.getDecoder.decode(b64), "UTF-8"))
         userMetadataSeq match {
           case Right(u)    => u
           case Left(_)     => Seq()

@@ -3,8 +3,6 @@ package org.broadinstitute.dsde.test.pipeline
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import io.circe.syntax.EncoderOps
 import io.circe.{Decoder, Encoder, HCursor, Json}
-// import org.broadinstitute.dsde.workbench.auth.AuthToken
-// import io.circe.generic.semiauto._
 
 /**
   * Represents metadata associated with a user.
