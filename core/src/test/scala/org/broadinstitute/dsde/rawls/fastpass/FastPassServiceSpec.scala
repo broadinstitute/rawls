@@ -463,7 +463,7 @@ class FastPassServiceSpec
 
     val samUserStatus = Await
       .result(services.fastPassMockSamDAO.getUserIdInfoForEmail(WorkbenchEmail(services.user.userEmail.value)),
-        Duration.Inf
+              Duration.Inf
       )
     val userSubjectId = WorkbenchUserId(samUserStatus.userSubjectId)
     val userEmail = WorkbenchEmail(samUserStatus.userEmail)
@@ -498,7 +498,7 @@ class FastPassServiceSpec
     val petKey =
       Await.result(
         services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
-          RawlsUserEmail(samUserStatus.userEmail)
+                                                                   RawlsUserEmail(samUserStatus.userEmail)
         ),
         Duration.Inf
       )
