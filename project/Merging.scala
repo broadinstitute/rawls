@@ -11,14 +11,13 @@ object Merging {
     // [error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/typesafe/akka/akka-protobuf-v3_2.12/2.6.5/akka-protobuf-v3_2.12-2.6.5.jar:google/protobuf/field_mask.proto
     case PathList("google", "protobuf", _ @_*) => MergeStrategy.first
     // [error] /home/sbtuser/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.12.15/scala-library-2.12.15.jar:scala/annotation/nowarn.class
-    case PathList("scala", "annotation", _ @_*)                => MergeStrategy.first
-    case PathList("javax", "ws", "rs", _ @_*)                  => MergeStrategy.first
-    case "version.conf"                                        => MergeStrategy.concat
-    case "logback.xml"                                         => MergeStrategy.first
-    case x if x.endsWith("kotlin-stdlib.kotlin_module")        => MergeStrategy.first
-    case x if x.endsWith("kotlin-stdlib-common.kotlin_module") => MergeStrategy.first
-    case x if x.endsWith("io.netty.versions.properties")       => MergeStrategy.concat
-    case x if x.endsWith("arrow-git.properties")               => MergeStrategy.concat
-    case x                                                     => oldStrategy(x)
+    case PathList("scala", "annotation", _ @_*)          => MergeStrategy.first
+    case PathList("javax", "ws", "rs", _ @_*)            => MergeStrategy.first
+    case "version.conf"                                  => MergeStrategy.concat
+    case "logback.xml"                                   => MergeStrategy.first
+    case x if x.endsWith("kotlin_module")                => MergeStrategy.first
+    case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.concat
+    case x if x.endsWith("arrow-git.properties")         => MergeStrategy.concat
+    case x                                               => oldStrategy(x)
   }
 }

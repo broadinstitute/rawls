@@ -17,6 +17,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -86,6 +87,7 @@ object RawlsApiService extends LazyLogging {
 
 trait RawlsApiService
     extends WorkspaceApiService
+    with WorkspaceApiServiceV2
     with EntityApiService
     with MethodConfigApiService
     with SubmissionApiService
@@ -120,7 +122,7 @@ trait RawlsApiService
   implicit val materializer: Materializer
 
   val baseApiRoutes =
-    workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+    workspaceRoutesV2 ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 
@@ -197,6 +199,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
                           val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
                           val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
+                          val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,

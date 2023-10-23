@@ -24,6 +24,7 @@ tags:
   - name: version
   - name: workflows
   - name: workspaces
+  - name: workspaces_v2
 
 paths:
   /version:
@@ -606,6 +607,113 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/v2/{projectId}/bucketMigration:
+    get:
+      tags:
+        - billing_v2
+      summary: list bucket migration attempts for workspaces in billing project
+      description: list bucket migration attempts for workspaces in billing project
+      operationId: listBucketMigrationsForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration metadata where the metadata is an empty list for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an owner to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found or you do not have access to it
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - billing_v2
+      summary: start bucket migration attempt for Google workspaces in billing project or restart failed past attempts
+      description: start bucket migration attempt for Google workspaces in billing project or restart failed past attempts
+      operationId: startBucketMigrationForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        201:
+          description: Workspaces in billing project scheduled for migration
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        400:
+          description: Some or all workspaces in billing project were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an owner to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found or you do not have access to it
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/v2/{projectId}/bucketMigration/progress:
+    get:
+      tags:
+        - billing_v2
+      summary: get bucket migration progress for workspaces in billing project
+      description: get bucket migration progress for workspaces in billing project
+      operationId: getBucketMigrationProgressForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an owner to get migration progress
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found or you do not have access to it
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/project/registration:
     post:
       tags:
@@ -886,14 +994,14 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/migrations:
+
+  /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
         - admin
-        - workspaces
-      summary: list migration attempts for workspace
-      description: list migration attempts for workspace
-      operationId: listMigrations
+      summary: list bucket migration attempts for workspace. empty list for workspaces that have not been migrated before
+      description: list bucket migration attempts for workspace. empty list for workspaces that have not been migrated before
+      operationId: adminListBucketMigrationsForWorkspace
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
@@ -912,15 +1020,20 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - admin
-        - workspaces
-      summary: start migration attempt for workspace
-      description: start migration attempt for workspace
-      operationId: startMigration
+      summary: start bucket migration attempt for Google workspace
+      description: start bucket migration attempt for Google workspace
+      operationId: adminStartBucketMigrationForWorkspace
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
@@ -931,6 +1044,118 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        400:
+          description: This workspace is ineligible for migration.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspace
+      description: get bucket migration progress for workspace
+      operationId: adminGetBucketMigrationProgressForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found or workspace has not been migrated before
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces:
+    post:
+      tags:
+        - admin
+      summary: batch start Google workspace bucket migrations
+      description: batch start bucket migration attempts for Google workspaces
+      operationId: adminBatchStartBucketMigrationForWorkspaces
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        201:
+          description: Workspaces scheduled for migration
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        400:
+          description: Some or all workspaces provided were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an admin to start migration attempts
+          content:
+             'application/json':
+               schema:
+                 $ref: '#/components/schemas/ErrorReport'
+        500:
+           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/getProgress:
+    post:
+      tags:
+        - admin
+      summary: fetch bucket migration progress for multiple Google workspaces
+      description: fetch bucket migration progress for multiple Google workspaces
+      operationId: adminGetBucketMigrationProgressForWorkspaceList
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -939,34 +1164,113 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/migrations:
-    post:
+  /api/admin/bucketMigration/billing/{projectId}:
+    get:
       tags:
         - admin
-        - workspaces
-      summary: batch start workspace migrations
-      description: batch start migration attempts for workspaces
-      operationId: batchStartMigration
-      requestBody:
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      summary: list bucket migration attempts for workspaces in billing project
+      description: list bucket migration attempts for workspaces in billing project
+      operationId: adminListBucketMigrationsForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
-        201:
-          description: Workspace scheduled for migration
+        200:
+          description: Successful Request
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration metadata where the metadata is an empty list for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to list migration attempts
           content:
-             'application/json':
-               schema:
-                 $ref: '#/components/schemas/ErrorReport'
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         500:
-           $ref: '#/components/responses/RawlsInternalError'
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - admin
+      summary: start bucket migration attempt for Google workspaces in billing project or restart failed past attempts
+      description: start bucket migration attempt for Google workspaces in billing project or restart failed past attempts
+      operationId: adminStartBucketMigrationForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        201:
+          description: Workspaces in billing project scheduled for migration
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        400:
+          description: Some or all workspaces in billing project were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/billing/{projectId}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspaces in billing project
+      description: get bucket migration progress for workspaces in billing project
+      operationId: adminGetBucketMigrationProgressForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -3825,6 +4129,239 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationType'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}:
+    delete:
+      tags:
+        - workspaces_v2
+      summary: Delete workspace
+      description: Starts a job to delete a workspace and all of its contents.
+      operationId: deleteWorkspaceV2
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        202:
+          description: Delete request accepted. Workspace bucket will be deleted within
+            24 hours.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDeletionResult'
+        400:
+          description: Workspace is not in a deletable state.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: Insufficient permissions to delete workspace (must be owner)
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: Workspace is already being deleted.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketMigration:
+    get:
+      tags:
+        - workspaces_v2
+      summary: list bucket migration attempts for workspace. empty list for workspaces that have not been migrated before
+      description: list bucket migration attempts for workspace. empty list for workspaces that have not been migrated before
+      operationId: listBucketMigrationsForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an owner to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found or you do not have access to it
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - workspaces_v2
+      summary: start bucket migration attempt for Google workspace or restart failed past attempt
+      description: start bucket migration attempt for Google workspace or restart failed past attempt
+      operationId: startBucketMigrationForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        201:
+          description: Workspace scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        400:
+          description: This workspace is ineligible for migration.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an owner to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found or you do not have access to it
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketMigration/progress:
+    get:
+      tags:
+        - workspaces_v2
+      summary: get bucket migration progress for workspace
+      description: get bucket migration progress for workspace
+      operationId: getBucketMigrationProgressForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an owner to get migration progress
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found, you do not have access to it, or it has not been migrated before
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/bucketMigration:
+    post:
+      tags:
+        - workspaces_v2
+      summary: batch start Google workspace bucket migrations or restart failed past attempts
+      description: batch start bucket migration attempts for Google workspaces or restart failed past attempts
+      operationId: batchStartBucketMigrationForWorkspaces
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        201:
+          description: Workspaces scheduled for migration
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        400:
+          description: Some or all workspaces in billing project were ineligible for migration. Eligible workspaces are scheduled for migration and ineligible workspaces will be included in error message.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an owner to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    get:
+      tags:
+        - workspaces_v2
+      summary: get workspaces eligible for bucket migration and their migration progress if it exists
+      description: get workspaces eligible for bucket migration and their migration progress if it exists
+      operationId: getEligibleWorkspacesForBucketMigrationWithProgress
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/bucketMigration/getProgress:
+    post:
+      tags:
+        - workspaces_v2
+      summary: fetch bucket migration progress for multiple Google workspaces
+      description: fetch bucket migration progress for multiple Google workspaces
+      operationId: getBucketMigrationProgressForWorkspaceList
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: Returns metadata in the shape workspaceNamespace/workspaceName -> bucket migration progress where the progress is null for workspaces that have not been scheduled for migration before.
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an owner of all requested workspaces
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
@@ -5096,6 +5633,7 @@ components:
         - workspaceId
         - googleProject
         - workspaceVersion
+        - state
       type: object
       properties:
         attributes:
@@ -5165,10 +5703,21 @@ components:
           format: date-time
         cloudPlatform:
           type: string
-          description: The cloud platform of the workspace
+          description: The cloud platform of the workspace. If the workspace is not in the Ready state, the cloud platform may be missing.
           enum:
             - GCP
             - AZURE
+        state:
+          type: string
+          description: The lifecycle state of the workspace
+          enum:
+            - Creating
+            - CreateFailed
+            - Ready
+            - Updating
+            - UpdateFailed
+            - Deleting
+            - DeleteFailed
       description: ""
     WorkspaceSubmissionStats:
       required:
@@ -5375,7 +5924,7 @@ components:
         namespace:
           type: string
         additionalData:
-          type: object
+          type: array
     WorkspaceListResponse:
       type: object
       properties:
@@ -5387,6 +5936,10 @@ components:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
           $ref: '#/components/schemas/WorkspaceSubmissionStats'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
       description: ""
     WorkspaceBucketOptions:
       required:
@@ -5407,6 +5960,22 @@ components:
         - WRITER
         - READER
         - NO ACCESS
+    WorkspaceDeletionResult:
+      type: object
+      description: Workspace deletion metadata
+      properties:
+        gcpContext:
+          $ref: '#/components/schemas/GcpWorkspaceDeletionContext'
+        jobId:
+          type: string
+          description: Deletion job ID
+    GcpWorkspaceDeletionContext:
+      type: object
+      description: Workspace deletion context information for a GCP workspace
+      properties:
+        bucketName:
+          type: string
+          description: Name of the workspace's GCP bucket, if present
     CallMetadata:
       type: object
       properties:
@@ -6032,10 +6601,6 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WorkspaceMigrationSuccess'
         - $ref: '#/components/schemas/WorkspaceMigrationFailure'
-      properties:
-        failure:
-          description: Supplementary failure information
-          type: string
     WorkspaceMigrationSuccess:
         type: string
         enum:
@@ -6049,10 +6614,54 @@ components:
             description: Supplementary failure information
             type: string
     BatchMigrateRequestBody:
-      description: List of workspace names to migrate
+      description: List of workspace names
       type: array
       items:
         $ref: '#/components/schemas/WorkspaceName'
+    MultiregionalBucketMigrationProgress:
+      description: Represents the progress of a workspace bucket through the multiregional bucket migration pipeline
+      type: object
+      required:
+        - migrationStep
+      properties:
+        migrationStep:
+          description: User facing step of migration
+          type: string
+          enum:
+            - ScheduledForMigration
+            - PreparingTransferToTempBucket
+            - TransferringToTempBucket
+            - PreparingTransferToFinalBucket
+            - TransferringToFinalBucket
+            - FinishingUp
+            - Finished
+        outcome:
+          $ref: '#/components/schemas/WorkspaceMigrationOutcome'
+        tempBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+        finalBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+    StorageTransferJobProgress:
+      description: Represents the progress of a single Storage Transfer Service job to move a bucket
+      type: object
+      required:
+        - totalBytesToTransfer
+        - bytesTransferred
+        - totalObjectsToTransfer
+        - objectsTransferred
+      properties:
+        totalBytesToTransfer:
+          description: total bytes that this job will transfer
+          type: integer
+        bytesTransferred:
+          description: bytes that this job has transferred so far
+          type: integer
+        totalObjectsToTransfer:
+          description: total objects that this job will transfer
+          type: integer
+        objectsTransferred:
+          description: objects that this job has transferred so far
+          type: integer
   parameters:
     billingProjectIdPathParam:
       name: projectId

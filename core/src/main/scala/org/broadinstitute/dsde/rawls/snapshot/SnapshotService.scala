@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
@@ -14,9 +15,11 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   SnapshotListResponse,
   WorkspaceAttributeSpecs,
+  WorkspaceCloudPlatform,
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -28,39 +31,71 @@ object SnapshotService {
   def constructor(dataSource: SlickDataSource,
                   samDAO: SamDAO,
                   workspaceManagerDAO: WorkspaceManagerDAO,
-                  terraDataRepoUrl: String
+                  terraDataRepoUrl: String,
+                  dataRepoDAO: DataRepoDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SnapshotService =
-    new SnapshotService(ctx, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl)
+    new SnapshotService(ctx,
+                        dataSource,
+                        samDAO,
+                        workspaceManagerDAO,
+                        terraDataRepoUrl,
+                        dataRepoDAO,
+                        new AggregatedWorkspaceService(workspaceManagerDAO)
+    )
 }
 
 class SnapshotService(protected val ctx: RawlsRequestContext,
                       val dataSource: SlickDataSource,
                       val samDAO: SamDAO,
                       workspaceManagerDAO: WorkspaceManagerDAO,
-                      terraDataRepoInstanceName: String
+                      terraDataRepoInstanceName: String,
+                      dataRepoDAO: DataRepoDAO,
+                      aggregatedWorkspaceService: AggregatedWorkspaceService
 )(implicit protected val executionContext: ExecutionContext)
     extends FutureSupport
     with WorkspaceSupport
     with LazyLogging {
 
-  def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataRepoSnapshotResource] =
+  def createSnapshot(workspaceName: WorkspaceName,
+                     snapshotIdentifiers: NamedDataRepoSnapshot
+  ): Future[DataRepoSnapshotResource] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap { workspaceContext =>
-      val wsid = workspaceContext.workspaceIdAsUUID // to avoid UUID parsing multiple times
-      // create the stub workspace in WSM if it does not already exist
-      if (!workspaceStubExists(wsid, ctx)) {
-        workspaceManagerDAO.createWorkspace(wsid, ctx)
+    ).flatMap { rawlsWorkspace =>
+      val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
+      val snapshot =
+        new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
+      val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
+
+      // prevent snapshots from disallowed platforms
+      snapshotValidator.validateSnapshotPlatform()
+
+      // prevent disallowed access across workspace or dataset protection boundaries
+      snapshotValidator.validateProtectedStatus()
+
+      try {
+        // if there's an existing WSM workspace, make sure its platform is compatible
+        // with that of the snapshot's dataset.
+        val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
+        snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
+      } catch {
+        case _: AggregateWorkspaceNotFoundException =>
+          // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
+          // and then create a stub workspace
+          snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
+          workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
       }
+
       // create the requested snapshot reference
-      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(wsid,
-                                                                            snapshot.snapshotId,
-                                                                            snapshot.name,
-                                                                            snapshot.description,
-                                                                            terraDataRepoInstanceName,
-                                                                            CloningInstructionsEnum.NOTHING,
-                                                                            ctx
+      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(
+        wsid,
+        snapshotIdentifiers.snapshotId,
+        snapshotIdentifiers.name,
+        snapshotIdentifiers.description,
+        terraDataRepoInstanceName,
+        CloningInstructionsEnum.NOTHING,
+        ctx
       )
       Future.successful(snapshotRef)
     }
@@ -89,7 +124,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     }
 
   // AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
-  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
+  private def massageSnapshots(references: ResourceList): SnapshotListResponse = {
     val snapshots = references.getResources.asScala.map { r =>
       val massaged = new DataRepoSnapshotResource
       massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
@@ -108,7 +143,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
       // to having no references, so return the empty list.
       case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 =>
-        new SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
+        SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
       // but if we hit a different error, it's a valid error; rethrow it
       case Failure(ex: bio.terra.workspace.client.ApiException) =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
@@ -230,9 +265,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, ctx)
     }
   }
-
-  private def workspaceStubExists(workspaceId: UUID, ctx: RawlsRequestContext): Boolean =
-    Try(workspaceManagerDAO.getWorkspace(workspaceId, ctx)).isSuccess
 
   private def validateSnapshotId(snapshotId: String): UUID =
     Try(UUID.fromString(snapshotId)) match {

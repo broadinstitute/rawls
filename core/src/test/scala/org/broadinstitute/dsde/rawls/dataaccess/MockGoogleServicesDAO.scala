@@ -199,9 +199,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 
-  override def getServiceAccountRawlsUser(): Future[RawlsUser] =
-    Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
-
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(
     UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000"))
   )
@@ -305,6 +302,13 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = Future.successful(permissions)
+
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] = Future.successful(true)
 
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext

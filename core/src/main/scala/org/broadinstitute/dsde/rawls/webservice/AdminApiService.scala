@@ -9,9 +9,11 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -27,6 +29,7 @@ trait AdminApiService extends UserInfoDirectives {
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val userServiceConstructor: RawlsRequestContext => UserService
+  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
   val adminRoutes: server.Route = traceRequest { span =>
     requireUserInfo(Option(span)) { userInfo =>
@@ -139,32 +142,88 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "workspaces" / "migrations") {
-          post {
-            entity(as[List[WorkspaceName]]) { workspaceNames =>
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .migrateAll(workspaceNames)
-                  .map(StatusCodes.Created -> _)
+        pathPrefix("admin" / "bucketMigration") {
+          pathPrefix("workspaces") {
+            pathEndOrSingleSlash {
+              post {
+                entity(as[List[WorkspaceName]]) { workspaceNames =>
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .adminMigrateAllWorkspaceBuckets(workspaceNames)
+                      .map(StatusCodes.Created -> _)
+                  }
+                }
               }
-            }
-          }
-        } ~
-        path("admin" / "workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
-          val workspaceName = WorkspaceName(namespace, name)
-          get {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .getWorkspaceMigrationAttempts(workspaceName)
-                .map(ms => StatusCodes.OK -> ms)
-            }
+            } ~
+              pathPrefix("getProgress") {
+                pathEndOrSingleSlash {
+                  post {
+                    entity(as[List[WorkspaceName]]) { workspaceNames =>
+                      complete {
+                        bucketMigrationServiceConstructor(ctx)
+                          .adminGetBucketMigrationProgressForWorkspaces(workspaceNames)
+                          .map(StatusCodes.OK -> _)
+                      }
+                    }
+                  }
+                }
+              } ~
+              pathPrefix(Segment / Segment) { (namespace, name) =>
+                val workspaceName = WorkspaceName(namespace, name)
+                pathEndOrSingleSlash {
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .adminGetBucketMigrationAttemptsForWorkspace(workspaceName)
+                        .map(ms => StatusCodes.OK -> ms)
+                    }
+                  } ~
+                    post {
+                      complete {
+                        bucketMigrationServiceConstructor(ctx)
+                          .adminMigrateWorkspaceBucket(workspaceName)
+                          .map(StatusCodes.Created -> _)
+                      }
+                    }
+                } ~
+                  path("progress") {
+                    get {
+                      complete {
+                        bucketMigrationServiceConstructor(ctx)
+                          .adminGetBucketMigrationProgressForWorkspace(workspaceName)
+                          .map(StatusCodes.OK -> _)
+                      }
+                    }
+                  }
+              }
           } ~
-            post {
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .migrateWorkspace(workspaceName)
-                  .map(StatusCodes.Created -> _)
-              }
+            pathPrefix("billing" / Segment) { projectName =>
+              val billingProjectName = RawlsBillingProjectName(projectName)
+              pathEndOrSingleSlash {
+                post {
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .adminMigrateWorkspaceBucketsInBillingProject(billingProjectName)
+                      .map(StatusCodes.Created -> _)
+                  }
+                } ~
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .adminGetBucketMigrationAttemptsForBillingProject(billingProjectName)
+                        .map(ms => StatusCodes.OK -> ms)
+                    }
+                  }
+              } ~
+                path("progress") {
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .adminGetBucketMigrationProgressForBillingProject(billingProjectName)
+                        .map(StatusCodes.OK -> _)
+                    }
+                  }
+                }
             }
         } ~
         path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>

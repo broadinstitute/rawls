@@ -6,6 +6,7 @@ import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -36,7 +37,8 @@ case class WorkspaceRecord(
   currentBillingAccountOnGoogleProject: Option[String],
   errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[Timestamp],
-  workspaceType: String
+  workspaceType: String,
+  state: String
 ) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
@@ -60,7 +62,8 @@ object WorkspaceRecord {
       workspace.currentBillingAccountOnGoogleProject.map(_.value),
       workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)),
-      workspaceType = workspace.workspaceType.toString
+      workspaceType = workspace.workspaceType.toString,
+      state = workspace.state.toString
     )
 
   def toWorkspace(workspaceRec: WorkspaceRecord): Workspace =
@@ -81,7 +84,8 @@ object WorkspaceRecord {
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
       workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
-      WorkspaceType.withName(workspaceRec.workspaceType)
+      WorkspaceType.withName(workspaceRec.workspaceType),
+      WorkspaceState.withName(workspaceRec.state)
     )
 
   def toWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace =
@@ -102,7 +106,8 @@ object WorkspaceRecord {
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
       workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
-      WorkspaceType.withName(workspaceRec.workspaceType)
+      WorkspaceType.withName(workspaceRec.workspaceType),
+      WorkspaceState.withName(workspaceRec.state)
     )
 }
 
@@ -137,6 +142,7 @@ trait WorkspaceComponent {
     def errorMessage = column[Option[String]]("error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
     def workspaceType = column[String]("workspace_type")
+    def state = column[String]("state")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
@@ -156,7 +162,8 @@ trait WorkspaceComponent {
              currentBillingAccountOnGoogleProject,
              errorMessage,
              completedCloneWorkspaceFileTransfer,
-             workspaceType
+             workspaceType,
+             state
     ) <> ((WorkspaceRecord.apply _).tupled, WorkspaceRecord.unapply)
   }
 
@@ -336,6 +343,9 @@ trait WorkspaceComponent {
     ): ReadAction[Option[Workspace]] =
       loadWorkspace(findByNameQuery(workspaceName), attributeSpecs)
 
+    def listByNames(workspaceNames: List[WorkspaceName]): ReadAction[Seq[Workspace]] =
+      loadWorkspaces(findByNamesQuery(workspaceNames))
+
     def findV2WorkspaceByName(workspaceName: WorkspaceName,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =
@@ -374,6 +384,12 @@ trait WorkspaceComponent {
             count > 0
           }
       }
+
+    def updateState(workspaceId: UUID, state: WorkspaceState): WriteAction[Int] =
+      findByIdQuery(workspaceId).map(_.state).update(state.toString)
+
+    def updateStateWithErrorMessage(workspaceId: UUID, state: WorkspaceState, errorMessage: String): WriteAction[Int] =
+      findByIdQuery(workspaceId).map(ws => (ws.state, ws.errorMessage)).update(state.toString, errorMessage.some)
 
     def updateLastModified(workspaceId: UUID) = {
       val currentTime = new Timestamp(new Date().getTime)
@@ -532,6 +548,11 @@ trait WorkspaceComponent {
 
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
+
+    private def findByNamesQuery(workspaceNames: List[WorkspaceName]): WorkspaceQueryType =
+      filter(rec =>
+        rec.name.inSetBind(workspaceNames.map(_.name)) && rec.namespace.inSetBind(workspaceNames.map(_.namespace))
+      )
 
     private def findV2WorkspaceByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec =>

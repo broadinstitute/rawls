@@ -231,7 +231,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       project.billingAccount,
       None,
       Option(createdDate),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -267,7 +268,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       currentBillingAccountOnWorkspace,
       errorMessage,
       completedCloneWorkspaceFileTransfer,
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
   class EmptyWorkspace() extends TestData {
@@ -352,7 +354,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       billingAccount,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     override def save() =
@@ -475,6 +478,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       .subscriptionId(UUID.randomUUID())
       .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
       .managedResourceGroupId("fake-mrg")
+      .createdDate("2023-09-12T22:20:48.949Z")
 
     val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
     val azureBillingProject = RawlsBillingProject(
@@ -483,6 +487,22 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Option(billingAccountName),
       None,
       billingProfileId = Some(azureBillingProfile.getId.toString)
+    )
+
+    // For testing of old Azure billing projects, can be removed if that code is removed.
+    val oldAzureBillingProfile = new ProfileModel()
+      .id(UUID.randomUUID())
+      .tenantId(UUID.randomUUID())
+      .subscriptionId(UUID.randomUUID())
+      .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
+      .managedResourceGroupId("fake-mrg")
+      .createdDate("2023-09-11T22:20:48.949Z")
+    val oldAzureBillingProject = RawlsBillingProject(
+      RawlsBillingProjectName("old-azure-billing-project"),
+      CreationStatuses.Ready,
+      Option(billingAccountName),
+      None,
+      billingProfileId = Some(oldAzureBillingProfile.getId.toString)
     )
 
     val wsAttrs = Map(
@@ -527,24 +547,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "testUser",
       wsAttrs,
       true
-    )
-    val v1Workspace = makeWorkspaceWithUsers(
-      billingProject,
-      wsName.name + "v1",
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      false,
-      WorkspaceVersions.V1,
-      billingProject.googleProjectId,
-      billingProject.googleProjectNumber,
-      billingProject.billingAccount,
-      None,
-      Option(currentTime())
     )
 
     val regionalWorkspace = makeWorkspaceWithUsers(
@@ -1657,13 +1659,34 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       currentBillingAccountOnGoogleProject = None,
       errorMessage = None,
       completedCloneWorkspaceFileTransfer = None,
-      workspaceType = WorkspaceType.McWorkspace
+      workspaceType = WorkspaceType.McWorkspace,
+      WorkspaceState.Ready
+    )
+
+    val deletingAzureWorkspace = new Workspace(
+      namespace = azureBillingProjectName.value,
+      name = "test-deleting-azure-workspace",
+      workspaceId = UUID.randomUUID().toString,
+      bucketName = "",
+      workflowCollectionName = None,
+      createdDate = currentTime(),
+      lastModified = currentTime(),
+      createdBy = "testUser",
+      attributes = Map.empty,
+      isLocked = false,
+      workspaceVersion = WorkspaceVersions.V2,
+      googleProjectId = GoogleProjectId(""),
+      googleProjectNumber = None,
+      currentBillingAccountOnGoogleProject = None,
+      errorMessage = None,
+      completedCloneWorkspaceFileTransfer = None,
+      workspaceType = WorkspaceType.McWorkspace,
+      WorkspaceState.Deleting
     )
 
     val allWorkspaces = Seq(
       workspace,
       workspaceLocked,
-      v1Workspace,
       controlledWorkspace,
       workspacePublished,
       workspaceNoAttrs,
@@ -1683,7 +1706,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceToTestGrant,
       workspaceConfigCopyDestination,
       regionalWorkspace,
-      azureWorkspace
+      azureWorkspace,
+      deletingAzureWorkspace
     )
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 
@@ -2006,8 +2030,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
-    val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")
-    val v1WsName2 = WorkspaceName(billingProject.projectName.value, "myV1Workspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
@@ -2041,53 +2063,59 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                "testUser",
                                Map.empty
     )
-    // TODO (CA-1235): Remove these after PPW Migration is complete
-    val v1Workspace = Workspace(
-      v1WsName.namespace,
-      v1WsName.name,
-      UUID.randomUUID().toString,
-      "aBucket3",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      Map.empty,
-      false,
-      WorkspaceVersions.V1,
-      billingProject.googleProjectId,
-      billingProject.googleProjectNumber,
-      None,
-      None,
-      Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
-    )
-    val v1Workspace2 = Workspace(
-      v1WsName2.namespace,
-      v1WsName2.name,
-      UUID.randomUUID().toString,
-      "aBucket4",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      Map.empty,
-      false,
-      WorkspaceVersions.V1,
-      billingProject.googleProjectId,
-      billingProject.googleProjectNumber,
-      None,
-      None,
-      Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
-    )
 
     override def save() =
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
         workspaceQuery.createOrUpdate(workspace2),
-        // TODO (CA-1235): Remove these after PPW Migration is complete
-        workspaceQuery.createOrUpdate(v1Workspace),
-        workspaceQuery.createOrUpdate(v1Workspace2),
+        rawlsBillingProjectQuery.create(billingProject)
+      )
+  }
+
+  class ProtectedWorkspaceTestData() extends TestData {
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"),
+                                             CreationStatuses.Ready,
+                                             Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
+                                             None
+    )
+    val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
+    val protectedWsName = WorkspaceName(billingProject.projectName.value, "myProtectedWorkspace")
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
+    val userReader = RawlsUser(
+      UserInfo(RawlsUserEmail("reader-access"),
+               OAuth2BearerToken("token"),
+               123,
+               RawlsUserSubjectId("123456789876543212347")
+      )
+    )
+    val workspace = Workspace(wsName.namespace,
+                              wsName.name,
+                              UUID.randomUUID().toString,
+                              "aBucket",
+                              Some("workflow-collection"),
+                              currentTime(),
+                              currentTime(),
+                              "testUser",
+                              Map.empty
+    )
+    val protectedWorkspace = Workspace(
+      protectedWsName.namespace,
+      protectedWsName.name,
+      UUID.randomUUID().toString,
+      "fc-secure-bucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "testUser",
+      Map.empty
+    )
+
+    override def save() =
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(protectedWorkspace),
         rawlsBillingProjectQuery.create(billingProject)
       )
   }
@@ -2511,6 +2539,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val constantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
   val localEntityProviderTestData = new LocalEntityProviderTestData()
+  val protectedWorkspaceTestData = new ProtectedWorkspaceTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(testData)(testCode)
@@ -2520,6 +2549,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
+
+  def withProtectedWorkspaceTestDatabase[T](testCode: SlickDataSource => T): T =
+    withCustomTestDatabaseInternal(protectedWorkspaceTestData)(testCode(slickDataSource))
 
   def withLocalEntityProviderTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(localEntityProviderTestData)(testCode(slickDataSource))

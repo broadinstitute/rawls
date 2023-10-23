@@ -1361,6 +1361,17 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         }
   }
 
+  it should "return 400 for a method inputs and outputs request missing method name" in withTestDataApiServices {
+    services =>
+      Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde", "", 2))) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest)(status)
+          val responseString = Unmarshal(response.entity).to[String].futureValue
+          assert(responseString.contains("Invalid request."))
+        }
+  }
+
   it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices {
     services =>
       Post("/methodconfigs/template", httpJson(AgoraMethod("dsde", "three_step", 2))) ~>

@@ -15,6 +15,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
@@ -49,6 +50,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceRepository,
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
@@ -509,7 +511,8 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        conf.getString("dataRepo.terraInstanceName")
+        conf.getString("dataRepo.terraInstanceName"),
+        dataRepoDAO
       )
 
       val spendReportingBigQueryService =
@@ -525,6 +528,7 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
@@ -551,6 +555,9 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
+      val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
+        BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
+
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
@@ -560,6 +567,7 @@ object Boot extends IOApp with LazyLogging {
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,
+        bucketMigrationServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
@@ -591,6 +599,8 @@ object Boot extends IOApp with LazyLogging {
           importServiceDAO,
           workspaceManagerDAO,
           billingProfileManagerDAO,
+          leonardoDAO,
+          workspaceRepository,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,

@@ -1707,4 +1707,46 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  behavior of "validateEntityIdOrdering"
+
+  it should "return ok when everything is ordered correctly" in {
+    val dummyUuid = UUID.randomUUID()
+    val entityAttributeRecords: Seq[EntityAndAttributesResult] = Seq(
+      EntityAndAttributesResult(EntityRecord(2, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(2, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(3, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(3, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(1, "name", "type", dummyUuid, 1, deleted = false, None), None, None)
+    )
+
+    val isProperlyOrdered: Option[EntityRecord] =
+      entityQuery.validateEntityIdOrdering(-1,
+                                           entityAttributeRecords.head,
+                                           Set.empty[Long],
+                                           entityAttributeRecords.tail
+      )
+
+    isProperlyOrdered shouldBe None
+  }
+
+  it should "return the offending EntityRecord when not ordered correctly" in {
+    val dummyUuid = UUID.randomUUID()
+    val entityAttributeRecords: Seq[EntityAndAttributesResult] = Seq(
+      EntityAndAttributesResult(EntityRecord(2, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(1, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(3, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(1, "offender", "type", dummyUuid, 1, deleted = false, None), None, None),
+      EntityAndAttributesResult(EntityRecord(1, "name", "type", dummyUuid, 1, deleted = false, None), None, None)
+    )
+
+    val isProperlyOrdered: Option[EntityRecord] =
+      entityQuery.validateEntityIdOrdering(-1,
+                                           entityAttributeRecords.head,
+                                           Set.empty[Long],
+                                           entityAttributeRecords.tail
+      )
+
+    isProperlyOrdered shouldBe Some(EntityRecord(1, "offender", "type", dummyUuid, 1, deleted = false, None))
+  }
+
 }

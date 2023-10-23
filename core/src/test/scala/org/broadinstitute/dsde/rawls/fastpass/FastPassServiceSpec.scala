@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
@@ -25,21 +26,22 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceService
 }
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.iam._
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.model.google.iam.{Binding, Expr, IamMemberTypes, IamResourceTypes, Policy}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -50,8 +52,11 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
-import java.util.concurrent.TimeUnit
+import java.sql.Timestamp
 import java.time.{Duration => JavaDuration, LocalDateTime, OffsetDateTime, ZoneOffset}
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -1288,5 +1293,143 @@ class FastPassServiceSpec
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
     fastPassGrants should be(empty)
+  }
+
+  it should "add a FastPass grant when the user doesn't have the expected project permissions" in withTestDataServices {
+    services =>
+      val projectRole = "some.role"
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set.empty))
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+      err.errorReport.message should include(projectRole)
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "add a FastPass grant when the user doesn't have the expected bucket permissions" in withTestDataServices {
+    services =>
+      val storageRole = "storage.foo"
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set.empty))
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+
+      err.errorReport.message should include(storageRole)
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "add a FastPass grant when the users bucket permissions are unable to be exercised" in withTestDataServices {
+    services =>
+      val storageRole = BUCKET_GET_PERMISSION
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
+      when(
+        services.gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(any[GoogleProject],
+                                                                     any[GcsBucketName],
+                                                                     any[String]
+        )(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(false))
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+
+      err.errorReport.message should include("unable to get bucket location")
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "not add a FastPass grant when the user doesn't have bucket get permissions" in withTestDataServices {
+    services =>
+      val storageRole = BUCKET_GET_PERMISSION + "not"
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set(IamPermission(storageRole))))
+      when(
+        services.gcsDAO.testSAGoogleBucketGetLocationOrRequesterPays(any[GoogleProject],
+                                                                     any[GcsBucketName],
+                                                                     any[String]
+        )(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(false))
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+
+      verify(services.mockFastPassService, never()).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
+  }
+
+  it should "not issue FastPass grants when a workspace's bucket is migrating" in withMinimalTestDatabase { _ =>
+    val ctx = RawlsRequestContext(
+      UserInfo(RawlsUserEmail("user@example.com"),
+               OAuth2BearerToken("fake_token"),
+               0L,
+               RawlsUserSubjectId(UUID.randomUUID().toString)
+      )
+    )
+    val config = FastPassConfig(true, JavaDuration.ZERO, JavaDuration.ZERO)
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    val iamDAO = spy(new MockGoogleIamDAO)
+    val storageDAO = spy(new MockGoogleStorageDAO)
+    val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))
+    val fastPassService =
+      new FastPassService(ctx, slickDataSource, config, iamDAO, storageDAO, gcsDAO, null, "", "", "", "", "")
+
+    Await.result(
+      for {
+        _ <- slickDataSource.inTransaction { dataAccess =>
+          for {
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(minimalTestData.workspace, Option("US"))
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(minimalTestData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update(attempt.getOrElse(fail()).id,
+                                                                     multiregionalBucketMigrationQuery.startedCol,
+                                                                     Some(Timestamp.valueOf(LocalDateTime.now()))
+            )
+          } yield ()
+        }
+        _ <- fastPassService.syncFastPassesForUserInWorkspace(minimalTestData.workspace)
+      } yield (),
+      Duration.Inf
+    )
+
+    verifyNoInteractions(iamDAO, storageDAO, gcsDAO)
   }
 }

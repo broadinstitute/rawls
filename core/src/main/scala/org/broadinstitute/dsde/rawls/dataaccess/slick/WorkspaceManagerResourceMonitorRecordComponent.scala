@@ -18,6 +18,19 @@ object WorkspaceManagerResourceMonitorRecord {
 
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
+
+    val WorkspaceDeleteInit: Value = Value("WorkspaceDeleteInit")
+    val LeoAppDeletionPoll: Value = Value("LeoAppDeletionPoll")
+    val LeoRuntimeDeletionPoll: Value = Value("LeoRuntimeDeletionPoll")
+    val WSMWorkspaceDeletionPoll: Value = Value("WSMWorkspaceDeletionPoll")
+
+    val deleteJobTypes: List[WorkspaceManagerResourceMonitorRecord.JobType.Value] = List(
+      JobType.WorkspaceDeleteInit,
+      JobType.LeoRuntimeDeletionPoll,
+      JobType.LeoAppDeletionPoll,
+      JobType.WSMWorkspaceDeletionPoll
+    )
+
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -64,6 +77,19 @@ object WorkspaceManagerResourceMonitorRecord {
       billingProjectId = None,
       userEmail = Some(userEmail.value),
       Timestamp.from(Instant.now())
+    )
+
+  def forWorkspaceDeletion(jobRecordId: UUID,
+                           workspaceId: UUID,
+                           userEmail: RawlsUserEmail
+  ): WorkspaceManagerResourceMonitorRecord =
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      JobType.WorkspaceDeleteInit,
+      workspaceId = Some(workspaceId),
+      billingProjectId = None,
+      userEmail = Some(userEmail.value),
+      createdTime = Timestamp.from(Instant.now())
     )
 }
 
@@ -131,6 +157,8 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
       query.filter(_.workspaceId === workspaceId).result
 
     def getRecords: ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
+
+    def updateJob(job: WorkspaceManagerResourceMonitorRecord): WriteAction[Int] = query.insertOrUpdate(job)
 
   }
 

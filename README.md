@@ -17,10 +17,8 @@
 
 ```sh
 git clone git@github.com:broadinstitute/rawls.git
-brew install git-secrets # if not already installed
 cd rawls
 sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
-./minnie-kenny.sh -f
 ```
 
 ## scalafmt

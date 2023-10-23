@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{enrichAny, JsObject}
@@ -1197,7 +1197,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                  billingProfileId = Some(UUID.randomUUID().toString)
         )
         val wsId = UUID.randomUUID()
-        val azureWorkspace = Workspace.buildMcWorkspace(
+        val azureWorkspace = Workspace.buildReadyMcWorkspace(
           namespace = "test-azure-bp",
           name = s"test-azure-ws-${wsId}",
           workspaceId = wsId.toString,
@@ -1216,7 +1216,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
-        when(services.workspaceManagerDAO.deleteWorkspaceV2(any[UUID], any[RawlsRequestContext]))
+        when(services.workspaceManagerDAO.deleteWorkspaceV2(any[UUID], anyString(), any[RawlsRequestContext]))
           .thenReturn(new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString)))
         when(services.workspaceManagerDAO.getDeleteWorkspaceV2Result(any[UUID], any[String], any[RawlsRequestContext]))
           .thenReturn(
@@ -1235,52 +1235,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
         verify(services.workspaceManagerDAO).deleteWorkspaceV2(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                                               anyString(),
                                                                any[RawlsRequestContext]
         )
       }
-    }
-  }
-
-  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
-  it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-test-ns"), CreationStatuses.Ready, None, None)
-    val v1Workspace = new Workspace(
-      billingProject.projectName.value,
-      "myWorkspaceV1",
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "test",
-      Map.empty,
-      false,
-      WorkspaceVersions.V1,
-      GoogleProjectId("googleprojectid"),
-      Option(GoogleProjectNumber("googleProjectNumber")),
-      Option(RawlsBillingAccountName("fakeBillingAcct")),
-      None,
-      Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
-    )
-
-    runAndWait(
-      DBIO.seq(
-        rawlsBillingProjectQuery.create(billingProject),
-        workspaceQuery.createOrUpdate(v1Workspace)
-      )
-    )
-
-    Delete(v1Workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Accepted, responseAs[String]) {
-          status
-        }
-      }
-
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(v1Workspace.toWorkspaceName))
     }
   }
 
@@ -1304,7 +1262,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                        Some(WorkspaceCloudPlatform.Gcp)
               ),
               Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
-              false
+              false,
+              Some(List.empty)
             ),
             WorkspaceListResponse(
               WorkspaceAccessLevels.Owner,
@@ -1314,7 +1273,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                        Some(WorkspaceCloudPlatform.Gcp)
               ),
               Option(WorkspaceSubmissionStats(None, None, 0)),
-              false
+              false,
+              Some(List.empty)
             )
           )
         ) {
@@ -1381,7 +1341,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                          Some(WorkspaceCloudPlatform.Gcp)
                 ),
                 Option(WorkspaceSubmissionStats(None, None, 8)),
-                false
+                false,
+                Some(List.empty)
               ),
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
@@ -1392,7 +1353,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                   Some(WorkspaceCloudPlatform.Gcp)
                 ),
                 Option(WorkspaceSubmissionStats(None, Option(testDate), 0)),
-                false
+                false,
+                Some(List.empty)
               )
             )
           ) {

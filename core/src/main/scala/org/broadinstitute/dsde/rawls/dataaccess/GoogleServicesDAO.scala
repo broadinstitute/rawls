@@ -195,8 +195,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getResourceBufferServiceAccountCredential: Credential
 
-  def getServiceAccountRawlsUser(): Future[RawlsUser]
-
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
@@ -336,6 +334,22 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]]
+
+  /**
+    *
+    * @param googleProject Google Project
+    * @param bucketName Google Bucket
+    * @param saKey Pet Service Account Key of the user
+    * @param executionContext Execution Context
+    * @return A Future Boolean. If true, the SA was able to get the bucket location, or the bucket is requester-pays.
+    *         If false, the bucket location could not be retrieved and the bucket is not requester-pays.
+    */
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean]
 
   def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext

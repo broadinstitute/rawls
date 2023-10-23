@@ -47,43 +47,27 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
       _ <- revokeEmails(emails.toSet, userEmail, workspace)
     } yield emails
 
-  def revokeAllUsersFromWorkspace(workspace: Workspace): Future[Seq[BondServiceAccountEmail]] =
-    for {
-      userEmailsToSAEmail <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceRequesterPaysQuery.listAllForWorkspace(workspace.toWorkspaceName)
-      }
-      _ <- userEmailsToSAEmail.toList
-        .traverse { case (userEmail, saEmails) =>
-          IO.fromFuture(IO(revokeEmails(saEmails.toSet, userEmail, workspace)))
-        }
-        .unsafeToFuture()
-    } yield userEmailsToSAEmail.flatMap(_._2).toSeq
+  /**
+    * Deletes all requester pays records for a workspace
+    * Since workspaces were migrated to v2, we no longer need to go through and revoke users 1 by 1
+    * when a workspace is deleted, because we're going to be deleting the google project itself anyway.
+    * So we just need to delete all the associated records
+    */
+  def deleteAllRecordsForWorkspace(workspace: Workspace): Future[Int] = dataSource.inTransaction { dataAccess =>
+    dataAccess.workspaceRequesterPaysQuery.deleteAllForWorkspace(workspace.workspaceIdAsUUID)
+  }
 
   private def revokeEmails(emails: Set[BondServiceAccountEmail],
                            userEmail: RawlsUserEmail,
                            workspace: Workspace
   ): Future[Unit] =
     for {
-      keepBindings <- dataSource.inTransaction { dataAccess =>
-        for {
-          _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
-          // TODO (CA-1236): Remove after PPW migration is complete, we won't need to track on workspace namespace anymore, since google project will be per workspace
-          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(
-            workspace.namespace,
-            userEmail
-          )
-        } yield keepBindings
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
       }
-      // TODO (CA-1236): Clean up the if statement once PPW migration is complete. There will be no more V1 workspaces so this will be dead code
-      // only remove google bindings if there are no workspaces left in the namespace (i.e. project) or the workspace is V2
-      _ <-
-        if (keepBindings) {
-          Future.successful(())
-        } else {
-          googleServicesDAO.removePolicyBindings(
-            workspace.googleProjectId,
-            Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email))
-          )
-        }
+      _ <- googleServicesDAO.removePolicyBindings(
+        workspace.googleProjectId,
+        Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email))
+      )
     } yield ()
 }

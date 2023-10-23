@@ -6,8 +6,15 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WsmPolicyInput, WsmPolicyPair}
-import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import bio.terra.workspace.model.{
+  AzureContext,
+  GcpContext,
+  WorkspaceDescription,
+  WorkspaceStageModel,
+  WsmPolicyInput,
+  WsmPolicyPair
+}
+import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -32,24 +39,18 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
+import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
   BigQueryTableName,
@@ -57,6 +58,7 @@ import org.broadinstitute.dsde.workbench.model.google.{
   GoogleProject,
   IamPermission
 }
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -71,13 +73,15 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Try
-import scala.collection.JavaConverters._
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class WorkspaceServiceSpec
@@ -929,6 +933,32 @@ class WorkspaceServiceSpec
     }
   }
 
+  it should "fail to unlock a migrating workspace" in withTestDataServices { services =>
+    runAndWait(
+      for {
+        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(
+          testData.workspace,
+          Option("US")
+        )
+        attempts <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(
+          testData.workspace
+        )
+        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.update(
+          attempts.head.id,
+          slickDataSource.dataAccess.multiregionalBucketMigrationQuery.startedCol,
+          Some(Timestamp.from(Instant.now))
+        )
+      } yield (),
+      Duration.Inf
+    )
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.unlockWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
   behavior of "deleteWorkspace"
 
   it should "delete a workspace with linked bond service account" in withTestDataServices { services =>
@@ -1284,12 +1314,14 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().azureContext(
-        new AzureContext()
-          .tenantId("fake_tenant_id")
-          .subscriptionId("fake_sub_id")
-          .resourceGroupId("fake_mrg_id")
-      )
+      new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .azureContext(
+          new AzureContext()
+            .tenantId("fake_tenant_id")
+            .subscriptionId("fake_sub_id")
+            .resourceGroupId("fake_mrg_id")
+        )
     )
 
     val workspace = Await.result(
@@ -1300,13 +1332,13 @@ class WorkspaceServiceSpec
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    val deletedBucketName = Await.result(services.workspaceService.deleteWorkspace(
-                                           WorkspaceName(workspace.namespace, workspace.name)
-                                         ),
-                                         Duration.Inf
+    val deletionResult = Await.result(services.workspaceService.deleteWorkspace(
+                                        WorkspaceName(workspace.namespace, workspace.name)
+                                      ),
+                                      Duration.Inf
     )
 
-    deletedBucketName shouldBe None
+    deletionResult.gcpContext shouldBe None
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
     }
@@ -1321,12 +1353,14 @@ class WorkspaceServiceSpec
         Map.empty
       )
       when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-        new WorkspaceDescription().azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
+        new WorkspaceDescription()
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId("fake_tenant_id")
+              .subscriptionId("fake_sub_id")
+              .resourceGroupId("fake_mrg_id")
+          )
       )
       when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
         throw new ApiException("error")
@@ -1362,12 +1396,14 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().azureContext(
-        new AzureContext()
-          .tenantId("fake_tenant_id")
-          .subscriptionId("fake_sub_id")
-          .resourceGroupId("fake_mrg_id")
-      )
+      new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .azureContext(
+          new AzureContext()
+            .tenantId("fake_tenant_id")
+            .subscriptionId("fake_sub_id")
+            .resourceGroupId("fake_mrg_id")
+        )
     )
     when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
       throw new ApiException(404, "not found")
@@ -1998,64 +2034,6 @@ class WorkspaceServiceSpec
       }
     }
   }
-
-  "migrateWorkspace" should "create an entry in the migration table" in
-    withTestDataServices { services =>
-      Await.result(
-        for {
-          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
-          isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.isPendingMigration(testData.v1Workspace)
-          }
-        } yield isMigrating should be(true),
-        30.seconds
-      )
-    }
-
-  "migrateAll" should "create and entry for each workspace listed" in
-    withTestDataServices { services =>
-      val workspaces = List(testData.v1Workspace)
-      Await.result(
-        for {
-          _ <- services.workspaceService.migrateAll(workspaces.map(_.toWorkspaceName))
-          isPendingMigration <- services.slickDataSource.inTransaction { dataAccess =>
-            workspaces.traverse(dataAccess.workspaceMigrationQuery.isPendingMigration)
-          }
-        } yield every(isPendingMigration) shouldBe true,
-        30.seconds
-      )
-    }
-
-  it should "not schedule any migrations if workspace is invalid" in
-    withTestDataServices { services =>
-      val workspaces = List(testData.v1Workspace, testData.workspace)
-      intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.migrateAll(workspaces.map(_.toWorkspaceName)), 30.seconds)
-      }
-
-      val isPendingMigration = Await.result(services.slickDataSource.inTransaction { dataAccess =>
-                                              workspaces.traverse(dataAccess.workspaceMigrationQuery.isPendingMigration)
-                                            },
-                                            30.seconds
-      )
-
-      every(isPendingMigration) shouldBe false
-    }
-
-  "getWorkspaceMigrations" should "return a list of workspace migration attempts" in
-    withTestDataServices { services =>
-      Await.result(
-        for {
-          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
-          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
-          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
-        } yield {
-          before shouldBe empty
-          after should not be empty
-        },
-        30.seconds
-      )
-    }
 
   "createWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
@@ -2973,6 +2951,7 @@ class WorkspaceServiceSpec
     response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
     response.azureContext shouldEqual None
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    response.workspace.state shouldBe WorkspaceState.Ready
   }
 
   private def createAzureWorkspace(services: TestApiService,
@@ -2988,6 +2967,7 @@ class WorkspaceServiceSpec
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
         .azureContext(
           new AzureContext()
             .tenantId(managedAppCoordinates.tenantId.toString)
@@ -3019,6 +2999,62 @@ class WorkspaceServiceSpec
     response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    response.workspace.state shouldBe WorkspaceState.Ready
+  }
+
+  it should "get the details of an Azure workspace that is deleting" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+
+    val deletingAzureWorkspace =
+      Workspace.buildMcWorkspace("test_namespace1",
+                                 "name",
+                                 workspaceId1,
+                                 new DateTime(),
+                                 new DateTime(),
+                                 "testUser1",
+                                 Map.empty,
+                                 WorkspaceState.Deleting
+      )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(deletingAzureWorkspace)
+      } yield ()
+    }
+
+    when(service.workspaceManagerDAO.getWorkspace(deletingAzureWorkspace.workspaceIdAsUUID, services.ctx1))
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
+
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    val readWorkspace = Await.result(
+      services.workspaceService.getWorkspace(
+        WorkspaceName(deletingAzureWorkspace.namespace, deletingAzureWorkspace.name),
+        WorkspaceFieldSpecs()
+      ),
+      Duration.Inf
+    )
+
+    val response = readWorkspace.convertTo[WorkspaceResponse]
+
+    response.workspace.state shouldBe WorkspaceState.Deleting
+    response.workspace.cloudPlatform shouldBe None
   }
 
   it should "return the policies of an Azure workspace" in withTestDataServices { services =>
@@ -3048,8 +3084,9 @@ class WorkspaceServiceSpec
     policy.name shouldBe wsmPolicyInput.getName
     policy.namespace shouldBe wsmPolicyInput.getNamespace
     val additionalData = policy.additionalData
-    additionalData.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
-    additionalData.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
+    additionalData.length shouldEqual 2
+    additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
+    additionalData.tail.head.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
   }
 
   it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>
@@ -3133,7 +3170,7 @@ class WorkspaceServiceSpec
         Duration.Inf
       )
 
-      val err = intercept[RawlsExceptionWithErrorReport] {
+      val err = intercept[AggregateWorkspaceNotFoundException] {
         Await.result(services.workspaceService.getWorkspace(
                        WorkspaceName(workspace.namespace, workspace.name),
                        WorkspaceFieldSpecs()
@@ -3155,14 +3192,14 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription() // no azureContext, should be an error
+      new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE) // no azureContext, should be an error
     )
     val workspace = Await.result(
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
     )
 
-    val err = intercept[RawlsExceptionWithErrorReport] {
+    val err = intercept[InvalidCloudContextException] {
       Await.result(services.workspaceService.getWorkspace(
                      WorkspaceName(workspace.namespace, workspace.name),
                      WorkspaceFieldSpecs()
@@ -3176,7 +3213,9 @@ class WorkspaceServiceSpec
     }
   }
 
-  "listWorkspaces" should "list the correct cloud platform for Azure and Google workspaces" in withTestDataServices {
+  behavior of "listWorkspaces"
+
+  it should "list the correct cloud platform and state for Azure and Google workspaces" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3184,13 +3223,13 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace.buildMcWorkspace("test_namespace1",
-                                   "name",
-                                   workspaceId1,
-                                   new DateTime(),
-                                   new DateTime(),
-                                   "testUser1",
-                                   Map.empty
+        Workspace.buildReadyMcWorkspace("test_namespace1",
+                                        "name",
+                                        workspaceId1,
+                                        new DateTime(),
+                                        new DateTime(),
+                                        "testUser1",
+                                        Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
@@ -3206,8 +3245,9 @@ class WorkspaceServiceSpec
         WorkspaceDetails.fromWorkspaceAndOptions(azureWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Azure))
       val googleWorkspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
-      val expected = List((azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform),
-                          (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform)
+      val expected = List(
+        (azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform, azureWorkspaceDetails.state),
+        (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
       )
 
       runAndWait {
@@ -3219,9 +3259,18 @@ class WorkspaceServiceSpec
 
       // mock external calls
       when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
-        .thenReturn(new WorkspaceDescription().azureContext(new AzureContext()))
+        .thenReturn(
+          new WorkspaceDescription()
+            .stage(WorkspaceStageModel.MC_WORKSPACE)
+            .azureContext(
+              new AzureContext()
+                .tenantId(UUID.randomUUID.toString)
+                .subscriptionId(UUID.randomUUID.toString)
+                .resourceGroupId(UUID.randomUUID.toString)
+            )
+        )
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
-        new WorkspaceDescription().gcpContext(new GcpContext())
+        new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE).gcpContext(new GcpContext())
       )
       when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
@@ -3253,80 +3302,109 @@ class WorkspaceServiceSpec
           .convertTo[Seq[WorkspaceListResponse]]
 
       // verify that the result is what you expect it to be
-      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+      result.map(ws =>
+        (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)
+      ) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "not return a MC workspace that does not have a cloud context" in withTestDataServices {
-    services =>
-      val service = services.workspaceService
-      val workspaceId1 = UUID.randomUUID().toString
-      val workspaceId2 = UUID.randomUUID().toString
+  it should "not return MC workspaces that do not have a cloud context" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+    val workspaceId2 = UUID.randomUUID().toString
+    val workspaceId3 = UUID.randomUUID().toString
 
-      // set up test data
-      val azureWorkspace =
-        Workspace.buildMcWorkspace("test_namespace1",
-                                   "name",
-                                   workspaceId1,
-                                   new DateTime(),
-                                   new DateTime(),
-                                   "testUser1",
-                                   Map.empty
-        )
-      val googleWorkspace = Workspace("test_namespace2",
-                                      workspaceId2,
-                                      workspaceId2,
-                                      "aBucket",
-                                      Some("workflow-collection"),
+    // set up test data
+    val deletingAzureWorkspace =
+      Workspace.buildMcWorkspace("test_namespace1",
+                                 "name1",
+                                 workspaceId1,
+                                 new DateTime(),
+                                 new DateTime(),
+                                 "testUser1",
+                                 Map.empty,
+                                 WorkspaceState.Deleting
+      )
+
+    val googleWorkspace = Workspace("test_namespace2",
+                                    workspaceId2,
+                                    workspaceId2,
+                                    "aBucket",
+                                    Some("workflow-collection"),
+                                    new DateTime(),
+                                    new DateTime(),
+                                    "testUser2",
+                                    Map.empty
+    )
+
+    val readyAzureWorkspace =
+      Workspace.buildReadyMcWorkspace("test_namespace3",
+                                      "name3",
+                                      workspaceId3,
                                       new DateTime(),
                                       new DateTime(),
-                                      "testUser2",
+                                      "testUser3",
                                       Map.empty
       )
 
-      runAndWait {
-        for {
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
-        } yield ()
-      }
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(readyAzureWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(deletingAzureWorkspace)
+      } yield ()
+    }
 
-      when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
-        .thenReturn(new WorkspaceDescription()) // no azureContext, should not be returned
-      when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
-        new WorkspaceDescription().gcpContext(new GcpContext())
-      )
-      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
-        Future(
-          Seq(
-            SamUserResource(
-              workspaceId1,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            ),
-            SamUserResource(
-              workspaceId2,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            )
+    when(service.workspaceManagerDAO.getWorkspace(deletingAzureWorkspace.workspaceIdAsUUID, services.ctx1))
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
+    when(service.workspaceManagerDAO.getWorkspace(readyAzureWorkspace.workspaceIdAsUUID, services.ctx1))
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
+    when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
+      new WorkspaceDescription().gcpContext(new GcpContext())
+    )
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            workspaceId2,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            workspaceId3,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
           )
         )
       )
+    )
 
-      val result =
-        Await
-          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-          .convertTo[Seq[WorkspaceListResponse]]
-      val expected = List((googleWorkspace.workspaceId, Some(WorkspaceCloudPlatform.Gcp)))
-      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+    val result =
+      Await
+        .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+    val expected = List((googleWorkspace.workspaceId, Some(WorkspaceCloudPlatform.Gcp)))
+    result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "log a warning and filter out the workspace if getWorkspace throws an ApiException" in withTestDataServices {
+  it should "log a warning and filter out the workspace if WSM's getWorkspace throws an ApiException" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3334,13 +3412,13 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace.buildMcWorkspace("test_namespace1",
-                                   "name",
-                                   workspaceId1,
-                                   new DateTime(),
-                                   new DateTime(),
-                                   "testUser1",
-                                   Map.empty
+        Workspace.buildReadyMcWorkspace("test_namespace1",
+                                        "name",
+                                        workspaceId1,
+                                        new DateTime(),
+                                        new DateTime(),
+                                        "testUser1",
+                                        Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
@@ -3400,220 +3478,72 @@ class WorkspaceServiceSpec
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "return only the leftmost N characters of string attributes" in withTestDataServices {
-    services =>
-      val service = services.workspaceService
-      val workspaceId1 = UUID.randomUUID().toString
-      val workspaceId2 = UUID.randomUUID().toString
+  it should "return only the leftmost N characters of string attributes" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+    val workspaceId2 = UUID.randomUUID().toString
 
-      val descriptionKey = AttributeName.withDefaultNS("description")
+    val descriptionKey = AttributeName.withDefaultNS("description")
 
-      val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
-      val longDescription = AttributeString("abcd" * 10000) // should be 40000 chars
+    val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
+    val longDescription = AttributeString("abcd" * 10000) // should be 40000 chars
 
-      // set up test data
-      val descriptive1 = Workspace(
-        "test_namespace2",
-        workspaceId1,
-        workspaceId1,
-        "aBucket",
-        Some("workflow-collection"),
-        new DateTime(),
-        new DateTime(),
-        "testUser2",
-        Map(descriptionKey -> shortDescription)
-      )
-      val descriptive2 = Workspace(
-        "test_namespace2",
-        workspaceId2,
-        workspaceId2,
-        "aBucket",
-        Some("workflow-collection"),
-        new DateTime(),
-        new DateTime(),
-        "testUser2",
-        Map(descriptionKey -> longDescription)
-      )
+    // set up test data
+    val descriptive1 = Workspace(
+      "test_namespace2",
+      workspaceId1,
+      workspaceId1,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map(descriptionKey -> shortDescription)
+    )
+    val descriptive2 = Workspace(
+      "test_namespace2",
+      workspaceId2,
+      workspaceId2,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map(descriptionKey -> longDescription)
+    )
 
-      runAndWait {
-        for {
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive2)
-        } yield ()
-      }
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive2)
+      } yield ()
+    }
 
-      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
-        Future(
-          Seq(
-            SamUserResource(
-              workspaceId1,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            ),
-            SamUserResource(
-              workspaceId2,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            )
+    when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            workspaceId2,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
           )
         )
       )
+    )
 
-      List(0, 1, 10, 200, 4096) foreach { stringAttributeMaxLength =>
-        info(s"for stringAttributeMaxLength = $stringAttributeMaxLength")
-        val result =
-          Await
-            .result(service.listWorkspaces(WorkspaceFieldSpecs(), stringAttributeMaxLength), Duration.Inf)
-            .convertTo[Seq[WorkspaceListResponse]]
-
-        result.map { ws =>
-          val actualAttributes = ws.workspace.attributes.getOrElse(Map())
-          actualAttributes.keySet should contain(descriptionKey)
-          val actual = actualAttributes.getOrElse(descriptionKey, AttributeNull)
-          actual match {
-            case AttributeString(s) =>
-              s.length should be <= stringAttributeMaxLength
-            case x => fail(s"description attribute was returned as a ${x.getClass.getSimpleName}")
-          }
-        }
-      }
-  }
-
-  "listWorkspaces" should "return entire string attributes when stringAttributeMaxLength = -1" in withTestDataServices {
-    services =>
-      val service = services.workspaceService
-      val workspaceId1 = UUID.randomUUID().toString
-      val workspaceId2 = UUID.randomUUID().toString
-
-      val descriptionKey = AttributeName.withDefaultNS("description")
-
-      val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
-      val longDescription = AttributeString("abcd" * 10000) // should be 40000 chars
-
-      // set up test data
-      val descriptive1 = Workspace(
-        "test_namespace2",
-        workspaceId1,
-        workspaceId1,
-        "aBucket",
-        Some("workflow-collection"),
-        new DateTime(),
-        new DateTime(),
-        "testUser2",
-        Map(descriptionKey -> shortDescription)
-      )
-      val descriptive2 = Workspace(
-        "test_namespace2",
-        workspaceId2,
-        workspaceId2,
-        "aBucket",
-        Some("workflow-collection"),
-        new DateTime(),
-        new DateTime(),
-        "testUser2",
-        Map(descriptionKey -> longDescription)
-      )
-
-      runAndWait {
-        for {
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive2)
-        } yield ()
-      }
-
-      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
-        Future(
-          Seq(
-            SamUserResource(
-              workspaceId1,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            ),
-            SamUserResource(
-              workspaceId2,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            )
-          )
-        )
-      )
-
-      val result =
-        Await
-          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-          .convertTo[Seq[WorkspaceListResponse]]
-
-      result.map { ws =>
-        val actualAttributes = ws.workspace.attributes.getOrElse(Map())
-        actualAttributes.keySet should contain(descriptionKey)
-        val actual = actualAttributes.getOrElse(descriptionKey, AttributeNull)
-        if (ws.workspace.workspaceId == workspaceId1) {
-          actual shouldBe shortDescription
-        } else {
-          actual shouldBe longDescription
-        }
-      }
-  }
-
-  "listWorkspaces" should "return numbers unchanged when specifying stringAttributeMaxLength" in withTestDataServices {
-    services =>
-      val service = services.workspaceService
-      val workspaceId1 = UUID.randomUUID().toString
-
-      val descriptionKey = AttributeName.withDefaultNS("description")
-      val numberKey = AttributeName.withDefaultNS("iamanumber")
-
-      val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
-      val numberAttr = AttributeNumber(123456789)
-
-      // set up test data
-      val descriptive1 = Workspace(
-        "test_namespace2",
-        workspaceId1,
-        workspaceId1,
-        "aBucket",
-        Some("workflow-collection"),
-        new DateTime(),
-        new DateTime(),
-        "testUser2",
-        Map(descriptionKey -> shortDescription, numberKey -> numberAttr)
-      )
-
-      runAndWait {
-        for {
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
-        } yield ()
-      }
-
-      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
-        Future(
-          Seq(
-            SamUserResource(
-              workspaceId1,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            )
-          )
-        )
-      )
-
-      val stringAttributeMaxLength = 5
-
+    List(0, 1, 10, 200, 4096) foreach { stringAttributeMaxLength =>
+      info(s"for stringAttributeMaxLength = $stringAttributeMaxLength")
       val result =
         Await
           .result(service.listWorkspaces(WorkspaceFieldSpecs(), stringAttributeMaxLength), Duration.Inf)
@@ -3622,18 +3552,163 @@ class WorkspaceServiceSpec
       result.map { ws =>
         val actualAttributes = ws.workspace.attributes.getOrElse(Map())
         actualAttributes.keySet should contain(descriptionKey)
-        actualAttributes.keySet should contain(numberKey)
-        val actualDescription = actualAttributes.getOrElse(descriptionKey, AttributeNull)
-        val actualNumber = actualAttributes.getOrElse(numberKey, AttributeNull)
-
-        actualDescription match {
+        val actual = actualAttributes.getOrElse(descriptionKey, AttributeNull)
+        actual match {
           case AttributeString(s) =>
-            s.length shouldBe stringAttributeMaxLength
+            s.length should be <= stringAttributeMaxLength
           case x => fail(s"description attribute was returned as a ${x.getClass.getSimpleName}")
         }
-
-        actualNumber shouldBe numberAttr
       }
+    }
+  }
+
+  it should "return entire string attributes when stringAttributeMaxLength = -1" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+    val workspaceId2 = UUID.randomUUID().toString
+
+    val descriptionKey = AttributeName.withDefaultNS("description")
+
+    val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
+    val longDescription = AttributeString("abcd" * 10000) // should be 40000 chars
+
+    // set up test data
+    val descriptive1 = Workspace(
+      "test_namespace2",
+      workspaceId1,
+      workspaceId1,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map(descriptionKey -> shortDescription)
+    )
+    val descriptive2 = Workspace(
+      "test_namespace2",
+      workspaceId2,
+      workspaceId2,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map(descriptionKey -> longDescription)
+    )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive2)
+      } yield ()
+    }
+
+    when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            workspaceId2,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    val result =
+      Await
+        .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+
+    result.map { ws =>
+      val actualAttributes = ws.workspace.attributes.getOrElse(Map())
+      actualAttributes.keySet should contain(descriptionKey)
+      val actual = actualAttributes.getOrElse(descriptionKey, AttributeNull)
+      if (ws.workspace.workspaceId == workspaceId1) {
+        actual shouldBe shortDescription
+      } else {
+        actual shouldBe longDescription
+      }
+    }
+  }
+
+  it should "return numbers unchanged when specifying stringAttributeMaxLength" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+
+    val descriptionKey = AttributeName.withDefaultNS("description")
+    val numberKey = AttributeName.withDefaultNS("iamanumber")
+
+    val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
+    val numberAttr = AttributeNumber(123456789)
+
+    // set up test data
+    val descriptive1 = Workspace(
+      "test_namespace2",
+      workspaceId1,
+      workspaceId1,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map(descriptionKey -> shortDescription, numberKey -> numberAttr)
+    )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
+      } yield ()
+    }
+
+    when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    val stringAttributeMaxLength = 5
+
+    val result =
+      Await
+        .result(service.listWorkspaces(WorkspaceFieldSpecs(), stringAttributeMaxLength), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+
+    result.map { ws =>
+      val actualAttributes = ws.workspace.attributes.getOrElse(Map())
+      actualAttributes.keySet should contain(descriptionKey)
+      actualAttributes.keySet should contain(numberKey)
+      val actualDescription = actualAttributes.getOrElse(descriptionKey, AttributeNull)
+      val actualNumber = actualAttributes.getOrElse(numberKey, AttributeNull)
+
+      actualDescription match {
+        case AttributeString(s) =>
+          s.length shouldBe stringAttributeMaxLength
+        case x => fail(s"description attribute was returned as a ${x.getClass.getSimpleName}")
+      }
+
+      actualNumber shouldBe numberAttr
+    }
   }
 
   "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {

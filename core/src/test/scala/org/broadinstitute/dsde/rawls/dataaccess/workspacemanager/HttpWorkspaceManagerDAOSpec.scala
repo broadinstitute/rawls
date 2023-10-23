@@ -55,22 +55,6 @@ class HttpWorkspaceManagerDAOSpec
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
   }
 
-  behavior of "enableApplication"
-
-  it should "call the WSM app API" in {
-    val workspaceApplicationApi = mock[WorkspaceApplicationApi]
-    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
-
-    val wsmDao = new HttpWorkspaceManagerDAO(
-      getApiClientProvider(workspaceApplicationApi = workspaceApplicationApi,
-                           controlledAzureResourceApi = controlledAzureResourceApi
-      )
-    )
-
-    wsmDao.enableApplication(workspaceId, "leo", testContext)
-    verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
-  }
-
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
                                            expectedCloningInstructions: CloningInstructionsEnum =
                                              CloningInstructionsEnum.NOTHING,
@@ -275,7 +259,7 @@ class HttpWorkspaceManagerDAOSpec
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
 
-  behavior of "createProtectedWorkspaceWithSpendProfile"
+  behavior of "createWorkspaceWithSpendProfile"
 
   it should "call the WSM workspace API" in {
     val workspaceApi = mock[WorkspaceApi]
@@ -295,14 +279,17 @@ class HttpWorkspaceManagerDAOSpec
       .displayName(testData.azureWorkspace.name)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .applicationIds(Seq("exampleApp").asJava)
       .policies(policyInputs)
       .projectOwnerGroupId(billingProjectId)
 
-    wsmDao.createProtectedWorkspaceWithSpendProfile(
+    wsmDao.createWorkspaceWithSpendProfile(
       testData.azureWorkspace.workspaceIdAsUUID,
       testData.azureWorkspace.name,
       testData.azureBillingProfile.getId.toString,
       billingProjectId,
+      Seq("exampleApp"),
+      Some(policyInputs),
       testContext
     )
 
@@ -315,7 +302,7 @@ class HttpWorkspaceManagerDAOSpec
     val workspaceApi = mock[WorkspaceApi]
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
-    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, testContext)
+    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, UUID.randomUUID().toString, testContext)
 
     verify(workspaceApi).deleteWorkspaceV2(any[DeleteWorkspaceV2Request],
                                            ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID)

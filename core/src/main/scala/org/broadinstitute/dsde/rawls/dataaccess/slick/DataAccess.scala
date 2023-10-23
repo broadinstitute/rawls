@@ -1,8 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
-import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJobs.PpwStorageTransferJobs
-import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationHistory, WorkspaceMigrationHistory}
+import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationHistory}
 import slick.jdbc.JdbcProfile
 
 import javax.naming.NameNotFoundException
@@ -26,7 +25,6 @@ trait DataAccess
     with LocalEntityExpressionQueries
     with CloneWorkspaceFileTransferComponent
     with WorkspaceFeatureFlagComponent
-    with WorkspaceMigrationHistory
     with WorkspaceManagerResourceMonitorRecordComponent
     with FastPassGrantComponent
     with MultiregionalBucketMigrationHistory {
@@ -76,9 +74,6 @@ trait DataAccess
       TableQuery[EntityAttributeStatisticsTable].delete andThen // FK to workspace
       TableQuery[EntityCacheTable].delete andThen // FK to workspace
       TableQuery[CloneWorkspaceFileTransferTable].delete andThen // FK to workspace
-      TableQuery[PpwStorageTransferJobs].delete andThen // FK to V1_WORKSPACE_MIGRATION_QUERY
-      migrationRetryQuery.delete andThen // FK to V1_WORKSPACE_MIGRATION_QUERY
-      workspaceMigrationQuery.delete andThen // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[BillingAccountChanges].delete andThen // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen

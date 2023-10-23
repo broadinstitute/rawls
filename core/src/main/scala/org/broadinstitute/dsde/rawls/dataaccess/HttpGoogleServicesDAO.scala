@@ -123,6 +123,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   val SingleRegionLocationType: String = "region"
 
+  val REQUESTER_PAYS_ERROR_SUBSTRINGS = Seq("requester pays", "UserProjectMissing")
+
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId]
@@ -159,6 +161,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
     // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
 
+    // it can also take some time for Google to come to a consensus about a bucket's existence when it is newly created.
+    // during this time, we may see intermittent 404s indicating that the bucket we just created doesn't exist. we need to
+    // retry these 404s in this case.
+
     // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
     // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
     googleStorageService
@@ -166,7 +172,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         bucketName,
         roleToIdentities.toMap,
         retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate,
-                                                                RetryPredicates.whenStatusCode(400)
+                                                                RetryPredicates.whenStatusCode(400),
+                                                                RetryPredicates.whenStatusCode(404)
         ),
         bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList
       )
@@ -620,6 +627,35 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         .map(_.getOrElse(List.empty).toSet)
         .unsafeToFuture()
     }
+
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] = {
+    implicit val async = IO.asyncForIO
+    val credentials = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes))
+    val storageServiceResource = GoogleStorageService.fromCredentials(credentials)
+    storageServiceResource
+      .use { storageService =>
+        storageService.getBucket(googleProject, bucketName, warnOnError = true)
+      }
+      .map(_.isDefined)
+      .unsafeToFuture()
+      .recoverWith {
+        case t: Throwable if REQUESTER_PAYS_ERROR_SUBSTRINGS.exists(t.getMessage.toLowerCase.contains) =>
+          logger.info(
+            s"${credentials.getClientEmail} was unable to get bucket location for $googleProject/$bucketName, but it appears this is a requester-pays bucket"
+          )
+          Future.successful(true)
+        case t: Throwable =>
+          logger.warn(s"${credentials.getClientEmail} was unable to get bucket location for $googleProject/$bucketName",
+                      t
+          )
+          Future.successful(false)
+      }
+  }
 
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
@@ -1221,16 +1257,17 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  def getServiceAccountRawlsUser(): Future[RawlsUser] =
-    getRawlsUserForCreds(getBucketServiceAccountCredential)
-
   def getRawlsUserForCreds(creds: Credential): Future[RawlsUser] = {
     implicit val service = GoogleInstrumentedService.Groups
     val oauth2 = new Builder(httpTransport, jsonFactory, null).setApplicationName(appName).build()
     Future {
       creds.refreshToken()
-      val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken))
+      val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken), logRequest = false)
       RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
+    }.recover { case e: GoogleJsonResponseException =>
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.InternalServerError, s"Failed to get token info: ${e.getMessage}")
+      )
     }
   }
 

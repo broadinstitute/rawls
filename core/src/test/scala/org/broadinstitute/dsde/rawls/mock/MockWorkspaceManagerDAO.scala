@@ -8,6 +8,7 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceDescriptionField,
   DataReferenceName,
@@ -27,7 +28,8 @@ class MockWorkspaceManagerDAO(
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
 
-  def mockGetWorkspaceResponse(workspaceId: UUID) = new WorkspaceDescription().id(workspaceId)
+  def mockGetWorkspaceResponse(workspaceId: UUID) =
+    new WorkspaceDescription().id(workspaceId).stage(WorkspaceStageModel.RAWLS_WORKSPACE)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId)
   def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.getOrElse(
     (workspaceId, referenceId),
@@ -44,7 +46,10 @@ class MockWorkspaceManagerDAO(
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
     mockGetWorkspaceResponse(workspaceId)
 
-  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
+  override def createWorkspace(workspaceId: UUID,
+                               workspaceType: WorkspaceType, // currently ignored by the mock
+                               ctx: RawlsRequestContext
+  ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,
@@ -202,15 +207,9 @@ class MockWorkspaceManagerDAO(
                                                displayName: String,
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
+                                               applicationIds: Seq[String],
+                                               policyInputs: Option[WsmPolicyInputs],
                                                ctx: RawlsRequestContext
-  ): CreatedWorkspace =
-    mockCreateWorkspaceResponse(workspaceId)
-
-  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                                        displayName: String,
-                                                        spendProfileId: String,
-                                                        billingProjectNamespace: String,
-                                                        ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
@@ -221,18 +220,6 @@ class MockWorkspaceManagerDAO(
                                                     jobControlId: String,
                                                     ctx: RawlsRequestContext
   ): CreateCloudContextResult = mockCreateAzureCloudContextResult()
-
-  override def enableApplication(workspaceId: UUID,
-                                 applicationId: String,
-                                 ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
-
-  override def disableApplication(workspaceId: UUID,
-                                  applicationId: String,
-                                  ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription =
-    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
@@ -267,7 +254,7 @@ class MockWorkspaceManagerDAO(
 
   override def throwWhenUnavailable(): Unit = ()
 
-  override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult =
+  override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
     new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString))
 
   override def getDeleteWorkspaceV2Result(workspaceId: UUID,

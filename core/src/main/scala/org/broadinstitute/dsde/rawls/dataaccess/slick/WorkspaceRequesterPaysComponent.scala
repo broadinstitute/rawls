@@ -45,18 +45,9 @@ trait WorkspaceRequesterPaysComponent {
 
     def deleteAllForUser(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): ReadWriteAction[Int] =
       existingRecordsForUserQuery(workspaceName, userEmail).delete
-    // TODO (CA-1235/1236): Remove after PPW migration is done. We will no longer need to track users on a per namespace basis, since Google Projects are scoped to the workspace
-    def userExistsInWorkspaceNamespaceAssociatedGoogleProject(namespace: String,
-                                                              userEmail: RawlsUserEmail
-    ): ReadAction[Boolean] = {
-      val query = (workspaceQuery join workspaceRequesterPaysQuery on (_.id === _.workspaceId)).filter {
-        case (ws, rp) =>
-          ws.namespace === namespace && rp.userEmail === userEmail.value && ws.workspaceVersion === WorkspaceVersions.V1
-            .toString()
-      }
 
-      query.exists.result
-    }
+    def deleteAllForWorkspace(workspaceId: UUID): ReadWriteAction[Int] =
+      recordsForWorkspaceQuery(workspaceId).delete
 
     def listAllForUser(workspaceName: WorkspaceName,
                        userEmail: RawlsUserEmail
@@ -85,6 +76,13 @@ trait WorkspaceRequesterPaysComponent {
       workspaceQuery.filter(ws => ws.namespace === workspaceName.namespace && ws.name === workspaceName.name).map(_.id)
     workspaceRequesterPaysQuery.filter(_.workspaceId in workspaceSubquery).filter(_.userEmail === userEmail.value)
   }
+
+  private def recordsForWorkspaceQuery(
+    workspaceId: UUID
+  ): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] =
+    for {
+      rp <- workspaceRequesterPaysQuery if rp.workspaceId === workspaceId
+    } yield rp
 
   private def existingRecordsForWorkspaceQuery(
     workspaceName: WorkspaceName
