@@ -151,12 +151,12 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{
+            "additional-args": JSON.stringify({ "logging": "true", "java-version": "17" }),
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}-${{ matrix.terra-env }}-${{ matrix.testing-env }}-${{ matrix.test-group.group_name }}",
             "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
             "ENV": "${{ matrix.testing-env }}",
             "test-group-name": "${{ matrix.test-group.group_name }}",
-            "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
-            "java-version": "17"
+            "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}"
           }'
 
   destroy-bee-workflow:
