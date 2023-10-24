@@ -8,6 +8,6 @@ object DeletionAction {
     throwable match {
       case t: WsmApiException => t.getCode / 100 == 5
       case t: LeoApiException => t.getCode / 100 == 5
-      case _ => false
+      case _                  => false
     }
 }
