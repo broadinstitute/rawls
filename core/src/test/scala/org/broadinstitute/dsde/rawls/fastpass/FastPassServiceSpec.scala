@@ -451,6 +451,10 @@ class FastPassServiceSpec
   }
 
   it should "sync FastPass grants for a workspace with the current user context" in withTestDataServices { services =>
+    verifyFastPassGrantsSynced(services)
+  }
+
+  def verifyFastPassGrantsSynced(services: TestApiService) = {
     val beforeCreate = OffsetDateTime.now(ZoneOffset.UTC)
     Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
 
@@ -1431,5 +1435,74 @@ class FastPassServiceSpec
     )
 
     verifyNoInteractions(iamDAO, storageDAO, gcsDAO)
+  }
+
+  it should "not issue FastPass grants when a workspace's bucket migration failed" in withMinimalTestDatabase { _ =>
+    val ctx = RawlsRequestContext(
+      UserInfo(RawlsUserEmail("user@example.com"),
+               OAuth2BearerToken("fake_token"),
+               0L,
+               RawlsUserSubjectId(UUID.randomUUID().toString)
+      )
+    )
+    val config = FastPassConfig(true, JavaDuration.ZERO, JavaDuration.ZERO)
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    val iamDAO = spy(new MockGoogleIamDAO)
+    val storageDAO = spy(new MockGoogleStorageDAO)
+    val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))
+    val fastPassService =
+      new FastPassService(ctx, slickDataSource, config, iamDAO, storageDAO, gcsDAO, null, "", "", "", "", "")
+
+    Await.result(
+      for {
+        _ <- slickDataSource.inTransaction { dataAccess =>
+          for {
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(minimalTestData.workspace, Option("US"))
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(minimalTestData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update3(
+              attempt.getOrElse(fail()).id,
+              multiregionalBucketMigrationQuery.startedCol,
+              Some(Timestamp.valueOf(LocalDateTime.now())),
+              multiregionalBucketMigrationQuery.finishedCol,
+              Some(Timestamp.valueOf(LocalDateTime.now())),
+              multiregionalBucketMigrationQuery.outcomeCol,
+              Some("Failure")
+            )
+          } yield ()
+        }
+        _ <- fastPassService.syncFastPassesForUserInWorkspace(minimalTestData.workspace)
+      } yield (),
+      Duration.Inf
+    )
+
+    verifyNoInteractions(iamDAO, storageDAO, gcsDAO)
+  }
+
+  it should "issue FastPass grants when a workspace's bucket has been migrated successfully" in withTestDataServices {
+    services =>
+      Await.result(
+        services.slickDataSource.inTransaction { dataAccess =>
+          for {
+            _ <- dataAccess.multiregionalBucketMigrationQuery.schedule(testData.workspace, Option("US"))
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update3(
+              attempt.getOrElse(fail()).id,
+              multiregionalBucketMigrationQuery.startedCol,
+              Some(Timestamp.valueOf(LocalDateTime.now())),
+              multiregionalBucketMigrationQuery.finishedCol,
+              Some(Timestamp.valueOf(LocalDateTime.now())),
+              multiregionalBucketMigrationQuery.outcomeCol,
+              Some("Success")
+            )
+          } yield ()
+        },
+        Duration.Inf
+      )
+
+      verifyFastPassGrantsSynced(services)
   }
 }
