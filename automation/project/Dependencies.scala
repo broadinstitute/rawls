@@ -8,7 +8,7 @@ object Dependencies {
   val jacksonV      = "2.15.2"
 
   val workbenchLibsHash = "e42c23c"
-  val serviceTestV = "4.1-cd966bed-SNAP"
+  val serviceTestV = "4.1-365557ae-SNAP"
   val workbenchGoogleV = s"0.29-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.32-${workbenchLibsHash}"
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"

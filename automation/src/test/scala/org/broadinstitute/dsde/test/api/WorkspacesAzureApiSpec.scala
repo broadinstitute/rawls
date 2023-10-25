@@ -157,12 +157,16 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
           verifyBlobNotCloned(cloneSasUrl, nonAnalysesFilename)
         }
       } finally {
-        Rawls.workspaces.delete(projectName, workspaceCloneName)
-        assertNoAccessToWorkspace(projectName, workspaceCloneName)
+        withClue(s"deleting the cloned workspace ${workspaceCloneName} failed") {
+          Rawls.workspaces.delete(projectName, workspaceCloneName)
+          assertNoAccessToWorkspace(projectName, workspaceCloneName)
+        }
       }
     } finally {
-      Rawls.workspaces.delete(projectName, workspaceName)
-      assertNoAccessToWorkspace(projectName, workspaceName)
+      withClue(s"deleting the original workspace ${workspaceName} failed") {
+        Rawls.workspaces.delete(projectName, workspaceName)
+        assertNoAccessToWorkspace(projectName, workspaceName)
+      }
     }
   }
 
