@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceCloudPlatform,
   WorkspacePolicy,
-  WorkspaceState,
   WorkspaceType
 }
 
@@ -28,29 +27,20 @@ case class AggregatedWorkspace(
   policies: List[WorkspacePolicy]
 ) {
 
-  def getCloudPlatform: Option[WorkspaceCloudPlatform] = {
+  def getCloudPlatform: WorkspaceCloudPlatform = {
     if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
-      return Some(WorkspaceCloudPlatform.Gcp)
+      return WorkspaceCloudPlatform.Gcp
     }
-
-    (googleProjectId, azureCloudContext, baseWorkspace.state) match {
-      case (Some(_), None, _) => Some(WorkspaceCloudPlatform.Gcp)
-      case (None, Some(_), _) => Some(WorkspaceCloudPlatform.Azure)
-      case (Some(_), Some(_), _) =>
+    (googleProjectId, azureCloudContext) match {
+      case (Some(_), None) => WorkspaceCloudPlatform.Gcp
+      case (None, Some(_)) => WorkspaceCloudPlatform.Azure
+      case (_, _) =>
         throw new InvalidCloudContextException(
           ErrorReport(
             StatusCodes.NotImplemented,
-            s"Unexpected state, expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId} in state ${baseWorkspace.state}"
+            s"Unexpected state, expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId}"
           )
         )
-      case (None, None, WorkspaceState.Ready) =>
-        throw new InvalidCloudContextException(
-          ErrorReport(
-            StatusCodes.NotImplemented,
-            s"Unexpected state, no cloud metadata for ready workspace ${baseWorkspace.workspaceId}"
-          )
-        )
-      case (None, None, _) => None // If we aren't in the Ready state, tolerate no cloud context
     }
   }
 }

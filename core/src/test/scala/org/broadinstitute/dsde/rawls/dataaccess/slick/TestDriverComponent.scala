@@ -1663,27 +1663,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       WorkspaceState.Ready
     )
 
-    val deletingAzureWorkspace = new Workspace(
-      namespace = azureBillingProjectName.value,
-      name = "test-deleting-azure-workspace",
-      workspaceId = UUID.randomUUID().toString,
-      bucketName = "",
-      workflowCollectionName = None,
-      createdDate = currentTime(),
-      lastModified = currentTime(),
-      createdBy = "testUser",
-      attributes = Map.empty,
-      isLocked = false,
-      workspaceVersion = WorkspaceVersions.V2,
-      googleProjectId = GoogleProjectId(""),
-      googleProjectNumber = None,
-      currentBillingAccountOnGoogleProject = None,
-      errorMessage = None,
-      completedCloneWorkspaceFileTransfer = None,
-      workspaceType = WorkspaceType.McWorkspace,
-      WorkspaceState.Deleting
-    )
-
     val allWorkspaces = Seq(
       workspace,
       workspaceLocked,
@@ -1706,8 +1685,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceToTestGrant,
       workspaceConfigCopyDestination,
       regionalWorkspace,
-      azureWorkspace,
-      deletingAzureWorkspace
+      azureWorkspace
     )
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 

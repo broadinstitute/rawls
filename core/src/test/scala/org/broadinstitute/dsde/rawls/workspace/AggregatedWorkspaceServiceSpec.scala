@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   GoogleProjectId,
@@ -15,8 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo,
   Workspace,
   WorkspaceCloudPlatform,
-  WorkspacePolicy,
-  WorkspaceState
+  WorkspacePolicy
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
@@ -89,7 +87,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     aggregatedWorkspace.baseWorkspace shouldBe mcRawlsWorkspace
     aggregatedWorkspace.azureCloudContext shouldBe Some(azContext)
     aggregatedWorkspace.googleProjectId shouldBe None
-    aggregatedWorkspace.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Azure
     aggregatedWorkspace.policies shouldBe policies.map(input =>
       WorkspacePolicy(
         input.getName,
@@ -116,7 +114,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val aggregatedWorkspace = svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
 
     aggregatedWorkspace.baseWorkspace shouldBe mcRawlsWorkspace
-    aggregatedWorkspace.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
     aggregatedWorkspace.azureCloudContext shouldBe None
     aggregatedWorkspace.googleProjectId shouldBe Some(GoogleProjectId("project-id"))
   }
@@ -158,31 +156,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
       svc.fetchAggregatedWorkspace(mcRawlsWorkspace, defaultRequestContext)
     }
 
-    thrown.getMessage should include("no cloud metadata for ready workspace")
-  }
-
-  it should "not raise for a creating MC workspace with no cloud context" in {
-    val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
-    )
-    val svc = new AggregatedWorkspaceService(wsmDao)
-    val creatingMcWorkspace = buildMcWorkspace(
-      "namespace",
-      "name",
-      workspaceId = UUID.randomUUID.toString,
-      createdDate = DateTime.now(),
-      lastModified = DateTime.now(),
-      createdBy = "fake",
-      attributes = Map.empty,
-      WorkspaceState.Creating
-    )
-
-    val aggregatedWorkspace = svc.fetchAggregatedWorkspace(creatingMcWorkspace, defaultRequestContext)
-    aggregatedWorkspace.baseWorkspace shouldBe creatingMcWorkspace
-    aggregatedWorkspace.getCloudPlatform shouldBe None
-    aggregatedWorkspace.azureCloudContext shouldBe None
-    aggregatedWorkspace.googleProjectId shouldBe None
+    thrown.getMessage should include("expected exactly one set of cloud metadata")
   }
 
   it should "default to GCP if the WSM workspace is a legacy Rawls workspace" in {
@@ -195,7 +169,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val aggregatedWorkspace = svc.fetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
 
     aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
-    aggregatedWorkspace.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
     aggregatedWorkspace.azureCloudContext shouldBe None
     aggregatedWorkspace.googleProjectId shouldBe Some(legacyRawlsWorkspace.googleProjectId)
   }
@@ -212,7 +186,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val aggregatedWorkspace = svc.fetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
 
     aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
-    aggregatedWorkspace.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
     aggregatedWorkspace.azureCloudContext shouldBe None
     verify(wsmDao).getWorkspace(ArgumentMatchers.eq(legacyRawlsWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
   }
@@ -229,7 +203,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     val aggregatedWorkspace = svc.optimizedFetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
 
     aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
-    aggregatedWorkspace.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
     aggregatedWorkspace.azureCloudContext shouldBe None
     aggregatedWorkspace.googleProjectId shouldBe Some(legacyRawlsWorkspace.googleProjectId)
     verify(wsmDao, never()).getWorkspace(any[UUID], any[RawlsRequestContext])

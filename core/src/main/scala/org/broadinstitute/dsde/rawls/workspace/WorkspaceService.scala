@@ -337,15 +337,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               // determine which functions to use for the various part of the response
               def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] =
                 if (options.contains("bucketOptions")) {
-                  wsmContext.googleProjectId match {
+                  wsmContext.azureCloudContext match {
                     case None =>
-                      noFuture
-                    case _ =>
                       traceWithParent("getBucketDetails", s1)(_ =>
                         gcsDAO
                           .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
                           .map(Option(_))
                       )
+                    case _ => noFuture
                   }
                 } else {
                   noFuture
@@ -354,7 +353,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 traceWithParent("getUserComputePermissions", s1)(_ =>
                   getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
                                             accessLevel,
-                                            wsmContext.getCloudPlatform
+                                            Some(wsmContext.getCloudPlatform)
                   )
                     .map(Option(_))
                 )
@@ -428,7 +427,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
                                                            authDomain,
                                                            useAttributes,
-                                                           wsmContext.getCloudPlatform
+                                                           Some(wsmContext.getCloudPlatform)
                   ),
                   stats,
                   bucketDetails,
@@ -1007,7 +1006,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         )
                       ),
                       attributesEnabled,
-                      wsmContext.getCloudPlatform
+                      Some(wsmContext.getCloudPlatform)
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -1015,21 +1014,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   } else {
                     None
                   }
-                  // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
-                  // cloud context will throw a WorkspaceAggregationException, which is handled below)
-                  wsmContext.getCloudPlatform match {
-                    case None => None
-                    case _ =>
-                      Option(
-                        WorkspaceListResponse(
-                          accessLevel,
-                          workspaceDetails,
-                          submissionStats,
-                          workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
-                          Some(wsmContext.policies)
-                        )
-                      )
-                  }
+                  Option(
+                    WorkspaceListResponse(
+                      accessLevel,
+                      workspaceDetails,
+                      submissionStats,
+                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
+                      Some(wsmContext.policies)
+                    )
+                  )
                 } catch {
                   // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
                   // be reachable when running against the dev environment.
@@ -1038,7 +1031,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
                     )
                     None
-                  // This catches the case of a Ready MC workspace with no cloud context, filtering out such workspaces.
                   case ex: WorkspaceAggregationException =>
                     logger.error(ex.getMessage)
                     None
