@@ -74,7 +74,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
       response.accessLevel should be(Some(ProjectOwner))
     } finally {
-      Rawls.workspaces.delete(projectName, workspaceName)
+      Rawls.workspaces.delete(projectName, workspaceName, 20)
       assertNoAccessToWorkspace(projectName, workspaceName)
     }
   }
