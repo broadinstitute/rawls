@@ -111,7 +111,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
 
       withClue(s"WDS did not become deletable within the timeout period") {
         awaitCond(
-          isWdsDeletable(projectName, workspaceName),
+          isWdsDeletable(projectName, workspaceName, token),
           300 seconds,
           10 seconds
         )
