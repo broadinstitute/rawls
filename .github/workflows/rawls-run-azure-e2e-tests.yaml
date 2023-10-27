@@ -209,7 +209,7 @@ jobs:
           run-name: "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}"
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/add-leo-to-swat
+          ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",

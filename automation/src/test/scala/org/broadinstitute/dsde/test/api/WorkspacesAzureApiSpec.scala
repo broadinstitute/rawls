@@ -58,7 +58,25 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  "Rawls" should "allow creation and deletion of azure workspaces" in {
+  "Other Terra services" should "should include Leonardo" in {
+    implicit val token = ownerAuthToken
+    val statusRequest = Rawls.getRequest(leoUrl + "status")
+
+    withClue(s"Leo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+      statusRequest.status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "should include WorkspaceManager" in {
+    implicit val token = ownerAuthToken
+    val statusRequest = Rawls.getRequest(wsmUrl + "status")
+
+    withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+      statusRequest.status shouldBe StatusCodes.OK
+    }
+  }
+
+  "Rawls" should "allow creation and deletion of azure workspaces without WDS" in {
     implicit val token = ownerAuthToken
     val projectName = billingProject
     val workspaceName = generateWorkspaceName()
@@ -80,21 +98,27 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  it should "allow access to WorkspaceManager API" in {
+  it should "allow creation and deletion of azure workspaces with WDS" in {
     implicit val token = ownerAuthToken
-    val statusRequest = Rawls.getRequest(wsmUrl + "status")
+    val projectName = billingProject
+    val workspaceName = generateWorkspaceName()
+    Rawls.workspaces.create(projectName, workspaceName)
 
-    withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
-      statusRequest.status shouldBe StatusCodes.OK
-    }
-  }
+    try {
+      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+      response.workspace.name should be(workspaceName)
+      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
 
-  it should "allow access to Leonardo API" in {
-    implicit val token = ownerAuthToken
-    val statusRequest = Rawls.getRequest(leoUrl + "status")
-
-    withClue(s"Leo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
-      statusRequest.status shouldBe StatusCodes.OK
+      withClue(s"WDS did not become deletable within the timeout period") {
+        awaitCond(
+          isWdsDeletable(projectName, workspaceName),
+          300 seconds,
+          10 seconds
+        )
+      }
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
     }
   }
 
@@ -166,18 +190,16 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
         withClue(s"testing blob ${nonAnalysesFilename} did not clone") {
           verifyBlobNotCloned(cloneSasUrl, nonAnalysesFilename)
         }
-      } finally {
+      } finally
         withClue(s"deleting the cloned workspace ${workspaceCloneName} failed") {
           Rawls.workspaces.delete(projectName, workspaceCloneName)
           assertNoAccessToWorkspace(projectName, workspaceCloneName)
         }
-      }
-    } finally {
+    } finally
       withClue(s"deleting the original workspace ${workspaceName} failed") {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
-    }
   }
 
   it should "allow listing workspaces" in {
@@ -369,5 +391,19 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       wsmUrl + s"api/workspaces/v1/${workspaceId}/resources/controlled/azure/storageContainer/${containerId}/getSasToken"
     )
     sasResponse.parseJson.asJsObject.getFields("url").head.convertTo[String]
+  }
+
+  private def isWdsDeletable(projectName: String, workspaceName: String, authToken: AuthToken) = {
+    implicit val token = authToken
+    val workspaceId = getWorkspaceId(projectName, workspaceName)
+
+    val appResponse = Rawls.postRequest(leoUrl + s"api/apps/v2/${workspaceId}/wds-${workspaceId}")
+    val wdsStatus = appResponse.parseJson.asJsObject.getFields("status").head.convertTo[String]
+    logger.info(s"WDS is in status ${wdsStatus}")
+    wdsStatus.toLowerCase match {
+      case "running" => true
+      case "error"   => true
+      case _         => false
+    }
   }
 }
