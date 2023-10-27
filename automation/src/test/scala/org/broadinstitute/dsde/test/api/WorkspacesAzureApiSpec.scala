@@ -275,12 +275,14 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
       response.workspace.name should be(workspaceName)
       response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      val workspaceId = response.workspace.workspaceId
+      val creationTimeout = 600
 
-      withClue(s"WDS did not become deletable within the timeout period") {
+      withClue(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
         awaitCond(
-          isWdsDeletable(projectName, workspaceName, token),
-          300 seconds,
-          10 seconds
+          isWdsDeletable(workspaceId, token),
+          creationTimeout seconds,
+          20 seconds
         )
       }
     } finally {
@@ -393,9 +395,8 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     sasResponse.parseJson.asJsObject.getFields("url").head.convertTo[String]
   }
 
-  private def isWdsDeletable(projectName: String, workspaceName: String, authToken: AuthToken) = {
+  private def isWdsDeletable(workspaceId: String, authToken: AuthToken) = {
     implicit val token = authToken
-    val workspaceId = getWorkspaceId(projectName, workspaceName)
 
     val appResponse = Rawls.parseResponse(Rawls.getRequest(leoUrl + s"api/apps/v2/${workspaceId}/wds-${workspaceId}"))
     val wdsStatus = appResponse.parseJson.asJsObject.getFields("status").head.convertTo[String]
