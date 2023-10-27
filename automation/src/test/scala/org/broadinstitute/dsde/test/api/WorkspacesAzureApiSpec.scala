@@ -58,7 +58,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  "Other Terra services" should "should include Leonardo" in {
+  "Other Terra services" should "include Leonardo" in {
     implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(leoUrl + "status")
 
@@ -67,7 +67,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  it should "should include WorkspaceManager" in {
+  it should "include WorkspaceManager" in {
     implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
@@ -76,7 +76,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  "Rawls" should "allow creation and deletion of azure workspaces without WDS" in {
+  "Rawls" should "allow creation and deletion of an Azure workspace without WDS" in {
     implicit val token = ownerAuthToken
     val projectName = billingProject
     val workspaceName = generateWorkspaceName()
@@ -265,7 +265,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  it should "allow creation and deletion of azure workspaces with WDS" in {
+  it should "allow creation and deletion of an Azure workspace with WDS" in {
     implicit val token = ownerAuthToken
     val projectName = billingProject
     val workspaceName = generateWorkspaceName()
