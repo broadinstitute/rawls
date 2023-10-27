@@ -209,13 +209,13 @@ jobs:
           run-name: "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}"
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/add-leo-to-swat
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
-            "ref": "refs/heads/add-leo-to-swat",
+            "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
             "test-group-name": "workspaces_azure",
             "test-command": "${{ env.rawls_test_command }}",
             "java-version": "17",
