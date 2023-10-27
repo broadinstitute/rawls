@@ -397,7 +397,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     implicit val token = authToken
     val workspaceId = getWorkspaceId(projectName, workspaceName)
 
-    val appResponse = Rawls.getRequest(leoUrl + s"api/apps/v2/${workspaceId}/wds-${workspaceId}")
+    val appResponse = Rawls.parseResponse(Rawls.getRequest(leoUrl + s"api/apps/v2/${workspaceId}/wds-${workspaceId}"))
     val wdsStatus = appResponse.parseJson.asJsObject.getFields("status").head.convertTo[String]
     logger.info(s"WDS is in status ${wdsStatus}")
     wdsStatus.toLowerCase match {
