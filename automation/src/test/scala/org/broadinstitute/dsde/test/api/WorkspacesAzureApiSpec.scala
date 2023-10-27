@@ -39,6 +39,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
   var nonOwnerAuthToken: ProxyAuthToken = _
 
   private val wsmUrl = RawlsConfig.wsmUrl
+  private val leoUrl = RawlsConfig.leoUrl
 
   implicit val system = ActorSystem()
 
@@ -84,6 +85,15 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
     withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+      statusRequest.status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "allow access to Leonardo API" in {
+    implicit val token = ownerAuthToken
+    val statusRequest = Rawls.getRequest(leoUrl + "status")
+
+    withClue(s"Leo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
       statusRequest.status shouldBe StatusCodes.OK
     }
   }
