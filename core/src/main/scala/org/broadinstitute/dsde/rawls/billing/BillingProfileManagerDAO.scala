@@ -79,9 +79,9 @@ class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExcepti
 class BpmAzureSpendReportApiException(val statusCode: Int, message: String, cause: Throwable = null)
     extends Exception(message, cause)
 
-class BillingProfileNotFoundException(billingProfileId: UUID, cause: Throwable)
+class BpmException(billingProfileId: UUID, cause: Throwable)
     extends RawlsExceptionWithErrorReport(
-      ErrorReport(StatusCodes.NotFound, s"Billing profile not found $billingProfileId", cause)
+      ErrorReport(StatusCodes.InternalServerError, s"Error fetching billing profile ID $billingProfileId", cause)
     )
 
 object BillingProfileManagerDAO {
@@ -151,7 +151,7 @@ class BillingProfileManagerDAOImpl(
       case Success(value) => value
       case Failure(e: ApiException) if e.getCode == StatusCodes.NotFound.intValue =>
         None
-      case Failure(e) => throw new BillingProfileNotFoundException(billingProfileId, e);
+      case Failure(e) => throw new BpmException(billingProfileId, e);
     }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =

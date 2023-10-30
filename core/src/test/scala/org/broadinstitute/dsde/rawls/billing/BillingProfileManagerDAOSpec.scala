@@ -91,7 +91,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val billingProfileManagerDAO =
       new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
-    intercept[BillingProfileNotFoundException] {
+    intercept[BpmException] {
       billingProfileManagerDAO.getBillingProfile(UUID.randomUUID(), testContext)
     }
   }
