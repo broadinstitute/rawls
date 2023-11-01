@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.LeonardoDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
@@ -58,7 +58,7 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
   def listApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListAppResponse]] =
-    retry(when500) { () =>
+    retry(when500OrProcessingException) { () =>
       Future {
         blocking {
           leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
@@ -69,7 +69,7 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
   def listAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListRuntimeResponse]] =
-    retry(when500) { () =>
+    retry(when500OrProcessingException) { () =>
       Future {
         blocking {
           leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
@@ -78,7 +78,7 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
     }
 
   def deleteApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
-    retry(when500) { () =>
+    retry(when500OrProcessingException) { () =>
       Future {
         blocking {
           logger.info(s"Sending app deletion request [workspaceId=${workspace.workspaceIdAsUUID}]")
@@ -88,7 +88,7 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
     }
 
   def deleteRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
-    retry(when500) { () =>
+    retry(when500OrProcessingException) { () =>
       Future {
         blocking {
           logger.info(s"Sending runtime deletion request [workspaceId=${workspace.workspaceIdAsUUID}]")
