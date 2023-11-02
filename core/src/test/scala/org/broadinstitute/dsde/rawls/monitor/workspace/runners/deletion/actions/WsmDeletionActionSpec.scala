@@ -26,6 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import javax.ws.rs.ProcessingException
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext}
 
@@ -178,6 +179,23 @@ class WsmDeletionActionSpec extends AnyFlatSpec with MockitoSugar with Matchers 
     when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext]))
       .thenAnswer(_ => throw new ApiException(StatusCodes.GatewayTimeout.intValue, "nope"))
       .thenAnswer(_ => throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
+
+    val action = new WsmDeletionAction(wsmDao)
+
+    Await.result(action.pollForCompletion(azureWorkspace, jobId.toString, ctx), Duration.Inf) shouldBe true
+
+    verify(wsmDao, times(2)).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                                        ArgumentMatchers.eq(jobId.toString),
+                                                        ArgumentMatchers.eq(ctx)
+    )
+  }
+
+  it should "retry on ProcessingExceptions when connecting to WSM" in {
+    val jobId = UUID.randomUUID()
+    val wsmDao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDao.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext]))
+      .thenAnswer(_ => throw new ProcessingException("processing exception"))
+      .thenReturn(new JobResult().jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED)))
 
     val action = new WsmDeletionAction(wsmDao)
 
