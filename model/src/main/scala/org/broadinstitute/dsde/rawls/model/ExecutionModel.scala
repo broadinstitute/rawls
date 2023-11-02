@@ -406,9 +406,9 @@ trait ExecutionJsonSupport extends JsonSupport {
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
         userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
         ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean]),
-        monitoringScript = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
-        monitoringImage = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
-        monitoringImageScript = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
+        monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
+        monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
+        monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }

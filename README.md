@@ -153,8 +153,12 @@ After publishing:
 
 ## Troubleshooting
 
-If you get this error message: `java.lang.IllegalArgumentException: invalid flag: --release`:
-* Run `java -version` and verify that you're running jdk11. If not, you will need to install / update your PATH.
+If you get this error message: `release version 17 not supported`:
+* Run `java -version` and verify that you're running 17. If not, you will need to install / update your PATH.
+
+If you have trouble with workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`:
+* Connect to the NonSplit VPN and try again
+* CromIAM doesn't accept requests from outside the Broad trusted Broad IP space 
 
 For integration test issues, see [automation/README.md](automation/README.md).
 
