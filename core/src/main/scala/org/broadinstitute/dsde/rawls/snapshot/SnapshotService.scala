@@ -83,7 +83,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         case _: AggregateWorkspaceNotFoundException =>
           // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
           // and then create a stub workspace
-          snapshotValidator.validateWorkspacePlatformCompatibility(WorkspaceCloudPlatform.Gcp)
+          snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
           workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
       }
 

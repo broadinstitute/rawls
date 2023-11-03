@@ -39,6 +39,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
+import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -3001,6 +3002,61 @@ class WorkspaceServiceSpec
     response.workspace.state shouldBe WorkspaceState.Ready
   }
 
+  it should "get the details of an Azure workspace that is deleting" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+
+    val deletingAzureWorkspace =
+      Workspace.buildMcWorkspace("test_namespace1",
+                                 "name",
+                                 workspaceId1,
+                                 new DateTime(),
+                                 new DateTime(),
+                                 "testUser1",
+                                 Map.empty,
+                                 WorkspaceState.Deleting
+      )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(deletingAzureWorkspace)
+      } yield ()
+    }
+
+    when(service.workspaceManagerDAO.getWorkspace(deletingAzureWorkspace.workspaceIdAsUUID, services.ctx1))
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
+
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            workspaceId1,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    val readWorkspace = Await.result(
+      services.workspaceService.getWorkspace(
+        WorkspaceName(deletingAzureWorkspace.namespace, deletingAzureWorkspace.name),
+        WorkspaceFieldSpecs()
+      ),
+      Duration.Inf
+    )
+
+    val response = readWorkspace.convertTo[WorkspaceResponse]
+
+    response.workspace.state shouldBe WorkspaceState.Deleting
+    response.workspace.cloudPlatform shouldBe None
+  }
+
   it should "return the policies of an Azure workspace" in withTestDataServices { services =>
     val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
     val wsmPolicyInput = new WsmPolicyInput()
@@ -3251,21 +3307,24 @@ class WorkspaceServiceSpec
       ) should contain theSameElementsAs expected
   }
 
-  it should "not return a MC workspace that does not have a cloud context" in withTestDataServices { services =>
+  it should "not return MC workspaces that do not have a cloud context" in withTestDataServices { services =>
     val service = services.workspaceService
     val workspaceId1 = UUID.randomUUID().toString
     val workspaceId2 = UUID.randomUUID().toString
+    val workspaceId3 = UUID.randomUUID().toString
 
     // set up test data
-    val azureWorkspace =
-      Workspace.buildReadyMcWorkspace("test_namespace1",
-                                      "name",
-                                      workspaceId1,
-                                      new DateTime(),
-                                      new DateTime(),
-                                      "testUser1",
-                                      Map.empty
+    val deletingAzureWorkspace =
+      Workspace.buildMcWorkspace("test_namespace1",
+                                 "name1",
+                                 workspaceId1,
+                                 new DateTime(),
+                                 new DateTime(),
+                                 "testUser1",
+                                 Map.empty,
+                                 WorkspaceState.Deleting
       )
+
     val googleWorkspace = Workspace("test_namespace2",
                                     workspaceId2,
                                     workspaceId2,
@@ -3277,14 +3336,29 @@ class WorkspaceServiceSpec
                                     Map.empty
     )
 
+    val readyAzureWorkspace =
+      Workspace.buildReadyMcWorkspace("test_namespace3",
+                                      "name3",
+                                      workspaceId3,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser3",
+                                      Map.empty
+      )
+
     runAndWait {
       for {
-        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(readyAzureWorkspace)
         _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(deletingAzureWorkspace)
       } yield ()
     }
 
-    when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
+    when(service.workspaceManagerDAO.getWorkspace(deletingAzureWorkspace.workspaceIdAsUUID, services.ctx1))
+      .thenReturn(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
+      ) // no azureContext, should not be returned
+    when(service.workspaceManagerDAO.getWorkspace(readyAzureWorkspace.workspaceIdAsUUID, services.ctx1))
       .thenReturn(
         new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
       ) // no azureContext, should not be returned
@@ -3304,6 +3378,14 @@ class WorkspaceServiceSpec
           ),
           SamUserResource(
             workspaceId2,
+            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            workspaceId3,
             SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
             SamRolesAndActions(Set.empty, Set.empty),
             SamRolesAndActions(Set.empty, Set.empty),

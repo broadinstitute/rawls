@@ -39,6 +39,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
   var nonOwnerAuthToken: ProxyAuthToken = _
 
   private val wsmUrl = RawlsConfig.wsmUrl
+  private val leoUrl = RawlsConfig.leoUrl
 
   implicit val system = ActorSystem()
 
@@ -57,7 +58,25 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  "Rawls" should "allow creation and deletion of azure workspaces" in {
+  "Other Terra services" should "include Leonardo" in {
+    implicit val token = ownerAuthToken
+    val statusRequest = Rawls.getRequest(leoUrl + "status")
+
+    withClue(s"Leo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+      statusRequest.status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "include WorkspaceManager" in {
+    implicit val token = ownerAuthToken
+    val statusRequest = Rawls.getRequest(wsmUrl + "status")
+
+    withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+      statusRequest.status shouldBe StatusCodes.OK
+    }
+  }
+
+  "Rawls" should "allow creation and deletion of an Azure workspace without WDS" in {
     implicit val token = ownerAuthToken
     val projectName = billingProject
     val workspaceName = generateWorkspaceName()
@@ -76,15 +95,6 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     } finally {
       Rawls.workspaces.delete(projectName, workspaceName)
       assertNoAccessToWorkspace(projectName, workspaceName)
-    }
-  }
-
-  it should "allow access to WorkspaceManager API" in {
-    implicit val token = ownerAuthToken
-    val statusRequest = Rawls.getRequest(wsmUrl + "status")
-
-    withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
-      statusRequest.status shouldBe StatusCodes.OK
     }
   }
 
@@ -156,14 +166,16 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
         withClue(s"testing blob ${nonAnalysesFilename} did not clone") {
           verifyBlobNotCloned(cloneSasUrl, nonAnalysesFilename)
         }
-      } finally {
-        Rawls.workspaces.delete(projectName, workspaceCloneName)
-        assertNoAccessToWorkspace(projectName, workspaceCloneName)
+      } finally
+        withClue(s"deleting the cloned workspace ${workspaceCloneName} failed") {
+          Rawls.workspaces.delete(projectName, workspaceCloneName)
+          assertNoAccessToWorkspace(projectName, workspaceCloneName)
+        }
+    } finally
+      withClue(s"deleting the original workspace ${workspaceName} failed") {
+        Rawls.workspaces.delete(projectName, workspaceName)
+        assertNoAccessToWorkspace(projectName, workspaceName)
       }
-    } finally {
-      Rawls.workspaces.delete(projectName, workspaceName)
-      assertNoAccessToWorkspace(projectName, workspaceName)
-    }
   }
 
   it should "allow listing workspaces" in {
@@ -249,6 +261,32 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       }
     } finally {
       Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
+    }
+  }
+
+  it should "allow creation and deletion of an Azure workspace with WDS" in {
+    implicit val token = ownerAuthToken
+    val projectName = billingProject
+    val workspaceName = generateWorkspaceName()
+    Rawls.workspaces.create(projectName, workspaceName)
+
+    try {
+      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+      response.workspace.name should be(workspaceName)
+      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      val workspaceId = response.workspace.workspaceId
+      val creationTimeout = 600
+
+      withClue(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
+        awaitCond(
+          isWdsDeletable(workspaceId, token),
+          creationTimeout seconds,
+          20 seconds
+        )
+      }
+    } finally {
+      Rawls.workspaces.delete(projectName, workspaceName, 600)
       assertNoAccessToWorkspace(projectName, workspaceName)
     }
   }
@@ -355,5 +393,18 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       wsmUrl + s"api/workspaces/v1/${workspaceId}/resources/controlled/azure/storageContainer/${containerId}/getSasToken"
     )
     sasResponse.parseJson.asJsObject.getFields("url").head.convertTo[String]
+  }
+
+  private def isWdsDeletable(workspaceId: String, authToken: AuthToken) = {
+    implicit val token = authToken
+
+    val appResponse = Rawls.parseResponse(Rawls.getRequest(leoUrl + s"api/apps/v2/${workspaceId}/wds-${workspaceId}"))
+    val wdsStatus = appResponse.parseJson.asJsObject.getFields("status").head.convertTo[String]
+    logger.info(s"WDS is in status ${wdsStatus}")
+    wdsStatus.toLowerCase match {
+      case "running" => true
+      case "error"   => true
+      case _         => false
+    }
   }
 }

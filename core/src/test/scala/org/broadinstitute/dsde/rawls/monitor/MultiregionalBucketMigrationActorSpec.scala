@@ -8,13 +8,7 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.rpc.Code
-import com.google.storagetransfer.v1.proto.TransferTypes.{
-  ErrorLogEntry,
-  ErrorSummary,
-  TransferCounters,
-  TransferJob,
-  TransferOperation
-}
+import com.google.storagetransfer.v1.proto.TransferTypes._
 import io.grpc.{Status, StatusRuntimeException}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -24,8 +18,8 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor._
 import org.broadinstitute.dsde.rawls.monitor.migration.{
-  FailureModes,
   MultiregionalBucketMigration,
+  MultiregionalBucketMigrationFailureModes,
   MultiregionalBucketMigrationStep,
   MultiregionalStorageTransferJob
 }
@@ -205,7 +199,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     override def getBucket(googleProject: GoogleProject,
                            bucketName: GcsBucketName,
                            bucketGetOptions: List[Storage.BucketGetOption],
-                           traceId: Option[TraceId]
+                           traceId: Option[TraceId],
+                           warnOnError: Boolean = false
     ): IO[Option[BucketInfo]] =
       IO.pure(BucketInfo.newBuilder(bucketName.value).setRequesterPays(true).build().some)
 
@@ -256,7 +251,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
   it should "return normalized ids rather than real ids" in
     spec.withMinimalTestDatabase { _ =>
       import spec.minimalTestData
-      import spec.multiregionalBucketMigrationQuery.{getAttempt, scheduleAndGetMetadata, setMigrationFinished}
+      import spec.multiregionalBucketMigrationQuery.scheduleAndGetMetadata
       spec.runAndWait {
         for {
           a <- scheduleAndGetMetadata(minimalTestData.workspace, testData.bucketLocation)
@@ -636,7 +631,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- allowOne(restartFailuresLike(FailureModes.gcsUnavailableFailure))
+        _ <- allowOne(restartFailuresLike(MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -895,7 +890,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           test
         }
 
-        _ <- allowOne(restartFailuresLike(FailureModes.noBucketPermissionsFailure))
+        _ <- allowOne(restartFailuresLike(MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -963,7 +958,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- allowOne(restartFailuresLike(FailureModes.stsRateLimitedFailure))
+        _ <- allowOne(restartFailuresLike(MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -986,6 +981,65 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         }
       } yield succeed
     }
+
+  it should "restart a migration that fails due to STS SA propagation delays" in runMigrationTest {
+    for {
+      now <- nowTimestamp
+      _ <- inTransaction { dataAccess =>
+        for {
+          _ <- createAndScheduleWorkspace(testData.workspace)
+          attempt <- dataAccess.multiregionalBucketMigrationQuery
+            .getAttempt(testData.workspace.workspaceIdAsUUID)
+            .value
+          _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+            attempt.get.id,
+            dataAccess.multiregionalBucketMigrationQuery.tmpBucketCreatedCol,
+            now.some,
+            dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+            GcsBucketName("tmp-bucket-name").some
+          )
+        } yield ()
+      }
+
+      error = new StatusRuntimeException(
+        Status.NOT_FOUND.withDescription(
+          s"Service account projects/-/serviceAccounts/project-630363624422@storage-transfer-service.iam.gserviceaccount.com does not exist."
+        )
+      )
+
+      mockSts = new MockStorageTransferService {
+        override def getStsServiceAccount(project: GoogleProject) =
+          IO.raiseError(error)
+      }
+
+      _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(migrate)
+      _ <- inTransactionT {
+        _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+      }.map { migration =>
+        migration.finished shouldBe defined
+        migration.outcome shouldBe Some(Failure(error.getMessage))
+      }
+
+      _ <- allowOne(restartFailuresLike(MultiregionalBucketMigrationFailureModes.stsSANotFoundFailure))
+      _ <- migrate
+
+      _ <- inTransaction { dataAccess =>
+        @nowarn("msg=not.*?exhaustive")
+        val test = for {
+          Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
+            .getAttempt(testData.workspace.workspaceIdAsUUID)
+            .value
+          retries <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
+        } yield {
+          migration.finished shouldBe empty
+          migration.outcome shouldBe empty
+          migration.workspaceBucketTransferIamConfigured shouldBe defined
+          retries.numRetries shouldBe 1
+        }
+        test
+      }
+    } yield succeed
+  }
 
   it should "not retry a failed migration when the maximum number of retries has been exceeded" in
     runMigrationTest {

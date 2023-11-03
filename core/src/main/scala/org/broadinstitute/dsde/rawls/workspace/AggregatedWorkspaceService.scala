@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   Workspace,
   WorkspacePolicy,
+  WorkspaceState,
   WorkspaceType
 }
 
@@ -43,14 +44,14 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", ctx.tracingSpan.orNull)
     try {
       val wsmInfo = workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)
-      (wsmInfo.getStage, Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext)) match {
-        case (WorkspaceStageModel.RAWLS_WORKSPACE, _, _) =>
+      (wsmInfo.getStage, Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext), workspace.state) match {
+        case (WorkspaceStageModel.RAWLS_WORKSPACE, _, _, _) =>
           AggregatedWorkspace(workspace,
                               Some(workspace.googleProjectId),
                               azureCloudContext = None,
                               policies = List.empty
           )
-        case (WorkspaceStageModel.MC_WORKSPACE, None, Some(azureContext)) =>
+        case (WorkspaceStageModel.MC_WORKSPACE, None, Some(azureContext), _) =>
           AggregatedWorkspace(
             workspace,
             googleProjectId = None,
@@ -62,19 +63,34 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
             ),
             convertPolicies(wsmInfo)
           )
-        case (WorkspaceStageModel.MC_WORKSPACE, Some(gcpContext), None) =>
+        case (WorkspaceStageModel.MC_WORKSPACE, Some(gcpContext), None, _) =>
           AggregatedWorkspace(
             workspace,
             Some(GoogleProjectId(gcpContext.getProjectId)),
             azureCloudContext = None,
             convertPolicies(wsmInfo)
           )
-        case (_, _, _) =>
+        case (WorkspaceStageModel.MC_WORKSPACE, Some(_), Some(_), _) =>
           throw new InvalidCloudContextException(
             ErrorReport(
               StatusCodes.NotImplemented,
               s"Unexpected state, expected exactly one set of cloud metadata for workspace ${workspace.workspaceId}"
             )
+          )
+        case (WorkspaceStageModel.MC_WORKSPACE, None, None, WorkspaceState.Ready) =>
+          throw new InvalidCloudContextException(
+            ErrorReport(
+              StatusCodes.NotImplemented,
+              s"Unexpected state, no cloud metadata for ready workspace ${workspace.workspaceId}"
+            )
+          )
+        case (WorkspaceStageModel.MC_WORKSPACE, None, None, _) =>
+          // Tolerate no cloud context for a workspace that is not ready.
+          AggregatedWorkspace(
+            workspace,
+            googleProjectId = None,
+            azureCloudContext = None,
+            convertPolicies(wsmInfo)
           )
       }
     } catch {
