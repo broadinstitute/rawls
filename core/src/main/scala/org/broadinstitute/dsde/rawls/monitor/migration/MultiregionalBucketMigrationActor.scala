@@ -210,8 +210,10 @@ object MultiregionalBucketMigrationActor {
   val storageTransferJobs = MultiregionalStorageTransferJobs.storageTransferJobs
 
   final def restartMigration: MigrateAction[Unit] =
-    restartFailuresLike(MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure,
-                        MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+    restartFailuresLike(
+      MultiregionalBucketMigrationFailureModes.noBucketPermissionsFailure,
+      MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure,
+      MultiregionalBucketMigrationFailureModes.stsSANotFoundFailure
     ) |
       reissueFailedStsJobs
 
@@ -312,7 +314,9 @@ object MultiregionalBucketMigrationActor {
             bucketOpt <- storageService.getBucket(
               GoogleProject(workspace.googleProjectId.value),
               GcsBucketName(workspace.bucketName),
-              bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING))
+              bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING),
+                                      Storage.BucketGetOption.userProject(workspace.googleProjectId.value)
+              )
             )
 
             bucketInfo <- IO.fromOption(bucketOpt)(noWorkspaceBucketError(migration, workspace))
@@ -594,7 +598,8 @@ object MultiregionalBucketMigrationActor {
             .updateBucketIam(
               bucket,
               bucketPolicies,
-              Option.when(migration.requesterPaysEnabled)(GoogleProjectId(deps.googleProjectToBill.value))
+              Option.when(migration.requesterPaysEnabled)(GoogleProjectId(deps.googleProjectToBill.value)),
+              iamPolicyVersion = 3
             )
             .io *>
             Applicative[IO].whenA(migration.requesterPaysEnabled) {
@@ -800,6 +805,13 @@ object MultiregionalBucketMigrationActor {
             serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
             // STS requires the following to read from the origin bucket and delete objects after
             // transfer
+
+            retryConfig = RetryPredicates.retryAllConfig.copy(retryable =
+              RetryPredicates.combine(
+                Seq(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(404))
+              )
+            )
+
             _ <- storageService
               .setIamPolicy(
                 srcBucket,
@@ -808,7 +820,8 @@ object MultiregionalBucketMigrationActor {
                 ),
                 bucketSourceOptions =
                   if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
-                  else List.empty
+                  else List.empty,
+                retryConfig = retryConfig
               )
               .compile
               .drain
@@ -820,7 +833,8 @@ object MultiregionalBucketMigrationActor {
                 dstBucket,
                 Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
                     StorageRole.ObjectCreator -> serviceAccountList
-                )
+                ),
+                retryConfig = retryConfig
               )
               .compile
               .drain
@@ -1295,8 +1309,10 @@ object MultiregionalBucketMigrationActor {
 
               case RetryKnownFailures =>
                 List(
-                  restartFailuresLike(MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure,
-                                      MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure
+                  restartFailuresLike(
+                    MultiregionalBucketMigrationFailureModes.stsRateLimitedFailure,
+                    MultiregionalBucketMigrationFailureModes.gcsUnavailableFailure,
+                    MultiregionalBucketMigrationFailureModes.stsSANotFoundFailure
                   ),
                   reissueFailedStsJobs
                 )

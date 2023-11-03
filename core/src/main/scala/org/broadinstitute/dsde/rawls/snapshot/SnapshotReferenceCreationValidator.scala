@@ -30,16 +30,21 @@ class SnapshotReferenceCreationValidator(val workspaceContext: Workspace, val sn
   // Throws an exception when the given snapshot cannot be referenced by the given workspace due to crossing an
   // unsupported platform boundary.
   @throws(classOf[PlatformBoundaryException])
-  def validateWorkspacePlatformCompatibility(workspacePlatform: WorkspaceCloudPlatform): Unit =
+  def validateWorkspacePlatformCompatibility(workspacePlatform: Option[WorkspaceCloudPlatform]): Unit =
     // Defining all acceptable combinations is overkill when all we really need to do is prevent anything Azure, but
     // this is here as a safeguard against us introducing support for Azure without deliberately addressing the issue of
     // snapshots by ref across cloud platforms.
     (snapshot.platform, workspacePlatform) match {
-      case (SnapshotCloudPlatform.GCP, WorkspaceCloudPlatform.Gcp) => // ok
+      case (SnapshotCloudPlatform.GCP, Some(WorkspaceCloudPlatform.Gcp)) => // ok
+      case (_, None) =>
+        throw new PlatformBoundaryException(
+          "Snapshots by reference are not supported into a workspace with no cloud context (" +
+            s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform})."
+        )
       case _ =>
         throw new PlatformBoundaryException(
           "Snapshots by reference are not supported across the given cloud boundaries (" +
-            s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform})."
+            s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform.get})."
         )
     }
 

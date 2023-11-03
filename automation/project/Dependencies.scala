@@ -7,10 +7,10 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.15.2"
 
-  val workbenchLibsHash = "e42c23c"
-  val serviceTestV = s"4.0-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.29-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.32-${workbenchLibsHash}"
+  val workbenchLibsHash = "a562dff"
+  val serviceTestV = s"4.2-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.30-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.34-${workbenchLibsHash}"
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.8-${workbenchLibsHash}"
 
@@ -55,7 +55,6 @@ object Dependencies {
     "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
     "org.specs2"          %%  "specs2-core"   % "4.15.0"  % Test,
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
-    "io.circe"            %%  "circe-generic" % "0.14.2"  % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-3891e8393"

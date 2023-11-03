@@ -34,7 +34,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                      userProject: Option[GoogleProjectId] = None
+                      userProject: Option[GoogleProjectId] = None,
+                      iamPolicyVersion: Int = 1
   ): Future[Unit]
 
   // returns bucket and group information

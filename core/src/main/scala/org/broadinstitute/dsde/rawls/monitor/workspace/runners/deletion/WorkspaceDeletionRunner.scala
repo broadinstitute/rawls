@@ -40,8 +40,8 @@ import scala.util.{Failure, Success}
   * 2. Fire a request to Leonardo to delete any applications
   * 3. Fire a request to Leonardo to delete any runtimes
   * 4. Fire a request to WSM to delete the WSM workspace (including any cloud resources like containers, batch pools, etc.)
-  * 5. Delete the rawls record 
-  * 
+  * 5. Delete the rawls record
+  *
   * If a downstream operation fails or times out during deletion, we mark the workspace as `DeleteFailed` and finish the job
   */
 class WorkspaceDeletionRunner(val samDAO: SamDAO,
@@ -73,10 +73,12 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     val userEmail = job.userEmail match {
       case Some(email) => email
       case None =>
-        logger.error(
+        val message =
           s"Job to monitor workspace deletion for workspace id = ${workspaceId} created with id ${job.jobControlId} but no user email set"
+        logger.error(
+          message
         )
-        return workspaceRepository.updateState(workspaceId, WorkspaceState.DeleteFailed).map(_ => Complete)
+        return workspaceRepository.setFailedState(workspaceId, WorkspaceState.DeleteFailed, message).map(_ => Complete)
     }
 
     for {
@@ -101,7 +103,9 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           s"Workspace deletion failed [workspaceId=${workspaceId}, jobControlId=${job.jobControlId}, jobType=${job.jobType}]",
           t
         )
-        workspaceRepository.updateState(job.workspaceId.get, WorkspaceState.DeleteFailed).map(_ => Complete)
+        workspaceRepository
+          .setFailedState(job.workspaceId.get, WorkspaceState.DeleteFailed, t.getMessage)
+          .map(_ => Complete)
       }
     } yield {
       logger.info(
@@ -170,7 +174,11 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     }
     val expireTime = Timestamp.from(Instant.ofEpochMilli(job.createdTime.getTime + (timeoutIntervalMinutes * 60000)))
     if (Timestamp.from(Instant.now()).after(expireTime)) {
-      workspaceRepository.updateState(job.workspaceId.get, WorkspaceState.DeleteFailed)
+      workspaceRepository.setFailedState(
+        job.workspaceId.get,
+        WorkspaceState.DeleteFailed,
+        s"Timed out while deleting workspace [jobType=${job.jobType}, jobControlId=${job.jobControlId}]"
+      )
       Complete
     } else {
       Incomplete
