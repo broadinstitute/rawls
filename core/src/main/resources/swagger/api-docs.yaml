@@ -4834,7 +4834,7 @@ components:
           description: Location of user-defined monitoring script that runs inside the task container
         monitoringImage:
           type: string
-          description: User-defined monitoring container that runs as a sibling to the task container
+          description: User-defined monitoring container that runs as a sibling to the task container. Alternative to `monitoringScript`.
         monitoringImageScript:
           type: string
           description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
