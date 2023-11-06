@@ -158,7 +158,7 @@ If you get the error message `release version 17 not supported`:
 
 If you have trouble submitting workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`:
 * Connect to the NonSplit VPN and try again
-* CromIAM doesn't accept requests from outside the Broad trusted Broad IP space 
+* CromIAM doesn't accept requests from outside the Broad trusted IP space 
 
 When running back Rawls with a DB clone, the app may crash on launch with an error related to `OpenTelemetry`.
 * Work around by setting `entityStatisticsCache.enabled = false`.
