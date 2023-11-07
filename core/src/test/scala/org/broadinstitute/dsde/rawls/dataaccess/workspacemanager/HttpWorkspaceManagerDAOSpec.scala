@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.{any, anyInt}
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{times, verify, verifyNoMoreInteractions, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -351,7 +351,9 @@ class HttpWorkspaceManagerDAOSpec
       .thenReturn(new WorkspaceDescriptionList().workspaces(List().asJava))
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
     wsmDao.listWorkspaces(testContext, 1) should have length 1
-    verify(workspaceApi, times(2)).listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(1), any())
+    verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(1), any())
+    verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(1), ArgumentMatchers.eq(1), any())
+    verifyNoMoreInteractions(workspaceApi)
   }
 
   it should "should combine results from all batches in the result list" in {
