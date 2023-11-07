@@ -234,4 +234,108 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     aggregatedWorkspace.googleProjectId shouldBe Some(legacyRawlsWorkspace.googleProjectId)
     verify(wsmDao, never()).getWorkspace(any[UUID], any[RawlsRequestContext])
   }
+
+  behavior of "fetchAggregatedWorkspaces"
+
+  it should "raise if the call to WSM fails" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+    when(wsmDao.listWorkspaces(any, any))
+      .thenAnswer(_ => throw new ApiException(StatusCodes.InternalServerError.intValue, "not found"))
+    val svc = new AggregatedWorkspaceService(wsmDao)
+
+    intercept[WorkspaceAggregationException] {
+      svc.fetchAggregatedWorkspaces(List(mcRawlsWorkspace), defaultRequestContext)
+    }
+
+    verify(wsmDao).listWorkspaces(any, any)
+  }
+
+  it should "match an MC workspace with the correct WMS information" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val azContext = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID().toString)
+    val policies = Seq(
+      new WsmPolicyInput()
+        .name("fakepolicy")
+        .namespace("fakens")
+        .addAdditionalDataItem(new WsmPolicyPair().key("dataKey").value("dataValue"))
+    )
+    when(wsmDao.listWorkspaces(any, any)).thenReturn(
+      List(
+        new WorkspaceDescription()
+          .id(mcRawlsWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(azContext.tenantId.toString)
+              .subscriptionId(azContext.subscriptionId.toString)
+              .resourceGroupId(azContext.managedResourceGroupId)
+          )
+          .policies(policies.asJava),
+        new WorkspaceDescription()
+          .id(UUID.randomUUID())
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .gcpContext(new GcpContext().projectId("project-id"))
+      )
+    )
+    val svc = new AggregatedWorkspaceService(wsmDao)
+
+    val aggregatedWorkspaces = svc.fetchAggregatedWorkspaces(List(mcRawlsWorkspace), defaultRequestContext)
+
+    aggregatedWorkspaces.head.baseWorkspace shouldBe mcRawlsWorkspace
+    aggregatedWorkspaces.head.azureCloudContext shouldBe Some(azContext)
+    aggregatedWorkspaces.head.googleProjectId shouldBe None
+    aggregatedWorkspaces.head.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    aggregatedWorkspaces.head.policies shouldBe policies.map(input =>
+      WorkspacePolicy(
+        input.getName,
+        input.getNamespace,
+        Option(
+          input.getAdditionalData.asScala.toList
+            .map(data => Map.apply(data.getKey -> data.getValue))
+        )
+          .getOrElse(List.empty)
+      )
+    )
+
+  }
+
+  it should "succeed without error when a Rawls workspace does not have matching WSM info" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+
+    when(wsmDao.listWorkspaces(any, any)).thenReturn(List())
+    val svc = new AggregatedWorkspaceService(wsmDao)
+
+    val aggregatedWorkspaces = svc.fetchAggregatedWorkspaces(List(legacyRawlsWorkspace), defaultRequestContext)
+
+    aggregatedWorkspaces.head.baseWorkspace.errorMessage shouldBe None
+    aggregatedWorkspaces.head.baseWorkspace.workspaceId shouldBe legacyRawlsWorkspace.workspaceId
+    aggregatedWorkspaces.head.googleProjectId.get shouldBe legacyRawlsWorkspace.googleProjectId
+  }
+
+  it should "report an error when a MC workspace does not have matching WSM info" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+
+    when(wsmDao.listWorkspaces(any, any)).thenReturn(List())
+    val svc = new AggregatedWorkspaceService(wsmDao)
+
+    val aggregatedWorkspaces = svc.fetchAggregatedWorkspaces(List(mcRawlsWorkspace), defaultRequestContext)
+
+    aggregatedWorkspaces.head.baseWorkspace.errorMessage.get should include("not found in")
+    aggregatedWorkspaces.head.baseWorkspace.workspaceId shouldBe mcRawlsWorkspace.workspaceId
+    aggregatedWorkspaces.head.azureCloudContext shouldBe None
+    aggregatedWorkspaces.head.googleProjectId shouldBe None
+  }
+
+  it should "report invalid cloud contexts in the errorMessage" in {
+    val wsmDao = mock[WorkspaceManagerDAO]
+    when(wsmDao.listWorkspaces(any, any)).thenReturn(
+      List(
+        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE).id(mcRawlsWorkspace.workspaceIdAsUUID)
+      )
+    )
+    val svc = new AggregatedWorkspaceService(wsmDao)
+    val aggregatedWorkspaces = svc.fetchAggregatedWorkspaces(List(mcRawlsWorkspace), defaultRequestContext)
+    aggregatedWorkspaces.head.baseWorkspace.errorMessage.get should include("no cloud metadata for ready workspace")
+  }
+
 }
