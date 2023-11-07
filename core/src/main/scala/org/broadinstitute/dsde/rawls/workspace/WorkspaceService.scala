@@ -2362,7 +2362,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
         userComment = submissionRequest.userComment,
-        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs
+        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs,
+        monitoringScript = submissionRequest.monitoringScript,
+        monitoringImage = submissionRequest.monitoringImage,
+        monitoringImageScript = submissionRequest.monitoringImageScript
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)

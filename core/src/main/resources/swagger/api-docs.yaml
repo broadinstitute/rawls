@@ -4627,6 +4627,15 @@ components:
         userComment:
           type: string
           description: Comment for the submission
+        monitoringScript:
+          type: string
+          description: Location of user-defined monitoring script that runs inside the task container
+        monitoringImage:
+          type: string
+          description: User-defined monitoring container that runs as a sibling to the task container. Alternative to `monitoringScript`.
+        monitoringImageScript:
+          type: string
+          description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
       description: ""
     ExternalEntityInfo:
       type: object
@@ -4820,6 +4829,15 @@ components:
           type: boolean
           default: false
           description: Whether or not to create output columns if they would be empty and optional.  Defaults to false (columns are created).
+        monitoringScript:
+          type: string
+          description: Location of user-defined monitoring script that runs inside the task container
+        monitoringImage:
+          type: string
+          description: User-defined monitoring container that runs as a sibling to the task container. Alternative to `monitoringScript`.
+        monitoringImageScript:
+          type: string
+          description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
