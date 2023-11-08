@@ -2064,6 +2064,20 @@ class WorkspaceServiceSpec
     )
   }
 
+  it should "fail with 400 if policies are provided for a GCP workspace" in withTestDataServices { services =>
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"${UUID.randomUUID()}")
+      val workspaceRequest = WorkspaceRequest(workspaceName.namespace,
+                                              workspaceName.name,
+                                              Map.empty,
+                                              policies = Some(List(WorkspacePolicy("fake", "fake", List.empty)))
+      )
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
   // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>

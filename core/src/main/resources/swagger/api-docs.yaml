@@ -5789,8 +5789,16 @@ components:
           default: false
         protectedData:
           type: boolean
-          description: Optional, false if not specified. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+          deprecated: True
+          description: |
+            Optional, false if not specified. Applicable only for Azure workspaces. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+            Note this field is deprecated. A protected data policy should be attached by utilizing the policies field instead.
           default: false
+        policies:
+          type: array
+          description: Optional, array of policies to attach to the workspace.
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
       description: ""
     WorkspaceRequestClone:
       required:
