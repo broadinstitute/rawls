@@ -983,6 +983,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
               val aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
                 .fetchAggregatedWorkspaces(workspaces, ctx)
+                // Filter out workspaces with no cloud contexts, logging cloud context exceptions
+                .filter { ws =>
+                  Try(ws.getCloudPlatform)
+                    .map(context => context.isDefined)
+                    .recover { case e: InvalidCloudContextException =>
+                      logger.error(e.getMessage)
+                      false
+                    }
+                    .get
+                }
 
               aggregatedWorkspaces.mapFilter { wsmContext =>
                 val workspace = wsmContext.baseWorkspace
