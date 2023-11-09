@@ -20,8 +20,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   Workspace,
   WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceRequest
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 
