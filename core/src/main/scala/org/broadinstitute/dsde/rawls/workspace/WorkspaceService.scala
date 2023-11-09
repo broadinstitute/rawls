@@ -981,67 +981,62 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     .max
                 }.toMap
               val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
-              workspaces.mapFilter { workspace =>
-                try {
-                  val wsId = UUID.fromString(workspace.workspaceId)
-                  val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
-                  val accessLevel =
-                    if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
-                      WorkspaceAccessLevels.NoAccess
-                    } else {
-                      highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
+              val aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
+                .fetchAggregatedWorkspaces(workspaces, ctx)
+                // Filter out workspaces with no cloud contexts, logging cloud context exceptions
+                .filter { ws =>
+                  Try(ws.getCloudPlatform)
+                    .map(context => context.isDefined)
+                    .recover { case e: InvalidCloudContextException =>
+                      logger.error(e.getMessage)
+                      false
                     }
+                    .get
+                }
 
-                  val wsmContext =
-                    new AggregatedWorkspaceService(workspaceManagerDAO).optimizedFetchAggregatedWorkspace(workspace,
-                                                                                                          ctx
-                    )
-
-                  // remove attributes if they were not requested
-                  val workspaceDetails =
-                    WorkspaceDetails.fromWorkspaceAndOptions(
-                      workspace,
-                      Option(
-                        workspaceSamResource.authDomainGroups.map(groupName =>
-                          ManagedGroupRef(RawlsGroupName(groupName.value))
-                        )
-                      ),
-                      attributesEnabled,
-                      wsmContext.getCloudPlatform
-                    )
-                  // remove submission stats if they were not requested
-                  val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-                    Option(submissionSummaryStats(wsId))
+              aggregatedWorkspaces.mapFilter { wsmContext =>
+                val workspace = wsmContext.baseWorkspace
+                val wsId = UUID.fromString(workspace.workspaceId)
+                val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
+                val accessLevel =
+                  if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
+                    WorkspaceAccessLevels.NoAccess
                   } else {
-                    None
+                    highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
                   }
-                  // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
-                  // cloud context will throw a WorkspaceAggregationException, which is handled below)
-                  wsmContext.getCloudPlatform match {
-                    case None => None
-                    case _ =>
-                      Option(
-                        WorkspaceListResponse(
-                          accessLevel,
-                          workspaceDetails,
-                          submissionStats,
-                          workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
-                          Some(wsmContext.policies)
-                        )
+
+                // remove attributes if they were not requested
+                val workspaceDetails =
+                  WorkspaceDetails.fromWorkspaceAndOptions(
+                    workspace,
+                    Option(
+                      workspaceSamResource.authDomainGroups.map(groupName =>
+                        ManagedGroupRef(RawlsGroupName(groupName.value))
                       )
-                  }
-                } catch {
-                  // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
-                  // be reachable when running against the dev environment.
-                  case ex: AggregateWorkspaceNotFoundException =>
-                    logger.warn(
-                      s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
+                    ),
+                    attributesEnabled,
+                    wsmContext.getCloudPlatform
+                  )
+                // remove submission stats if they were not requested
+                val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
+                  Option(submissionSummaryStats(wsId))
+                } else {
+                  None
+                }
+                // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
+                // cloud context will throw a WorkspaceAggregationException, which is handled below)
+                wsmContext.getCloudPlatform match {
+                  case None => None
+                  case _ =>
+                    Option(
+                      WorkspaceListResponse(
+                        accessLevel,
+                        workspaceDetails,
+                        submissionStats,
+                        workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
+                        Some(wsmContext.policies)
+                      )
                     )
-                    None
-                  // This catches the case of a Ready MC workspace with no cloud context, filtering out such workspaces.
-                  case ex: WorkspaceAggregationException =>
-                    logger.error(ex.getMessage)
-                    None
                 }
               }
             }

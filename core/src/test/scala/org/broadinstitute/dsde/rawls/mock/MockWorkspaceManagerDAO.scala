@@ -46,6 +46,8 @@ class MockWorkspaceManagerDAO(
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
     mockGetWorkspaceResponse(workspaceId)
 
+  override def listWorkspaces(ctx: RawlsRequestContext, batchSize: Int = 100): List[WorkspaceDescription] = List()
+
   override def createWorkspace(workspaceId: UUID,
                                workspaceType: WorkspaceType, // currently ignored by the mock
                                ctx: RawlsRequestContext

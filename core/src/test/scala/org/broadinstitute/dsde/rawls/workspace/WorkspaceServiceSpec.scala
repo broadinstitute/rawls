@@ -3258,9 +3258,14 @@ class WorkspaceServiceSpec
       }
 
       // mock external calls
-      when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
-        .thenReturn(
+      when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+        List(
           new WorkspaceDescription()
+            .id(googleWorkspace.workspaceIdAsUUID)
+            .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+            .gcpContext(new GcpContext()),
+          new WorkspaceDescription()
+            .id(azureWorkspace.workspaceIdAsUUID)
             .stage(WorkspaceStageModel.MC_WORKSPACE)
             .azureContext(
               new AzureContext()
@@ -3269,8 +3274,6 @@ class WorkspaceServiceSpec
                 .resourceGroupId(UUID.randomUUID.toString)
             )
         )
-      when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
-        new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE).gcpContext(new GcpContext())
       )
       when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
@@ -3353,18 +3356,16 @@ class WorkspaceServiceSpec
         _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(deletingAzureWorkspace)
       } yield ()
     }
-
-    when(service.workspaceManagerDAO.getWorkspace(deletingAzureWorkspace.workspaceIdAsUUID, services.ctx1))
-      .thenReturn(
-        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
-      ) // no azureContext, should not be returned
-    when(service.workspaceManagerDAO.getWorkspace(readyAzureWorkspace.workspaceIdAsUUID, services.ctx1))
-      .thenReturn(
-        new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE)
-      ) // no azureContext, should not be returned
-    when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
-      new WorkspaceDescription().gcpContext(new GcpContext())
+    when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        // no azureContext, should not be returned
+        new WorkspaceDescription().id(deletingAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
+        // no azureContext, should not be returned
+        new WorkspaceDescription().id(readyAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
+        new WorkspaceDescription().id(googleWorkspace.workspaceIdAsUUID).gcpContext(new GcpContext())
+      )
     )
+
     when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
       Future(
         Seq(
@@ -3404,7 +3405,7 @@ class WorkspaceServiceSpec
     result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  it should "log a warning and filter out the workspace if WSM's getWorkspace throws an ApiException" in withTestDataServices {
+  it should "log a warning and filter out the workspace if WSM's listWorkspaces call doesn't return a matching workspace" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3441,12 +3442,12 @@ class WorkspaceServiceSpec
         } yield ()
       }
 
-      when(service.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID), any()))
-        .thenAnswer(_ => throw new ApiException(StatusCodes.NotFound.intValue, "not found"))
-      when(service.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID), any()))
-        .thenReturn(
-          new WorkspaceDescription().gcpContext(new GcpContext())
+      when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+        List(
+          new WorkspaceDescription().id(googleWorkspace.workspaceIdAsUUID).gcpContext(new GcpContext())
         )
+      )
+
       when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
         Future(
           Seq(
