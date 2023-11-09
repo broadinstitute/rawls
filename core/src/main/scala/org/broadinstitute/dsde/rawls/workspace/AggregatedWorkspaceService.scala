@@ -48,7 +48,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] = {
     val span = startSpanWithParent("listWorkspacesFromWorkspaceManager", ctx.tracingSpan.orNull)
     try {
-      val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx)
+      val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx).groupBy(_.getId)
       workspaces.map(workspace =>
         workspace.workspaceType match {
           case WorkspaceType.RawlsWorkspace =>
@@ -59,10 +59,9 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
             )
           case WorkspaceType.McWorkspace =>
             val id = workspace.workspaceIdAsUUID
-            wsmResponse
-              .find(_.getId == id)
+            wsmResponse.get(id)
               .map(wsmInfo =>
-                Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo)).recover {
+                Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
                   case e: InvalidCloudContextException =>
                     val ws = workspace.copy(errorMessage =
                       Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}")

@@ -327,17 +327,21 @@ class HttpWorkspaceManagerDAOSpec
     val responseList = new WorkspaceDescriptionList().workspaces(List().asJava)
     when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(0), anyInt(), any())).thenReturn(responseList)
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
     wsmDao.listWorkspaces(testContext) shouldBe empty
+
     verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), anyInt(), any())
   }
 
-  it should "should only make one requests when fewer than workspaces the request batch size of are returned" in {
+  it should "should only make one request when fewer workspaces than the request batch size are returned" in {
     val workspaceApi = mock[WorkspaceApi]
     val ws = new WorkspaceDescription()
     when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(2), any()))
       .thenReturn(new WorkspaceDescriptionList().workspaces(List(ws).asJava))
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
     wsmDao.listWorkspaces(testContext, 2) should have length 1
+
     verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(2), any())
 
   }
@@ -350,7 +354,9 @@ class HttpWorkspaceManagerDAOSpec
     when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(1), ArgumentMatchers.eq(1), any()))
       .thenReturn(new WorkspaceDescriptionList().workspaces(List().asJava))
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
     wsmDao.listWorkspaces(testContext, 1) should have length 1
+
     verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(1), any())
     verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(1), ArgumentMatchers.eq(1), any())
     verifyNoMoreInteractions(workspaceApi)
@@ -368,7 +374,9 @@ class HttpWorkspaceManagerDAOSpec
       when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(i * batchSize), ArgumentMatchers.eq(batchSize), any()))
         .thenReturn(new WorkspaceDescriptionList().workspaces(batches(i).toList.asJava))
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
     val result = wsmDao.listWorkspaces(testContext, batchSize)
+
     result should have length 10
     result should contain theSameElementsAs workspaces
     verify(workspaceApi, times(batches.length)).listWorkspaces(any(), ArgumentMatchers.eq(batchSize), any())

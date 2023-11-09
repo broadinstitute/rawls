@@ -250,7 +250,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     verify(wsmDao).listWorkspaces(any, any)
   }
 
-  it should "match an MC workspace with the correct WMS information" in {
+  it should "match an MC workspace with the correct WSM information" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     val azContext = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID().toString)
     val policies = Seq(
