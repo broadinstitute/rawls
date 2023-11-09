@@ -182,11 +182,9 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     )
   }.build()
 
-  val consumerPactBuilder: ConsumerPactBuilder = ConsumerPactBuilder
-    .consumer("rawls-consumer")
+  val consumerPactBuilder: ConsumerPactBuilder = ConsumerPactBuilder.consumer("rawls")
 
-  val pactProvider: PactDslWithProvider = consumerPactBuilder
-    .hasPactWith("bpm-provider")
+  val pactProvider: PactDslWithProvider = consumerPactBuilder.hasPactWith("bpm")
 
   // stateParams provides the desired subsystem states
   // for BPM provider to generate the expected response
