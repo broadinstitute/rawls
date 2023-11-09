@@ -3405,7 +3405,7 @@ class WorkspaceServiceSpec
     result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  it should "log a warning and filter out the workspace if WSM's getWorkspace throws an ApiException" in withTestDataServices {
+  it should "log a warning and filter out the workspace if WSM's listWorkspaces call doesn't return a matching workspace" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString

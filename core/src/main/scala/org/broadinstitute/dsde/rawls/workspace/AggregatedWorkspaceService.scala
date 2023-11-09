@@ -42,8 +42,6 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     * @param workspaces The list of source rawls workspaces
     * @param ctx Rawls request and tracing context.
     *
-    * @throws WorkspaceAggregationException when an error is encountered pulling data from aggregating upstream systems
-
     */
   def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] = {
     val span = startSpanWithParent("listWorkspacesFromWorkspaceManager", ctx.tracingSpan.orNull)
@@ -59,7 +57,8 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
             )
           case WorkspaceType.McWorkspace =>
             val id = workspace.workspaceIdAsUUID
-            wsmResponse.get(id)
+            wsmResponse
+              .get(id)
               .map(wsmInfo =>
                 Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
                   case e: InvalidCloudContextException =>
@@ -75,8 +74,6 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
               }
         }
       )
-    } catch {
-      case e: ApiException => throw new WorkspaceAggregationException(errorReport = ErrorReport(e.getCode, e))
     } finally
       span.end()
   }

@@ -237,19 +237,6 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
 
   behavior of "fetchAggregatedWorkspaces"
 
-  it should "raise if the call to WSM fails" in {
-    val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.listWorkspaces(any, any))
-      .thenAnswer(_ => throw new ApiException(StatusCodes.InternalServerError.intValue, "not found"))
-    val svc = new AggregatedWorkspaceService(wsmDao)
-
-    intercept[WorkspaceAggregationException] {
-      svc.fetchAggregatedWorkspaces(List(mcRawlsWorkspace), defaultRequestContext)
-    }
-
-    verify(wsmDao).listWorkspaces(any, any)
-  }
-
   it should "match an MC workspace with the correct WSM information" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     val azContext = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID().toString)
