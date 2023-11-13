@@ -31,6 +31,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceDeletionResult,
   WorkspaceName,
+  WorkspacePolicy,
   WorkspaceRequest,
   WorkspaceState,
   WorkspaceType
@@ -50,8 +51,8 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.language.postfixOps
 import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
 class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with OptionValues with TestDriverComponent {
 
@@ -681,6 +682,123 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  it should "fail with an improperly structured additional fields element on a policy" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+    val samDAO = new MockSamDAO(slickDataSource)
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[MockLeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val policies = List(
+      WorkspacePolicy("protected-data", "terra", List.empty),
+      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup", "otherInvalid" -> "other")))
+    )
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty,
+      protectedData = None,
+      policies = Some(policies)
+    )
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "create a workspace with the requested policies" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val samDAO = new MockSamDAO(slickDataSource)
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[MockLeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val policies = List(
+      WorkspacePolicy("protected-data", "terra", List.empty),
+      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
+      WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
+    )
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty,
+      protectedData = None,
+      policies = Some(policies)
+    )
+
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+
+    result.name shouldBe "fake_name"
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("fake_name"),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(namespace),
+        any[Seq[String]],
+        ArgumentMatchers.eq(
+          Some(
+            new WsmPolicyInputs()
+              .inputs(
+                Seq(
+                  new WsmPolicyInput()
+                    .name("protected-data")
+                    .namespace("terra"),
+                  new WsmPolicyInput()
+                    .name("group-constraint")
+                    .namespace("terra")
+                    .additionalData(List(new WsmPolicyPair().key("group").value("myFakeGroup")).asJava),
+                  new WsmPolicyInput()
+                    .name("region-constraint")
+                    .namespace("other-namespace")
+                    .additionalData(
+                      List(new WsmPolicyPair().key("key1").value("value1"),
+                           new WsmPolicyPair().key("key2").value("value2")
+                      ).asJava
+                    )
+                ).asJava
+              )
+          )
+        ),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(workspaceManagerDAO, Mockito.times(0))
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(namespace),
+        any(),
+        ArgumentMatchers.eq(None),
+        ArgumentMatchers.any()
+      )
   }
 
   it should "create a protected data workspace" in {

@@ -241,6 +241,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       billingProject <- traceWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
+      // policies are not supported on GCP workspaces
+      _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       workspace <- traceWithParent("createNewWorkspaceContext", parentContext)(s =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
@@ -282,6 +284,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
     args
   }
+
+  private def failIfPoliciesIncluded(workspaceRequest: WorkspaceRequest): Future[Unit] =
+    workspaceRequest.policies match {
+      case None                               => Future.successful()
+      case Some(policies) if policies.isEmpty => Future.successful()
+      case Some(policies) =>
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Policies are not supported for GCP workspaces")
+          )
+        )
+    }
 
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,
