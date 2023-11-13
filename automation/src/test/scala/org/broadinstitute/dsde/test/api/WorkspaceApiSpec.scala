@@ -67,8 +67,8 @@ class WorkspaceApiSpec
     PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
-
-    "should add workspace Google project to billing project's service perimeter" in {
+    // disabled, see WOR-1323
+    "should add workspace Google project to billing project's service perimeter" ignore {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
