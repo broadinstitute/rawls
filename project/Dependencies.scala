@@ -66,7 +66,7 @@ object Dependencies {
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.28.0"
-  val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.46"
+  val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.48"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.11"
