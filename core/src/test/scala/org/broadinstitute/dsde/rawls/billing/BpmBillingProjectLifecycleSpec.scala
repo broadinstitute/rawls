@@ -183,6 +183,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithExistingLz.projectName.value),
         ArgumentMatchers.eq(createRequestWithExistingLz.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -236,6 +237,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithExistingLz.projectName.value),
         ArgumentMatchers.eq(createRequestWithExistingLz.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -291,6 +293,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+        any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -370,6 +373,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
         ArgumentMatchers.eq(createRequestWithMembers.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -423,6 +427,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+        any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -455,6 +460,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createProtectedRequest.projectName.value),
         ArgumentMatchers.eq(createProtectedRequest.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -511,6 +517,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+        any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -565,6 +572,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+        any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -622,6 +630,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+        any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -675,6 +684,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+        any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -735,7 +745,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val billingRepoError = "SQLException from billing repository"
     when(
-      bpm.createBillingProfile(createRequest.projectName.value, createRequest.billingInfo, testContext)
+      bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(createRequest.billingInfo), any(), ArgumentMatchers.eq(testContext))
     )
       .thenReturn(profileModel)
     // Throw exception when deleting profile during cleanup code.

@@ -38,6 +38,7 @@ import BpmAzureReportErrorMessageJsonProtocol._
 trait BillingProfileManagerDAO {
   def createBillingProfile(displayName: String,
                            billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+                           policies: Map[String, Map[String, String]],
                            ctx: RawlsRequestContext
   ): ProfileModel
 
@@ -124,12 +125,32 @@ class BillingProfileManagerDAOImpl(
   override def createBillingProfile(
     displayName: String,
     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+    policies: Map[String, Map[String, String]] = Map.empty,
     ctx: RawlsRequestContext
   ): ProfileModel = {
     val azureManagedAppCoordinates = billingInfo match {
       case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
     }
+
+    val policyInputs = new BpmApiPolicyInputs().inputs(
+      policies
+        .map { case (policyName, additionalData) =>
+          new BpmApiPolicyInput()
+            .namespace("terra") // policy namespaces in Rawls are always 'terra'
+            .name(policyName)
+            .additionalData(
+              additionalData
+                .map { case (key, value) =>
+                  new BpmApiPolicyPair().key(key).value(value)
+                }
+                .toList
+                .asJava
+            )
+        }
+        .toList
+        .asJava
+    )
 
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(ctx)
@@ -141,6 +162,7 @@ class BillingProfileManagerDAOImpl(
       .id(UUID.randomUUID())
       .biller("direct") // community terra is always 'direct' (i.e., no reseller)
       .cloudPlatform(CloudPlatform.AZURE)
+      .policies(policyInputs)
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
     profileApi.createProfile(createProfileRequest)
