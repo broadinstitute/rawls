@@ -38,7 +38,7 @@ import BpmAzureReportErrorMessageJsonProtocol._
 trait BillingProfileManagerDAO {
   def createBillingProfile(displayName: String,
                            billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-                           policies: Map[String, Map[String, String]],
+                           policies: Map[String, List[(String, String)]],
                            ctx: RawlsRequestContext
   ): ProfileModel
 
@@ -125,7 +125,7 @@ class BillingProfileManagerDAOImpl(
   override def createBillingProfile(
     displayName: String,
     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-    policies: Map[String, Map[String, String]] = Map.empty,
+    policies: Map[String, List[(String, String)]] = Map.empty,
     ctx: RawlsRequestContext
   ): ProfileModel = {
     val azureManagedAppCoordinates = billingInfo match {
@@ -144,7 +144,6 @@ class BillingProfileManagerDAOImpl(
                 .map { case (key, value) =>
                   new BpmApiPolicyPair().key(key).value(value)
                 }
-                .toList
                 .asJava
             )
         }

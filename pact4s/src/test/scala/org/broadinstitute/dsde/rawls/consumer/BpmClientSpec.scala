@@ -335,7 +335,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     val profileModel =
       billingProfileManagerDAO.createBillingProfile("billingProfile",
                                                     Right(managedAppCoordinates),
-                                                    Map[String, Map[String, String]](),
+                                                    Map[String, List[(String, String)]](),
                                                     testContext
       )
     profileModel.getSubscriptionId shouldBe dummySubscriptionId

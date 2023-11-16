@@ -158,7 +158,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar with Mo
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
-    val policies = Map[String, Map[String, String]]()
+    val policies = Map[String, List[(String, String)]]()
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     val createProfileRequestCaptor = captor[CreateProfileRequest]
@@ -180,14 +180,26 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar with Mo
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
-    val policies = Map("protected-data" -> Map[String, String]())
+    val policies = Map("protected-data" -> List[(String, String)](),
+                       "group-constraint" -> List(("group", "myFakeGroup"), ("group", "myOtherFakeGroup"))
+    )
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     val createProfileRequestCaptor = captor[CreateProfileRequest]
     bpmDAO.createBillingProfile("fake", Right(coords), policies, testContext)
 
     val expectedPolicies = new BpmApiPolicyInputs().inputs(
-      List(new BpmApiPolicyInput().namespace("terra").name("protected-data").additionalData(List.empty.asJava)).asJava
+      List(
+        new BpmApiPolicyInput().namespace("terra").name("protected-data").additionalData(List.empty.asJava),
+        new BpmApiPolicyInput()
+          .namespace("terra")
+          .name("group-constraint")
+          .additionalData(
+            List(new BpmApiPolicyPair().key("group").value("myFakeGroup"),
+                 new BpmApiPolicyPair().key("group").value("myOtherFakeGroup")
+            ).asJava
+          )
+      ).asJava
     )
 
     verify(profileApi).createProfile(createProfileRequestCaptor.capture)

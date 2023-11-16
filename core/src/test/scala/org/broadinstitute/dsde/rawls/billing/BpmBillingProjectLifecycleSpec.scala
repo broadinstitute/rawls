@@ -294,7 +294,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequest.projectName.value),
         ArgumentMatchers.eq(createRequest.billingInfo),
-        ArgumentMatchers.eq(Map[String, Map[String, String]]()),
+        ArgumentMatchers.eq(Map[String, List[(String, String)]]()),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -341,7 +341,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     verify(bpm, Mockito.times(1)).createBillingProfile(createRequest.projectName.value,
                                                        createRequest.billingInfo,
-                                                       Map[String, Map[String, String]](),
+                                                       Map[String, List[(String, String)]](),
                                                        testContext
     )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, Option(landingZoneId))
@@ -461,7 +461,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val repo = mock[BillingRepository]
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
-    val expectedPolicy = Map("protected-data" -> Map[String, String]())
+    val expectedPolicy = Map("protected-data" -> List[(String, String)]())
 
     when(
       bpm.createBillingProfile(
