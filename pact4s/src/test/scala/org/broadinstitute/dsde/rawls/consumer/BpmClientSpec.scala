@@ -107,6 +107,23 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.stringType("displayName")
     // It appears to be necessary to specify the value because the enum doesn't get translated to string automatically
     o.stringType("cloudPlatform", CloudPlatform.AZURE.toString)
+    o.`object`("policies",
+      po =>
+        po.array("inputs",
+          pio =>
+            pio.`object` { p =>
+              p.stringType("namespace")
+              p.stringType("name")
+              p.array("additionalData",
+                pad =>
+                  pad.`object` { ad =>
+                    ad.stringType("key")
+                    ad.stringType("value")
+                  }
+              )
+            }
+        )
+    )
   }.build()
 
   val profileModelResponse: DslPart = newJsonBody { o =>
@@ -118,6 +135,23 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.stringType("biller")
     o.stringType("displayName")
     o.stringType("cloudPlatform", CloudPlatform.AZURE.toString)
+    o.`object`("policies",
+      po =>
+        po.array("inputs",
+          pio =>
+            pio.`object` { p =>
+              p.stringType("namespace")
+              p.stringType("name")
+              p.array("additionalData",
+                pad =>
+                  pad.`object` { ad =>
+                    ad.stringType("key")
+                    ad.stringType("value")
+                  }
+              )
+            }
+        )
+    )
   }.build()
 
   val minimalProfile: Consumer[LambdaDslObject] = o => {
