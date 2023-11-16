@@ -140,11 +140,9 @@ class BillingProfileManagerDAOImpl(
             .namespace("terra") // policy namespaces in Rawls are always 'terra'
             .name(policyName)
             .additionalData(
-              additionalData
-                .map { case (key, value) =>
-                  new BpmApiPolicyPair().key(key).value(value)
-                }
-                .asJava
+              additionalData.map { case (key, value) =>
+                new BpmApiPolicyPair().key(key).value(value)
+              }.asJava
             )
         }
         .toList
