@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.workbench.model.{ErrorReport, ErrorReportSource, 
 import org.broadinstitute.dsde.workbench.service.util.ExceptionHandling
 import org.scalatest.{Outcome, TestSuite, TestSuiteMixin}
 import spray.json._
+import org.broadinstitute.dsde.workbench.service.test.{CleanUp => WBCleanup}
 
 import java.util.concurrent.ConcurrentLinkedDeque
 import scala.jdk.CollectionConverters._
@@ -14,25 +15,12 @@ import scala.util.{Failure, Success, Try}
 /**
   * Mix-in for cleaning up data created during a test.
   */
-trait CleanUp extends TestSuiteMixin with ExceptionHandling with LazyLogging { self: TestSuite =>
-  implicit val errorReportSource: ErrorReportSource = ErrorReportSource(self.suiteName)
+trait CleanUp extends TestSuiteMixin with ExceptionHandling with LazyLogging with WBCleanup { self: TestSuite =>
+  override implicit val errorReportSource: ErrorReportSource = ErrorReportSource(self.suiteName)
 
   private val cleanUpFunctions = new ConcurrentLinkedDeque[() => Any]()
 
-  /**
-    * Verb object for the DSL for registering clean-up functions.
-    */
-  object register {
 
-    /**
-      * Register a function to be executed at the end of the test to undo any
-      * side effects of the test.
-      *
-      * @param f the clean-up function
-      */
-    def cleanUp(f: => Any): Unit =
-      cleanUpFunctions.addFirst(f _)
-  }
 
   /**
     * Function for controlling when the clean-up functions will be run.
@@ -81,7 +69,7 @@ trait CleanUp extends TestSuiteMixin with ExceptionHandling with LazyLogging { s
     *
     * @param testCode the test code to run
     */
-  def withCleanUp(testCode: => Any): Unit = {
+  override def withCleanUp(testCode: => Any): Unit = {
     val testTrial = Try(testCode)
     val cleanupTrial = Try(runCleanUpFunctions())
     runCodeWithCleanup(testTrial, cleanupTrial)
