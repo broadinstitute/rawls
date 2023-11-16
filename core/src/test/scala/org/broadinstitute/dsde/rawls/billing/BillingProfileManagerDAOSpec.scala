@@ -1,41 +1,38 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
+import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
+import org.broadinstitute.dsde.rawls.billing.BpmAzureReportErrorMessageJsonProtocol._
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
-  ProjectRoles,
   RawlsBillingAccountName,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
-  SamResourceAction,
-  SamResourceTypeNames,
   UserInfo
 }
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
-import org.mockito.{ArgumentCaptor, ArgumentMatchers}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers.{key, _}
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
-import spray.json.{enrichAny, JsObject, JsValue}
+import spray.json._
 
 import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.jdk.CollectionConverters.SeqHasAsJava
-import spray.json._
-import BpmAzureReportErrorMessageJsonProtocol._
-import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.client.ApiException
-import org.mockito.ArgumentMatchers.any
 
-class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
+class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar with MockitoTestUtils {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
@@ -151,6 +148,50 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     assertResult(expectedProfile)(profile)
     verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
+  }
+
+  it should "include an empty set of policy inputs if no policies are present" in {
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val dummyProfile = new ProfileModel().id(UUID.randomUUID())
+    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(dummyProfile)
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
+    val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
+    val policies = Map[String, Map[String, String]]()
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
+
+    val createProfileRequestCaptor = captor[CreateProfileRequest]
+    bpmDAO.createBillingProfile("fake", Right(coords), policies, testContext)
+
+    val expectedPolicies = new BpmApiPolicyInputs().inputs(
+      List.empty.asJava
+    )
+
+    verify(profileApi).createProfile(createProfileRequestCaptor.capture)
+    assertResult(expectedPolicies)(createProfileRequestCaptor.getValue.getPolicies)
+  }
+
+  it should "include any policies that are present" in {
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val dummyProfile = new ProfileModel().id(UUID.randomUUID())
+    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(dummyProfile)
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
+    val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
+    val policies = Map("protected-data" -> Map[String, String]())
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
+
+    val createProfileRequestCaptor = captor[CreateProfileRequest]
+    bpmDAO.createBillingProfile("fake", Right(coords), policies, testContext)
+
+    val expectedPolicies = new BpmApiPolicyInputs().inputs(
+      List(new BpmApiPolicyInput().namespace("terra").name("protected-data").additionalData(List.empty.asJava)).asJava
+    )
+
+    verify(profileApi).createProfile(createProfileRequestCaptor.capture)
+    assertResult(expectedPolicies)(createProfileRequestCaptor.getValue.getPolicies)
   }
 
   behavior of "deleteBillingProfile"
