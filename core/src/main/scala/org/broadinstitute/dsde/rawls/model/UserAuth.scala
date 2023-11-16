@@ -100,14 +100,16 @@ case class RawlsBillingProjectResponse(
   message: Option[String],
   managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
   cloudPlatform: String,
-  landingZoneId: Option[String]
+  landingZoneId: Option[String],
+  protectedData: Boolean
 )
 
 object RawlsBillingProjectResponse {
   def apply(
     roles: Set[ProjectRole],
     project: RawlsBillingProject,
-    platform: CloudPlatform = CloudPlatform.UNKNOWN
+    platform: CloudPlatform = CloudPlatform.UNKNOWN,
+    protectedData: Boolean = false
   ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
@@ -118,7 +120,8 @@ object RawlsBillingProjectResponse {
     project.message,
     project.azureManagedAppCoordinates,
     platform.toString,
-    project.landingZoneId
+    project.landingZoneId,
+    protectedData
   )
 }
 
@@ -316,7 +319,7 @@ class UserAuthJsonSupport extends JsonSupport {
   )
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
-    jsonFormat10(RawlsBillingProjectResponse.apply)
+    jsonFormat11(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

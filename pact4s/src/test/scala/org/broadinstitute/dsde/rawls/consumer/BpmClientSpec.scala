@@ -331,7 +331,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
       multiCloudWorkspaceConfig
     )
     val profileModel =
-      billingProfileManagerDAO.createBillingProfile("billingProfile", Right(managedAppCoordinates), testContext)
+      billingProfileManagerDAO.createBillingProfile("billingProfile", Right(managedAppCoordinates), Map[String, Map[String, String]](), testContext)
     profileModel.getSubscriptionId shouldBe dummySubscriptionId
     profileModel.getTenantId shouldBe dummyTenantId
     profileModel.getManagedResourceGroupId shouldBe dummyMrgId
