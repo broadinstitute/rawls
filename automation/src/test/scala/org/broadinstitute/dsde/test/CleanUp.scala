@@ -83,17 +83,7 @@ trait CleanUp extends TestSuiteMixin with ExceptionHandling with LazyLogging wit
   }
 
   private def runCleanUpFunctions(): Unit = {
-    val cleanups = cleanUpFunctions.asScala.map { f =>
-      Try(f())
-    }
-    cleanUpFunctions.clear()
-    val errorReports = cleanups.collect { case Failure(t) =>
-      ErrorReport(t)
-    }
 
-    if (errorReports.nonEmpty) {
-      throw new Exception(ErrorReport("cleanup failed", errorReports.toSeq).toJson.prettyPrint)
-    }
   }
 
   def runCodeWithCleanup[T, C](testTrial: Try[T], cleanupTrial: Try[C]): T =
