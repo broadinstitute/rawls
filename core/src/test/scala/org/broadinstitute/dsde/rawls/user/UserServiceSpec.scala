@@ -1241,7 +1241,8 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
-    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE))
+    val expected =
+      Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE, Option(false)))
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
 
@@ -1306,7 +1307,8 @@ class UserServiceSpec
       RawlsBillingProjectResponse(
         Set(ProjectRoles.User),
         project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
-        CloudPlatform.AZURE
+        CloudPlatform.AZURE,
+        Option(false)
       )
     )
 
@@ -1407,11 +1409,15 @@ class UserServiceSpec
 
     val expected = Seq(
       RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject, CloudPlatform.AZURE),
+      RawlsBillingProjectResponse(Set(ProjectRoles.User),
+                                  billingProfileBackedProject,
+                                  CloudPlatform.AZURE,
+                                  protectedData = Option(false)
+      ),
       RawlsBillingProjectResponse(Set(ProjectRoles.Owner),
                                   protectedDataBillingProfileBackedProject,
                                   CloudPlatform.AZURE,
-                                  protectedData = true
+                                  protectedData = Option(true)
       )
     )
 

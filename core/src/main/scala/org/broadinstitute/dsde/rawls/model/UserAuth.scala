@@ -101,7 +101,7 @@ case class RawlsBillingProjectResponse(
   managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
   cloudPlatform: String,
   landingZoneId: Option[String],
-  protectedData: Boolean
+  protectedData: Option[Boolean]
 )
 
 object RawlsBillingProjectResponse {
@@ -109,7 +109,7 @@ object RawlsBillingProjectResponse {
     roles: Set[ProjectRole],
     project: RawlsBillingProject,
     platform: CloudPlatform = CloudPlatform.UNKNOWN,
-    protectedData: Boolean = false
+    protectedData: Option[Boolean] = None
   ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
