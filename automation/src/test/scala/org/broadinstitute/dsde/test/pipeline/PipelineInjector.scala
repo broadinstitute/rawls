@@ -31,8 +31,8 @@ trait PipelineInjector {
           seq <- json.as[Seq[UserMetadata]]
         } yield seq
         userMetadataSeq match {
-          case Right(u)    => u
-          case Left(_)     => Seq()
+          case Right(u) => u
+          case Left(_)  => Seq()
         }
       case _ => Seq()
     }
