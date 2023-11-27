@@ -28,6 +28,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
 /**
@@ -283,7 +284,9 @@ class UserService(
     billingProfile = billingProject.flatMap {
       _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
     }
-  } yield billingProject.flatMap(p => if (roles.nonEmpty) Some(mapCloudPlatform(p, billingProfile, roles)) else None)
+  } yield billingProject.flatMap(p =>
+    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles)) else None
+  )
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
@@ -299,29 +302,39 @@ class UserService(
     .map { p =>
       val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
       val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
-      mapCloudPlatform(p, billingProfile, roles)
+      mapCloudPlatformAndPolicies(p, billingProfile, roles)
     }
     .filter(p => p.roles.nonEmpty)
 
   /**
     * Map the cloud platform to a billing project.
     * if no BPM id is set it's a GCP project
-    * if a BPM id is set and a billing profile was found, use cloud platform from bpm and add the the coordinates if it's Azure
+    * if a BPM id is set and a billing profile was found, use cloud platform from bpm, add the the coordinates if it's Azure, check for protected-data policy on the billing profile
     * if a BPM id is set and no billing profile was found, mark as UNKNOWN
     */
-  def mapCloudPlatform(
+  def mapCloudPlatformAndPolicies(
     project: RawlsBillingProject,
     billingProfile: Option[ProfileModel],
     roles: Set[ProjectRole]
   ): RawlsBillingProjectResponse = (project.billingProfileId, billingProfile) match {
-    case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP)
+    case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP, protectedData = None)
     case (Some(_), Some(p)) =>
       val platform = CloudPlatform(p)
       val responseProject = if (platform == CloudPlatform.AZURE) {
         val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
         project.copy(azureManagedAppCoordinates = Some(c))
       } else project
-      RawlsBillingProjectResponse(roles, responseProject, platform)
+      val protectedData = Option(p.getPolicies) match {
+        case Some(policies) =>
+          Option(
+            policies.getInputs.asScala.exists(policy =>
+              policy.getNamespace.equals("terra") && policy.getName.equals("protected-data")
+            )
+          )
+        case None => Option(false)
+      }
+
+      RawlsBillingProjectResponse(roles, responseProject, platform, protectedData)
     case (Some(id), None) =>
       val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
       RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
