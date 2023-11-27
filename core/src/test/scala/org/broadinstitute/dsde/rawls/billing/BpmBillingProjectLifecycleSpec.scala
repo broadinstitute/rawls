@@ -183,6 +183,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithExistingLz.projectName.value),
         ArgumentMatchers.eq(createRequestWithExistingLz.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -236,6 +237,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithExistingLz.projectName.value),
         ArgumentMatchers.eq(createRequestWithExistingLz.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -289,9 +291,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
 
     when(
-      bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
-                               ArgumentMatchers.eq(createRequest.billingInfo),
-                               ArgumentMatchers.eq(testContext)
+      bpm.createBillingProfile(
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(createRequest.billingInfo),
+        ArgumentMatchers.eq(Map[String, List[(String, String)]]()),
+        ArgumentMatchers.eq(testContext)
       )
     )
       .thenReturn(profileModel)
@@ -335,6 +339,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                                     testContext,
                                                                     None
     )
+    verify(bpm, Mockito.times(1)).createBillingProfile(createRequest.projectName.value,
+                                                       createRequest.billingInfo,
+                                                       Map[String, List[(String, String)]](),
+                                                       testContext
+    )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, Option(landingZoneId))
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
     verify(wsmResouceRecordDao, Mockito.times(1))
@@ -370,6 +379,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
         ArgumentMatchers.eq(createRequestWithMembers.billingInfo),
+        any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -423,6 +433,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+                               any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -446,15 +457,17 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
-  it should "create a protected data landing zone if requested" in {
+  it should "create a protected data landing zone and attach a protected-data policy to the billing profile if requested" in {
     val repo = mock[BillingRepository]
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val expectedPolicy = Map("protected-data" -> List[(String, String)]())
 
     when(
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createProtectedRequest.projectName.value),
         ArgumentMatchers.eq(createProtectedRequest.billingInfo),
+        ArgumentMatchers.eq(expectedPolicy),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -501,6 +514,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                                     testContext,
                                                                     None
     )
+    verify(bpm, Mockito.times(1)).createBillingProfile(createProtectedRequest.projectName.value,
+                                                       createProtectedRequest.billingInfo,
+                                                       expectedPolicy,
+                                                       testContext
+    )
   }
 
   it should "handle landing zone creation errors and delete the billing profile" in {
@@ -511,6 +529,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+                               any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -565,6 +584,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+                               any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -622,6 +642,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+                               any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -675,6 +696,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
+                               any(),
                                ArgumentMatchers.eq(testContext)
       )
     )
@@ -735,7 +757,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val billingRepoError = "SQLException from billing repository"
     when(
-      bpm.createBillingProfile(createRequest.projectName.value, createRequest.billingInfo, testContext)
+      bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
+                               ArgumentMatchers.eq(createRequest.billingInfo),
+                               any(),
+                               ArgumentMatchers.eq(testContext)
+      )
     )
       .thenReturn(profileModel)
     // Throw exception when deleting profile during cleanup code.
