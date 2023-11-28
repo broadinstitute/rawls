@@ -203,7 +203,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
 
   pactDslResponse = pactDslResponse
     .`given`("a managed app exists")
-    .uponReceiving("Request to list managed apps for existing app")
+    .uponReceiving("Request to list managed apps for an existing app")
     .method("GET")
     .path("/api/azure/v1/managedApps")
     .headers(jsonRequestHeaders)
