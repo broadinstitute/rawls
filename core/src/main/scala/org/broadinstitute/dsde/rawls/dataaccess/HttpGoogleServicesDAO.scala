@@ -44,6 +44,7 @@ import com.google.cloud.storage.Storage.BucketSourceOption
 import com.google.cloud.storage.StorageException
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
+import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
@@ -1267,8 +1268,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken), logRequest = false)
       RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
     }.recover { case e: GoogleJsonResponseException =>
+      // abbreviate the error message to ensure we don't include a token in the exception
       throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.InternalServerError, s"Failed to get token info: ${e.getMessage}")
+        ErrorReport(StatusCodes.InternalServerError,
+                    s"Failed to get token info: ${StringUtils.abbreviate(e.getMessage, 50)}"
+        )
       )
     }
   }

@@ -107,6 +107,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.stringType("displayName")
     // It appears to be necessary to specify the value because the enum doesn't get translated to string automatically
     o.stringType("cloudPlatform", CloudPlatform.AZURE.toString)
+    o.`object`("policies", po => po.array("inputs", arr => arr.getPactDslJsonArray))
   }.build()
 
   val profileModelResponse: DslPart = newJsonBody { o =>
@@ -118,6 +119,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.stringType("biller")
     o.stringType("displayName")
     o.stringType("cloudPlatform", CloudPlatform.AZURE.toString)
+    o.`object`("policies", po => po.array("inputs", arr => arr.getPactDslJsonArray))
   }.build()
 
   val minimalProfile: Consumer[LambdaDslObject] = o => {
@@ -182,11 +184,9 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     )
   }.build()
 
-  val consumerPactBuilder: ConsumerPactBuilder = ConsumerPactBuilder
-    .consumer("rawls-consumer")
+  val consumerPactBuilder: ConsumerPactBuilder = ConsumerPactBuilder.consumer("rawls")
 
-  val pactProvider: PactDslWithProvider = consumerPactBuilder
-    .hasPactWith("bpm-provider")
+  val pactProvider: PactDslWithProvider = consumerPactBuilder.hasPactWith("bpm")
 
   // stateParams provides the desired subsystem states
   // for BPM provider to generate the expected response
@@ -327,20 +327,25 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     managedApps.headOption.get.isAssigned shouldBe false
   }
 
-  it should "return the proper response from creating a billing project" in {
+  it should "return the proper response from creating a billing profile" in {
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       new HttpBillingProfileManagerClientProvider(Some(mockServer.getUrl)),
       multiCloudWorkspaceConfig
     )
     val profileModel =
-      billingProfileManagerDAO.createBillingProfile("billingProfile", Right(managedAppCoordinates), testContext)
+      billingProfileManagerDAO.createBillingProfile("billingProfile",
+                                                    Right(managedAppCoordinates),
+                                                    Map[String, List[(String, String)]](),
+                                                    testContext
+      )
     profileModel.getSubscriptionId shouldBe dummySubscriptionId
     profileModel.getTenantId shouldBe dummyTenantId
     profileModel.getManagedResourceGroupId shouldBe dummyMrgId
     profileModel.getCloudPlatform shouldBe CloudPlatform.AZURE
+    assert(Option(profileModel.getPolicies).getOrElse(fail("policies not included in response")).getInputs.isEmpty)
   }
 
-  it should "return the proper response from deleting a billing project" in {
+  it should "return the proper response from deleting a billing profile" in {
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       new HttpBillingProfileManagerClientProvider(Some(mockServer.getUrl)),
       multiCloudWorkspaceConfig

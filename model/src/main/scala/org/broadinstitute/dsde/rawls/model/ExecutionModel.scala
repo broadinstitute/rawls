@@ -32,7 +32,10 @@ case class SubmissionRequest(
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
   userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false
+  ignoreEmptyOutputs: Boolean = false,
+  monitoringScript: Option[String] = None,
+  monitoringImage: Option[String] = None,
+  monitoringImageScript: Option[String] = None
 )
 
 // Cromwell's response to workflow submission
@@ -70,6 +73,7 @@ case class ExecutionServiceCallLogs(
   backendLogs: Option[Map[String, String]] = None
 )
 
+// https://cromwell.readthedocs.io/en/stable/wf_options/Google/
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
   google_project: String,
@@ -85,7 +89,10 @@ case class ExecutionServiceWorkflowOptions(
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty,
-  ignore_empty_outputs: Boolean = false
+  ignore_empty_outputs: Boolean = false,
+  monitoring_script: Option[String] = None,
+  monitoring_image: Option[String] = None,
+  monitoring_image_script: Option[String] = None
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
@@ -143,7 +150,10 @@ case class Submission(
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
   userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false
+  ignoreEmptyOutputs: Boolean = false,
+  monitoringScript: Option[String] = None,
+  monitoringImage: Option[String] = None,
+  monitoringImageScript: Option[String] = None
 )
 
 case class SubmissionListResponse(
@@ -368,7 +378,10 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
           Option("userComment" -> obj.userComment.toJson),
-          Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson)
+          Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson),
+          Option("monitoringScript" -> obj.monitoringScript.toJson),
+          Option("monitoringImage" -> obj.monitoringImage.toJson),
+          Option("monitoringImageScript" -> obj.monitoringImageScript.toJson)
         ).flatten: _*
       )
 
@@ -392,7 +405,10 @@ trait ExecutionJsonSupport extends JsonSupport {
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
         userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
-        ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean])
+        ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean]),
+        monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
+        monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
+        monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
@@ -414,7 +430,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat15(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat18(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
@@ -438,7 +454,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat18(Submission)
+  implicit val SubmissionFormat = jsonFormat21(Submission)
 
   implicit val SubmissionRetryFormat = jsonFormat1(SubmissionRetry)
 

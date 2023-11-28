@@ -37,7 +37,10 @@ case class SubmissionRecord(id: UUID,
                             rootEntityType: Option[String],
                             userComment: Option[String],
                             submissionRoot: String,
-                            ignoreEmptyOutputs: Boolean
+                            ignoreEmptyOutputs: Boolean,
+                            monitoringScript: Option[String],
+                            monitoringImage: Option[String],
+                            monitoringImageScript: Option[String]
 )
 
 case class SubmissionValidationRecord(id: Long, workflowId: Long, errorText: Option[String], inputName: String)
@@ -73,6 +76,9 @@ trait SubmissionComponent {
     def userComment = column[Option[String]]("USER_COMMENT")
     def submissionRoot = column[String]("SUBMISSION_ROOT")
     def ignoreEmptyOutputs = column[Boolean]("IGNORE_EMPTY_OUTPUTS")
+    def monitoringScript = column[Option[String]]("MONITORING_SCRIPT")
+    def monitoringImage = column[Option[String]]("MONITORING_IMAGE")
+    def monitoringImageScript = column[Option[String]]("MONITORING_IMAGE_SCRIPT")
 
     def * = (
       id,
@@ -91,7 +97,10 @@ trait SubmissionComponent {
       rootEntityType,
       userComment,
       submissionRoot,
-      ignoreEmptyOutputs
+      ignoreEmptyOutputs,
+      monitoringScript,
+      monitoringImage,
+      monitoringImageScript
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -491,7 +500,10 @@ trait SubmissionComponent {
         submission.externalEntityInfo.map(_.rootEntityType),
         submission.userComment,
         submission.submissionRoot,
-        submission.ignoreEmptyOutputs
+        submission.ignoreEmptyOutputs,
+        submission.monitoringScript,
+        submission.monitoringImage,
+        submission.monitoringImageScript
       )
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord,
@@ -519,7 +531,10 @@ trait SubmissionComponent {
           rootEntityType <- submissionRec.rootEntityType
         } yield ExternalEntityInfo(entityStoreId, rootEntityType),
         userComment = submissionRec.userComment,
-        ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs
+        ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
+        monitoringScript = submissionRec.monitoringScript,
+        monitoringImage = submissionRec.monitoringImage,
+        monitoringImageScript = submissionRec.monitoringImageScript
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,

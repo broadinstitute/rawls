@@ -96,7 +96,7 @@ jobs:
 
   rawls-consumer-contract-tests:
     runs-on: ubuntu-latest
-    needs: [init-github-context]
+    needs: [ init-github-context ]
     outputs:
       pact-b64: ${{ steps.encode-pact.outputs.pact-b64 }}
 
@@ -115,7 +115,7 @@ jobs:
         id: encode-pact
         run: |
           cd pact4s
-          NON_BREAKING_B64=$(cat target/pacts/rawls-consumer-bpm-provider.json | base64 -w 0)
+          NON_BREAKING_B64=$(cat target/pacts/rawls-bpm.json | base64 -w 0)
           echo "pact-b64=${NON_BREAKING_B64}" >> $GITHUB_OUTPUT
 
   # Prevent untrusted sources from using PRs to publish contracts
@@ -160,6 +160,6 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           inputs: '{
             "run-name": "${{ env.CAN_I_DEPLOY_RUN_NAME }}",
-            "pacticipant": "rawls-consumer",
+            "pacticipant": "rawls",
             "version": "${{ needs.init-github-context.outputs.repo-version }}"
           }'

@@ -50,10 +50,9 @@ import org.joda.time.{DateTime, DateTimeZone}
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.jdk.CollectionConverters.{ListHasAsScala, _}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
-import scala.jdk.CollectionConverters._
 
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
@@ -509,8 +508,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
     val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
-    val isTestProfile = profile.getCreatedDate() == null || profile.getCreatedDate() == ""
-    if (!isTestProfile && DateTime.parse(profile.getCreatedDate()).isBefore(previewDate)) {
+    val isTestProfile = profile.getCreatedDate == null || profile.getCreatedDate == ""
+    if (!isTestProfile && DateTime.parse(profile.getCreatedDate).isBefore(previewDate)) {
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(
           StatusCodes.Forbidden,
@@ -675,22 +674,35 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest) =
-    workspaceRequest.protectedData match {
+  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest) = {
+    val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {
       case Some(true) =>
         Some(
-          new WsmPolicyInputs()
-            .inputs(
-              Seq(
-                new WsmPolicyInput()
-                  .name("protected-data")
-                  .namespace("terra")
-                  .additionalData(List().asJava)
-              ).asJava
-            )
+          Seq(
+            new WsmPolicyInput()
+              .name("protected-data")
+              .namespace("terra")
+              .additionalData(List().asJava)
+          )
         )
       case _ => None
     }
+
+    val otherPolicyInputs: Option[Seq[WsmPolicyInput]] = workspaceRequest.policies match {
+      case Some(inputs) =>
+        Some(inputs.map { requestedPolicy =>
+          requestedPolicy.toWsmPolicyInput()
+        })
+      case _ => None
+    }
+
+    val merged: Option[WsmPolicyInputs] = synthesizedProtectedDataPolicyInput |+| otherPolicyInputs match {
+      case Some(mergedInputs) => Some(new WsmPolicyInputs().inputs(mergedInputs.asJava))
+      case _                  => None
+    }
+
+    merged
+  }
 
   private def getCloudContextCreationStatus(workspaceId: UUID,
                                             jobControlId: String,

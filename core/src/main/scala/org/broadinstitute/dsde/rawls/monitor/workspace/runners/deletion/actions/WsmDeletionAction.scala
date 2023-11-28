@@ -7,9 +7,10 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.util.Retry
 
+import javax.ws.rs.ProcessingException
 import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -20,7 +21,7 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO)(implicit val s
   def pollForCompletion(workspace: Workspace, jobId: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] =
-    retry(when500)(() => Future(isComplete(workspace, jobId, ctx)))
+    retry(when500OrProcessingException)(() => Future(isComplete(workspace, jobId, ctx)))
 
   private def isComplete(workspace: Workspace, jobId: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
@@ -56,7 +57,7 @@ class WsmDeletionAction(workspaceManagerDao: WorkspaceManagerDAO)(implicit val s
   def startStep(workspace: Workspace, jobId: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Unit] =
-    retry(when500) { () =>
+    retry(when500OrProcessingException) { () =>
       startDeletion(workspace, jobId, ctx)
     }
 

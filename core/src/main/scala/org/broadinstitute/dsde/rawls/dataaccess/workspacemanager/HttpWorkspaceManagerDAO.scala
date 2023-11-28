@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
+import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 
@@ -55,6 +56,17 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
     getWorkspaceApi(ctx).getWorkspace(workspaceId, null) // use default value for role
+
+  override def listWorkspaces(ctx: RawlsRequestContext, batchSize: Int = 100): List[WorkspaceDescription] = {
+    @tailrec
+    def listWorkspacesLoop(offset: Int = 0, acc: List[WorkspaceDescription] = List()): List[WorkspaceDescription] =
+      getWorkspaceApi(ctx).listWorkspaces(offset, batchSize, null).getWorkspaces.asScala.toList match {
+        case results if results.size < batchSize => results ::: acc
+        case results                             => listWorkspacesLoop(offset + batchSize, results ::: acc)
+      }
+
+    listWorkspacesLoop()
+  }
 
   override def createWorkspace(workspaceId: UUID,
                                workspaceType: WorkspaceType,

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet id="add_monitoring_script" author="anichols" logicalFilePath="dummy">
+        <addColumn tableName="SUBMISSION">
+            <column name="MONITORING_SCRIPT" type="VARCHAR(1024)" remarks="Script that runs in the task container">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="add_monitoring_image" author="anichols" logicalFilePath="dummy">
+        <addColumn tableName="SUBMISSION">
+            <column name="MONITORING_IMAGE" type="VARCHAR(1024)" remarks="Separate container that runs alongside task container">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="add_monitoring_image_script" author="anichols" logicalFilePath="dummy">
+        <addColumn tableName="SUBMISSION">
+            <column name="MONITORING_IMAGE_SCRIPT" type="VARCHAR(1024)" remarks="Script that runs in the separate `MONITORING_IMAGE` container">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

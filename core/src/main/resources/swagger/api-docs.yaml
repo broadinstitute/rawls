@@ -4627,6 +4627,15 @@ components:
         userComment:
           type: string
           description: Comment for the submission
+        monitoringScript:
+          type: string
+          description: Location of user-defined monitoring script that runs inside the task container
+        monitoringImage:
+          type: string
+          description: User-defined monitoring container that runs as a sibling to the task container. Alternative to `monitoringScript`.
+        monitoringImageScript:
+          type: string
+          description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
       description: ""
     ExternalEntityInfo:
       type: object
@@ -4820,6 +4829,15 @@ components:
           type: boolean
           default: false
           description: Whether or not to create output columns if they would be empty and optional.  Defaults to false (columns are created).
+        monitoringScript:
+          type: string
+          description: Location of user-defined monitoring script that runs inside the task container
+        monitoringImage:
+          type: string
+          description: User-defined monitoring container that runs as a sibling to the task container. Alternative to `monitoringScript`.
+        monitoringImageScript:
+          type: string
+          description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -5771,8 +5789,16 @@ components:
           default: false
         protectedData:
           type: boolean
-          description: Optional, false if not specified. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+          deprecated: True
+          description: |
+            Optional, false if not specified. Applicable only for Azure workspaces. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+            Note this field is deprecated. A protected data policy should be attached by utilizing the policies field instead.
           default: false
+        policies:
+          type: array
+          description: Optional, array of policies to attach to the workspace.
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
       description: ""
     WorkspaceRequestClone:
       required:
@@ -6431,6 +6457,9 @@ components:
           type: string
           format: uuid
           description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        protectedData:
+          type: boolean
+          description: whether this billing project supports protected data (cloudPlatform AZURE only)
     AzureManagedAppCoordinates:
       required:
         - tenantId
