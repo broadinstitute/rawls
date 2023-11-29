@@ -11,7 +11,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
-import com.google.cloud.storage.Storage
+import com.google.cloud.storage.{Storage, StorageClass}
 import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
 import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
@@ -776,7 +776,8 @@ object MultiregionalBucketMigrationActor {
                 GoogleServicesDAO.getStorageLogsBucketName(workspace.googleProjectId)
               ).some,
               location = env.defaultBucketLocation.some,
-              autoclassEnabled = true
+              autoclassEnabled = true,
+              autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE)
             )
             .compile
             .drain
