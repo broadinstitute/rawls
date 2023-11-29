@@ -317,7 +317,7 @@ trait EntityApiService extends UserInfoDirectives {
                   entity(as[EntityCopyDefinition]) { copyDefinition =>
                     complete {
                       entityServiceConstructor(ctx)
-                        .copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool)
+                        .copyEntities(copyDefinition, linkExistingEntitiesBool)
                         .map { response =>
                           if (
                             response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntitiesBool)
