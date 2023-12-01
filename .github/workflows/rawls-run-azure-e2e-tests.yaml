@@ -212,7 +212,7 @@ jobs:
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
-            "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":${{ needs.params-gen.outputs.project-name }}}",
+            "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":\"${{ needs.params-gen.outputs.project-name }}\"}",
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
