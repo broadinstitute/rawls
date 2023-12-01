@@ -50,28 +50,39 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
       }
       _ <- pendingTransfers.toList
         .traverse { pendingTransfer =>
-          if (pendingTransfer.created.isBefore(DateTime.now().minusDays(1))) {
-            logger.warn(
-              s"File transfer from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName} did not succeed within allowed time and will no longer be retried. [workspaceId=${pendingTransfer.destWorkspaceId}]"
-            )
-            IO.fromFuture(IO(markTransferAsComplete(pendingTransfer, transferSucceeded = false)))
-          } else {
-            IO.fromFuture(IO(copyBucketFiles(pendingTransfer))).attempt.map {
-              case Left(e) =>
-                // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
-                // want to continue traversing the list to transfer the rest of the buckets even if one of the
-                // copy operations fails.
-                logger.warn(
-                  s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}",
-                  e
-                )
-                List.empty
-              case Right(res) => res
-            }
+          IO.fromFuture(IO(attemptTransfer(pendingTransfer))).attempt.map {
+            case Left(e) =>
+              // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+              // want to continue traversing the list to transfer the rest of the buckets even if one of the
+              // copy operations fails.
+              logger.warn(
+                s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}",
+                e
+              )
+              List.empty
+            case Right(res) => res
           }
         }
         .unsafeToFuture()
     } yield ()
+
+  private def attemptTransfer(
+    pendingTransfer: PendingCloneWorkspaceFileTransfer
+  )(implicit executionContext: ExecutionContext): Future[List[Option[StorageObject]]] = {
+    val transferExpired = pendingTransfer.created.isBefore(DateTime.now().minusDays(1))
+    for {
+      copiedObjects <-
+        if (!transferExpired) copyBucketFiles(pendingTransfer)
+        else {
+          logger.warn(
+            s"File transfer from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName} did not succeed within allowed time and will no longer be retried. [workspaceId=${pendingTransfer.destWorkspaceId}]"
+          )
+          Future.successful(List.empty)
+        }
+
+      _ <- markTransferAsComplete(pendingTransfer, transferSucceeded = !transferExpired)
+    } yield copiedObjects
+  }
 
   private def copyBucketFiles(
     pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer
@@ -110,7 +121,6 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
       _ = logger.info(
         s"successfully copied files with prefix ${pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix} from ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}"
       )
-      _ <- markTransferAsComplete(pendingCloneWorkspaceFileTransfer, transferSucceeded = true)
     } yield copiedObjects
 
   private def markTransferAsComplete(
