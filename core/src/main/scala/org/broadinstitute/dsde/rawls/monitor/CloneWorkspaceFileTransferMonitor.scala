@@ -11,8 +11,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CloneWorkspaceFileTransferMonitor.CheckAll
+import org.joda.time.DateTime
 
-import java.util.Date
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -50,17 +50,24 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
       }
       _ <- pendingTransfers.toList
         .traverse { pendingTransfer =>
-          IO.fromFuture(IO(copyBucketFiles(pendingTransfer))).attempt.map {
-            case Left(e) =>
-              // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
-              // want to continue traversing the list to transfer the rest of the buckets even if one of the
-              // copy operations fails.
-              logger.warn(
-                s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}",
-                e
-              )
-              List.empty
-            case Right(res) => res
+          if (pendingTransfer.created.isBefore(DateTime.now().minusDays(1))) {
+            logger.warn(
+              s"File transfer from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName} did not succeed within allowed time and will no longer be retried. [workspaceId=${pendingTransfer.destWorkspaceId}]"
+            )
+            IO.fromFuture(IO(markTransferAsComplete(pendingTransfer, transferSucceeded = false)))
+          } else {
+            IO.fromFuture(IO(copyBucketFiles(pendingTransfer))).attempt.map {
+              case Left(e) =>
+                // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+                // want to continue traversing the list to transfer the rest of the buckets even if one of the
+                // copy operations fails.
+                logger.warn(
+                  s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}",
+                  e
+                )
+                List.empty
+              case Right(res) => res
+            }
           }
         }
         .unsafeToFuture()
@@ -103,21 +110,29 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
       _ = logger.info(
         s"successfully copied files with prefix ${pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix} from ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}"
       )
-      _ <- markTransferAsComplete(pendingCloneWorkspaceFileTransfer)
+      _ <- markTransferAsComplete(pendingCloneWorkspaceFileTransfer, transferSucceeded = true)
     } yield copiedObjects
 
   private def markTransferAsComplete(
-    pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer
-  ): Future[Unit] =
+    pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer,
+    transferSucceeded: Boolean
+  ): Future[Unit] = {
+    val currentTime = DateTime.now()
+
     dataSource.inTransaction { dataAccess =>
       for {
-        _ <- dataAccess.cloneWorkspaceFileTransferQuery.delete(pendingCloneWorkspaceFileTransfer.destWorkspaceId)
+        _ <- dataAccess.cloneWorkspaceFileTransferQuery.update(
+          pendingCloneWorkspaceFileTransfer.copy(finished = currentTime.some,
+                                                 outcome = if (transferSucceeded) "Success".some else "Failure".some
+          )
+        )
         _ <- dataAccess.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(
           pendingCloneWorkspaceFileTransfer.destWorkspaceId,
-          new Date()
+          currentTime.toDate
         )
       } yield ()
     }
+  }
 }
 
 final case class CloneWorkspaceFileTransferMonitorConfig(pollInterval: FiniteDuration, initialDelay: FiniteDuration)

@@ -938,7 +938,10 @@ case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID,
                                              sourceWorkspaceBucketName: String,
                                              destWorkspaceBucketName: String,
                                              copyFilesWithPrefix: String,
-                                             destWorkspaceGoogleProjectId: GoogleProjectId
+                                             destWorkspaceGoogleProjectId: GoogleProjectId,
+                                             created: DateTime,
+                                             finished: Option[DateTime],
+                                             outcome: Option[String]
 )
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
@@ -1263,7 +1266,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 
-  implicit val PendingCloneWorkspaceFileTransferFormat: RootJsonFormat[PendingCloneWorkspaceFileTransfer] = jsonFormat5(
+  implicit val PendingCloneWorkspaceFileTransferFormat: RootJsonFormat[PendingCloneWorkspaceFileTransfer] = jsonFormat8(
     PendingCloneWorkspaceFileTransfer
   )
 
