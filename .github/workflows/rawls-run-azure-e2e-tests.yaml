@@ -212,14 +212,13 @@ jobs:
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{
+            "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":\"\"}",
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
             "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
             "test-group-name": "workspaces_azure",
-            "test-command": "${{ env.rawls_test_command }}",
-            "java-version": "17",
-            "billing-project": "${{ needs.params-gen.outputs.project-name }}",
+            "test-command": "${{ env.rawls_test_command }}",,
             "e2e-env": "${{ env.E2E_ENV }}",
             "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
           }'
