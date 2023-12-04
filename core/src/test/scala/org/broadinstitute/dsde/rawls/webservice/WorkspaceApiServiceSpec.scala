@@ -2696,14 +2696,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
       val clonedWorkspaceResult = runAndWait(workspaceQuery.findByName(clonedWorkspaceName)).get
-      val expected = Seq(
-        PendingCloneWorkspaceFileTransfer(
-          clonedWorkspaceResult.workspaceIdAsUUID,
-          testData.workspace.bucketName,
-          clonedWorkspaceResult.bucketName,
-          workspaceCopy.copyFilesWithPrefix.get,
-          clonedWorkspaceResult.googleProjectId
-        )
+      val expected = PendingCloneWorkspaceFileTransfer(
+        clonedWorkspaceResult.workspaceIdAsUUID,
+        testData.workspace.bucketName,
+        clonedWorkspaceResult.bucketName,
+        workspaceCopy.copyFilesWithPrefix.get,
+        clonedWorkspaceResult.googleProjectId,
+        DateTime.now(),
+        None,
+        None
       )
 
       Get(s"${clonedWorkspaceName.path}/fileTransfers") ~>
@@ -2712,9 +2713,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(expected) {
-            responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
-          }
+
+          val allTransfers = responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
+          allTransfers should have size 1
+
+          val res = allTransfers.headOption.getOrElse(fail("pending transfer expected but not found"))
+          res.destWorkspaceId shouldBe expected.destWorkspaceId
+          res.sourceWorkspaceBucketName shouldBe expected.sourceWorkspaceBucketName
+          res.destWorkspaceBucketName shouldBe expected.destWorkspaceBucketName
+          res.copyFilesWithPrefix shouldBe expected.copyFilesWithPrefix
+          res.destWorkspaceGoogleProjectId shouldBe expected.destWorkspaceGoogleProjectId
         }
   }
 
