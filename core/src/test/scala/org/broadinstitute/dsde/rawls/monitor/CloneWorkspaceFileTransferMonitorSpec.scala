@@ -213,7 +213,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
+      val failureMessage = "expected test exception"
       val exception =
         new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
@@ -303,7 +303,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
+      val failureMessage = "expected test exception"
       val exception =
         new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
@@ -405,7 +405,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
+      val failureMessage = "expected test exception"
       val exception =
         new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
@@ -549,7 +549,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
+      val failureMessage = "expected test exception"
       val exception =
         new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
@@ -680,7 +680,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
+      val failureMessage = "expected test exception"
       val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
       when(
         mockGcsDAO.listObjectsWithPrefix(sourceBucketName, copyFilesWithPrefix, Option(destWorkspace.googleProjectId))
