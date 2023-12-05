@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import slick.dbio.DBIO
+import slick.jdbc.TransactionIsolation
 
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
@@ -106,12 +107,13 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
 
   def sweep(): Future[EntityStatisticsCacheMessage] =
     trace("EntityStatisticsCacheMonitor.sweep") { rootContext =>
-      dataSource.inTransaction { dataAccess =>
-        // calculate now - workspaceCooldown as the upper bound for workspace last_modified
-        val maxModifiedTime = nowMinus(workspaceCooldown)
+      dataSource.inTransaction(
+        { dataAccess =>
+          // calculate now - workspaceCooldown as the upper bound for workspace last_modified
+          val maxModifiedTime = nowMinus(workspaceCooldown)
 
-        dataAccess.entityCacheQuery.findMostOutdatedEntityCachesAfter(MIN_CACHE_TIME, maxModifiedTime) flatMap {
-          candidates =>
+          dataAccess.entityCacheQuery
+            .findMostOutdatedEntityCachesAfter(MIN_CACHE_TIME, maxModifiedTime) flatMap { candidates =>
             if (candidates.nonEmpty) {
               // pick one of the candidates at random. This randomness ensures that we don't get stuck constantly trying
               // and failing to update the same workspace - until all we have left as candidates are un-updatable workspaces
@@ -134,8 +136,10 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
                 DBIO.successful(ScheduleDelayedSweep)
               }
             }
-        }
-      }
+          }
+        },
+        TransactionIsolation.ReadCommitted
+      )
     }
 
   def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
