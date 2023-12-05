@@ -168,7 +168,8 @@ class BillingProfileManagerDAOImpl(
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
     Try(Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))) match {
       case Success(value) => value
-      case Failure(e: ApiException) if e.getCode == StatusCodes.NotFound.intValue =>
+      case Failure(e: ApiException)
+          if e.getCode == StatusCodes.NotFound.intValue || e.getCode == StatusCodes.Forbidden.intValue =>
         None
       case Failure(e) => throw new BpmException(billingProfileId, e);
     }
