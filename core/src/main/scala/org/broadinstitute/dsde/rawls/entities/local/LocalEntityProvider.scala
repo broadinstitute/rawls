@@ -67,6 +67,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
 
   override val workspaceContext = requestArguments.workspace
 
+  final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
+
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     // start performance tracing
     traceWithParent("LocalEntityProvider.entityTypeMetadata", requestArguments.ctx) { localContext =>
@@ -176,7 +178,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                   throw new DeleteEntitiesConflictException(referringEntities)
                 else {
                   traceDBIOWithParent("entityQuery.hide", innerSpan)(_ =>
-                    dataAccess.entityQuery.hide(workspaceContext, entRefs)
+                    dataAccess.entityQuery
+                      .hide(workspaceContext, entRefs)
+                      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
                   )
                 }
             }
@@ -198,7 +202,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
             if (referringEntitiesCount != 0)
               throw new DeleteEntitiesOfTypeConflictException(referringEntitiesCount)
             else {
-              dataAccess.entityQuery.hideType(workspaceContext, entityType)
+              dataAccess.entityQuery
+                .hideType(workspaceContext, entityType)
+                .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
             }
         }
       }
@@ -365,7 +371,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
             } else {
               val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
 
-              dataAccess.entityQuery.save(workspaceContext, t)
+              dataAccess.entityQuery
+                .save(workspaceContext, t)
+                .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
             }
           }
 
