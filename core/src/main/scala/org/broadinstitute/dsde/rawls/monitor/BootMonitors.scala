@@ -81,6 +81,7 @@ object BootMonitors extends LazyLogging {
                    methodRepoDAO: MethodRepoDAO,
                    drsResolver: DrsResolver,
                    entityService: RawlsRequestContext => EntityService,
+                   entityQueryTimeout: Duration,
                    workspaceService: RawlsRequestContext => WorkspaceService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
@@ -116,7 +117,7 @@ object BootMonitors extends LazyLogging {
       gcsDAO,
       notificationDAO,
       shardedExecutionServiceCluster,
-      conf.getDuration("entities.queryTimeout").toScala,
+      entityQueryTimeout,
       metricsPrefix
     )
 
