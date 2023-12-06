@@ -144,7 +144,7 @@ object FastPassService extends LazyLogging {
                              googleStorageDAO
         ).transform {
           case Failure(e) =>
-            logger.error(
+            logger.warn(
               s"Encountered an error while removing FastPass grants for ${accountEmail.value} in ${googleProjectId.value}",
               e
             )
@@ -282,7 +282,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       }
       .transform {
         case Failure(e) =>
-          logger.error(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
+          logger.warn(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Success(_) => Success()
@@ -346,7 +346,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Failure(e: Throwable) =>
-          logger.error(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
+          logger.warn(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Success(_) => Success()
@@ -415,7 +415,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       }
       .transform {
         case Failure(e) =>
-          logger.error(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
+          logger.warn(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Success(_) => Success()

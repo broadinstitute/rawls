@@ -5851,6 +5851,13 @@ components:
           description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
       description: ""
     PendingCloneWorkspaceFileTransfer:
+      required:
+        - destWorkspaceId
+        - sourceWorkspaceBucketName
+        - destWorkspaceBucketName
+        - copyFilesWithPrefix
+        - destWorkspaceGoogleProjectId
+        - created
       type: object
       properties:
         destWorkspaceId:
@@ -5868,6 +5875,22 @@ components:
         destWorkspaceGoogleProjectId:
           type: string
           description: "The Google project that the destination workspace belongs to"
+        created:
+          type: string
+          description: "The time the file transfer started in yyyy-MM-ddTHH:mm:ss.SSSZZ
+            format."
+          format: date-time
+        finished:
+          type: string
+          description: "The time the file transfer finished in yyyy-MM-ddTHH:mm:ss.SSSZZ
+            format."
+          format: date-time
+        outcome:
+          type: string
+          description: "The outcome of a finished file transfer."
+          enum:
+            - Success
+            - Failure
     Attribute:
       type: object
       properties:
@@ -6457,6 +6480,9 @@ components:
           type: string
           format: uuid
           description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        protectedData:
+          type: boolean
+          description: whether this billing project supports protected data (cloudPlatform AZURE only)
     AzureManagedAppCoordinates:
       required:
         - tenantId

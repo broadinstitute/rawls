@@ -38,6 +38,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
+import slick.jdbc.TransactionIsolation
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -75,62 +76,69 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         s.putAttribute("cacheEnabled", OpenCensusAttributeValue.booleanAttributeValue(cacheEnabled))
       }
       // start transaction
-      dataSource.inTransaction { dataAccess =>
-        if (!useCache || !cacheEnabled) {
-          if (!cacheEnabled) {
-            logger.info(
-              s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]"
-            )
-          } else if (!useCache) {
-            logger.info(
-              s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]"
-            )
-          }
-          // retrieve metadata, bypassing cache
-          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-        } else {
-          // system and request both have cache enabled. Check for existence and staleness of cache
-          cacheStaleness(dataAccess, localContext).flatMap {
-            case None =>
-              // cache does not exist - return uncached
+      dataSource.inTransaction(
+        dataAccess =>
+          if (!useCache || !cacheEnabled) {
+            if (!cacheEnabled) {
               logger.info(
-                s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]"
+                s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]"
               )
-              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-            case Some(0) =>
-              // cache is up to date - return cached
-              logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
-            case Some(stalenessSeconds) =>
-              // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
-              cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
-                if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                  localContext.tracingSpan.foreach { s =>
-                    s.putAttribute("alwaysCacheTypeCountsFeatureFlag",
-                                   OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts)
-                    )
-                    s.putAttribute("alwaysCacheAttributesFeatureFlag",
-                                   OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes)
-                    )
-                  }
-                  logger.info(
-                    s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                  )
-                } else {
-                  logger.info(
-                    s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                  )
-                  // and opportunistically save
-                }
+            } else if (!useCache) {
+              logger.info(
+                s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]"
+              )
+            }
+            // retrieve metadata, bypassing cache
+            calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
+          } else {
+            // system and request both have cache enabled. Check for existence and staleness of cache
+            cacheStaleness(dataAccess, localContext).flatMap {
+              case None =>
+                // cache does not exist - return uncached
+                logger.info(
+                  s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]"
+                )
                 calculateMetadataResponse(dataAccess,
-                                          countsFromCache = flags.alwaysCacheTypeCounts,
-                                          attributesFromCache = flags.alwaysCacheAttributes,
+                                          countsFromCache = false,
+                                          attributesFromCache = false,
                                           localContext
                 )
-              } // end feature-flags lookup
-          } // end staleness lookup
-        } // end if useCache/cacheEnabled check
-      } // end transaction
+              case Some(0) =>
+                // cache is up to date - return cached
+                logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
+                calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
+              case Some(stalenessSeconds) =>
+                // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
+                cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
+                  if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
+                    localContext.tracingSpan.foreach { s =>
+                      s.putAttribute("alwaysCacheTypeCountsFeatureFlag",
+                                     OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts)
+                      )
+                      s.putAttribute("alwaysCacheAttributesFeatureFlag",
+                                     OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes)
+                      )
+                    }
+                    logger.info(
+                      s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
+                    )
+                  } else {
+                    logger.info(
+                      s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
+                    )
+                    // and opportunistically save
+                  }
+                  calculateMetadataResponse(dataAccess,
+                                            countsFromCache = flags.alwaysCacheTypeCounts,
+                                            attributesFromCache = flags.alwaysCacheAttributes,
+                                            localContext
+                  )
+                } // end feature-flags lookup
+            } // end staleness lookup
+          } // end if useCache/cacheEnabled check
+        ,
+        TransactionIsolation.ReadCommitted
+      ) // end transaction
     } // end root trace
 
   override def createEntity(entity: Entity): Future[Entity] =

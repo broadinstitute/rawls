@@ -6,6 +6,7 @@ import akka.stream.ActorMaterializer
 import cats.effect.IO
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
+import com.google.cloud.storage.StorageClass
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.model.{
@@ -160,7 +161,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
         any(),
         any(),
         any(),
-        autoclassEnabled = ArgumentMatchers.eq(true)
+        autoclassEnabled = ArgumentMatchers.eq(true),
+        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE))
       )
     ).thenReturn(fs2.Stream.unit)
 
@@ -208,7 +210,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
         any(),
         any(),
         any(),
-        autoclassEnabled = ArgumentMatchers.eq(true)
+        autoclassEnabled = ArgumentMatchers.eq(true),
+        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE))
       ),
       times(1)
     )

@@ -91,9 +91,13 @@ class BpmBillingProjectLifecycle(
 
     def createBillingProfile: Future[ProfileModel] =
       Future(blocking {
+        val policies: Map[String, List[(String, String)]] =
+          if (createProjectRequest.protectedData.getOrElse(false)) Map("protected-data" -> List[(String, String)]())
+          else Map.empty
         val profileModel = billingProfileManagerDAO.createBillingProfile(
           projectName.value,
           createProjectRequest.billingInfo,
+          policies,
           ctx
         )
         logger.info(

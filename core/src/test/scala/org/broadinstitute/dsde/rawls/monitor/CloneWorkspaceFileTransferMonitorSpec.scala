@@ -17,6 +17,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -212,8 +213,9 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
-      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
+      val failureMessage = "expected test exception"
+      val exception =
+        new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
         mockGcsDAO.listObjectsWithPrefix(sourceBucketName, copyFilesWithPrefix, Option(destWorkspace.googleProjectId))
       )
@@ -301,8 +303,9 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
-      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
+      val failureMessage = "expected test exception"
+      val exception =
+        new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
         mockGcsDAO.listObjectsWithPrefix(sourceBucketName, copyFilesWithPrefix, Option(destWorkspace.googleProjectId))
       )
@@ -402,8 +405,9 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
-      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
+      val failureMessage = "expected test exception"
+      val exception =
+        new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
         mockGcsDAO.listObjectsWithPrefix(sourceBucketName, copyFilesWithPrefix, Option(destWorkspace.googleProjectId))
       )
@@ -423,7 +427,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                             destinationBucketName,
                             goodObjectToCopy.getName,
                             Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
       )
         .thenReturn(Future.successful(Option(goodObjectToCopy)))
 
@@ -545,8 +549,9 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
       )
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
-      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
+      val failureMessage = "expected test exception"
+      val exception =
+        new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).setMessage(failureMessage).build
       when(
         mockGcsDAO.listObjectsWithPrefix(sourceBucketName,
                                          copyFilesWithPrefix,
@@ -605,6 +610,119 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
           .isDefined shouldBe true
         runAndWait(cloneWorkspaceFileTransferQuery.listPendingTransfers())
           .map(_.destWorkspaceBucketName) should contain theSameElementsAs Seq(badDestinationBucketName)
+      }
+
+      system.stop(actor)
+    }
+  }
+
+  it should "eventually stop trying to copy files" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = RawlsBillingProject(defaultBillingProjectName,
+                                               CreationStatuses.Ready,
+                                               Option(defaultBillingAccountName),
+                                               None,
+                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      )
+      val sourceBucketName = "sourceBucket"
+      val destinationBucketName = "destinationBucket"
+      val copyFilesWithPrefix = "prefix"
+      val objectToCopy = new StorageObject().setName("copy-me")
+      val sourceWorkspace = Workspace(
+        billingProject.projectName.value,
+        "source",
+        UUID.randomUUID().toString,
+        sourceBucketName,
+        None,
+        DateTime.now,
+        DateTime.now,
+        "creator@example.com",
+        Map.empty,
+        false,
+        WorkspaceVersions.V2,
+        GoogleProjectId("some-project"),
+        Option(GoogleProjectNumber("43")),
+        billingProject.billingAccount,
+        None,
+        Option(DateTime.now),
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
+      )
+      val destWorkspace = Workspace(
+        billingProject.projectName.value,
+        "destination",
+        UUID.randomUUID().toString,
+        destinationBucketName,
+        None,
+        DateTime.now,
+        DateTime.now,
+        "creator@example.com",
+        Map.empty,
+        false,
+        WorkspaceVersions.V2,
+        GoogleProjectId("different-project"),
+        Option(GoogleProjectNumber("44")),
+        billingProject.billingAccount,
+        None,
+        None,
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
+      )
+
+      runAndWait(rawlsBillingProjectQuery.create(billingProject))
+      runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
+      runAndWait(workspaceQuery.createOrUpdate(destWorkspace))
+      runAndWait(
+        cloneWorkspaceFileTransferQuery.save(destWorkspace.workspaceIdAsUUID,
+                                             sourceWorkspace.workspaceIdAsUUID,
+                                             copyFilesWithPrefix
+        )
+      )
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val failureMessage = "expected test exception"
+      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
+      when(
+        mockGcsDAO.listObjectsWithPrefix(sourceBucketName, copyFilesWithPrefix, Option(destWorkspace.googleProjectId))
+      )
+        .thenReturn(Future.successful(List(objectToCopy)))
+      when(
+        mockGcsDAO.copyFile(sourceBucketName,
+                            objectToCopy.getName,
+                            destinationBucketName,
+                            objectToCopy.getName,
+                            Option(destWorkspace.googleProjectId)
+        )(system.dispatchers.defaultGlobalDispatcher)
+      )
+        .thenReturn(Future.failed(exception))
+
+      val actor = createCloneWorkspaceFileTransferMonitor(dataSource, mockGcsDAO)
+      import driver.api._
+      runAndWait(
+        cloneWorkspaceFileTransferQuery
+          .filter(_.destWorkspaceId === destWorkspace.workspaceIdAsUUID)
+          .map(_.created)
+          .update(new Timestamp(DateTime.now().minusDays(2).getMillis))
+      )
+
+      eventually(timeout = timeout(Span(10, Seconds))) {
+        runAndWait(workspaceQuery.findById(destWorkspace.workspaceIdAsUUID.toString))
+          .getOrElse(fail(s"${destWorkspace.name} not found"))
+          .completedCloneWorkspaceFileTransfer
+          .isDefined shouldBe true
+        runAndWait(cloneWorkspaceFileTransferQuery.listPendingTransfers()) shouldBe empty
+
+        val allWorkspaceTransfers = runAndWait(
+          cloneWorkspaceFileTransferQuery
+            .filter(_.destWorkspaceId === destWorkspace.workspaceIdAsUUID)
+            .map(r => (r.finished, r.outcome))
+            .result
+        )
+        allWorkspaceTransfers should have size 1
+
+        val transferResult = allWorkspaceTransfers.head
+        transferResult._1 shouldBe defined
+        transferResult._2 shouldBe Some("Failure")
       }
 
       system.stop(actor)
