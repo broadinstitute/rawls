@@ -80,6 +80,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -170,6 +171,7 @@ class WorkspaceServiceSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
+          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")

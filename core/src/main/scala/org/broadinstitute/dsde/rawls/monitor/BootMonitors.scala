@@ -116,6 +116,7 @@ object BootMonitors extends LazyLogging {
       gcsDAO,
       notificationDAO,
       shardedExecutionServiceCluster,
+      conf.getDuration("entities.queryTimeout").toScala,
       metricsPrefix
     )
 
@@ -286,6 +287,7 @@ object BootMonitors extends LazyLogging {
                                                gcsDAO: GoogleServicesDAO,
                                                notificationDAO: NotificationDAO,
                                                shardedExecutionServiceCluster: ExecutionServiceCluster,
+                                               entityQueryTimeout: Duration,
                                                metricsPrefix: String
   ) =
     system.actorOf(
@@ -297,6 +299,7 @@ object BootMonitors extends LazyLogging {
         notificationDAO,
         gcsDAO.getBucketServiceAccountCredential,
         submissionMonitorConfig,
+        entityQueryTimeout,
         workbenchMetricBaseName = metricsPrefix
       ),
       "rawls-submission-supervisor"
