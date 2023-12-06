@@ -64,7 +64,7 @@ object Dependencies {
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.15.3"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.5"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
-  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
+  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.28.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.46"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
