@@ -162,15 +162,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     mockImportServiceDAO
   }
 
-  def setUpMockImportServiceToThrowAnError(services: TestApiService, exception: Exception): ImportServiceDAO = {
-    val mockImportServiceDAO = setUpMockImportService(services)
-
-    when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
-      .thenReturn(Future.failed(exception))
-
-    mockImportServiceDAO
-  }
-
   def setUpMockImportService(services: TestApiService): ImportServiceDAO = {
     setUpPubSub(services)
 
@@ -190,18 +181,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         slickDataSource
       )
     )
-
-    mockImportServiceDAO
-  }
-
-  def setUpMockImportServiceToReturnStatus(services: TestApiService,
-                                           status: ImportStatuses.ImportStatus
-  ): ImportServiceDAO = {
-    val mockImportServiceDAO = setUpMockImportService(services)
-    when(
-      mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo])
-    )
-      .thenReturn(Future.successful(Some(status)))
 
     mockImportServiceDAO
   }
@@ -805,7 +784,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val timeout = 30000 milliseconds
     val interval = 250 milliseconds
 
-    setUpMockImportServiceToThrowAnError(services, new Exception("User not found"))
+    val mockImportServiceDAO = setUpMockImportService(services)
+    when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
+      .thenReturn(Future.failed(new Exception("User not found")))
 
     val contents = makeOpsJsonString(100)
 
@@ -853,7 +834,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val interval = 250 milliseconds
     val importUuid = UUID.randomUUID()
 
-    setUpMockImportServiceToReturnStatus(services, ImportStatuses.Done)
+    val mockImportServiceDAO = setUpMockImportService(services)
+    when(
+      mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo])
+    ).thenReturn(Future.successful(Some(ImportStatuses.Done)))
 
     val contents = makeOpsJsonString(100)
 
@@ -993,7 +977,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
 
-      setUpMockImportServiceToThrowAnError(services, new Exception("User not found"))
+      {
+        val mockImportServiceDAO = setUpMockImportService(services)
+
+        when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
+          .thenReturn(Future.failed(new Exception("User not found")))
+
+        mockImportServiceDAO
+      }
 
       val contents = makeOpsJsonString(100)
 
