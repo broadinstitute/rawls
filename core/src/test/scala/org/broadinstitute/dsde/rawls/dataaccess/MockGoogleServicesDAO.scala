@@ -90,7 +90,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                               userProject: Option[GoogleProjectId]
+                               userProject: Option[GoogleProjectId],
+                               iamPolicyVersion: Int = 1
   ): Future[Unit] =
     Future.unit
 
@@ -302,6 +303,13 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = Future.successful(permissions)
+
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] = Future.successful(true)
 
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext

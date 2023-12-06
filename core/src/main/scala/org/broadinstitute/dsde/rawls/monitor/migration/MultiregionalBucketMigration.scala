@@ -94,6 +94,9 @@ object MultiregionalBucketMigrationFailureModes {
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
+
+  val stsSANotFoundFailure: String =
+    "%NOT_FOUND%project-%@storage-transfer-service.iam.gserviceaccount.com does not exist."
 }
 
 object MultiregionalBucketMigrationStep extends Enumeration {

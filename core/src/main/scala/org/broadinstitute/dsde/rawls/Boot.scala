@@ -50,6 +50,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceRepository,
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
@@ -527,6 +528,7 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
@@ -597,6 +599,8 @@ object Boot extends IOApp with LazyLogging {
           importServiceDAO,
           workspaceManagerDAO,
           billingProfileManagerDAO,
+          leonardoDAO,
+          workspaceRepository,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,

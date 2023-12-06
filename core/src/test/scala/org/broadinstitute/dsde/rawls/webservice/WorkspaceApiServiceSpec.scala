@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{enrichAny, JsObject}
@@ -1216,7 +1216,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
-        when(services.workspaceManagerDAO.deleteWorkspaceV2(any[UUID], any[RawlsRequestContext]))
+        when(services.workspaceManagerDAO.deleteWorkspaceV2(any[UUID], anyString(), any[RawlsRequestContext]))
           .thenReturn(new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString)))
         when(services.workspaceManagerDAO.getDeleteWorkspaceV2Result(any[UUID], any[String], any[RawlsRequestContext]))
           .thenReturn(
@@ -1235,6 +1235,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
         verify(services.workspaceManagerDAO).deleteWorkspaceV2(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                                               anyString(),
                                                                any[RawlsRequestContext]
         )
       }
@@ -2695,14 +2696,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
       val clonedWorkspaceResult = runAndWait(workspaceQuery.findByName(clonedWorkspaceName)).get
-      val expected = Seq(
-        PendingCloneWorkspaceFileTransfer(
-          clonedWorkspaceResult.workspaceIdAsUUID,
-          testData.workspace.bucketName,
-          clonedWorkspaceResult.bucketName,
-          workspaceCopy.copyFilesWithPrefix.get,
-          clonedWorkspaceResult.googleProjectId
-        )
+      val expected = PendingCloneWorkspaceFileTransfer(
+        clonedWorkspaceResult.workspaceIdAsUUID,
+        testData.workspace.bucketName,
+        clonedWorkspaceResult.bucketName,
+        workspaceCopy.copyFilesWithPrefix.get,
+        clonedWorkspaceResult.googleProjectId,
+        DateTime.now(),
+        None,
+        None
       )
 
       Get(s"${clonedWorkspaceName.path}/fileTransfers") ~>
@@ -2711,9 +2713,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(expected) {
-            responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
-          }
+
+          val allTransfers = responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
+          allTransfers should have size 1
+
+          val res = allTransfers.headOption.getOrElse(fail("pending transfer expected but not found"))
+          res.destWorkspaceId shouldBe expected.destWorkspaceId
+          res.sourceWorkspaceBucketName shouldBe expected.sourceWorkspaceBucketName
+          res.destWorkspaceBucketName shouldBe expected.destWorkspaceBucketName
+          res.copyFilesWithPrefix shouldBe expected.copyFilesWithPrefix
+          res.destWorkspaceGoogleProjectId shouldBe expected.destWorkspaceGoogleProjectId
         }
   }
 

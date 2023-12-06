@@ -34,7 +34,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                      userProject: Option[GoogleProjectId] = None
+                      userProject: Option[GoogleProjectId] = None,
+                      iamPolicyVersion: Int = 1
   ): Future[Unit]
 
   // returns bucket and group information
@@ -334,6 +335,22 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]]
+
+  /**
+    *
+    * @param googleProject Google Project
+    * @param bucketName Google Bucket
+    * @param saKey Pet Service Account Key of the user
+    * @param executionContext Execution Context
+    * @return A Future Boolean. If true, the SA was able to get the bucket location, or the bucket is requester-pays.
+    *         If false, the bucket location could not be retrieved and the bucket is not requester-pays.
+    */
+  def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                   bucketName: GcsBucketName,
+                                                   saKey: String
+  )(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean]
 
   def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext

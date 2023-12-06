@@ -1,9 +1,7 @@
 package org.broadinstitute.dsde.test.pipeline
 
-import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.typesafe.scalalogging.LazyLogging
-import io.circe.parser._
-import org.broadinstitute.dsde.workbench.auth.AuthToken
+import io.circe.parser
 
 import java.util.Base64
 import scala.util.Random
@@ -27,10 +25,14 @@ trait PipelineInjector {
   def usersMetadata: Seq[UserMetadata] =
     sys.env.get(PredefinedEnv.UsersMetadataB64) match {
       case Some(b64) =>
-        val decoded = decode[Seq[UserMetadata]](new String(Base64.getDecoder.decode(b64), "UTF-8"))
-        decoded match {
-          case Right(u)    => u
-          case Left(error) => Seq()
+        val decodedB64 = new String(Base64.getDecoder.decode(b64), "UTF-8")
+        val userMetadataSeq = for {
+          json <- parser.parse(decodedB64)
+          seq <- json.as[Seq[UserMetadata]]
+        } yield seq
+        userMetadataSeq match {
+          case Right(u) => u
+          case Left(_)  => Seq()
         }
       case _ => Seq()
     }
@@ -38,10 +40,8 @@ trait PipelineInjector {
   trait Users {
     val users: Seq[UserMetadata]
 
-    def getUserCredential(like: String): Option[UserMetadata] = {
-      val filteredResults = users.filter(_.email.toLowerCase.contains(like.toLowerCase))
-      if (filteredResults.isEmpty) None else Some(filteredResults.head)
-    }
+    def getUserCredential(like: String): Option[UserMetadata] =
+      users.find(_.email.toLowerCase.contains(like.toLowerCase))
   }
 
   object Owners extends Users {

@@ -478,6 +478,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       .subscriptionId(UUID.randomUUID())
       .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
       .managedResourceGroupId("fake-mrg")
+      .createdDate("2023-09-12T22:20:48.949Z")
 
     val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
     val azureBillingProject = RawlsBillingProject(
@@ -486,6 +487,22 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Option(billingAccountName),
       None,
       billingProfileId = Some(azureBillingProfile.getId.toString)
+    )
+
+    // For testing of old Azure billing projects, can be removed if that code is removed.
+    val oldAzureBillingProfile = new ProfileModel()
+      .id(UUID.randomUUID())
+      .tenantId(UUID.randomUUID())
+      .subscriptionId(UUID.randomUUID())
+      .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
+      .managedResourceGroupId("fake-mrg")
+      .createdDate("2023-09-11T22:20:48.949Z")
+    val oldAzureBillingProject = RawlsBillingProject(
+      RawlsBillingProjectName("old-azure-billing-project"),
+      CreationStatuses.Ready,
+      Option(billingAccountName),
+      None,
+      billingProfileId = Some(oldAzureBillingProfile.getId.toString)
     )
 
     val wsAttrs = Map(
@@ -1646,6 +1663,27 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       WorkspaceState.Ready
     )
 
+    val deletingAzureWorkspace = new Workspace(
+      namespace = azureBillingProjectName.value,
+      name = "test-deleting-azure-workspace",
+      workspaceId = UUID.randomUUID().toString,
+      bucketName = "",
+      workflowCollectionName = None,
+      createdDate = currentTime(),
+      lastModified = currentTime(),
+      createdBy = "testUser",
+      attributes = Map.empty,
+      isLocked = false,
+      workspaceVersion = WorkspaceVersions.V2,
+      googleProjectId = GoogleProjectId(""),
+      googleProjectNumber = None,
+      currentBillingAccountOnGoogleProject = None,
+      errorMessage = None,
+      completedCloneWorkspaceFileTransfer = None,
+      workspaceType = WorkspaceType.McWorkspace,
+      WorkspaceState.Deleting
+    )
+
     val allWorkspaces = Seq(
       workspace,
       workspaceLocked,
@@ -1668,7 +1706,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceToTestGrant,
       workspaceConfigCopyDestination,
       regionalWorkspace,
-      azureWorkspace
+      azureWorkspace,
+      deletingAzureWorkspace
     )
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 

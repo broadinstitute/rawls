@@ -150,7 +150,10 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       memory_retry_multiplier = 2.718,
       backend = CromwellBackend("PAPIv2"),
       workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible),
-      ignore_empty_outputs = false
+      ignore_empty_outputs = false,
+      monitoring_script = Option("script"),
+      monitoring_image = Option("image"),
+      monitoring_image_script = Option("image script")
     )
 
     val expectedJson =
@@ -169,7 +172,10 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2",
         |  "workflow_failure_mode": "ContinueWhilePossible",
-        |  "ignore_empty_outputs": false
+        |  "ignore_empty_outputs": false,
+        |  "monitoring_script": "script",
+        |  "monitoring_image": "image",
+        |  "monitoring_image_script": "image script"
         |}
       """.stripMargin.parseJson
 
@@ -195,7 +201,10 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "use_reference_disks": true,
         |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2",
-        |  "ignore_empty_outputs": false
+        |  "ignore_empty_outputs": false,
+        |  "monitoring_script": "script",
+        |  "monitoring_image": "image",
+        |  "monitoring_image_script": "image script"
         |}
       """.stripMargin.parseJson
 

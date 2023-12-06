@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import bio.terra.workspace.model.WsmPolicyInput
+import bio.terra.workspace.model.{WsmPolicyInput, WsmPolicyPair}
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -22,8 +22,8 @@ import spray.json._
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.jdk.CollectionConverters._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -170,7 +170,8 @@ case class WorkspaceRequest(
   noWorkspaceOwner: Option[Boolean] = None,
   bucketLocation: Option[String] = None,
   enhancedBucketLogging: Option[Boolean] = Option(false),
-  protectedData: Option[Boolean] = Option(false)
+  protectedData: Option[Boolean] = Option(false),
+  policies: Option[List[WorkspacePolicy]] = None
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
@@ -759,7 +760,32 @@ case class AzureManagedAppCoordinates(tenantId: UUID,
                                       landingZoneId: Option[UUID] = None
 )
 
-case class WorkspacePolicy(name: String, namespace: String, additionalData: List[Map[String, String]])
+case class WorkspacePolicy(name: String, namespace: String, additionalData: List[Map[String, String]]) {
+
+  /**
+    * Adapts a Rawls WorkspacePolicy object to a Workspace Manager WsmPolicyInput object, suitable
+    * for usage in WSM createWorkspace() and other API calls
+    */
+  def toWsmPolicyInput(): WsmPolicyInput = {
+    val policyInput = new WsmPolicyInput().name(name).namespace(namespace)
+    additionalData.foreach { addlData: Map[String, String] =>
+      if (addlData.size > 1) {
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(BadRequest, "Policy additional data elements must consist of exactly one key-value pair")(
+            ErrorReportSource("rawls")
+          )
+        )
+      }
+
+      addlData.foreach { item =>
+        policyInput.addAdditionalDataItem(new WsmPolicyPair().key(item._1).value(item._2))
+      }
+
+    }
+    policyInput
+  }
+
+}
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -912,7 +938,10 @@ case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID,
                                              sourceWorkspaceBucketName: String,
                                              destWorkspaceBucketName: String,
                                              copyFilesWithPrefix: String,
-                                             destWorkspaceGoogleProjectId: GoogleProjectId
+                                             destWorkspaceGoogleProjectId: GoogleProjectId,
+                                             created: DateTime,
+                                             finished: Option[DateTime],
+                                             outcome: Option[String]
 )
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
@@ -1096,7 +1125,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspacePolicyFormat: RootJsonFormat[WorkspacePolicy] = jsonFormat3(WorkspacePolicy.apply)
 
-  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat9(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat10(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 
@@ -1237,7 +1266,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 
-  implicit val PendingCloneWorkspaceFileTransferFormat: RootJsonFormat[PendingCloneWorkspaceFileTransfer] = jsonFormat5(
+  implicit val PendingCloneWorkspaceFileTransferFormat: RootJsonFormat[PendingCloneWorkspaceFileTransfer] = jsonFormat8(
     PendingCloneWorkspaceFileTransfer
   )
 

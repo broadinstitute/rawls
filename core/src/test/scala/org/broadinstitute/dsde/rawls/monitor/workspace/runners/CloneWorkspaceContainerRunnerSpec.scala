@@ -219,6 +219,39 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
   }
 
+  it should "report an errors and a complete job for jobs failed with a 401" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val apiMessage = "some failure message"
+    val apiException = new ApiException(401, apiMessage)
+
+    doAnswer(_ => throw apiException)
+      .when(wsmDao)
+      .getJob(ArgumentMatchers.eq(monitorRecord.jobControlId.toString), ArgumentMatchers.any())
+
+    val runner = spy(
+      new CloneWorkspaceContainerRunner(
+        mock[SamDAO],
+        wsmDao,
+        mock[SlickDataSource],
+        mock[GoogleServicesDAO]
+      )
+    )
+
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    doAnswer { answer =>
+      val errorMessage = answer.getArgument(1).asInstanceOf[String]
+      errorMessage should include("unauthed")
+      errorMessage should include(monitorRecord.jobControlId.toString)
+      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
+    }.when(runner)
+      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+  }
+
   behavior of "handling the clone container report"
 
   it should "calls cloneSuccess with the time from the job and updates the record to Complete" in {

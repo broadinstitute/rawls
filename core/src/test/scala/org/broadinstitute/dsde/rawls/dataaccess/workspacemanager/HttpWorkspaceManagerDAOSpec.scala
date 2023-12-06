@@ -8,8 +8,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.verify
+import org.mockito.ArgumentMatchers.{any, anyInt}
+import org.mockito.Mockito.{times, verify, verifyNoMoreInteractions, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -53,22 +53,6 @@ class HttpWorkspaceManagerDAOSpec
     override def getJobsApi(ctx: RawlsRequestContext): JobsApi = ???
 
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
-  }
-
-  behavior of "enableApplication"
-
-  it should "call the WSM app API" in {
-    val workspaceApplicationApi = mock[WorkspaceApplicationApi]
-    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
-
-    val wsmDao = new HttpWorkspaceManagerDAO(
-      getApiClientProvider(workspaceApplicationApi = workspaceApplicationApi,
-                           controlledAzureResourceApi = controlledAzureResourceApi
-      )
-    )
-
-    wsmDao.enableApplication(workspaceId, "leo", testContext)
-    verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
   }
 
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
@@ -275,7 +259,7 @@ class HttpWorkspaceManagerDAOSpec
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
 
-  behavior of "createProtectedWorkspaceWithSpendProfile"
+  behavior of "createWorkspaceWithSpendProfile"
 
   it should "call the WSM workspace API" in {
     val workspaceApi = mock[WorkspaceApi]
@@ -295,14 +279,17 @@ class HttpWorkspaceManagerDAOSpec
       .displayName(testData.azureWorkspace.name)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .applicationIds(Seq("exampleApp").asJava)
       .policies(policyInputs)
       .projectOwnerGroupId(billingProjectId)
 
-    wsmDao.createProtectedWorkspaceWithSpendProfile(
+    wsmDao.createWorkspaceWithSpendProfile(
       testData.azureWorkspace.workspaceIdAsUUID,
       testData.azureWorkspace.name,
       testData.azureBillingProfile.getId.toString,
       billingProjectId,
+      Seq("exampleApp"),
+      Some(policyInputs),
       testContext
     )
 
@@ -315,7 +302,7 @@ class HttpWorkspaceManagerDAOSpec
     val workspaceApi = mock[WorkspaceApi]
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
-    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, testContext)
+    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, UUID.randomUUID().toString, testContext)
 
     verify(workspaceApi).deleteWorkspaceV2(any[DeleteWorkspaceV2Request],
                                            ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID)
@@ -332,4 +319,67 @@ class HttpWorkspaceManagerDAOSpec
                                                     ArgumentMatchers.eq("test_job_id")
     )
   }
+
+  behavior of "listWorkspaces"
+
+  it should "should only make a single request when no workspaces are returned" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val responseList = new WorkspaceDescriptionList().workspaces(List().asJava)
+    when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(0), anyInt(), any())).thenReturn(responseList)
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.listWorkspaces(testContext) shouldBe empty
+
+    verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), anyInt(), any())
+  }
+
+  it should "should only make one request when fewer workspaces than the request batch size are returned" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val ws = new WorkspaceDescription()
+    when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(2), any()))
+      .thenReturn(new WorkspaceDescriptionList().workspaces(List(ws).asJava))
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.listWorkspaces(testContext, 2) should have length 1
+
+    verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(2), any())
+
+  }
+
+  it should "should make a follow-up request when exactly the batch size of workspaces are returned" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val ws = new WorkspaceDescription()
+    when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(1), any()))
+      .thenReturn(new WorkspaceDescriptionList().workspaces(List(ws).asJava))
+    when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(1), ArgumentMatchers.eq(1), any()))
+      .thenReturn(new WorkspaceDescriptionList().workspaces(List().asJava))
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.listWorkspaces(testContext, 1) should have length 1
+
+    verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(0), ArgumentMatchers.eq(1), any())
+    verify(workspaceApi).listWorkspaces(ArgumentMatchers.eq(1), ArgumentMatchers.eq(1), any())
+    verifyNoMoreInteractions(workspaceApi)
+  }
+
+  it should "should combine results from all batches in the result list" in {
+    val workspaceApi = mock[WorkspaceApi]
+
+    val workspaces = Array.tabulate[WorkspaceDescription](10) { i =>
+      new WorkspaceDescription().displayName(i.toString)
+    }
+    val batchSize = 3
+    val batches = workspaces.grouped(batchSize).toIndexedSeq
+    for (i <- batches.indices)
+      when(workspaceApi.listWorkspaces(ArgumentMatchers.eq(i * batchSize), ArgumentMatchers.eq(batchSize), any()))
+        .thenReturn(new WorkspaceDescriptionList().workspaces(batches(i).toList.asJava))
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    val result = wsmDao.listWorkspaces(testContext, batchSize)
+
+    result should have length 10
+    result should contain theSameElementsAs workspaces
+    verify(workspaceApi, times(batches.length)).listWorkspaces(any(), ArgumentMatchers.eq(batchSize), any())
+  }
+
 }

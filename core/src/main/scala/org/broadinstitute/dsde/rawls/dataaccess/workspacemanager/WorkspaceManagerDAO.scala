@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
 
@@ -12,19 +13,15 @@ trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
 
   def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
-  def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace
+  def listWorkspaces(ctx: RawlsRequestContext, batchSize: Int = 100): List[WorkspaceDescription]
+  def createWorkspace(workspaceId: UUID, workspaceType: WorkspaceType, ctx: RawlsRequestContext): CreatedWorkspace
   def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                       displayName: String,
                                       spendProfileId: String,
                                       billingProjectNamespace: String,
+                                      applicationIds: Seq[String],
+                                      policyInputs: Option[WsmPolicyInputs],
                                       ctx: RawlsRequestContext
-  ): CreatedWorkspace
-
-  def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                               displayName: String,
-                                               spendProfileId: String,
-                                               billingProjectNamespace: String,
-                                               ctx: RawlsRequestContext
   ): CreatedWorkspace
 
   def cloneWorkspace(sourceWorkspaceId: UUID,
@@ -48,7 +45,7 @@ trait WorkspaceManagerDAO {
   ): CreateCloudContextResult
   def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
 
-  def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult
+  def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
 
   def getDeleteWorkspaceV2Result(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
 
@@ -79,14 +76,6 @@ trait WorkspaceManagerDAO {
                                           limit: Int,
                                           ctx: RawlsRequestContext
   ): ResourceList
-  def enableApplication(workspaceId: UUID,
-                        applicationId: String,
-                        ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription
-  def disableApplication(workspaceId: UUID,
-                         applicationId: String,
-                         ctx: RawlsRequestContext
-  ): WorkspaceApplicationDescription
 
   /**
     * Creates an Azure storage container in the workspace. This container will be created in the workspace's

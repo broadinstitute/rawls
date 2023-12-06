@@ -4,7 +4,8 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.dataaccess._
-import slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
@@ -40,7 +41,6 @@ import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
-import org.broadinstitute.dsde.rawls.entities.EntityService
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -162,12 +162,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     mockImportServiceDAO
   }
 
-  def setUpMockImportService(services: TestApiService) = {
+  def setUpMockImportService(services: TestApiService): ImportServiceDAO = {
     setUpPubSub(services)
 
     val mockImportServiceDAO = mock[ImportServiceDAO]
-    when(mockImportServiceDAO.getImportStatus(failImportStatusUUID, workspaceName, userInfo))
-      .thenReturn(Future.failed(new Exception("User not found")))
 
     // Start the monitor
     system.actorOf(
@@ -786,8 +784,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val timeout = 30000 milliseconds
     val interval = 250 milliseconds
 
-    // MockImportService should throw an error when getting import status
-    setUpMockImportService(services)
+    val mockImportServiceDAO = setUpMockImportService(services)
+    when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
+      .thenReturn(Future.failed(new Exception("User not found")))
 
     val contents = makeOpsJsonString(100)
 
@@ -824,6 +823,46 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
 
     // upsert will fail; check that a pubsub message was acked.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks should not be empty
+    }
+
+  }
+
+  it should "ack pubsub message if message is double delivered" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importUuid = UUID.randomUUID()
+
+    val mockImportServiceDAO = setUpMockImportService(services)
+    when(
+      mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo])
+    ).thenReturn(Future.successful(Some(ImportStatuses.Done)))
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(
+      googleStorage
+        .createBlob(bucketName, GcsBlobName(importUuid.toString), contents.getBytes())
+        .compile
+        .drain
+        .unsafeToFuture(),
+      Duration.apply(10, TimeUnit.SECONDS)
+    )
+
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(
+      importReadPubSubTopic,
+      List(MessageRequest(importUuid.toString, testAttributes(importUuid)))
+    )
+
+    // check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       services.gpsDAO.acks should not be empty
     }
@@ -938,8 +977,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
 
-      // MockImportService should throw an error when getting import status
-      setUpMockImportService(services)
+      {
+        val mockImportServiceDAO = setUpMockImportService(services)
+
+        when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
+          .thenReturn(Future.failed(new Exception("User not found")))
+
+        mockImportServiceDAO
+      }
 
       val contents = makeOpsJsonString(100)
 

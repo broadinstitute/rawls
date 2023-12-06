@@ -4,21 +4,30 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsBillingProjectName,
   RawlsRequestContext,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  SamWorkspaceRoles,
   Workspace,
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO, val gcsDAO: GoogleServicesDAO)(
   val ctx: RawlsRequestContext
@@ -27,32 +36,279 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     with WorkspaceSupport
     with LazyLogging {
 
-  def getBucketMigrationProgressForWorkspace(
-    workspaceName: WorkspaceName
-  ): Future[Option[MultiregionalBucketMigrationProgress]] =
+  /**
+    * Helper functions to enforce appropriate authz and load workspace(s) if authz passes
+    */
+  private def asFCAdminWithWorkspace[T](workspaceName: WorkspaceName)(op: Workspace => Future[T]): Future[T] =
     asFCAdmin {
       for {
         workspace <- getV2WorkspaceContext(workspaceName)
-        res <- dataSource.inTransaction(getBucketMigrationProgress(workspace))
+        res <- op(workspace)
       } yield res
+    }
+
+  private def asOwnerWithWorkspace[T](workspaceName: WorkspaceName)(op: Workspace => Future[T]): Future[T] =
+    for {
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
+      res <- op(workspace)
+    } yield res
+
+  private def asFCAdminWithBillingProjectWorkspaces[T](
+    billingProject: RawlsBillingProjectName
+  )(op: Seq[Workspace] => Future[T]): Future[T] =
+    asFCAdmin {
+      for {
+        workspaces <- dataSource.inTransaction(_.workspaceQuery.listWithBillingProject(billingProject))
+        res <- op(workspaces)
+      } yield res
+    }
+
+  private def asOwnerWithBillingProjectWorkspaces[T](
+    billingProject: RawlsBillingProjectName
+  )(op: Seq[Workspace] => Future[T]): Future[T] =
+    for {
+      isOwner <- samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                                      billingProject.value,
+                                      SamBillingProjectActions.own,
+                                      ctx
+      )
+      _ = if (!isOwner)
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "you must be an owner"))
+
+      workspaces <- dataSource.inTransaction(_.workspaceQuery.listWithBillingProject(billingProject))
+      res <- op(workspaces)
+    } yield res
+
+  private def asFCAdminWithWorkspaces[T](
+    workspaces: Iterable[WorkspaceName]
+  )(op: Seq[Workspace] => Future[T]): Future[T] =
+    asFCAdmin {
+      for {
+        workspaces <- dataSource.inTransaction(_.workspaceQuery.listByNames(workspaces.toList))
+        res <- op(workspaces)
+      } yield res
+    }
+
+  private def asOwnerWithWorkspaces[T](
+    workspaces: Iterable[WorkspaceName]
+  )(op: Seq[Workspace] => Future[T]): Future[T] =
+    for {
+      workspaces <- dataSource.inTransaction(_.workspaceQuery.listByNames(workspaces.toList))
+      ownsAllWorkspaces <- workspaces.traverse { workspace =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
+      }
+      _ = if (!ownsAllWorkspaces.forall(identity))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "you must own all workspaces"))
+      res <- op(workspaces)
+    } yield res
+
+  /**
+    * Entrypoints that make necessary authz checks then call relevant method to do the actual work
+    */
+
+  def getEligibleOrMigratingWorkspaces: Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] = {
+    def getOwnedWorkspaces: Future[Seq[Workspace]] = for {
+      userWorkspaces <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
+      workspaceIds = userWorkspaces
+        .filter(_.hasRole(SamWorkspaceRoles.owner))
+        .map(workspaceResource => Try(UUID.fromString(workspaceResource.resourceId)))
+        .flatMap(_.toOption)
+      workspaces <- dataSource.inTransaction(_.workspaceQuery.listV2WorkspacesByIds(workspaceIds))
+    } yield workspaces
+
+    // Only return workspaces with US multiregion buckets
+    def getEligibleUnmigratedWorkspacesWithEmptyProgress(
+      workspaces: Seq[Workspace]
+    ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
+      workspaces
+        .traverse { workspace =>
+          getBucketLocation(workspace).map(workspace -> _)
+        }
+        .map {
+          _.collect {
+            case (workspace, Some(location)) if location.equals("US") =>
+              (workspace, Option.empty[MultiregionalBucketMigrationProgress])
+          }
+        }
+
+    // Only return workspaces that are in progress, completed migration within the last 7 days, or failed to migrate
+    def getMigratingOrRecentlyFinishedWorkspacesWithProgress(
+      workspaces: Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]
+    ): Future[Seq[(Workspace, Option[MultiregionalBucketMigrationProgress])]] =
+      workspaces
+        .traverse {
+          case (workspace, progress @ Some(MultiregionalBucketMigrationProgress(_, Some(outcome), _, _))) =>
+            dataSource
+              .inTransaction(_.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace))
+              .map { migrations =>
+                if (
+                  migrations.exists(
+                    _.finished
+                      .getOrElse(Timestamp.from(Instant.MIN))
+                      .after(Timestamp.from(Instant.now().minus(7, ChronoUnit.DAYS))) || outcome.isFailure
+                  )
+                ) Some(workspace -> progress)
+                else None
+              }
+          case unfinishedWorkspaceWithProgress @ (_, Some(MultiregionalBucketMigrationProgress(_, None, _, _))) =>
+            Future.successful(unfinishedWorkspaceWithProgress.some)
+          case _ =>
+            Future.successful(
+              None
+            )
+        }
+        .map(_.flatten)
+
+    for {
+      workspaces <- getOwnedWorkspaces
+
+      // get migration progress if it exists
+      workspacesWithProgressOpt <- workspaces.traverse { workspace =>
+        dataSource
+          .inTransaction(getBucketMigrationProgress(workspace))
+          .recover(_ => None)
+          .map(workspace -> _)
+      }
+
+      // partition workspaces by whether they have any past migration attempts
+      (scheduledWorkspaces, unscheduledWorkspaces) = workspacesWithProgressOpt.partition(_._2.isDefined)
+
+      eligibleWorkspacesWithEmptyProgress <- getEligibleUnmigratedWorkspacesWithEmptyProgress(
+        unscheduledWorkspaces.map(_._1)
+      )
+      migratingOrRecentlyFinishedWorkspacesWithProgress <- getMigratingOrRecentlyFinishedWorkspacesWithProgress(
+        scheduledWorkspaces
+      )
+    } yield (migratingOrRecentlyFinishedWorkspacesWithProgress ++ eligibleWorkspacesWithEmptyProgress).map {
+      case (workspace, progressOpt) =>
+        workspace.toWorkspaceName.toString -> progressOpt
+    }.toMap
+  }
+
+  def adminGetBucketMigrationProgressForWorkspace(
+    workspaceName: WorkspaceName
+  ): Future[Option[MultiregionalBucketMigrationProgress]] =
+    asFCAdminWithWorkspace(workspaceName) {
+      getBucketMigrationProgressForWorkspaceInternal
+    }
+
+  def getBucketMigrationProgressForWorkspace(
+    workspaceName: WorkspaceName
+  ): Future[Option[MultiregionalBucketMigrationProgress]] =
+    asOwnerWithWorkspace(workspaceName) {
+      getBucketMigrationProgressForWorkspaceInternal
+    }
+
+  def adminGetBucketMigrationProgressForWorkspaces(
+    workspaces: Iterable[WorkspaceName]
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
+    asFCAdminWithWorkspaces(workspaces) {
+      getBucketMigrationProgressForWorkspacesInternal
+    }
+
+  def getBucketMigrationProgressForWorkspaces(
+    workspaces: Iterable[WorkspaceName]
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
+    asOwnerWithWorkspaces(workspaces) {
+      getBucketMigrationProgressForWorkspacesInternal
+    }
+
+  def adminGetBucketMigrationProgressForBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
+    asFCAdminWithBillingProjectWorkspaces(billingProjectName) {
+      getBucketMigrationProgressForWorkspacesInternal
     }
 
   def getBucketMigrationProgressForBillingProject(
     billingProjectName: RawlsBillingProjectName
   ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
-        }
-        progress <- workspaces.traverse { workspace =>
-          dataSource
-            .inTransaction(getBucketMigrationProgress(workspace))
-            .recover(_ => None)
-            .map(workspace.toWorkspaceName.toString -> _)
-        }
-      } yield progress.toMap
+    asOwnerWithBillingProjectWorkspaces(billingProjectName) {
+      getBucketMigrationProgressForWorkspacesInternal
     }
+  def adminGetBucketMigrationAttemptsForWorkspace(
+    workspaceName: WorkspaceName
+  ): Future[List[MultiregionalBucketMigrationMetadata]] =
+    asFCAdminWithWorkspace(workspaceName) {
+      getBucketMigrationAttemptsForWorkspaceInternal
+    }
+
+  def getBucketMigrationAttemptsForWorkspace(
+    workspaceName: WorkspaceName
+  ): Future[List[MultiregionalBucketMigrationMetadata]] =
+    asOwnerWithWorkspace(workspaceName) {
+      getBucketMigrationAttemptsForWorkspaceInternal
+    }
+
+  def adminGetBucketMigrationAttemptsForBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[Map[String, List[MultiregionalBucketMigrationMetadata]]] =
+    asFCAdminWithBillingProjectWorkspaces(billingProjectName) {
+      getBucketMigrationAttemptsForWorkspacesInternal
+    }
+
+  def getBucketMigrationAttemptsForBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[Map[String, List[MultiregionalBucketMigrationMetadata]]] =
+    asOwnerWithBillingProjectWorkspaces(billingProjectName) {
+      getBucketMigrationAttemptsForWorkspacesInternal
+    }
+
+  def adminMigrateWorkspaceBucket(workspaceName: WorkspaceName): Future[MultiregionalBucketMigrationMetadata] =
+    asFCAdminWithWorkspace(workspaceName) {
+      migrateWorkspaceBucketInternal
+    }
+
+  def migrateWorkspaceBucket(workspaceName: WorkspaceName): Future[MultiregionalBucketMigrationMetadata] =
+    asOwnerWithWorkspace(workspaceName) {
+      migrateWorkspaceBucketInternal
+    }
+
+  def adminMigrateAllWorkspaceBuckets(
+    workspaceNames: Iterable[WorkspaceName]
+  ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
+    asFCAdminWithWorkspaces(workspaceNames) {
+      migrateWorkspaceBuckets
+    }
+
+  def migrateAllWorkspaceBuckets(
+    workspaceNames: Iterable[WorkspaceName]
+  ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
+    asOwnerWithWorkspaces(workspaceNames) {
+      migrateWorkspaceBuckets
+    }
+
+  def adminMigrateWorkspaceBucketsInBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
+    asFCAdminWithBillingProjectWorkspaces(billingProjectName) {
+      migrateWorkspaceBuckets
+    }
+
+  def migrateWorkspaceBucketsInBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
+    asOwnerWithBillingProjectWorkspaces(billingProjectName) {
+      migrateWorkspaceBuckets
+    }
+
+  /**
+    * Shared methods to do the actual work
+    */
+  private def getBucketMigrationProgressForWorkspaceInternal(
+    workspace: Workspace
+  ): Future[Option[MultiregionalBucketMigrationProgress]] =
+    dataSource.inTransaction(getBucketMigrationProgress(workspace))
+
+  private def getBucketMigrationProgressForWorkspacesInternal(workspaces: Seq[Workspace]) =
+    workspaces
+      .traverse { workspace =>
+        dataSource
+          .inTransaction(getBucketMigrationProgress(workspace))
+          .recover(_ => None)
+          .map(workspace.toWorkspaceName.toString -> _)
+      }
+      .map(_.toMap)
 
   private def getBucketMigrationProgress(
     workspace: Workspace
@@ -94,83 +350,40 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     ).some
   }
 
-  def getBucketMigrationAttemptsForWorkspace(
-    workspaceName: WorkspaceName
-  ): Future[List[MultiregionalBucketMigrationMetadata]] =
-    asFCAdmin {
-      for {
-        workspace <- getV2WorkspaceContext(workspaceName)
-        attempts <- dataSource.inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
-        }
-      } yield attempts.mapWithIndex(MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration)
-    }
+  private def getBucketMigrationAttemptsForWorkspaceInternal(workspace: Workspace) =
+    for {
+      attempts <- dataSource.inTransaction { dataAccess =>
+        dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
+      }
+    } yield attempts.mapWithIndex(MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration)
 
-  def getBucketMigrationAttemptsForBillingProject(
-    billingProjectName: RawlsBillingProjectName
-  ): Future[Map[String, List[MultiregionalBucketMigrationMetadata]]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
-        }
-        attempts <- workspaces.traverse { workspace =>
-          dataSource
-            .inTransaction { dataAccess =>
-              dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
-            }
-            .map { attempts =>
-              workspace.toWorkspaceName.toString -> attempts.mapWithIndex(
-                MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration
-              )
-            }
-        }
-      } yield attempts.toMap
-    }
+  private def getBucketMigrationAttemptsForWorkspacesInternal(workspaces: Seq[Workspace]) =
+    for {
+      attempts <- workspaces.traverse { workspace =>
+        dataSource
+          .inTransaction { dataAccess =>
+            dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
+          }
+          .map { attempts =>
+            workspace.toWorkspaceName.toString -> attempts.mapWithIndex(
+              MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration
+            )
+          }
+      }
+    } yield attempts.toMap
 
-  def migrateWorkspaceBucket(workspaceName: WorkspaceName): Future[MultiregionalBucketMigrationMetadata] =
-    asFCAdmin {
-      logger.info(s"Scheduling Workspace '$workspaceName' for bucket migration")
-      for {
-        workspaceOpt <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.findByName(workspaceName)
-        }
-        workspace = workspaceOpt.getOrElse(throw new NoSuchWorkspaceException(workspaceName.toString))
-        location <- getBucketLocation(workspace)
+  private def migrateWorkspaceBucketInternal(workspace: Workspace) =
+    for {
+      location <- getBucketLocation(workspace)
 
-        metadata <- dataSource.inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
-        }
-      } yield metadata
-    }
+      metadata <- dataSource.inTransaction { dataAccess =>
+        dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(workspace, location)
+      }
+    } yield metadata
 
-  def migrateAllWorkspaceBuckets(
-    workspaceNames: Iterable[WorkspaceName]
+  private def migrateWorkspaceBuckets(
+    workspaces: Seq[Workspace]
   ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listByNames(workspaceNames.toList)
-        }
-
-        res <- migrateWorkspaces(workspaces.toList)
-      } yield res
-    }
-
-  def migrateWorkspaceBucketsInBillingProject(
-    billingProjectName: RawlsBillingProjectName
-  ): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
-        }
-
-        res <- migrateWorkspaces(workspaces.toList)
-      } yield res
-    }
-
-  private def migrateWorkspaces(workspaces: List[Workspace]): Future[Iterable[MultiregionalBucketMigrationMetadata]] =
     for {
       workspacesWithBucketLocation <- workspaces.traverse(workspace => getBucketLocation(workspace).map(workspace -> _))
       migrationErrorsOrAttempts <- dataSource.inTransaction { dataAccess =>

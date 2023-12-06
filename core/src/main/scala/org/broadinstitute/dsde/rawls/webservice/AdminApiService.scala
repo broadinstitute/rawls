@@ -149,26 +149,39 @@ trait AdminApiService extends UserInfoDirectives {
                 entity(as[List[WorkspaceName]]) { workspaceNames =>
                   complete {
                     bucketMigrationServiceConstructor(ctx)
-                      .migrateAllWorkspaceBuckets(workspaceNames)
+                      .adminMigrateAllWorkspaceBuckets(workspaceNames)
                       .map(StatusCodes.Created -> _)
                   }
                 }
               }
             } ~
+              pathPrefix("getProgress") {
+                pathEndOrSingleSlash {
+                  post {
+                    entity(as[List[WorkspaceName]]) { workspaceNames =>
+                      complete {
+                        bucketMigrationServiceConstructor(ctx)
+                          .adminGetBucketMigrationProgressForWorkspaces(workspaceNames)
+                          .map(StatusCodes.OK -> _)
+                      }
+                    }
+                  }
+                }
+              } ~
               pathPrefix(Segment / Segment) { (namespace, name) =>
                 val workspaceName = WorkspaceName(namespace, name)
                 pathEndOrSingleSlash {
                   get {
                     complete {
                       bucketMigrationServiceConstructor(ctx)
-                        .getBucketMigrationAttemptsForWorkspace(workspaceName)
+                        .adminGetBucketMigrationAttemptsForWorkspace(workspaceName)
                         .map(ms => StatusCodes.OK -> ms)
                     }
                   } ~
                     post {
                       complete {
                         bucketMigrationServiceConstructor(ctx)
-                          .migrateWorkspaceBucket(workspaceName)
+                          .adminMigrateWorkspaceBucket(workspaceName)
                           .map(StatusCodes.Created -> _)
                       }
                     }
@@ -177,7 +190,7 @@ trait AdminApiService extends UserInfoDirectives {
                     get {
                       complete {
                         bucketMigrationServiceConstructor(ctx)
-                          .getBucketMigrationProgressForWorkspace(workspaceName)
+                          .adminGetBucketMigrationProgressForWorkspace(workspaceName)
                           .map(StatusCodes.OK -> _)
                       }
                     }
@@ -190,14 +203,14 @@ trait AdminApiService extends UserInfoDirectives {
                 post {
                   complete {
                     bucketMigrationServiceConstructor(ctx)
-                      .migrateWorkspaceBucketsInBillingProject(billingProjectName)
+                      .adminMigrateWorkspaceBucketsInBillingProject(billingProjectName)
                       .map(StatusCodes.Created -> _)
                   }
                 } ~
                   get {
                     complete {
                       bucketMigrationServiceConstructor(ctx)
-                        .getBucketMigrationAttemptsForBillingProject(billingProjectName)
+                        .adminGetBucketMigrationAttemptsForBillingProject(billingProjectName)
                         .map(ms => StatusCodes.OK -> ms)
                     }
                   }
@@ -206,7 +219,7 @@ trait AdminApiService extends UserInfoDirectives {
                   get {
                     complete {
                       bucketMigrationServiceConstructor(ctx)
-                        .getBucketMigrationProgressForBillingProject(billingProjectName)
+                        .adminGetBucketMigrationProgressForBillingProject(billingProjectName)
                         .map(StatusCodes.OK -> _)
                     }
                   }

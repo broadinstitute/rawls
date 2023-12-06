@@ -400,7 +400,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     }
   }
 
-
   it should "submit a workflow with the right zones for a regional bucket" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
     val workflowSubmission = new TestWorkflowSubmission(

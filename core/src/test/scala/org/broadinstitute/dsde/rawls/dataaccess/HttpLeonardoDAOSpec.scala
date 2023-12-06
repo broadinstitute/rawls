@@ -48,7 +48,6 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
   }
 
   it should "call the createApp API with source workspace id" in {
-    val workspaceId: UUID = UUID.randomUUID()
     val sourceWorkspaceId: UUID = UUID.randomUUID()
 
     val leonardoDAO = new HttpLeonardoDAO(leonardoConfig)
@@ -60,6 +59,54 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
     expectedAppRequest.setAccessScope(AppAccessScope.WORKSPACE_SHARED)
 
     assertResult(expectedAppRequest)(createAppRequest)
+
+  }
+
+  it should "call the listApps API with source workspace id" in {
+    val workspaceId = UUID.randomUUID()
+    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+
+    Try(leonardoDAO.listApps(token, workspaceId))
+
+    Mockito
+      .verify(leonardoDAO)
+      .listApps(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId))
+
+  }
+
+  it should "call the deleteApps API with source workspace id" in {
+    val workspaceId = UUID.randomUUID()
+    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+
+    Try(leonardoDAO.deleteApps(token, workspaceId, deleteDisk = true))
+
+    Mockito
+      .verify(leonardoDAO)
+      .deleteApps(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId), ArgumentMatchers.eq(true))
+
+  }
+
+  it should "call the listAzureRuntimes API with source workspace id" in {
+    val workspaceId = UUID.randomUUID()
+    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+
+    Try(leonardoDAO.listAzureRuntimes(token, workspaceId))
+
+    Mockito
+      .verify(leonardoDAO)
+      .listAzureRuntimes(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId))
+
+  }
+
+  it should "call the deleteAzureRuntimes API with source workspace id" in {
+    val workspaceId = UUID.randomUUID()
+    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+
+    Try(leonardoDAO.deleteAzureRuntimes(token, workspaceId, deleteDisk = true))
+
+    Mockito
+      .verify(leonardoDAO)
+      .deleteAzureRuntimes(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId), ArgumentMatchers.eq(true))
 
   }
 

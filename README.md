@@ -17,10 +17,8 @@
 
 ```sh
 git clone git@github.com:broadinstitute/rawls.git
-brew install git-secrets # if not already installed
 cd rawls
 sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
-./minnie-kenny.sh -f
 ```
 
 ## scalafmt
@@ -98,11 +96,11 @@ If you are developing a ticket that deals with any sort of monitoring or asynchr
 BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 ```
 
-***Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls. See note below on database work.
+**Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls. See note below on database work.
 
 #### Developing Database Schema Changes
 
-If you are writing Liquibase migrations or doing database work, it is mandatory that you create your own Cloud SQL instance and develop against that. To point to your own CloudSQL instance, modify `/config/sqlproxy.env` accordingly
+If you are writing Liquibase migrations or doing database work, it is mandatory that you create your own Cloud SQL instance and develop against that. To point to your own CloudSQL instance, modify `/config/sqlproxy.env` accordingly.
 
 
 
@@ -155,8 +153,15 @@ After publishing:
 
 ## Troubleshooting
 
-If you get this error message: `java.lang.IllegalArgumentException: invalid flag: --release`:
-* Run `java -version` and verify that you're running jdk11. If not, you will need to install / update your PATH.
+If you get the error message `release version 17 not supported`:
+* Run `java -version` and verify that you're running 17. If not, you will need to install / update your PATH.
+
+If you have trouble submitting workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`:
+* Connect to the NonSplit VPN and try again
+* CromIAM doesn't accept requests from outside the Broad trusted IP space 
+
+When running back Rawls with a DB clone, the app may crash on launch with an error related to `OpenTelemetry`.
+* Work around by setting `entityStatisticsCache.enabled = false`.
 
 For integration test issues, see [automation/README.md](automation/README.md).
 

@@ -22,7 +22,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
   ErrorReport,
-  GcpWorkspaceDeletionContext,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -32,6 +31,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceDeletionResult,
   WorkspaceName,
+  WorkspacePolicy,
   WorkspaceRequest,
   WorkspaceState,
   WorkspaceType
@@ -51,6 +51,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with OptionValues with TestDriverComponent {
@@ -324,6 +325,65 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
+  it should "throw an exception if the billing profile was created before 9/12/2023" in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty
+    )
+    val billingProfileId = UUID.randomUUID()
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+                     request,
+                     new ProfileModel().id(billingProfileId).createdDate("2023-09-11T22:20:48.949Z")
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    thrown.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+  }
+
+  it should "not throw an exception for billing profiles created 9/12/2023 or later" in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty
+    )
+    val billingProfileId = UUID.randomUUID()
+    Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+                   request,
+                   new ProfileModel().id(billingProfileId).createdDate("2023-09-12T22:20:48.949Z")
+                 ),
+                 Duration.Inf
+    )
+  }
+
   it should "deploy a WDS instance during workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
@@ -362,13 +422,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.eq(name),
         any(), // spend profile id
         ArgumentMatchers.eq(namespace),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
-      .enableApplication(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_app_id"),
+        any[Seq[String]],
+        any[Option[WsmPolicyInputs]],
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -423,13 +478,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
-    Mockito
-      .verify(workspaceManagerDAO)
-      .enableApplication(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_app_id"),
-        ArgumentMatchers.eq(testContext)
-      )
     Mockito
       .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
@@ -487,13 +535,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.namespace shouldEqual namespace
     Mockito
       .verify(workspaceManagerDAO)
-      .enableApplication(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_app_id"),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(testContext)
@@ -520,10 +561,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                    displayName: String,
                                                    spendProfileId: String,
                                                    billingProjectNamespace: String,
+                                                   applicationIds: Seq[String],
+                                                   policyInputs: Option[WsmPolicyInputs],
                                                    ctx: RawlsRequestContext
       ): CreatedWorkspace = throw new ApiException(500, "whoops")
 
-      override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult =
+      override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
         throw new ApiException(404, "i've never seen that workspace in my life")
     })
 
@@ -579,35 +622,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail on application enable failure and try to rollback workspace creation" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      override def enableApplication(workspaceId: UUID,
-                                     applicationId: String,
-                                     ctx: RawlsRequestContext
-      ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
-    })
-
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
-    }
-
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
-  }
-
   it should "fail on container creation failure and try to rollback workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
       override def createAzureStorageContainer(workspaceId: UUID,
@@ -639,10 +653,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should "still delete from the database when cleaning up the workspace in WSM fails" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      override def enableApplication(workspaceId: UUID,
-                                     applicationId: String,
-                                     ctx: RawlsRequestContext
-      ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
+      override def createAzureStorageContainer(workspaceId: UUID,
+                                               storageContainerName: String,
+                                               ctx: RawlsRequestContext
+      ): CreatedControlledAzureStorageContainer =
+        throw new ApiException(500, "error")
 
       override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
         throw new ApiException(500, "no take backsies")
@@ -667,6 +682,123 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  it should "fail with an improperly structured additional fields element on a policy" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+    val samDAO = new MockSamDAO(slickDataSource)
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[MockLeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val policies = List(
+      WorkspacePolicy("protected-data", "terra", List.empty),
+      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup", "otherInvalid" -> "other")))
+    )
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty,
+      protectedData = None,
+      policies = Some(policies)
+    )
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "create a workspace with the requested policies" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val samDAO = new MockSamDAO(slickDataSource)
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[MockLeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val policies = List(
+      WorkspacePolicy("protected-data", "terra", List.empty),
+      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
+      WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
+    )
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty,
+      protectedData = None,
+      policies = Some(policies)
+    )
+
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+
+    result.name shouldBe "fake_name"
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("fake_name"),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(namespace),
+        any[Seq[String]],
+        ArgumentMatchers.eq(
+          Some(
+            new WsmPolicyInputs()
+              .inputs(
+                Seq(
+                  new WsmPolicyInput()
+                    .name("protected-data")
+                    .namespace("terra"),
+                  new WsmPolicyInput()
+                    .name("group-constraint")
+                    .namespace("terra")
+                    .additionalData(List(new WsmPolicyPair().key("group").value("myFakeGroup")).asJava),
+                  new WsmPolicyInput()
+                    .name("region-constraint")
+                    .namespace("other-namespace")
+                    .additionalData(
+                      List(new WsmPolicyPair().key("key1").value("value1"),
+                           new WsmPolicyPair().key("key2").value("value2")
+                      ).asJava
+                    )
+                ).asJava
+              )
+          )
+        ),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(workspaceManagerDAO, Mockito.times(0))
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(namespace),
+        any(),
+        ArgumentMatchers.eq(None),
+        ArgumentMatchers.any()
+      )
   }
 
   it should "create a protected data workspace" in {
@@ -701,11 +833,25 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     Mockito
       .verify(workspaceManagerDAO)
-      .createProtectedWorkspaceWithSpendProfile(
+      .createWorkspaceWithSpendProfile(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq("fake_name"),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any[Seq[String]],
+        ArgumentMatchers.eq(
+          Some(
+            new WsmPolicyInputs()
+              .inputs(
+                Seq(
+                  new WsmPolicyInput()
+                    .name("protected-data")
+                    .namespace("terra")
+                    .additionalData(List().asJava)
+                ).asJava
+              )
+          )
+        ),
         ArgumentMatchers.eq(testContext)
       )
 
@@ -716,6 +862,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any(),
+        ArgumentMatchers.eq(None),
         ArgumentMatchers.any()
       )
   }
@@ -723,7 +871,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   private def verifyWorkspaceCreationRollback(workspaceManagerDAO: MockWorkspaceManagerDAO,
                                               workspaceName: WorkspaceName
   ): Unit = {
-    verify(workspaceManagerDAO).deleteWorkspaceV2(any(), any[RawlsRequestContext])
+    verify(workspaceManagerDAO).deleteWorkspaceV2(any(), anyString(), any[RawlsRequestContext])
     Await.result(slickDataSource.inTransaction(_.workspaceQuery.findByName(workspaceName)), Duration.Inf) shouldBe None
   }
 
@@ -760,6 +908,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     doReturn(Some(testData.azureBillingProfile))
       .when(bpmDAO)
       .getBillingProfile(equalTo(testData.azureBillingProfile.getId), any())
+
+    // For testing of old Azure billing projects, can be removed if that code is removed.
+    doReturn(Future.successful(testData.oldAzureBillingProject))
+      .when(mcWorkspaceService)
+      .getBillingProjectContext(equalTo(testData.oldAzureBillingProject.projectName), any())
+    doReturn(Some(testData.oldAzureBillingProfile))
+      .when(bpmDAO)
+      .getBillingProfile(equalTo(testData.oldAzureBillingProfile.getId), any())
 
     doReturn(Future.successful(testData.azureWorkspace))
       .when(mcWorkspaceService)
@@ -852,6 +1008,34 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         )
 
         clone shouldBe empty
+      }
+    }
+
+  it should "throw an exception if the billing profile was created before 9/12/2023" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.oldAzureBillingProject.projectName.value, "unsupported")
+        val result = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            for {
+              _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.azureWorkspace)
+              _ <- mcWorkspaceService.cloneMultiCloudWorkspace(
+                mock[WorkspaceService](RETURNS_SMART_NULLS),
+                testData.azureWorkspace.toWorkspaceName,
+                WorkspaceRequest(
+                  cloneName.namespace,
+                  cloneName.name,
+                  Map.empty
+                )
+              )
+            } yield fail(
+              "cloneMultiCloudWorkspace does not fail when a workspace " +
+                "with the same name already exists."
+            ),
+            Duration.Inf
+          )
+        }
+        result.errorReport.statusCode.value shouldBe StatusCodes.Forbidden
       }
     }
 
@@ -1230,10 +1414,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             }
           } yield {
             verify(mcWorkspaceService.workspaceManagerDAO, times(1))
-              .disableApplication(any(), any(), any())
-            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
-              .enableApplication(any(), any(), any())
-            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
               .cloneAzureStorageContainer(
                 equalTo(testData.azureWorkspace.workspaceIdAsUUID),
                 equalTo(clone.workspaceIdAsUUID),
@@ -1304,7 +1484,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           } yield {
             deletionResult.jobId shouldBe defined
             jobs.size shouldBe 1
-            jobs.head.jobType shouldBe JobType.WorkspaceDelete
+            jobs.head.jobType shouldBe JobType.WorkspaceDeleteInit
             jobs.head.workspaceId.value.toString shouldBe testData.azureWorkspace.workspaceId
             assertWorkspaceExists(testData.azureWorkspace)
             assertWorkspaceState(testData.azureWorkspace, WorkspaceState.Deleting)
@@ -1493,7 +1673,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
 
       verify(workspaceManagerDAO).getWorkspace(equalTo(testData.azureWorkspace.workspaceIdAsUUID), any())
-      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
+      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
       assertWorkspaceExists(testData.azureWorkspace)
     }
   }
@@ -1528,7 +1708,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )
 
       // rawls workspace should be deleted if WSM returns not found
-      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
+      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
       assertWorkspaceGone(testData.azureWorkspace)
     }
   }
@@ -1557,6 +1737,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     actual.errorReport.statusCode shouldEqual Some(StatusCodes.InternalServerError)
     verify(svc.workspaceManagerDAO, times(0)).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                                anyString(),
                                                                 any[RawlsRequestContext]
     )
   }
@@ -1580,6 +1761,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
     Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO, times(0)).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                                anyString(),
                                                                 any[RawlsRequestContext]
     )
   }
@@ -1606,6 +1788,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     actual.getMessage shouldBe "failure"
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(1)).getDeleteWorkspaceV2Result(
@@ -1637,6 +1820,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     actual.getMessage shouldBe "failure"
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(1)).getDeleteWorkspaceV2Result(
@@ -1676,6 +1860,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
     Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(2)).getDeleteWorkspaceV2Result(
@@ -1714,6 +1899,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
     Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      anyString(),
                                                       any[RawlsRequestContext]
     )
     verify(svc.workspaceManagerDAO, times(2)).getDeleteWorkspaceV2Result(

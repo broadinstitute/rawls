@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.model.{
   ImportStatuses,
   RawlsRequestContext,
   RawlsUserEmail,
-  UserInfo,
   Workspace,
   WorkspaceName
 }
@@ -342,9 +341,11 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                                                  Option(errMsg)
               )
           }
-        case Some(_) =>
-          logger.warn(s"Received a double message delivery for import ID [${attributes.importId}]")
-          Future.unit
+        case Some(status) =>
+          logger.warn(
+            s"Received a double message delivery for import ID [${attributes.importId}] which is already in status [$status].  Acking message."
+          )
+          acknowledgeMessage(message.ackId)
         case None =>
           publishMessageToUpdateImportStatus(attributes.importId,
                                              None,

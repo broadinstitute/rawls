@@ -24,14 +24,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   WorkspaceManagerResourceMonitorRecordDao
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
   AttributeString,
   ErrorReport,
-  GcpWorkspaceDeletionContext,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -46,12 +45,12 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.joda.time.DateTime
+import org.joda.time.{DateTime, DateTimeZone}
 
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.jdk.CollectionConverters.{ListHasAsScala, _}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -118,6 +117,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
     } yield result.gcpContext.map(_.bucketName)
 
+  /**
+    * Starts the deletion process for a workspace. For GCP workspaces, the deletion is complete synchronously.
+    * MC workspaces are enqueued for deletion via an entry in the WorkspaceManagerMonitor record table, with
+    * orchestration of the cleanup handed off to the WorkspaceDeletionRunner runner class.
+
+    * @param workspaceName Tuple of namespace + name of the workspace for deletion
+    * @param workspaceService Workspace service to which legacy GCP deletion calls will be delegated
+    * @return Result of the deletion operation, including a job ID for async deletions
+    */
   def deleteMultiCloudOrRawlsWorkspaceV2(workspaceName: WorkspaceName,
                                          workspaceService: WorkspaceService
   ): Future[WorkspaceDeletionResult] =
@@ -341,6 +349,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                           parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
+    assertBillingProfileCreationDate(profile)
+
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
     val workspaceId = UUID.randomUUID()
@@ -376,16 +386,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                           "Clone workspace",
                           getWorkspaceCloneStatus
           )
-        }
-        _ <- traceWithParent("workspaceManagerDAO.disableLeo", parentContext) { context =>
-          Future(blocking {
-            workspaceManagerDAO.disableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, context)
-          })
-        }
-        _ <- traceWithParent("workspaceManagerDAO.reenableLeo", parentContext) { context =>
-          Future(blocking {
-            workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, context)
-          })
         }
 
         _ = logger.info(
@@ -497,11 +497,26 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
+    assertBillingProfileCreationDate(profile)
+
     traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
       createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
         createdMultiCloudWorkspaceCounter.inc()
       }
     )
+  }
+
+  def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
+    val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
+    val isTestProfile = profile.getCreatedDate == null || profile.getCreatedDate == ""
+    if (!isTestProfile && DateTime.parse(profile.getCreatedDate).isBefore(previewDate)) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.Forbidden,
+          "Azure Terra billing projects created before 9/12/2023, and their associated workspaces, are unable to take advantage of new functionality. This billing project cannot be used for creating new workspaces. Please create a new billing project."
+        )
+      )
+    }
   }
 
   /**
@@ -516,7 +531,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       // kick off the deletion job w/WSM
       deletionJobResult <- traceWithParent("deleteWorkspaceInWSM", ctx)(_ =>
-        Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, ctx))
+        Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, UUID.randomUUID().toString, ctx))
       )
       deletionJobId = deletionJobResult.getJobReport.getId
       _ <- traceWithParent("pollWorkspaceDeletionInWSM", ctx) { _ =>
@@ -594,26 +609,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
       _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
-        workspaceRequest.protectedData match {
-          case Some(true) =>
-            Future(
-              workspaceManagerDAO.createProtectedWorkspaceWithSpendProfile(workspaceId,
-                                                                           workspaceRequest.name,
-                                                                           spendProfileId,
-                                                                           workspaceRequest.namespace,
-                                                                           ctx
-              )
-            )
-          case _ =>
-            Future(
-              workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId,
-                                                                  workspaceRequest.name,
-                                                                  spendProfileId,
-                                                                  workspaceRequest.namespace,
-                                                                  ctx
-              )
-            )
-        }
+        Future(
+          workspaceManagerDAO.createWorkspaceWithSpendProfile(
+            workspaceId,
+            workspaceRequest.name,
+            spendProfileId,
+            workspaceRequest.namespace,
+            Seq(wsmConfig.leonardoWsmApplicationId),
+            buildPolicyInputs(workspaceRequest),
+            ctx
+          )
+        )
       }
       _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
       cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
@@ -634,10 +640,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("enableLeoInWSM", parentContext)(_ =>
-        Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, ctx))
-      )
       containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createAzureStorageContainer(
@@ -670,6 +672,36 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
     }
+  }
+
+  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest) = {
+    val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {
+      case Some(true) =>
+        Some(
+          Seq(
+            new WsmPolicyInput()
+              .name("protected-data")
+              .namespace("terra")
+              .additionalData(List().asJava)
+          )
+        )
+      case _ => None
+    }
+
+    val otherPolicyInputs: Option[Seq[WsmPolicyInput]] = workspaceRequest.policies match {
+      case Some(inputs) =>
+        Some(inputs.map { requestedPolicy =>
+          requestedPolicy.toWsmPolicyInput()
+        })
+      case _ => None
+    }
+
+    val merged: Option[WsmPolicyInputs] = synthesizedProtectedDataPolicyInput |+| otherPolicyInputs match {
+      case Some(mergedInputs) => Some(new WsmPolicyInputs().inputs(mergedInputs.asJava))
+      case _                  => None
+    }
+
+    merged
   }
 
   private def getCloudContextCreationStatus(workspaceId: UUID,
