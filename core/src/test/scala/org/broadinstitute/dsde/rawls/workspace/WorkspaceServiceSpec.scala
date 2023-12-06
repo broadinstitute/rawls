@@ -2725,7 +2725,7 @@ class WorkspaceServiceSpec
         testData.testProject1Name.value,
         baseWorkspaceName,
         Map.empty,
-        authorizationDomain = Option(Set(testData.dbGapAuthorizedUsersGroup))
+        enhancedBucketLogging = Some(true)
       )
       val baseWorkspace = Await.result(services.workspaceService.createWorkspace(baseWorkspaceRequest), Duration.Inf)
 
