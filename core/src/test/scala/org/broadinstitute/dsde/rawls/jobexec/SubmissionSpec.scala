@@ -496,6 +496,7 @@ class SubmissionSpec(_system: ActorSystem)
         bigQueryServiceFactory,
         DataRepoEntityProviderConfig(100, 10000, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
 
