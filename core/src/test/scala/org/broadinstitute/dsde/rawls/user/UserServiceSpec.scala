@@ -2,8 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
-import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
+import bio.terra.profile.model.{BpmApiPolicyInput, BpmApiPolicyInputs, CloudPlatform => BPMCloudPlatform, ProfileModel}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -11,7 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -28,11 +27,10 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.sql.Timestamp
-import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.jdk.CollectionConverters._
 
 class UserServiceSpec
     extends AnyFlatSpecLike
@@ -1243,7 +1241,8 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
-    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE))
+    val expected =
+      Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE, Option(false)))
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
 
@@ -1308,7 +1307,8 @@ class UserServiceSpec
       RawlsBillingProjectResponse(
         Set(ProjectRoles.User),
         project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
-        CloudPlatform.AZURE
+        CloudPlatform.AZURE,
+        Option(false)
       )
     )
 
@@ -1362,11 +1362,26 @@ class UserServiceSpec
       billingProfileId = Some(bpmBillingProfile.getId.toString)
     )
 
-    val billingProjects = Set(ownerProject, billingProfileBackedProject)
+    // Azure, BPM-backed, protected project
+    val policies = new BpmApiPolicyInputs().inputs(
+      List(new BpmApiPolicyInput().namespace("terra").name("protected-data").additionalData(List.empty.asJava)).asJava
+    )
+    val bpmProtectedDataBillingProfile =
+      new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE).policies(policies)
+    val protectedDataBillingProfileBackedProject = RawlsBillingProject(
+      RawlsBillingProjectName(UUID.randomUUID().toString),
+      CreationStatuses.Ready,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(bpmProtectedDataBillingProfile.getId.toString)
+    )
+
+    val billingProjects = Set(ownerProject, billingProfileBackedProject, protectedDataBillingProfileBackedProject)
 
     val repository = mock[BillingRepository]
     when(repository.getBillingProjects(ArgumentMatchers.eq(billingProjects.map(_.projectName))))
-      .thenReturn(Future.successful(Seq(ownerProject, billingProfileBackedProject)))
+      .thenReturn(Future.successful(billingProjects.toSeq))
 
     // Setup mock DAOs
     val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
@@ -1375,18 +1390,35 @@ class UserServiceSpec
       SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val userBillingResources = Seq(
       SamUserResource(ownerProject.projectName.value, ownerRole, noRole, noRole, Set.empty, Set.empty),
-      SamUserResource(billingProfileBackedProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+      SamUserResource(billingProfileBackedProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty),
+      SamUserResource(protectedDataBillingProfileBackedProject.projectName.value,
+                      ownerRole,
+                      noRole,
+                      noRole,
+                      Set.empty,
+                      Set.empty
+      )
     )
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
       .thenReturn(Future.successful(userBillingResources))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
+    when(bpmDAO.getAllBillingProfiles(testContext))
+      .thenReturn(Future.successful(Seq(bpmBillingProfile, bpmProtectedDataBillingProfile)))
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
       RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject, CloudPlatform.AZURE)
+      RawlsBillingProjectResponse(Set(ProjectRoles.User),
+                                  billingProfileBackedProject,
+                                  CloudPlatform.AZURE,
+                                  protectedData = Option(false)
+      ),
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner),
+                                  protectedDataBillingProfileBackedProject,
+                                  CloudPlatform.AZURE,
+                                  protectedData = Option(true)
+      )
     )
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected

@@ -5,37 +5,52 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloud
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ErrorReport,
+  GoogleProjectId,
   Workspace,
   WorkspaceCloudPlatform,
   WorkspacePolicy,
+  WorkspaceState,
   WorkspaceType
 }
 
 /**
   * Represents the aggregation of a "rawls" workspace with any data from
   * external sources (i.e,. workspace manager cloud context, policies, etc.)
-  * @param baseWorkspace Source rawls worksapce
+  * @param baseWorkspace Source rawls workspace
+  * @param googleProjectId Google project ID (if present)
   * @param azureCloudContext Azure cloud context (if present)
   * @param policies Terra policies
   */
 case class AggregatedWorkspace(
   baseWorkspace: Workspace,
+  googleProjectId: Option[GoogleProjectId],
   azureCloudContext: Option[AzureManagedAppCoordinates],
   policies: List[WorkspacePolicy]
 ) {
 
-  def getCloudPlatform: WorkspaceCloudPlatform = {
+  def getCloudPlatform: Option[WorkspaceCloudPlatform] = {
     if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
-      return WorkspaceCloudPlatform.Gcp
+      return Some(WorkspaceCloudPlatform.Gcp)
     }
-    azureCloudContext match {
-      case Some(_) => WorkspaceCloudPlatform.Azure
-      case None =>
+
+    (googleProjectId, azureCloudContext, baseWorkspace.state) match {
+      case (Some(_), None, _) => Some(WorkspaceCloudPlatform.Gcp)
+      case (None, Some(_), _) => Some(WorkspaceCloudPlatform.Azure)
+      case (Some(_), Some(_), _) =>
         throw new InvalidCloudContextException(
-          ErrorReport(StatusCodes.NotImplemented,
-                      s"Unexpected state, no cloud context found for workspace ${baseWorkspace.workspaceId}"
+          ErrorReport(
+            StatusCodes.NotImplemented,
+            s"Unexpected state, expected exactly one set of cloud metadata for workspace ${baseWorkspace.workspaceId} in state ${baseWorkspace.state}"
           )
         )
+      case (None, None, WorkspaceState.Ready) =>
+        throw new InvalidCloudContextException(
+          ErrorReport(
+            StatusCodes.NotImplemented,
+            s"Unexpected state, no cloud metadata for ready workspace ${baseWorkspace.workspaceId}"
+          )
+        )
+      case (None, None, _) => None // If we aren't in the Ready state, tolerate no cloud context
     }
   }
 }

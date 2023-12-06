@@ -41,9 +41,10 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.StorageException
+import com.google.cloud.storage.{StorageClass, StorageException}
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
+import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
@@ -127,7 +128,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                               userProject: Option[GoogleProjectId]
+                               userProject: Option[GoogleProjectId],
+                               iamPolicyVersion: Int = 1
   ): Future[Unit] = {
     // default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
     // do not have separate permissions that deviate from the bucket-level permissions.
@@ -161,6 +163,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
     // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
 
+    // it can also take some time for Google to come to a consensus about a bucket's existence when it is newly created.
+    // during this time, we may see intermittent 404s indicating that the bucket we just created doesn't exist. we need to
+    // retry these 404s in this case.
+
     // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
     // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
     googleStorageService
@@ -168,9 +174,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         bucketName,
         roleToIdentities.toMap,
         retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate,
-                                                                RetryPredicates.whenStatusCode(400)
+                                                                RetryPredicates.whenStatusCode(400),
+                                                                RetryPredicates.whenStatusCode(404)
         ),
-        bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList
+        bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList,
+        version = iamPolicyVersion
       )
       .compile
       .drain
@@ -220,7 +228,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             bucketPolicyOnlyEnabled = true,
             logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
             location = bucketLocation,
-            autoclassEnabled = true
+            autoclassEnabled = true,
+            autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE)
           )
           .compile
           .drain
@@ -634,7 +643,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     val storageServiceResource = GoogleStorageService.fromCredentials(credentials)
     storageServiceResource
       .use { storageService =>
-        storageService.getBucket(googleProject, bucketName)
+        storageService.getBucket(googleProject, bucketName, warnOnError = true)
       }
       .map(_.isDefined)
       .unsafeToFuture()
@@ -1260,8 +1269,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken), logRequest = false)
       RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
     }.recover { case e: GoogleJsonResponseException =>
+      // abbreviate the error message to ensure we don't include a token in the exception
       throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.InternalServerError, s"Failed to get token info: ${e.getMessage}")
+        ErrorReport(StatusCodes.InternalServerError,
+                    s"Failed to get token info: ${StringUtils.abbreviate(e.getMessage, 50)}"
+        )
       )
     }
   }

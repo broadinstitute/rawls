@@ -5,7 +5,7 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
-import cats.{Applicative, ApplicativeThrow, MonadThrow}
+import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
@@ -241,6 +241,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       billingProject <- traceWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
+      // policies are not supported on GCP workspaces
+      _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       workspace <- traceWithParent("createNewWorkspaceContext", parentContext)(s =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
@@ -283,6 +285,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
+  private def failIfPoliciesIncluded(workspaceRequest: WorkspaceRequest): Future[Unit] =
+    workspaceRequest.policies match {
+      case None                               => Future.successful()
+      case Some(policies) if policies.isEmpty => Future.successful()
+      case Some(policies) =>
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Policies are not supported for GCP workspaces")
+          )
+        )
+    }
+
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,
                    parentContext: RawlsRequestContext = ctx
@@ -314,7 +328,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val wsmContext = wsmService.getAggregatedWorkspace(workspaceContext, ctx)
+            val wsmContext = wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -337,14 +351,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               // determine which functions to use for the various part of the response
               def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] =
                 if (options.contains("bucketOptions")) {
-                  wsmContext.azureCloudContext match {
+                  wsmContext.googleProjectId match {
                     case None =>
+                      noFuture
+                    case _ =>
                       traceWithParent("getBucketDetails", s1)(_ =>
                         gcsDAO
                           .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
                           .map(Option(_))
                       )
-                    case _ => noFuture
                   }
                 } else {
                   noFuture
@@ -353,7 +368,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 traceWithParent("getUserComputePermissions", s1)(_ =>
                   getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
                                             accessLevel,
-                                            Some(wsmContext.getCloudPlatform)
+                                            wsmContext.getCloudPlatform
                   )
                     .map(Option(_))
                 )
@@ -427,7 +442,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
                                                            authDomain,
                                                            useAttributes,
-                                                           Some(wsmContext.getCloudPlatform)
+                                                           wsmContext.getCloudPlatform
                   ),
                   stats,
                   bucketDetails,
@@ -980,58 +995,62 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     .max
                 }.toMap
               val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
-              workspaces.mapFilter { workspace =>
-                try {
-                  val wsId = UUID.fromString(workspace.workspaceId)
-                  val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
-                  val accessLevel =
-                    if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
-                      WorkspaceAccessLevels.NoAccess
-                    } else {
-                      highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
+              val aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
+                .fetchAggregatedWorkspaces(workspaces, ctx)
+                // Filter out workspaces with no cloud contexts, logging cloud context exceptions
+                .filter { ws =>
+                  Try(ws.getCloudPlatform)
+                    .map(context => context.isDefined)
+                    .recover { case e: InvalidCloudContextException =>
+                      logger.error(e.getMessage)
+                      false
                     }
+                    .get
+                }
 
-                  val wsmContext =
-                    new AggregatedWorkspaceService(workspaceManagerDAO).getAggregatedWorkspace(workspace, ctx)
-
-                  // remove attributes if they were not requested
-                  val workspaceDetails =
-                    WorkspaceDetails.fromWorkspaceAndOptions(
-                      workspace,
-                      Option(
-                        workspaceSamResource.authDomainGroups.map(groupName =>
-                          ManagedGroupRef(RawlsGroupName(groupName.value))
-                        )
-                      ),
-                      attributesEnabled,
-                      Some(wsmContext.getCloudPlatform)
-                    )
-                  // remove submission stats if they were not requested
-                  val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-                    Option(submissionSummaryStats(wsId))
+              aggregatedWorkspaces.mapFilter { wsmContext =>
+                val workspace = wsmContext.baseWorkspace
+                val wsId = UUID.fromString(workspace.workspaceId)
+                val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
+                val accessLevel =
+                  if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
+                    WorkspaceAccessLevels.NoAccess
                   } else {
-                    None
+                    highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
                   }
-                  Option(
-                    WorkspaceListResponse(
-                      accessLevel,
-                      workspaceDetails,
-                      submissionStats,
-                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
-                      Some(wsmContext.policies)
-                    )
+
+                // remove attributes if they were not requested
+                val workspaceDetails =
+                  WorkspaceDetails.fromWorkspaceAndOptions(
+                    workspace,
+                    Option(
+                      workspaceSamResource.authDomainGroups.map(groupName =>
+                        ManagedGroupRef(RawlsGroupName(groupName.value))
+                      )
+                    ),
+                    attributesEnabled,
+                    wsmContext.getCloudPlatform
                   )
-                } catch {
-                  // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
-                  // be reachable when running against the dev environment.
-                  case ex: AggregateWorkspaceNotFoundException =>
-                    logger.warn(
-                      s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
+                // remove submission stats if they were not requested
+                val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
+                  Option(submissionSummaryStats(wsId))
+                } else {
+                  None
+                }
+                // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
+                // cloud context will throw a WorkspaceAggregationException, which is handled below)
+                wsmContext.getCloudPlatform match {
+                  case None => None
+                  case _ =>
+                    Option(
+                      WorkspaceListResponse(
+                        accessLevel,
+                        workspaceDetails,
+                        submissionStats,
+                        workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
+                        Some(wsmContext.policies)
+                      )
                     )
-                    None
-                  case ex: WorkspaceAggregationException =>
-                    logger.error(ex.getMessage)
-                    None
                 }
               }
             }
@@ -1109,8 +1128,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
               val forceEnhancedBucketMonitoring =
-                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceBucketNameOption.exists(
-                  _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceWorkspace.bucketName.startsWith(
+                  s"${config.workspaceBucketNamePrefix}-secure"
                 )
               createNewWorkspaceContext(
                 destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
@@ -2352,7 +2371,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
         userComment = submissionRequest.userComment,
-        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs
+        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs,
+        monitoringScript = submissionRequest.monitoringScript,
+        monitoringImage = submissionRequest.monitoringImage,
+        monitoringImageScript = submissionRequest.monitoringImageScript
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)

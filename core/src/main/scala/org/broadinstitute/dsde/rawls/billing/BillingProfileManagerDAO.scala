@@ -21,6 +21,7 @@ import java.util.{Date, UUID}
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 case class BpmAzureReportErrorMessage(message: String, statusCode: Int)
 
@@ -37,6 +38,7 @@ import BpmAzureReportErrorMessageJsonProtocol._
 trait BillingProfileManagerDAO {
   def createBillingProfile(displayName: String,
                            billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+                           policies: Map[String, List[(String, String)]],
                            ctx: RawlsRequestContext
   ): ProfileModel
 
@@ -78,6 +80,11 @@ class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExcepti
 class BpmAzureSpendReportApiException(val statusCode: Int, message: String, cause: Throwable = null)
     extends Exception(message, cause)
 
+class BpmException(billingProfileId: UUID, cause: Throwable)
+    extends RawlsExceptionWithErrorReport(
+      ErrorReport(StatusCodes.InternalServerError, s"Error fetching billing profile ID $billingProfileId", cause)
+    )
+
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
 
@@ -118,12 +125,29 @@ class BillingProfileManagerDAOImpl(
   override def createBillingProfile(
     displayName: String,
     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+    policies: Map[String, List[(String, String)]] = Map.empty,
     ctx: RawlsRequestContext
   ): ProfileModel = {
     val azureManagedAppCoordinates = billingInfo match {
       case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
     }
+
+    val policyInputs = new BpmApiPolicyInputs().inputs(
+      policies
+        .map { case (policyName, additionalData) =>
+          new BpmApiPolicyInput()
+            .namespace("terra") // policy namespaces in Rawls are always 'terra'
+            .name(policyName)
+            .additionalData(
+              additionalData.map { case (key, value) =>
+                new BpmApiPolicyPair().key(key).value(value)
+              }.asJava
+            )
+        }
+        .toList
+        .asJava
+    )
 
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(ctx)
@@ -135,13 +159,20 @@ class BillingProfileManagerDAOImpl(
       .id(UUID.randomUUID())
       .biller("direct") // community terra is always 'direct' (i.e., no reseller)
       .cloudPlatform(CloudPlatform.AZURE)
+      .policies(policyInputs)
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
     profileApi.createProfile(createProfileRequest)
   }
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
-    Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
+    Try(Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))) match {
+      case Success(value) => value
+      case Failure(e: ApiException)
+          if e.getCode == StatusCodes.NotFound.intValue || e.getCode == StatusCodes.Forbidden.intValue =>
+        None
+      case Failure(e) => throw new BpmException(billingProfileId, e);
+    }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
     apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)

@@ -13,4 +13,11 @@ object RawlsConfig extends CommonConfig {
   } else {
     "ERROR: workspaceManagerApiUrl unspecified! "
   }
+
+  // This value is only available when tests are run through the rawls-swat Github action (in a bee).
+  val leoUrl = if (fireCloud.hasPath("leonardoApiUrl")) {
+    fireCloud.getString("leonardoApiUrl")
+  } else {
+    "ERROR: leonardoApiUrl unspecified! "
+  }
 }

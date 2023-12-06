@@ -1,11 +1,13 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
+import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   openTelemetryTags,
   policyBindingsQuotaLimit,
@@ -15,6 +17,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   UserAndPetEmails
 }
 import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
   FastPassGrant,
   GoogleProjectId,
   RawlsRequestContext,
@@ -30,20 +33,20 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
 import spray.json._
 
-import java.time.{OffsetDateTime, ZoneOffset}
 import java.time.temporal.ChronoUnit
+import java.time.{OffsetDateTime, ZoneOffset}
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 import scala.util.matching.Regex
+import scala.util.{Failure, Success}
 
 object FastPassService extends LazyLogging {
   def constructor(config: FastPassConfig,
@@ -141,7 +144,7 @@ object FastPassService extends LazyLogging {
                              googleStorageDAO
         ).transform {
           case Failure(e) =>
-            logger.error(
+            logger.warn(
               s"Encountered an error while removing FastPass grants for ${accountEmail.value} in ${googleProjectId.value}",
               e
             )
@@ -279,7 +282,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       }
       .transform {
         case Failure(e) =>
-          logger.error(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
+          logger.warn(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Success(_) => Success()
@@ -296,6 +299,15 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     dataSource
       .inTransaction { implicit dataAccess =>
         for {
+          migrationAttempts <- dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
+          _ = if (migrationAttempts.nonEmpty && !migrationAttempts.exists(_.outcome.exists(_.isSuccess))) {
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.Conflict,
+                s"Workspace ${workspace.toWorkspaceName} has been scheduled for bucket migration, but it has not succeeded yet."
+              )
+            )
+          }
           rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
           samUserInfo <- DBIO.from(
             samDAO.getUserIdInfo(email, RawlsRequestContext(rawlsServiceAccountUserInfo)).map {
@@ -334,7 +346,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Failure(e: Throwable) =>
-          logger.error(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
+          logger.warn(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Success(_) => Success()
@@ -403,7 +415,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       }
       .transform {
         case Failure(e) =>
-          logger.error(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
+          logger.warn(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
         case Success(_) => Success()
