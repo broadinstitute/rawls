@@ -426,6 +426,7 @@ object Boot extends IOApp with LazyLogging {
         appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"),
+        conf.getDuration("entities.queryTimeout"),
         metricsPrefix
       )
 

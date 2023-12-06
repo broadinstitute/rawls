@@ -40,6 +40,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 import slick.jdbc.TransactionIsolation
 
+import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -50,6 +51,7 @@ import scala.util.{Failure, Success, Try}
 class LocalEntityProvider(requestArguments: EntityRequestArguments,
                           implicit protected val dataSource: SlickDataSource,
                           cacheEnabled: Boolean,
+                          queryTimeout: Duration,
                           override val workbenchMetricBaseName: String
 )(implicit protected val executionContext: ExecutionContext)
     extends EntityProvider
