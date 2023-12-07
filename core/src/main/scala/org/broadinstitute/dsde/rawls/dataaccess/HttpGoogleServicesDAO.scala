@@ -41,7 +41,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.StorageException
+import com.google.cloud.storage.{StorageClass, StorageException}
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
 import org.apache.commons.lang3.StringUtils
@@ -228,7 +228,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             bucketPolicyOnlyEnabled = true,
             logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
             location = bucketLocation,
-            autoclassEnabled = true
+            autoclassEnabled = true,
+            autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE)
           )
           .compile
           .drain
