@@ -65,13 +65,13 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.5"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.28.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.34.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.50"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.14"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.16" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.17" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
@@ -108,7 +108,7 @@ object Dependencies {
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.15.1"
 
   // should we prefer jakarta over javax.xml?
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
