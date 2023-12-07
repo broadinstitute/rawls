@@ -1128,8 +1128,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
               val forceEnhancedBucketMonitoring =
-                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceBucketNameOption.exists(
-                  _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceWorkspace.bucketName.startsWith(
+                  s"${config.workspaceBucketNamePrefix}-secure"
                 )
               createNewWorkspaceContext(
                 destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
