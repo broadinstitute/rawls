@@ -72,22 +72,22 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
 
   "LocalEntityProvider query timeouts" should {
 
-    "enforce on deleteEntities" in withLocalEntityProviderTestDatabase { ds =>
-      lockedEntitiesTest(ds, a[MySQLTimeoutException]) { localEntityProvider =>
+    "enforce on deleteEntities" in withLocalEntityProviderTestDatabase { dataSource =>
+      lockedEntitiesTest(dataSource, a[MySQLTimeoutException]) { localEntityProvider =>
         localEntityProvider.deleteEntities(
           Seq(AttributeEntityReference(entityType = "unitTestType", entityName = "deleteTimeoutTest"))
         )
       }
     }
 
-    "enforce on deleteEntitiesOfType" in withLocalEntityProviderTestDatabase { ds =>
-      lockedEntitiesTest(ds, a[MySQLTimeoutException]) { localEntityProvider =>
+    "enforce on deleteEntitiesOfType" in withLocalEntityProviderTestDatabase { dataSource =>
+      lockedEntitiesTest(dataSource, a[MySQLTimeoutException]) { localEntityProvider =>
         localEntityProvider.deleteEntitiesOfType("unitTestType")
       }
     }
 
-    "enforce on batchUpsert" in withLocalEntityProviderTestDatabase { ds =>
-      lockedEntitiesTest(ds, a[RawlsExceptionWithErrorReport]) { localEntityProvider =>
+    "enforce on batchUpsert" in withLocalEntityProviderTestDatabase { dataSource =>
+      lockedEntitiesTest(dataSource, a[RawlsExceptionWithErrorReport]) { localEntityProvider =>
         val attrUpdate = AddUpdateAttribute(AttributeName.withDefaultNS("newAttr"), AttributeString("whatever"))
         val entityUpdate =
           EntityUpdateDefinition(name = "deleteTimeoutTest", entityType = "unitTestType", Seq(attrUpdate))
@@ -95,8 +95,8 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
       }
     }
 
-    "enforce on batchUpdate" in withLocalEntityProviderTestDatabase { ds =>
-      lockedEntitiesTest(ds, a[RawlsExceptionWithErrorReport]) { localEntityProvider =>
+    "enforce on batchUpdate" in withLocalEntityProviderTestDatabase { dataSource =>
+      lockedEntitiesTest(dataSource, a[RawlsExceptionWithErrorReport]) { localEntityProvider =>
         val attrUpdate = AddUpdateAttribute(AttributeName.withDefaultNS("newAttr"), AttributeString("whatever"))
         val entityUpdate =
           EntityUpdateDefinition(name = "deleteTimeoutTest", entityType = "unitTestType", Seq(attrUpdate))
