@@ -42,7 +42,7 @@ case class UserMetadata(email: String, `type`: UserType, bearer: String) {
   * Companion object containing some useful methods for UserMetadata.
   */
 object UserMetadata {
-  //implicit val userMetadataDecoder: Decoder[UserMetadata] = deriveDecoder[UserMetadata]
+  // implicit val userMetadataDecoder: Decoder[UserMetadata] = deriveDecoder[UserMetadata]
   implicit val userMetadataDecoder: Decoder[UserMetadata] = (c: HCursor) =>
     for {
       email <- c.downField("email").as[String]

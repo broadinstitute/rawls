@@ -2718,6 +2718,32 @@ class WorkspaceServiceSpec
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
+  it should "clone a workspace with an enhanced bucket monitoring, resulting in the child workspace having enhanced logging even if the destination bucket location is defined" in withTestDataServices {
+    services =>
+      val baseWorkspaceName = "secure_space_for_workin"
+      val baseWorkspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        baseWorkspaceName,
+        Map.empty,
+        enhancedBucketLogging = Some(true)
+      )
+      val baseWorkspace = Await.result(services.workspaceService.createWorkspace(baseWorkspaceRequest), Duration.Inf)
+
+      val newWorkspaceName = "cloned_space"
+      val workspaceRequest =
+        WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty, bucketLocation = Some("US"))
+
+      val workspace =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
+
+      workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
+  }
+
   it should "create a bucket with enhanced logging when told to, even if the parent workspace doesn't have it" in withTestDataServices {
     services =>
       val baseWorkspaceName = "secure_space_for_workin"

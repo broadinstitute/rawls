@@ -87,7 +87,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
           errors.foreach { errorTuple =>
             val (error, grants) = errorTuple
             val users = grants.map(_.accountEmail.value).toSet.mkString("(", ", ", ")")
-            logger.error(
+            logger.warn(
               s"Encountered error while removing FastPass for users: $users in ${googleProjectId.value}. Continuing sweep.",
               error
             )
@@ -102,7 +102,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
         }
         .cleanUp {
           case Some(e) =>
-            logger.error(
+            logger.warn(
               s"Encountered an error while removing FastPass grants in ${googleProjectId.value}. Continuing sweep.",
               e
             )
