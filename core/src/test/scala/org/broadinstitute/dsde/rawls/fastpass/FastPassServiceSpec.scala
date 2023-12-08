@@ -59,6 +59,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -175,6 +176,7 @@ class FastPassServiceSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
+          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")
@@ -255,6 +257,7 @@ class FastPassServiceSpec
       bigQueryServiceFactory,
       DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 

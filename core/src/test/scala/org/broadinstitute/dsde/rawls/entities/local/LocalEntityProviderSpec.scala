@@ -58,10 +58,12 @@ class LocalEntityProviderSpec
                         dataAccess: DataAccess
   )(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
 
-    val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                      slickDataSource,
-                                                      testConf.getBoolean("entityStatisticsCache.enabled"),
-                                                      workbenchMetricBaseName
+    val localEntityProvider = new LocalEntityProvider(
+      EntityRequestArguments(workspaceContext, testContext),
+      slickDataSource,
+      testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
     )
 
     dataAccess.entityQuery
@@ -324,10 +326,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         val multiUpsert = Seq(
@@ -393,10 +397,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
@@ -425,10 +431,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
@@ -458,10 +466,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
@@ -493,6 +503,7 @@ class LocalEntityProviderSpec
         val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
                                                           slickDataSource,
                                                           false,
+                                                          testConf.getDuration("entities.queryTimeout"),
                                                           workbenchMetricBaseName
         )
 
@@ -522,10 +533,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
@@ -588,10 +601,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
@@ -646,10 +661,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
@@ -933,10 +950,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
         val wsid = workspaceContext.workspaceIdAsUUID
         val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
@@ -971,10 +990,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // create the first entity with name "myname"
@@ -1005,10 +1026,12 @@ class LocalEntityProviderSpec
         val workspaceContext = runAndWait(
           dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
         ).get
-        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                          slickDataSource,
-                                                          cacheEnabled = true,
-                                                          workbenchMetricBaseName
+        val localEntityProvider = new LocalEntityProvider(
+          EntityRequestArguments(workspaceContext, testContext),
+          slickDataSource,
+          cacheEnabled = true,
+          testConf.getDuration("entities.queryTimeout"),
+          workbenchMetricBaseName
         )
 
         // create the first entity with name "myname"

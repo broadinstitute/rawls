@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceType}
 
+import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.runtime.universe._
 import scala.util.{Failure, Try}
@@ -89,13 +90,14 @@ object EntityManager {
                            bqServiceFactory: GoogleBigQueryServiceFactory,
                            config: DataRepoEntityProviderConfig,
                            cacheEnabled: Boolean,
+                           queryTimeout: Duration,
                            metricsPrefix: String
   )(implicit ec: ExecutionContext): EntityManager = {
     // create the EntityManager along with its associated provider-builders. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder =
-      new LocalEntityProviderBuilder(dataSource, cacheEnabled, metricsPrefix) // implicit executionContext
+      new LocalEntityProviderBuilder(dataSource, cacheEnabled, queryTimeout, metricsPrefix) // implicit executionContext
     val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO,
                                                                           dataRepoDAO,
                                                                           samDAO,

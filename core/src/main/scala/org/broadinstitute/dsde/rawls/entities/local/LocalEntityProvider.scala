@@ -45,6 +45,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 import slick.jdbc.TransactionIsolation
 
+import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -55,6 +56,7 @@ import scala.util.{Failure, Success, Try}
 class LocalEntityProvider(requestArguments: EntityRequestArguments,
                           implicit protected val dataSource: SlickDataSource,
                           cacheEnabled: Boolean,
+                          queryTimeout: Duration,
                           override val workbenchMetricBaseName: String
 )(implicit protected val executionContext: ExecutionContext)
     extends EntityProvider
@@ -69,6 +71,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override val entityStoreId: Option[String] = None
 
   override val workspaceContext = requestArguments.workspace
+
+  final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     // start performance tracing
@@ -179,7 +183,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                   throw new DeleteEntitiesConflictException(referringEntities)
                 else {
                   traceDBIOWithParent("entityQuery.hide", innerSpan)(_ =>
-                    dataAccess.entityQuery.hide(workspaceContext, entRefs)
+                    dataAccess.entityQuery
+                      .hide(workspaceContext, entRefs)
+                      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
                   )
                 }
             }
@@ -201,7 +207,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
             if (referringEntitiesCount != 0)
               throw new DeleteEntitiesOfTypeConflictException(referringEntitiesCount)
             else {
-              dataAccess.entityQuery.hideType(workspaceContext, entityType)
+              dataAccess.entityQuery
+                .hideType(workspaceContext, entityType)
+                .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
             }
         }
       }
@@ -368,7 +376,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
             } else {
               val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
 
-              dataAccess.entityQuery.save(workspaceContext, t)
+              dataAccess.entityQuery
+                .save(workspaceContext, t)
+                .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
             }
           }
 
