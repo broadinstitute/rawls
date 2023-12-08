@@ -84,7 +84,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar with Mo
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val apiProvider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
-    when(profileApi.getProfile(any())).thenThrow(new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
+    when(profileApi.getProfile(any())).thenThrow(new ApiException(StatusCodes.BadRequest.intValue, "bad request"))
     val billingProfileManagerDAO =
       new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 

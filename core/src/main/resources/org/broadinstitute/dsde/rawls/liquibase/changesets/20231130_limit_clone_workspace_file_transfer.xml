@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="add_timestamps_outcome_CLONE_WORKSPACE_FILE_TRANSFER">
+        <addColumn tableName="CLONE_WORKSPACE_FILE_TRANSFER">
+            <column name="CREATED" type="DATETIME" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false" />
+            </column>
+        </addColumn>
+        <addColumn tableName="CLONE_WORKSPACE_FILE_TRANSFER">
+            <column name="FINISHED" type="DATETIME">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+        <addColumn tableName="CLONE_WORKSPACE_FILE_TRANSFER">
+            <column name="OUTCOME" type="VARCHAR(254)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>
