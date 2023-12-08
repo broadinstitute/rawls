@@ -70,6 +70,7 @@ import spray.json._
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -188,6 +189,7 @@ trait ApiServiceSpec
     )
 
     val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
+    val testConf = ConfigFactory.load()
     val submissionSupervisor = system.actorOf(
       SubmissionSupervisor
         .props(
@@ -198,12 +200,11 @@ trait ApiServiceSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           config,
+          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher")
     )
-
-    val testConf = ConfigFactory.load()
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
@@ -318,6 +319,7 @@ trait ApiServiceSpec
       bigQueryServiceFactory,
       DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 
