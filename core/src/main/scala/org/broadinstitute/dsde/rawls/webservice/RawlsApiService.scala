@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext, UserInfo}
@@ -62,6 +63,9 @@ object RawlsApiService extends LazyLogging {
           Sentry.captureException(wsmApiException)
         }
         complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
+      case dataEntityException: DataEntityException =>
+        // propagate only the message; don't include the stack trace
+        complete(dataEntityException.code -> ErrorReport(dataEntityException.getMessage))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
         if (logger.underlying.isDebugEnabled) {

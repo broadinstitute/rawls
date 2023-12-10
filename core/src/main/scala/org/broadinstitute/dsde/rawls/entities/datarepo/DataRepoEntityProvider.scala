@@ -38,13 +38,16 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValueList,
   AttributeValueRawJson,
   Entity,
+  EntityCopyDefinition,
+  EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
   EntityTypeMetadata,
   ErrorReport,
   GoogleProjectId,
   RawlsRequestContext,
-  SubmissionValidationEntityInputs
+  SubmissionValidationEntityInputs,
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -524,4 +527,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
+
+  override def copyEntities(sourceWorkspaceContext: Workspace,
+                            destWorkspaceContext: Workspace,
+                            entityType: String,
+                            entityNames: Seq[String],
+                            linkExistingEntities: Boolean,
+                            parentContext: RawlsRequestContext
+  ): Future[EntityCopyResponse] =
+    throw new UnsupportedEntityOperationException("copy entities not supported by this provider.")
 }

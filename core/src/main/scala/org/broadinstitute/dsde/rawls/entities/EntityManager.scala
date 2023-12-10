@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import bio.terra.workspace.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -9,7 +10,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProvid
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.model.ErrorReport
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceType}
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
@@ -42,6 +43,12 @@ import scala.util.{Failure, Try}
 class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]]) {
 
   def resolveProvider(requestArguments: EntityRequestArguments): Try[EntityProvider] = {
+
+    if (!WorkspaceType.RawlsWorkspace.equals(requestArguments.workspace.workspaceType)) {
+      throw new DataEntityException(
+        s"This API is disabled for ${CloudPlatform.AZURE} workspaces. Contact support for alternatives."
+      )
+    }
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.

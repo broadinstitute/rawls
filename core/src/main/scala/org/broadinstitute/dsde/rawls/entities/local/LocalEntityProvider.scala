@@ -26,15 +26,20 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeValue,
   Entity,
+  EntityCopyDefinition,
+  EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
   ErrorReport,
   RawlsRequestContext,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
   SubmissionValidationEntityInputs,
   SubmissionValidationValue,
-  Workspace
+  Workspace,
+  WorkspaceAttributeSpecs
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
@@ -404,4 +409,22 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = true)
 
+  override def copyEntities(sourceWorkspaceContext: Workspace,
+                            destWorkspaceContext: Workspace,
+                            entityType: String,
+                            entityNames: Seq[String],
+                            linkExistingEntities: Boolean,
+                            parentContext: RawlsRequestContext
+  ): Future[EntityCopyResponse] =
+    traceWithParent("checkAndCopyEntities", parentContext)(_ =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext,
+                                                    destWorkspaceContext,
+                                                    entityType,
+                                                    entityNames,
+                                                    linkExistingEntities,
+                                                    parentContext
+        )
+      }
+    )
 }
