@@ -237,7 +237,8 @@ trait EntityComponent {
     // noinspection SqlDialectInspection,DuplicatedCode
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
-      implicit val getEntityRecord: GetResult[EntityRecord] = GetResult(r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+      implicit val getEntityRecord: GetResult[EntityRecord] =
+        GetResult(r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] =
         if (entities.isEmpty) {

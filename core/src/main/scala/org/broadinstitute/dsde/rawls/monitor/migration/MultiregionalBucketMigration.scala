@@ -160,7 +160,8 @@ final case class MultiregionalBucketMigrationProgress(
 object MultiregionalBucketMigrationJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val MultiregionalBucketMigrationDetailsJsonFormat: RootJsonFormat[MultiregionalBucketMigrationMetadata] = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
+  implicit val MultiregionalBucketMigrationDetailsJsonFormat: RootJsonFormat[MultiregionalBucketMigrationMetadata] =
+    jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
 
   implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
   implicit object MultiregionalBucketMigrationStepJsonFormat extends RootJsonFormat[MultiregionalBucketMigrationStep] {

@@ -22,7 +22,9 @@ case class Providers(providers: List[String])
 object BondJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val BondServiceAccountEmailFormat: RootJsonFormat[BondServiceAccountEmail] = jsonFormat1(BondServiceAccountEmail)
+  implicit val BondServiceAccountEmailFormat: RootJsonFormat[BondServiceAccountEmail] = jsonFormat1(
+    BondServiceAccountEmail
+  )
   implicit val BondResponseDataFormat: RootJsonFormat[BondResponseData] = jsonFormat1(BondResponseData)
 
   implicit val providersFormat: RootJsonFormat[Providers] = jsonFormat1(Providers)

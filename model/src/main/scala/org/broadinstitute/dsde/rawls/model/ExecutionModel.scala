@@ -327,11 +327,17 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowStatusFormat: RootJsonFormat[WorkflowStatus] = rawlsEnumerationFormat(WorkflowStatuses.withName)
 
-  implicit val SubmissionStatusFormat: RootJsonFormat[SubmissionStatus] = rawlsEnumerationFormat(SubmissionStatuses.withName)
+  implicit val SubmissionStatusFormat: RootJsonFormat[SubmissionStatus] = rawlsEnumerationFormat(
+    SubmissionStatuses.withName
+  )
 
-  implicit val SubmissionRetryStatusesFormat: RootJsonFormat[RetryStatus] = rawlsEnumerationFormat(SubmissionRetryStatuses.withName)
+  implicit val SubmissionRetryStatusesFormat: RootJsonFormat[RetryStatus] = rawlsEnumerationFormat(
+    SubmissionRetryStatuses.withName
+  )
 
-  implicit val WorkflowFailureModeFormat: RootJsonFormat[WorkflowFailureMode] = rawlsEnumerationFormat(WorkflowFailureModes.withName)
+  implicit val WorkflowFailureModeFormat: RootJsonFormat[WorkflowFailureMode] = rawlsEnumerationFormat(
+    WorkflowFailureModes.withName
+  )
 
   implicit val CromwellBackendFormat: ValueObjectFormat[CromwellBackend] = ValueObjectFormat(CromwellBackend)
 
@@ -416,23 +422,39 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionEventFormat: RootJsonFormat[ExecutionEvent] = jsonFormat3(ExecutionEvent)
 
-  implicit val ExecutionServiceStatusFormat: RootJsonFormat[ExecutionServiceStatus] = jsonFormat2(ExecutionServiceStatus)
+  implicit val ExecutionServiceStatusFormat: RootJsonFormat[ExecutionServiceStatus] = jsonFormat2(
+    ExecutionServiceStatus
+  )
 
-  implicit val ExecutionServiceFailureFormat: RootJsonFormat[ExecutionServiceFailure] = jsonFormat3(ExecutionServiceFailure)
+  implicit val ExecutionServiceFailureFormat: RootJsonFormat[ExecutionServiceFailure] = jsonFormat3(
+    ExecutionServiceFailure
+  )
 
-  implicit val ExecutionServiceVersionFormat: RootJsonFormat[ExecutionServiceVersion] = jsonFormat1(ExecutionServiceVersion)
+  implicit val ExecutionServiceVersionFormat: RootJsonFormat[ExecutionServiceVersion] = jsonFormat1(
+    ExecutionServiceVersion
+  )
 
-  implicit val ExecutionServiceValidationFormat: RootJsonFormat[ExecutionServiceValidation] = jsonFormat2(ExecutionServiceValidation)
+  implicit val ExecutionServiceValidationFormat: RootJsonFormat[ExecutionServiceValidation] = jsonFormat2(
+    ExecutionServiceValidation
+  )
 
-  implicit val ExecutionServiceOutputsFormat: RootJsonFormat[ExecutionServiceOutputs] = jsonFormat2(ExecutionServiceOutputs)
+  implicit val ExecutionServiceOutputsFormat: RootJsonFormat[ExecutionServiceOutputs] = jsonFormat2(
+    ExecutionServiceOutputs
+  )
 
-  implicit val ExecutionServiceCallLogsFormat: RootJsonFormat[ExecutionServiceCallLogs] = jsonFormat3(ExecutionServiceCallLogs)
+  implicit val ExecutionServiceCallLogsFormat: RootJsonFormat[ExecutionServiceCallLogs] = jsonFormat3(
+    ExecutionServiceCallLogs
+  )
 
   implicit val ExecutionServiceLogsFormat: RootJsonFormat[ExecutionServiceLogs] = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat18(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat18(
+    ExecutionServiceWorkflowOptions
+  )
 
-  implicit val ExecutionServiceLabelResponseFormat: RootJsonFormat[ExecutionServiceLabelResponse] = jsonFormat2(ExecutionServiceLabelResponse)
+  implicit val ExecutionServiceLabelResponseFormat: RootJsonFormat[ExecutionServiceLabelResponse] = jsonFormat2(
+    ExecutionServiceLabelResponse
+  )
 
   implicit val TaskOutputFormat: RootJsonFormat[TaskOutput] = jsonFormat2(TaskOutput)
 
@@ -440,15 +462,25 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowCostFormat: RootJsonFormat[WorkflowCost] = jsonFormat2(WorkflowCost)
 
-  implicit val SubmissionValidationInputFormat: RootJsonFormat[SubmissionValidationInput] = jsonFormat2(SubmissionValidationInput)
+  implicit val SubmissionValidationInputFormat: RootJsonFormat[SubmissionValidationInput] = jsonFormat2(
+    SubmissionValidationInput
+  )
 
-  implicit val SubmissionValidationHeaderFormat: RootJsonFormat[SubmissionValidationHeader] = jsonFormat3(SubmissionValidationHeader)
+  implicit val SubmissionValidationHeaderFormat: RootJsonFormat[SubmissionValidationHeader] = jsonFormat3(
+    SubmissionValidationHeader
+  )
 
-  implicit val SubmissionValidationValueFormat: RootJsonFormat[SubmissionValidationValue] = jsonFormat3(SubmissionValidationValue)
+  implicit val SubmissionValidationValueFormat: RootJsonFormat[SubmissionValidationValue] = jsonFormat3(
+    SubmissionValidationValue
+  )
 
-  implicit val SubmissionValidationEntityInputsFormat: RootJsonFormat[SubmissionValidationEntityInputs] = jsonFormat2(SubmissionValidationEntityInputs)
+  implicit val SubmissionValidationEntityInputsFormat: RootJsonFormat[SubmissionValidationEntityInputs] = jsonFormat2(
+    SubmissionValidationEntityInputs
+  )
 
-  implicit val SubmissionValidationReportFormat: RootJsonFormat[SubmissionValidationReport] = jsonFormat4(SubmissionValidationReport)
+  implicit val SubmissionValidationReportFormat: RootJsonFormat[SubmissionValidationReport] = jsonFormat4(
+    SubmissionValidationReport
+  )
 
   implicit val WorkflowFormat: RootJsonFormat[Workflow] = jsonFormat7(Workflow)
 
@@ -460,9 +492,13 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat: RootJsonFormat[SubmissionReport] = jsonFormat7(SubmissionReport)
 
-  implicit val RetriedSubmissionReportFormat: RootJsonFormat[RetriedSubmissionReport] = jsonFormat7(RetriedSubmissionReport)
+  implicit val RetriedSubmissionReportFormat: RootJsonFormat[RetriedSubmissionReport] = jsonFormat7(
+    RetriedSubmissionReport
+  )
 
-  implicit val SubmissionListResponseFormat: RootJsonFormat[SubmissionListResponse] = jsonFormat17(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat: RootJsonFormat[SubmissionListResponse] = jsonFormat17(
+    SubmissionListResponse.apply
+  )
 
   implicit val MetadataParamsFormat: RootJsonFormat[MetadataParams] = jsonFormat3(MetadataParams)
 
@@ -470,9 +506,13 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ActiveSubmissionFormat: RootJsonFormat[ActiveSubmission] = jsonFormat3(ActiveSubmission)
 
-  implicit val WorkflowQueueStatusResponseFormat: RootJsonFormat[WorkflowQueueStatusResponse] = jsonFormat3(WorkflowQueueStatusResponse)
+  implicit val WorkflowQueueStatusResponseFormat: RootJsonFormat[WorkflowQueueStatusResponse] = jsonFormat3(
+    WorkflowQueueStatusResponse
+  )
 
-  implicit val UserCommentUpdateOperationFormat: RootJsonFormat[UserCommentUpdateOperation] = jsonFormat1(UserCommentUpdateOperation)
+  implicit val UserCommentUpdateOperationFormat: RootJsonFormat[UserCommentUpdateOperation] = jsonFormat1(
+    UserCommentUpdateOperation
+  )
 
   implicit object WorkflowQueueStatusByUserResponseFormat extends RootJsonFormat[WorkflowQueueStatusByUserResponse] {
     def write(r: WorkflowQueueStatusByUserResponse) = JsObject(

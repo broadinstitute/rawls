@@ -109,7 +109,8 @@ trait RawSqlQuery {
   import driver.api._
 
   implicit val GetUUIDResult: GetResult[UUID] = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
-  implicit val GetUUIDOptionResult: GetResult[Option[UUID]] = GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
+  implicit val GetUUIDOptionResult: GetResult[Option[UUID]] =
+    GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
   implicit object SetUUIDParameter extends SetParameter[UUID] {
     def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) }
   }
