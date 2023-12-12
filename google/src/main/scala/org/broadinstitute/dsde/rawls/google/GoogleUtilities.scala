@@ -9,7 +9,7 @@ import nl.grons.metrics4.scala.Histogram
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, InstrumentedRetry}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
-import spray.json.JsValue
+import spray.json.{JsValue, RootJsonFormat}
 
 import java.io.{ByteArrayOutputStream, IOException, InputStream}
 import java.util.concurrent.TimeUnit
@@ -179,5 +179,5 @@ protected[google] case class GoogleRequest(method: String,
 protected[google] object GoogleRequestJsonSupport extends JsonSupport {
   import WorkspaceJsonSupport.ErrorReportFormat
   import spray.json.DefaultJsonProtocol._
-  implicit val GoogleRequestFormat = jsonFormat6(GoogleRequest)
+  implicit val GoogleRequestFormat: RootJsonFormat[GoogleRequest] = jsonFormat6(GoogleRequest)
 }

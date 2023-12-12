@@ -79,21 +79,21 @@ class UserModelJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val RawlsUserEmailFormat = UserModelJsonFormatter(RawlsUserEmail)
-  implicit val RawlsUserSubjectIdFormat = UserModelJsonFormatter(RawlsUserSubjectId)
+  implicit val RawlsUserEmailFormat: UserModelJsonFormatter[RawlsUserEmail] = UserModelJsonFormatter(RawlsUserEmail)
+  implicit val RawlsUserSubjectIdFormat: UserModelJsonFormatter[RawlsUserSubjectId] = UserModelJsonFormatter(RawlsUserSubjectId)
 
-  implicit val RawlsGroupNameFormat = UserModelJsonFormatter(RawlsGroupName)
-  implicit val RawlsGroupEmailFormat = UserModelJsonFormatter(RawlsGroupEmail)
-  implicit val RawlsBillingAccountNameFormat = UserModelJsonFormatter(RawlsBillingAccountName)
-  implicit val RawlsBillingProjectNameFormat = UserModelJsonFormatter(RawlsBillingProjectName)
+  implicit val RawlsGroupNameFormat: UserModelJsonFormatter[RawlsGroupName] = UserModelJsonFormatter(RawlsGroupName)
+  implicit val RawlsGroupEmailFormat: UserModelJsonFormatter[RawlsGroupEmail] = UserModelJsonFormatter(RawlsGroupEmail)
+  implicit val RawlsBillingAccountNameFormat: UserModelJsonFormatter[RawlsBillingAccountName] = UserModelJsonFormatter(RawlsBillingAccountName)
+  implicit val RawlsBillingProjectNameFormat: UserModelJsonFormatter[RawlsBillingProjectName] = UserModelJsonFormatter(RawlsBillingProjectName)
 
-  implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
-  implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
-  implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
-  implicit val ManagedGroupRefFormat = jsonFormat1(ManagedGroupRef)
-  implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
-  implicit val ManagedGroupAccessResponseFormat = jsonFormat3(ManagedGroupAccessResponse)
-  implicit val ManagedGroupWithMembersFormat = jsonFormat3(ManagedGroupWithMembers)
+  implicit val RawlsUserRefFormat: RootJsonFormat[RawlsUserRef] = jsonFormat1(RawlsUserRef)
+  implicit val RawlsGroupRefFormat: RootJsonFormat[RawlsGroupRef] = jsonFormat1(RawlsGroupRef)
+  implicit val RawlsGroupShortFormat: RootJsonFormat[RawlsGroupShort] = jsonFormat2(RawlsGroupShort)
+  implicit val ManagedGroupRefFormat: RootJsonFormat[ManagedGroupRef] = jsonFormat1(ManagedGroupRef)
+  implicit val ManagedGroupAccessFormat: RootJsonFormat[ManagedGroupAccess] = jsonFormat2(ManagedGroupAccess)
+  implicit val ManagedGroupAccessResponseFormat: RootJsonFormat[ManagedGroupAccessResponse] = jsonFormat3(ManagedGroupAccessResponse)
+  implicit val ManagedGroupWithMembersFormat: RootJsonFormat[ManagedGroupWithMembers] = jsonFormat3(ManagedGroupWithMembers)
 }
 
 object UserModelJsonSupport extends UserModelJsonSupport

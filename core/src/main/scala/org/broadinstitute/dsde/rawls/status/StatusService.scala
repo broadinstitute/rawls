@@ -22,7 +22,7 @@ object StatusService {
 }
 
 class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: ExecutionContext) {
-  implicit val timeout = Timeout(1 minute)
+  implicit val timeout: Timeout = Timeout(1 minute)
 
   def getStatus: Future[(StatusCode, StatusCheckResponse)] =
     (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusCheckResponse =>

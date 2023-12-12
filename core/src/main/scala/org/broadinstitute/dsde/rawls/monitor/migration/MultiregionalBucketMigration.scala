@@ -160,7 +160,7 @@ final case class MultiregionalBucketMigrationProgress(
 object MultiregionalBucketMigrationJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
+  implicit val MultiregionalBucketMigrationDetailsJsonFormat: RootJsonFormat[MultiregionalBucketMigrationMetadata] = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
 
   implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
   implicit object MultiregionalBucketMigrationStepJsonFormat extends RootJsonFormat[MultiregionalBucketMigrationStep] {
@@ -191,11 +191,11 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
   def getMRBOption[T](f: String => T): GetResult[Option[T]] =
     GetResult(_.nextStringOption().map(f))
 
-  implicit val getMRBGoogleProjectId = getMRBOption(GoogleProjectId)
-  implicit val getMRBGoogleProjectNumber = getMRBOption(GoogleProjectNumber)
-  implicit val getMRBGcsBucketName = getMRBOption(GcsBucketName)
-  implicit val getMRBInstant = GetResult(_.nextTimestamp().toInstant)
-  implicit val getMRBInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+  implicit val getMRBGoogleProjectId: GetResult[Option[GoogleProjectId]] = getMRBOption(GoogleProjectId)
+  implicit val getMRBGoogleProjectNumber: GetResult[Option[GoogleProjectNumber]] = getMRBOption(GoogleProjectNumber)
+  implicit val getMRBGcsBucketName: GetResult[Option[GcsBucketName]] = getMRBOption(GcsBucketName)
+  implicit val getMRBInstant: GetResult[Instant] = GetResult(_.nextTimestamp().toInstant)
+  implicit val getMRBInstantOption: GetResult[Option[Instant]] = GetResult(_.nextTimestampOption().map(_.toInstant))
 
   object multiregionalBucketMigrationQuery
       extends RawMRBTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_HISTORY", primaryKey = ColumnName("id")) {
@@ -254,7 +254,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
 
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    implicit private val getMultiregionalBucketMigration = GetResult(r =>
+    implicit private val getMultiregionalBucketMigration: GetResult[MultiregionalBucketMigration] = GetResult(r =>
       MultiregionalBucketMigration(r.<<,
                                    r.<<,
                                    r.<<,
@@ -278,7 +278,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       )
     )
 
-    implicit private val getMultiregionalBucketMigrationDetails =
+    implicit private val getMultiregionalBucketMigrationDetails: GetResult[MultiregionalBucketMigrationMetadata] =
       GetResult(r => MultiregionalBucketMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
     def setMigrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): ReadWriteAction[Int] = {
@@ -522,7 +522,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
     val allColumns: String = List(idCol, migrationIdCol, retriesCol).mkString(",")
 
-    implicit private val getMultiregionalBucketMigrationRetry =
+    implicit private val getMultiregionalBucketMigrationRetry: GetResult[MultiregionalBucketMigrationRetry] =
       GetResult(r => MultiregionalBucketMigrationRetry(r.<<, r.<<, r.<<))
 
     final def isPipelineBlocked(maxRetries: Int): ReadWriteAction[Boolean] =

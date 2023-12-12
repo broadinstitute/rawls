@@ -74,5 +74,5 @@ object AttributeUpdateOperations {
     operations: Seq[AttributeUpdateOperation]
   )
 
-  implicit val entityUpdateDefinitionFormat = jsonFormat3(EntityUpdateDefinition)
+  implicit val entityUpdateDefinitionFormat: RootJsonFormat[EntityUpdateDefinition] = jsonFormat3(EntityUpdateDefinition)
 }

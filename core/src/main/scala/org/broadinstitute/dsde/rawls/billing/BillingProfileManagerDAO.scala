@@ -8,14 +8,8 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  ErrorReport,
-  ProjectRoles,
-  RawlsBillingAccountName,
-  RawlsRequestContext
-}
-import spray.json.DefaultJsonProtocol
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, ProjectRoles, RawlsBillingAccountName, RawlsRequestContext}
+import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
@@ -26,7 +20,7 @@ import scala.util.{Failure, Success, Try}
 case class BpmAzureReportErrorMessage(message: String, statusCode: Int)
 
 object BpmAzureReportErrorMessageJsonProtocol extends DefaultJsonProtocol {
-  implicit val bpmAzureReportErrorMessageFormat = jsonFormat2(BpmAzureReportErrorMessage.apply)
+  implicit val bpmAzureReportErrorMessageFormat: RootJsonFormat[BpmAzureReportErrorMessage] = jsonFormat2(BpmAzureReportErrorMessage.apply)
 }
 
 import spray.json._

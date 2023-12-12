@@ -56,7 +56,7 @@ object Expansion {
   /**
     * Expand exceptions into their simple class name.
     */
-  implicit def ThrowableExpansion[T <: Throwable] = new Expansion[T] {
+  implicit def ThrowableExpansion[T <: Throwable]: Expansion[T] = new Expansion[T] {
     override def makeName(a: T): String = a.getClass.getSimpleName
   }
 
