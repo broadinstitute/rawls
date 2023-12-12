@@ -48,7 +48,7 @@ import scala.concurrent.duration.Duration
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
-  implicit val actorSystem = ActorSystem() // needed for stream materialization
+  implicit val actorSystem: ActorSystem = ActorSystem() // needed for stream materialization
 
   // ===================================================================================================================
   // exemplar data used in multiple tests

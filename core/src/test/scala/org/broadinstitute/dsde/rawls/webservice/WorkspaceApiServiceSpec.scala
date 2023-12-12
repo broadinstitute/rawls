@@ -106,7 +106,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testCode: TestApiService => T
   ): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
-      override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
+      override val samDAO: MockSamDAO = new MockSamDAO(this.dataSource) {
         override def userHasAction(resourceTypeName: SamResourceTypeName,
                                    resourceId: String,
                                    action: SamResourceAction,
@@ -133,7 +133,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       // these need to be overridden to use the new samDAO
       override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
       override val multiCloudWorkspaceAclManager =
-        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, this.dataSource)
     }
     try
       testCode(apiService)

@@ -52,7 +52,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()

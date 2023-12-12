@@ -43,7 +43,7 @@ class SubmissionSupervisorSpec
     with MockitoTestUtils
     with RawlsStatsDTestUtils {
 
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   val testDbName = "SubmissionSupervisorSpec"
   val submissionSupervisorActorName = "test-subsupervisorspec-submission-supervisor"

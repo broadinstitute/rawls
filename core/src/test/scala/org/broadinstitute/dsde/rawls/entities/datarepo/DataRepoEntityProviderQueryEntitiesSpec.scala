@@ -8,15 +8,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createKeyList, createTestTableResult}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  EntityTypeNotFoundException,
-  UnsupportedEntityOperationException
-}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 
 class DataRepoEntityProviderQueryEntitiesSpec
@@ -25,7 +22,7 @@ class DataRepoEntityProviderQueryEntitiesSpec
     with TestDriverComponent
     with Matchers {
 
-  implicit override val executionContext = TestExecutionContext.testExecutionContext
+  implicit override val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
   val defaultEntityRequestArguments =
     EntityRequestArguments(workspace, testContext, Some(DataReferenceName("referenceName")))

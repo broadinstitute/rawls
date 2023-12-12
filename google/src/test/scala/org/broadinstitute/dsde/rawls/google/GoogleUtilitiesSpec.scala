@@ -6,6 +6,7 @@ import akka.testkit.TestKit
 import com.google.api.client.googleapis.json.GoogleJsonError.ErrorInfo
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http._
+import nl.grons.metrics4.scala.Histogram
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.BeforeAndAfterAll
@@ -31,9 +32,9 @@ class GoogleUtilitiesSpec
     with Eventually
     with MockitoTestUtils
     with StatsDTestUtils {
-  implicit val executionContext = ExecutionContext.global
-  implicit def histo = ExpandedMetricBuilder.empty.asHistogram("histo")
-  implicit override val patienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
+  implicit val executionContext: ExecutionContext = ExecutionContext.global
+  implicit def histo: Histogram = ExpandedMetricBuilder.empty.asHistogram("histo")
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
 
   override def afterAll() {
     TestKit.shutdownActorSystem(system)

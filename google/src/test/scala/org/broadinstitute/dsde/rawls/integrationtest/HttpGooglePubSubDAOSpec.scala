@@ -31,7 +31,7 @@ class HttpGooglePubSubDAOSpec
     with Eventually
     with MockitoTestUtils
     with StatsDTestUtils {
-  implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")
+  implicit val system: ActorSystem = ActorSystem("HttpGooglePubSubDAOSpec")
 
   val etcConf = ConfigFactory.load()
   val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))

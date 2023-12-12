@@ -14,7 +14,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   //   validateAttributeName
   //   createBatches
 
-  implicit val getWorkflowRecord = GetResult { r =>
+  implicit val getWorkflowRecord: GetResult[WorkflowRecord] = GetResult { r =>
     WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
   }
 

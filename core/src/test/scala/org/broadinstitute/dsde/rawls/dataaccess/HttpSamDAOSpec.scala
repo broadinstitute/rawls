@@ -36,7 +36,7 @@ class HttpSamDAOSpec
     with Matchers
     with BeforeAndAfterAll {
 
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
   val mockServer = RemoteServicesMockServer()
 
   override def beforeAll(): Unit = {

@@ -22,9 +22,9 @@ class HttpGoogleAccessContextManagerDAOSpec
     with MockitoTestUtils
     with StatsDTestUtils
     with ScalaFutures {
-  implicit val system = ActorSystem("HttpGoogleAccessContextManagerDAOSpec")
+  implicit val system: ActorSystem = ActorSystem("HttpGoogleAccessContextManagerDAOSpec")
 
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(180, Seconds)))
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(180, Seconds)))
   // val etcConf = ConfigFactory.load()
   // val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
   // val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")

@@ -7,12 +7,7 @@ import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{
-  makeToolInputParameter,
-  makeToolOutputParameter,
-  makeValueType,
-  makeWorkflowDescription
-}
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._
@@ -35,7 +30,7 @@ import org.scalatest.matchers.should.Matchers
 import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
@@ -63,7 +58,7 @@ object DbResource extends LazyLogging {
 trait TestDriverComponent extends DriverComponent with DataAccess with DefaultInstrumented {
   this: Suite =>
 
-  implicit override val executionContext = TestExecutionContext.testExecutionContext
+  implicit override val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
   // Implicit counters are required for certain methods on WorkflowComponent and SubmissionComponent
   override lazy val metricBaseName = MetricName("test")

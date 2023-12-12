@@ -17,12 +17,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{
-  MultiregionalBucketMigration,
-  MultiregionalBucketMigrationFailureModes,
-  MultiregionalBucketMigrationStep,
-  MultiregionalStorageTransferJob
-}
+import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigration, MultiregionalBucketMigrationFailureModes, MultiregionalBucketMigrationStep, MultiregionalStorageTransferJob}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
@@ -45,14 +40,15 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import scala.annotation.nowarn
+import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
 import scala.util.Random
 
 class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eventually with OptionValues {
 
-  implicit val logger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
-  implicit val ec = IORuntime.global.compute
-  implicit val timestampOrdering = new Ordering[Timestamp] {
+  implicit val logger: ConsoleLogger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
+  implicit val ec: ExecutionContext = IORuntime.global.compute
+  implicit val timestampOrdering: Ordering[Timestamp] = new Ordering[Timestamp] {
     override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
   implicit class FailureMessageOps(outcome: Outcome)(implicit pos: source.Position) {
