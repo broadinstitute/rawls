@@ -6,7 +6,14 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WorkspaceStageModel, WsmPolicyInput, WsmPolicyPair}
+import bio.terra.workspace.model.{
+  AzureContext,
+  GcpContext,
+  WorkspaceDescription,
+  WorkspaceStageModel,
+  WsmPolicyInput,
+  WsmPolicyPair
+}
 import cats.effect.IO
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -45,7 +52,13 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GcsBucketName, GoogleProject, IamPermission}
+import org.broadinstitute.dsde.workbench.model.google.{
+  BigQueryDatasetName,
+  BigQueryTableName,
+  GcsBucketName,
+  GoogleProject,
+  IamPermission
+}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.joda.time.DateTime

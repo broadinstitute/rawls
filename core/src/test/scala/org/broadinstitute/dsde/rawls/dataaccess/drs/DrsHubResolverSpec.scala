@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, doReturn, spy, when}
+import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}

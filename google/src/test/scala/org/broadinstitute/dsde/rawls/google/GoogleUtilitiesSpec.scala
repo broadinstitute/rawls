@@ -34,7 +34,8 @@ class GoogleUtilitiesSpec
     with StatsDTestUtils {
   implicit val executionContext: ExecutionContext = ExecutionContext.global
   implicit def histo: Histogram = ExpandedMetricBuilder.empty.asHistogram("histo")
-  implicit override val patienceConfig: PatienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
+  implicit override val patienceConfig: PatienceConfig =
+    PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
 
   override def afterAll() {
     TestKit.shutdownActorSystem(system)

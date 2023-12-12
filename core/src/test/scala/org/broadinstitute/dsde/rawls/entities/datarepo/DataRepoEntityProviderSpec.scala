@@ -14,10 +14,27 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityNotFoundException,
+  EntityTypeNotFoundException
+}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, DataReferenceName, Entity, EntityTypeMetadata, GoogleProjectId, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeNumber,
+  AttributeString,
+  AttributeValue,
+  AttributeValueRawJson,
+  DataReferenceName,
+  Entity,
+  EntityTypeMetadata,
+  GoogleProjectId,
+  SubmissionValidationEntityInputs,
+  SubmissionValidationValue
+}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.Header

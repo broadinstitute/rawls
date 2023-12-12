@@ -28,7 +28,12 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
@@ -49,7 +54,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
 import java.sql.Timestamp
-import java.time.{LocalDateTime, OffsetDateTime, ZoneOffset, Duration => JavaDuration}
+import java.time.{Duration => JavaDuration, LocalDateTime, OffsetDateTime, ZoneOffset}
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._

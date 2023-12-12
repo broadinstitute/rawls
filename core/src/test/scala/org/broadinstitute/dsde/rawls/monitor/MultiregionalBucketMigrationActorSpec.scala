@@ -17,7 +17,12 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigration, MultiregionalBucketMigrationFailureModes, MultiregionalBucketMigrationStep, MultiregionalStorageTransferJob}
+import org.broadinstitute.dsde.rawls.monitor.migration.{
+  MultiregionalBucketMigration,
+  MultiregionalBucketMigrationFailureModes,
+  MultiregionalBucketMigrationStep,
+  MultiregionalStorageTransferJob
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
