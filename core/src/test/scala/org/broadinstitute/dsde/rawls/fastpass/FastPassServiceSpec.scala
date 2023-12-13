@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.effect.IO
 import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -42,7 +43,7 @@ import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemb
 import org.broadinstitute.dsde.workbench.model.google.iam._
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
+import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -138,7 +139,7 @@ class FastPassServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
@@ -1411,7 +1412,7 @@ class FastPassServiceSpec
       )
     )
     val config = FastPassConfig(true, JavaDuration.ZERO, JavaDuration.ZERO)
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
     val iamDAO = spy(new MockGoogleIamDAO)
     val storageDAO = spy(new MockGoogleStorageDAO)
     val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))
@@ -1449,7 +1450,7 @@ class FastPassServiceSpec
       )
     )
     val config = FastPassConfig(true, JavaDuration.ZERO, JavaDuration.ZERO)
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
     val iamDAO = spy(new MockGoogleIamDAO)
     val storageDAO = spy(new MockGoogleStorageDAO)
     val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))

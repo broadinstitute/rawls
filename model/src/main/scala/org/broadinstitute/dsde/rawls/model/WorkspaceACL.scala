@@ -102,19 +102,24 @@ class WorkspaceACLJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val AccessEntryFormat = jsonFormat4(AccessEntry)
+  implicit val AccessEntryFormat: RootJsonFormat[AccessEntry] = jsonFormat4(AccessEntry)
 
-  implicit val WorkspaceACLFormat = jsonFormat1(WorkspaceACL)
+  implicit val WorkspaceACLFormat: RootJsonFormat[WorkspaceACL] = jsonFormat1(WorkspaceACL)
 
-  implicit val WorkspaceACLUpdateFormat = jsonFormat4(WorkspaceACLUpdate)
+  implicit val WorkspaceACLUpdateFormat: RootJsonFormat[WorkspaceACLUpdate] = jsonFormat4(WorkspaceACLUpdate)
 
-  implicit val WorkspaceACLUpdateResponseListFormat = jsonFormat3(WorkspaceACLUpdateResponseList)
+  implicit val WorkspaceACLUpdateResponseListFormat: RootJsonFormat[WorkspaceACLUpdateResponseList] = jsonFormat3(
+    WorkspaceACLUpdateResponseList
+  )
 
-  implicit val WorkspaceCatalogFormat = jsonFormat2(WorkspaceCatalog)
+  implicit val WorkspaceCatalogFormat: RootJsonFormat[WorkspaceCatalog] = jsonFormat2(WorkspaceCatalog)
 
-  implicit val WorkspaceCatalogResponseFormat = jsonFormat2(WorkspaceCatalogResponse)
+  implicit val WorkspaceCatalogResponseFormat: RootJsonFormat[WorkspaceCatalogResponse] = jsonFormat2(
+    WorkspaceCatalogResponse
+  )
 
-  implicit val WorkspaceCatalogUpdateResponseListFormat = jsonFormat2(WorkspaceCatalogUpdateResponseList)
+  implicit val WorkspaceCatalogUpdateResponseListFormat: RootJsonFormat[WorkspaceCatalogUpdateResponseList] =
+    jsonFormat2(WorkspaceCatalogUpdateResponseList)
 }
 
 object WorkspaceACLJsonSupport extends WorkspaceACLJsonSupport

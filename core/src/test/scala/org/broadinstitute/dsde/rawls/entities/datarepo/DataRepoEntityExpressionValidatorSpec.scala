@@ -101,7 +101,7 @@ class DataRepoEntityExpressionValidatorSpec
     AgoraMethod("dsde", "three_step", 1)
   )
 
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   "validateMCExpressions" should "validate expressions in a MethodConfiguration with a root entity" in {
     val validationResults =

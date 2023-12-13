@@ -87,7 +87,7 @@ object AvroUpsertMonitorSupervisor {
     )
 
   import spray.json.DefaultJsonProtocol._
-  implicit val updateImportStatusFormat = jsonFormat5(UpdateImportStatus)
+  implicit val updateImportStatusFormat: RootJsonFormat[UpdateImportStatus] = jsonFormat5(UpdateImportStatus)
 }
 
 case class UpdateImportStatus(importId: String,
@@ -227,7 +227,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                               jobId: String,
                               startTime: String
   )
-  implicit val avroMetadataJsonFormat = jsonFormat6(AvroMetadataJson)
+  implicit val avroMetadataJsonFormat: RootJsonFormat[AvroMetadataJson] = jsonFormat6(AvroMetadataJson)
 
   self ! StartMonitorPass
 

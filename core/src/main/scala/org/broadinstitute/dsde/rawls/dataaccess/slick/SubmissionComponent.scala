@@ -563,7 +563,7 @@ trait SubmissionComponent {
                                             externalEntity: Option[AttributeEntityReference]
       )
 
-      implicit val getWorkflowMessagesListResult = GetResult { r =>
+      implicit val getWorkflowMessagesListResult: GetResult[WorkflowMessagesListResult] = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val rootEntityTypeOption: Option[String] = r.<<
 
@@ -602,7 +602,7 @@ trait SubmissionComponent {
                                                    submissionAttributeRec: Option[SubmissionAttributeRecord]
       )
 
-      implicit val getWorkflowInputResolutionListResult = GetResult { r =>
+      implicit val getWorkflowInputResolutionListResult: GetResult[WorkflowInputResolutionListResult] = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
@@ -685,7 +685,7 @@ trait SubmissionComponent {
     object GatherStatusesForWorkspaceSubmissionsQuery extends RawSqlQuery {
       val driver: JdbcProfile = SubmissionComponent.this.driver
 
-      implicit val getSubmissionWorkflowStatusResponse = GetResult { r =>
+      implicit val getSubmissionWorkflowStatusResponse: GetResult[SubmissionWorkflowStatusResponse] = GetResult { r =>
         SubmissionWorkflowStatusResponse(r.<<, r.<<, r.<<, r.<<)
       }
 
