@@ -7,11 +7,14 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeValue,
   Entity,
+  EntityCopyDefinition,
+  EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
   EntityTypeMetadata,
   RawlsRequestContext,
-  SubmissionValidationEntityInputs
+  SubmissionValidationEntityInputs,
+  Workspace
 }
 
 import scala.concurrent.Future
@@ -70,4 +73,12 @@ trait EntityProvider {
   def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
 
   def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+
+  def copyEntities(sourceWorkspaceContext: Workspace,
+                   destWorkspaceContext: Workspace,
+                   entityType: String,
+                   entityNames: Seq[String],
+                   linkExistingEntities: Boolean,
+                   parentContext: RawlsRequestContext
+  ): Future[EntityCopyResponse]
 }

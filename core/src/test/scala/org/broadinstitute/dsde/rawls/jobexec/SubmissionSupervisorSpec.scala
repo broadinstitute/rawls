@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -29,6 +30,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
 import scala.concurrent.duration._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation
@@ -78,6 +80,7 @@ class SubmissionSupervisorSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           config,
+          ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher"),

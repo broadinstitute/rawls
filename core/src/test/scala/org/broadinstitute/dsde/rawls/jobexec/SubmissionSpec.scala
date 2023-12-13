@@ -52,6 +52,7 @@ import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -428,6 +429,9 @@ class SubmissionSpec(_system: ActorSystem)
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
+
+      val testConf = ConfigFactory.load()
+
       val submissionSupervisor = system.actorOf(
         SubmissionSupervisor
           .props(
@@ -438,13 +442,12 @@ class SubmissionSpec(_system: ActorSystem)
             mockNotificationDAO,
             gcsDAO.getBucketServiceAccountCredential,
             config,
+            testConf.getDuration("entities.queryTimeout").toScala,
             workbenchMetricBaseName = workbenchMetricBaseName
           )
           .withDispatcher("submission-monitor-dispatcher"),
         submissionSupervisorActorName
       )
-
-      val testConf = ConfigFactory.load()
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
@@ -497,6 +500,7 @@ class SubmissionSpec(_system: ActorSystem)
         bigQueryServiceFactory,
         DataRepoEntityProviderConfig(100, 10000, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
 

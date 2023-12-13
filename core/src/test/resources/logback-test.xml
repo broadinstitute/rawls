@@ -20,7 +20,7 @@
 
     <root level="info">
         <appender-ref ref="FILE"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="console"/>
     </root>
 
     <logger name="org.broadinstitute.dsde" level="info" additivity="false">

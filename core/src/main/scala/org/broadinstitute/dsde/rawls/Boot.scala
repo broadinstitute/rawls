@@ -75,6 +75,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.jdk.CollectionConverters._
 import scala.language.{higherKinds, postfixOps}
 
@@ -417,6 +418,8 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysSetupService: RequesterPaysSetupService =
         new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
+      val entityQueryTimeout = conf.getDuration("entities.queryTimeout")
+
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(
         slickDataSource,
@@ -426,6 +429,7 @@ object Boot extends IOApp with LazyLogging {
         appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"),
+        entityQueryTimeout,
         metricsPrefix
       )
 
@@ -606,6 +610,7 @@ object Boot extends IOApp with LazyLogging {
           methodRepoDAO,
           drsResolver,
           entityServiceConstructor,
+          entityQueryTimeout.toScala,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,

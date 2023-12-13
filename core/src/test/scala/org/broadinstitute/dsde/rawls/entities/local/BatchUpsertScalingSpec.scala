@@ -116,6 +116,7 @@ class BatchUpsertScalingSpec
         bigQueryServiceFactory,
         DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       ),
       1000
