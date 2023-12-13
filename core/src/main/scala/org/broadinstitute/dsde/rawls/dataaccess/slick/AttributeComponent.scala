@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
+import io.opencensus.scala.Tracing._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport}
 import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
@@ -596,17 +598,26 @@ trait AttributeComponent {
     def patchAttributesAction(inserts: Traversable[RECORD],
                               updates: Traversable[RECORD],
                               deleteIds: Traversable[Long],
-                              insertFunction: Seq[RECORD] => String => WriteAction[Int]
+                              insertFunction: Seq[RECORD] => String => WriteAction[Int],
+                              tracingContext: RawlsTracingContext
     ) =
-      for {
-        _ <- if (deleteIds.nonEmpty) deleteAttributeRecordsById(deleteIds.toSeq) else DBIO.successful(0)
-        _ <- if (inserts.nonEmpty) batchInsertAttributes(inserts.toSeq) else DBIO.successful(0)
-        updateResult <-
-          if (updates.nonEmpty)
-            AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
-          else
-            DBIO.successful(0)
-      } yield updateResult
+      traceDBIOWithParent("patchAttributesAction", tracingContext) { span =>
+        for {
+          _ <-
+            if (deleteIds.nonEmpty)
+              traceDBIOWithParent("deleteAttributeRecordsById", span)(_ => deleteAttributeRecordsById(deleteIds.toSeq))
+            else DBIO.successful(0)
+          _ <-
+            if (inserts.nonEmpty)
+              traceDBIOWithParent("batchInsertAttributes", span)(_ => batchInsertAttributes(inserts.toSeq))
+            else DBIO.successful(0)
+          updateResult <-
+            if (updates.nonEmpty)
+              AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq), span)
+            else
+              DBIO.successful(0)
+        } yield updateResult
+      }
 
     def deleteAttributes(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) =
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
@@ -762,10 +773,12 @@ trait AttributeComponent {
         attributesToDelete.values.map(_.ownerId)).toSet
 
       // perform the inserts/updates/deletes
-      patchAttributesAction(attributesToInsert.values,
-                            attributesToUpdate.values,
-                            attributesToDelete.values.map(_.id),
-                            insertFunction
+      patchAttributesAction(
+        attributesToInsert.values,
+        attributesToUpdate.values,
+        attributesToDelete.values.map(_.id),
+        insertFunction,
+        RawlsTracingContext(Option(startSpan("rewriteAttrsAction")))
       )
         .map(_ => ownersWithWrites)
     }
@@ -809,12 +822,15 @@ trait AttributeComponent {
         else DBIO.successful(0)
       }
 
-      def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
-        val transactionId = UUID.randomUUID().toString
-        insertIntoScratchFunction(transactionId) andThen
-          updateInMasterAction(transactionId) andThen
-          clearAttributeScratchTableAction(transactionId)
-      }
+      def updateAction(insertIntoScratchFunction: String => WriteAction[Int], tracingContext: RawlsTracingContext) =
+        traceDBIOWithParent("updateAction", tracingContext) { span =>
+          val transactionId = UUID.randomUUID().toString
+          traceDBIOWithParent("insertIntoScratchFunction", span)(_ => insertIntoScratchFunction(transactionId)) andThen
+            traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction(transactionId)) andThen
+            traceDBIOWithParent("clearAttributeScratchTableAction", span)(_ =>
+              clearAttributeScratchTableAction(transactionId)
+            )
+        }
     }
 
     def unmarshalAttributes[ID](

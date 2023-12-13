@@ -4,6 +4,8 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.scala.Tracing._
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -25,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
@@ -516,14 +519,28 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(())
     } else {
+      val rootSpan = RawlsTracingContext(Option(startSpan("SubmissionMonitorActor.handleOutputs")))
+      rootSpan.tracingSpan.foreach { span =>
+        span.putAttribute("submissionId", OpenCensusAttributeValue.stringAttributeValue(submissionId.toString))
+        span.putAttribute("numWorkflowsWithOutputs",
+                          OpenCensusAttributeValue.longAttributeValue(workflowsWithOutputs.length)
+        )
+      }
+
       for {
         // load all the starting data
-        workspace <- getWorkspace(dataAccess).map(
+        workspace <- traceDBIOWithParent("getWorkspace", rootSpan)(_ => getWorkspace(dataAccess)).map(
           _.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found"))
         )
-        entitiesById <- listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
-        outputExpressionMap <- listMethodConfigOutputsForSubmission(dataAccess)
-        emptyOutputs <- getSubmissionEmptyOutputParam(dataAccess)
+        entitiesById <- traceDBIOWithParent("listWorkflowEntitiesById", rootSpan)(_ =>
+          listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
+        )
+        outputExpressionMap <- traceDBIOWithParent("listMethodConfigOutputsForSubmission", rootSpan)(_ =>
+          listMethodConfigOutputsForSubmission(dataAccess)
+        )
+        emptyOutputs <- traceDBIOWithParent("getSubmissionEmptyOutputParam", rootSpan)(_ =>
+          getSubmissionEmptyOutputParam(dataAccess)
+        )
 
         // figure out the updates that need to occur to entities and workspaces
         updatedEntitiesAndWorkspace = attachOutputs(workspace,
@@ -549,9 +566,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
 
         // save everything to the db
-        _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
-        _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace)
-        _ <- saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess)
+        _ <- traceDBIOWithParent("saveWorkspace", rootSpan)(_ => saveWorkspace(dataAccess, updatedEntitiesAndWorkspace))
+        _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace, rootSpan) // has its own tracing
+        _ <- traceDBIOWithParent("saveErrors", rootSpan)(_ =>
+          saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess)
+        )
       } yield ()
     }
 
@@ -598,21 +617,28 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     workspace: Workspace,
     updatedEntitiesAndWorkspace: Seq[
       Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]
-    ]
-  )(implicit executionContext: ExecutionContext) = {
-    val entityUpdates = updatedEntitiesAndWorkspace.collect {
-      case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
+    ],
+    tracingContext: RawlsTracingContext
+  )(implicit executionContext: ExecutionContext) =
+    traceDBIOWithParent("saveEntities", tracingContext) { span =>
+      val entityUpdates = updatedEntitiesAndWorkspace.collect {
+        case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
+      }
+      span.tracingSpan.foreach { s =>
+        s.putAttribute("numEntityUpdates", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
+      }
+      if (entityUpdates.isEmpty) {
+        DBIO.successful(())
+      } else {
+        traceDBIOWithParent("saveEntityPatchSequence", span) { innerSpan =>
+          DBIO.sequence(entityUpdates map { entityUpd =>
+            dataAccess.entityQuery
+              .saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq(), innerSpan)
+              .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
+          })
+        }
+      }
     }
-    if (entityUpdates.isEmpty) {
-      DBIO.successful(())
-    } else {
-      DBIO.sequence(entityUpdates map { entityUpd =>
-        dataAccess.entityQuery
-          .saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq())
-          .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
-      })
-    }
-  }
 
   private def attributeIsEmpty(attribute: Attribute): Boolean =
     attribute match {
