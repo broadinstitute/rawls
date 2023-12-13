@@ -64,20 +64,22 @@ object EntityStreamingUtils {
           val newAccum = prev.accum ++ curr.accum
           AttrAccum(newAccum, None)
 
-        // midstream, we notice that the current entity's id is greater than the previous entity's id.
+        // midstream, we notice that the current entity's id is different than the previous entity's id.
         // take all the attributes we have gathered for the previous entity,
         // marshal them into an Entity object, emit that Entity, and start a new accumulator
         // for the new/current entity
-        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id < curr.accum.head.entityRecord.id =>
+        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id =>
           entityFinished(prev.accum, curr.accum)
 
+        // TODO AJ-1347: should we have another accumulator (set of entity type/names) that tracks if we see the
+        //    same entity twice in the stream?
         // midstream, we notice that the current entity's id is LESS than the previous entity's id.
         // this breaks the assumption that entities are ordered by their ids ascending, and indicates a coding
         // error. Throw an exception.
-        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id > curr.accum.head.entityRecord.id =>
-          throw new RawlsException(
-            "Unexpected internal error; the previous results may be incomplete. Cause: entity source input is in unexpected order."
-          )
+//        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id > curr.accum.head.entityRecord.id =>
+//          throw new RawlsException(
+//            "Unexpected internal error; the previous results may be incomplete. Cause: entity source input is in unexpected order."
+//          )
 
         // if current is empty but previous is not, it means the stream has finished.
         // Marshal and output the final Entity.
