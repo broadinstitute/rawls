@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.{
   RawlsFatalExceptionWithErrorReport
 }
 import slick.dbio.Effect.Read
-import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
+import slick.jdbc.{GetResult, JdbcProfile, ResultSetConcurrency, ResultSetType, SQLActionBuilder, TransactionIsolation}
 import slick.sql.SqlStreamingAction
 
 import java.sql.Timestamp
@@ -420,11 +420,75 @@ trait EntityComponent {
         )
       }
 
-      def activeActionForPagination(workspaceContext: Workspace,
-                                    entityType: String,
-                                    entityQuery: model.EntityQuery,
-                                    parentContext: RawlsRequestContext
-      ): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
+      // generate the clause to filter based on user search terms
+      def paginationFilterSql(prefix: String, alias: String, entityQuery: model.EntityQuery) = {
+        val filtersOption = entityQuery.filterTerms.map {
+          _.split(" ").toSeq.map { term =>
+            sql"concat(#$alias.name, ' ', #$alias.all_attribute_values) like ${'%' + term.toLowerCase + '%'}"
+          }
+        }
+
+        filtersOption match {
+          case None => sql""
+          case Some(filters) =>
+            concatSqlActions(
+              sql"#$prefix (",
+              reduceSqlActionsWithDelim(filters, sql" #${FilterOperators.toSql(entityQuery.filterOperator)} "),
+              sql") "
+            )
+        }
+      }
+
+      def activeActionForMetadata(workspaceContext: Workspace,
+                                  entityType: String,
+                                  entityQuery: model.EntityQuery,
+                                  parentContext: RawlsRequestContext
+      ): ReadWriteAction[(Int, Int)] = {
+        // standalone query to calculate the count of results that match our filter
+        def filteredCountQuery: ReadAction[Vector[Int]] =
+          entityQuery.columnFilter match {
+            case Some(columnFilter) =>
+              sql"""select count(distinct(e.id)) from ENTITY e, ENTITY_ATTRIBUTE_#${determineShard(
+                  workspaceContext.workspaceIdAsUUID
+                )} a
+              where a.owner_id = e.id
+              and e.deleted = 0
+              and e.entity_type = $entityType
+              and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+              and a.namespace = ${columnFilter.attributeName.namespace}
+              and a.name = ${columnFilter.attributeName.name}
+              and COALESCE(a.value_string, a.value_number) = ${columnFilter.term}
+       """.as[Int]
+            case _ =>
+              val filteredQuery =
+                sql"""select count(1) from ENTITY e
+                where e.deleted = 0
+                and e.entity_type = $entityType
+                and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """
+              concatSqlActions(filteredQuery, paginationFilterSql("and", "e", entityQuery)).as[Int]
+          }
+
+        for {
+          unfilteredCount <- traceDBIOWithParent("findActiveEntityByType", parentContext)(_ =>
+            findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
+          )
+          filteredCount <-
+            if (entityQuery.filterTerms.isEmpty && entityQuery.columnFilter.isEmpty) {
+              // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
+              DBIO.successful(Vector(unfilteredCount))
+            } else {
+              traceDBIOWithParent("filteredCountQuery", parentContext)(_ => filteredCountQuery)
+            }
+
+        } yield (unfilteredCount, filteredCount.head)
+      }
+      // END activeActionForMetadata
+
+      def activeActionForEntityAndAttributesSource(workspaceContext: Workspace,
+                                                   entityType: String,
+                                                   entityQuery: model.EntityQuery,
+                                                   parentContext: RawlsRequestContext
+      ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
         /*
           Lots of conditionals in here, to achieve the optimal SQL query for any given request. Pseudocode:
 
@@ -441,25 +505,6 @@ trait EntityComponent {
                       optional filter on e.all_attribute_values
                       sort by attribute, limit, offset) to get the proper pagination
          */
-
-        // generate the clause to filter based on user search terms
-        def filterSql(prefix: String, alias: String) = {
-          val filtersOption = entityQuery.filterTerms.map {
-            _.split(" ").toSeq.map { term =>
-              sql"concat(#$alias.name, ' ', #$alias.all_attribute_values) like ${'%' + term.toLowerCase + '%'}"
-            }
-          }
-
-          filtersOption match {
-            case None => sql""
-            case Some(filters) =>
-              concatSqlActions(
-                sql"#$prefix (",
-                reduceSqlActionsWithDelim(filters, sql" #${FilterOperators.toSql(entityQuery.filterOperator)} "),
-                sql") "
-              )
-          }
-        }
 
         // generate the clauses to limit the attributes returned to the user
         def attrSelectionSql(prefix: String) = {
@@ -523,35 +568,11 @@ trait EntityComponent {
         val paginationJoin = concatSqlActions(
           sql""" join (""",
           paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
-          filterSql("and", "e"),
+          paginationFilterSql("and", "e", entityQuery),
           filterByColumn,
           order(""),
           sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
-
-        // standalone query to calculate the count of results that match our filter
-        def filteredCountQuery: ReadAction[Vector[Int]] =
-          entityQuery.columnFilter match {
-            case Some(columnFilter) =>
-              sql"""select count(distinct(e.id)) from ENTITY e, ENTITY_ATTRIBUTE_#${determineShard(
-                  workspaceContext.workspaceIdAsUUID
-                )} a
-              where a.owner_id = e.id
-              and e.deleted = 0
-              and e.entity_type = $entityType
-              and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-              and a.namespace = ${columnFilter.attributeName.namespace}
-              and a.name = ${columnFilter.attributeName.name}
-              and COALESCE(a.value_string, a.value_number) = ${columnFilter.term}
-       """.as[Int]
-            case _ =>
-              val filteredQuery =
-                sql"""select count(1) from ENTITY e
-                where e.deleted = 0
-                and e.entity_type = $entityType
-                and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """
-              concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
-          }
 
         // the full query to generate the page of results, as requested by the user
         def pageQuery = {
@@ -572,7 +593,7 @@ trait EntityComponent {
               sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date, null
                              from ENTITY e
                              where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """,
-              filterSql("and", "e"),
+              paginationFilterSql("and", "e", entityQuery),
               order("e"),
               sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize}"
             ).as[EntityAndAttributesResult]
@@ -599,20 +620,26 @@ trait EntityComponent {
           }
         }
 
-        for {
-          unfilteredCount <- traceDBIOWithParent("findActiveEntityByType", parentContext)(_ =>
-            findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
-          )
-          filteredCount <-
-            if (entityQuery.filterTerms.isEmpty && entityQuery.columnFilter.isEmpty) {
-              // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
-              DBIO.successful(Vector(unfilteredCount))
-            } else {
-              traceDBIOWithParent("filteredCountQuery", parentContext)(_ => filteredCountQuery)
-            }
-          page <- traceDBIOWithParent("pageQuery", parentContext)(_ => pageQuery)
-        } yield (unfilteredCount, filteredCount.head, page)
+        pageQuery
       }
+      // END activeActionForEntityAndAttributesSource
+
+      @deprecated("Don't use this one; it materializes", "2023-12-12")
+      def activeActionForPagination(workspaceContext: Workspace,
+                                    entityType: String,
+                                    entityQuery: model.EntityQuery,
+                                    parentContext: RawlsRequestContext
+      ): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] =
+        for {
+          (unfilteredCount, filteredCount) <- activeActionForMetadata(workspaceContext,
+                                                                      entityType,
+                                                                      entityQuery,
+                                                                      parentContext
+          )
+          page <- traceDBIOWithParent("pageQuery", parentContext)(_ =>
+            activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
+          )
+        } yield (unfilteredCount, filteredCount, page)
       // END activeActionForPagination
 
       // actions which may include "deleted" hidden entities
@@ -958,6 +985,22 @@ trait EntityComponent {
           (unfilteredCount, page.size, page)
         }
 
+    def loadEntityPageCounts(workspaceContext: Workspace,
+                             entityType: String,
+                             entityQuery: model.EntityQuery,
+                             parentContext: RawlsRequestContext
+    ): ReadWriteAction[(Int, Int)] =
+      EntityAndAttributesRawSqlQuery.activeActionForMetadata(workspaceContext, entityType, entityQuery, parentContext)
+
+    def loadEntityPageSource(workspaceContext: Workspace,
+                             entityType: String,
+                             entityQuery: model.EntityQuery,
+                             parentContext: RawlsRequestContext
+    ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
+      EntityAndAttributesRawSqlQuery
+        .activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
+
+    @deprecated("Don't use this one, it materializes", "2023-12-12")
     // get paginated entities for UI display, as a result of executing a query
     def loadEntityPage(workspaceContext: Workspace,
                        entityType: String,

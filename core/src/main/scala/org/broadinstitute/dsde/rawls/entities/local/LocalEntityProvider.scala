@@ -1,12 +1,19 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.NotUsed
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  EntityAndAttributesResult,
+  EntityRecord,
+  ReadWriteAction
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{
   EntityProvider,
@@ -43,7 +50,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
-import slick.jdbc.TransactionIsolation
+import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
@@ -279,6 +286,52 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     dataSource.inTransaction { dataAccess =>
       withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
         DBIO.successful(entity)
+      }
+    }
+
+  override def queryEntitiesSource(entityType: String,
+                                   query: EntityQuery,
+                                   parentContext: RawlsRequestContext = requestArguments.ctx
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    // TODO: add tracing back in
+    dataSource.inTransaction { dataAccess =>
+      traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
+        childContext.tracingSpan.foreach { s1 =>
+          s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
+          s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
+          s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
+          s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
+          s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
+        }
+        for {
+          (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
+                                                                                          entityType,
+                                                                                          query,
+                                                                                          childContext
+          )
+        } yield {
+          // TODO: is this expectedPageCount logic solid?
+          val expectedPageCount: Int = if (filteredCount < query.pageSize) filteredCount else query.pageSize
+          // TODO: replicate the createEntityQueryResponse logic for page > available pages?
+          val metadata: EntityQueryResultMetadata =
+            EntityQueryResultMetadata(unfilteredCount, filteredCount, expectedPageCount)
+          val allAttrsStream =
+            dataAccess.entityQuery
+              .loadEntityPageSource(workspaceContext, entityType, query, childContext)
+              .transactionally
+              .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+              .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                       rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                       fetchSize = dataSource.dataAccess.fetchSize
+              )
+          val dbSource: Source[EntityAndAttributesResult, NotUsed] =
+            Source.fromPublisher(dataSource.database.stream(allAttrsStream))
+
+          val entitySource = EntityStreamingUtils.gatherEntities(dataSource, dbSource)
+
+          (metadata, entitySource)
+        }
+
       }
     }
 

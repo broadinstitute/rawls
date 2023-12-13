@@ -462,7 +462,8 @@ class EntityServiceSpec
 
     "EntityService.gatherEntities" should "handle empty list" in {
       val input = Source.empty[EntityAndAttributesResult]
-      val actual = services.entityService.gatherEntities(input).runWith(Sink.seq).futureValue
+      val actual =
+        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
 
       assertResult(0, "actual result should be empty")(actual.size)
     }
@@ -483,7 +484,8 @@ class EntityServiceSpec
         ).iterator
       )
 
-      val actual = services.entityService.gatherEntities(input).runWith(Sink.seq).futureValue
+      val actual =
+        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
 
       assertResult(
         Seq(
@@ -529,7 +531,8 @@ class EntityServiceSpec
         ).iterator
       )
 
-      val actual = services.entityService.gatherEntities(input).runWith(Sink.seq).futureValue
+      val actual =
+        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
 
       assertResult(
         Seq(
@@ -589,7 +592,8 @@ class EntityServiceSpec
         ).iterator
       )
 
-      val actual = services.entityService.gatherEntities(input).runWith(Sink.seq).futureValue
+      val actual =
+        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
 
       assertResult(
         Seq(
