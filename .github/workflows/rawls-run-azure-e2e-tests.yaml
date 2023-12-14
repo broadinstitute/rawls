@@ -120,12 +120,13 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
-          inputs: '{
-            "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
-            "repository": "${{ github.event.repository.full_name }}",
-            "ref": "${{ (inputs.build-branch && needs.init-github-context.outputs.fully-specified-branch) || ''}}",
-            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
-          }'
+          inputs: |
+            {
+              "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
+              "repository": "${{ github.event.repository.full_name }}",
+              "ref": "${{ inputs.build-branch && needs.init-github-context.outputs.fully-specified-branch || '' }}",
+              "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
+            }
 
       - name: Render Rawls version
         if: ${{ inputs.build-branch }}
