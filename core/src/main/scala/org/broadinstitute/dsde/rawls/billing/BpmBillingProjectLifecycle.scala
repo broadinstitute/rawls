@@ -217,7 +217,10 @@ class BpmBillingProjectLifecycle(
     landingZoneId: UUID,
     ctx: RawlsRequestContext
   ): Option[DeleteAzureLandingZoneResult] = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
-    case Failure(e: ApiException) if e.getCode == HttpStatus.SC_FORBIDDEN =>
+    // The service returns a 403 instead of a 404 when there's no landing zone present.
+    // It's fine to move on here, because if this was a 403 for permission reasons, we won't be able to delete the billing profile anyway,
+    // and we don't have a valid instance of a user having access to the billing project but not the underlying resources.
+    case Failure(e: ApiException) if e.getCode == HttpStatus.SC_FORBIDDEN || e.getCode == HttpStatus.SC_NOT_FOUND =>
       logger.warn(s"No landing zone available with ID $landingZoneId for BPM-backed billing project.")
       None
     case Failure(e: ApiException) =>
