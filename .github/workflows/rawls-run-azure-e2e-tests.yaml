@@ -19,17 +19,17 @@ on:
   workflow_dispatch:
     inputs:
       build-branch:
-        description: 'Build a custom image of Rawls from the branch specified (default is true). If false, the version installed on the bee is used.'
+        description: 'Build a custom image of Rawls from the specified branch. Default is true; if false, the tests run against the version specified by bee-version-template.'
         required: true
         default: true
         type: boolean
       branch:
-        description: 'Branch of rawls to build a custom image from and run tests on (ignored if custom image option is false)'
+        description: 'Branch of Rawls to build a custom image from. Ignored if custom image option is false.'
         required: true
         default: 'develop'
         type: string
       bee-version-template:
-        description: 'The version of services to install on the bee (default is dev, staging is supported).'
+        description: 'The version of services to install on the bee (default is dev, staging is supported). If the custom image option is false, this will also specify the Rawls version.'
         required: true
         default: 'dev'
         type: string
@@ -297,13 +297,14 @@ jobs:
       - create-bee-workflow
       - rawls-swat-e2e-test-job
       - destroy-bee-workflow
-    if: ${{ always() }} # Want to notify regardless of which step fails
+    if: ${{ failure() }} # Want to notify regardless of which step fails
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
-          # Channel is for #dsp-workspaces-test-alerts
-          channel-id: 'C03F21QEWV7'
+          # C03F21QEWV7 channel is for #dsp-workspaces-test-alerts
+          # C53JYBV9A channel is for #dsde-qa
+          channel-id: ${{ inputs.bee-version-template == 'staging' && 'C03F21QEWV7,C53JYBV9A' || 'C03F21QEWV7' }}
           slack-message: "Azure E2E Tests FAILED, branch: ${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
