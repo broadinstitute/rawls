@@ -71,6 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branch: ${{ steps.extract-inputs.outputs.branch }}
+      fully-specified-branch: refs/heads/${{ steps.extract-inputs.outputs.branch }}
       delete-bee: ${{ steps.extract-inputs.outputs.delete-bee }}
       student-subjects: ${{ steps.extract-inputs.outputs.student-subjects }}
       owner-subject: ${{ steps.extract-inputs.outputs.owner-subject }}
@@ -96,6 +97,7 @@ jobs:
       custom-version-json: ${{ (inputs.build-branch && steps.render-rawls-version.outputs.custom-version-json) || ''}}
     steps:
       - uses: 'actions/checkout@v3'
+        if: ${{ inputs.build-branch }}
         with:
           ref: ${{ needs.init-github-context.outputs.branch }}
 
@@ -121,7 +123,7 @@ jobs:
           inputs: '{
             "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
             "repository": "${{ github.event.repository.full_name }}",
-            "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
+            "ref": "${{ (inputs.build-branch && needs.init-github-context.outputs.fully-specified-branch) || ''}}",
             "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
           }'
 
@@ -231,7 +233,7 @@ jobs:
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
-            "ref": "${{ (inputs.build-branch && refs/heads/${{ needs.init-github-context.outputs.branch }}) || '' }}",
+            "ref": "${{ (inputs.build-branch && needs.init-github-context.outputs.fully-specified-branch ) || '' }}",
             "test-group-name": "workspaces_azure",
             "test-command": "${{ env.rawls_test_command }}",
             "e2e-env": "${{ env.E2E_ENV }}",
