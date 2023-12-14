@@ -400,9 +400,15 @@ trait WorkflowComponent {
       }
 
     def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID,
+                                                 limit: Int,
                                                  statuses: WorkflowStatuses.WorkflowStatus*
     ): ReadAction[Seq[WorkflowRecord]] =
-      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind (statuses.map(_.toString))).result
+      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind (statuses.map(_.toString))).take(limit).result
+
+    def countWorkflowRecsForSubmissionAndStatuses(submissionId: UUID,
+                                                  statuses: WorkflowStatuses.WorkflowStatus*
+    ): ReadAction[Int] =
+      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind (statuses.map(_.toString))).length.result
 
     def countWorkflowsForSubmissionByQueueStatus(submissionId: UUID): ReadAction[Map[String, Int]] = {
       val groupedSeq = findWorkflowsBySubmissionId(submissionId)

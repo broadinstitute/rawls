@@ -254,6 +254,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         for {
           wfRecs <- dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
             submissionId,
+            config.workflowsPerMonitorPass,
             WorkflowStatuses.runningStatuses: _*
           )
           (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
@@ -488,11 +489,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   def updateSubmissionStatus(
     dataAccess: DataAccess
   )(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] =
-    dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
+    dataAccess.workflowQuery.countWorkflowRecsForSubmissionAndStatuses(
       submissionId,
       (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses): _*
-    ) flatMap { workflowRecs =>
-      if (workflowRecs.isEmpty) {
+    ) flatMap { workflowCount =>
+      if (workflowCount == 0) {
         dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
           val finalStatus = SubmissionStatuses.withName(status) match {
             case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
@@ -779,5 +780,6 @@ final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration,
                                          submissionPollExpiration: FiniteDuration,
                                          trackDetailedSubmissionMetrics: Boolean,
                                          attributeUpdatesPerWorkflow: Int,
-                                         enableEmailNotifications: Boolean
+                                         enableEmailNotifications: Boolean,
+                                         workflowsPerMonitorPass: Int
 )

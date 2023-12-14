@@ -189,7 +189,7 @@ trait ApiServiceSpec
       slickDataSource
     )
 
-    val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
+    val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true, 20)
     val testConf = ConfigFactory.load()
     val submissionSupervisor = system.actorOf(
       SubmissionSupervisor

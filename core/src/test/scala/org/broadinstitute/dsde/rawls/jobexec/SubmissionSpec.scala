@@ -424,7 +424,7 @@ class SubmissionSpec(_system: ActorSystem)
       implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
       val config =
-        SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false)
+        SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false, 20)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
