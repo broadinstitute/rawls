@@ -111,7 +111,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       dataSource: SlickDataSource =>
         val status = WorkflowStatuses.Succeeded
         val attributesPerWorkflow = outputs.outputs.size * workflowsPerBatch
-        val monitor = createSubmissionMonitor(dataSource,
+        val monitor = createSubmissionMonitor(
+          dataSource,
           mockSamDAO,
           mockGoogleServicesDAO,
           testData.submissionUpdateEntity,

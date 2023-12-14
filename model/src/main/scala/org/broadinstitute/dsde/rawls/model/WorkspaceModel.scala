@@ -40,7 +40,7 @@ object Attributable {
   def attributeCount(values: Iterable[Attribute]): Int = {
     def countAttributes(attribute: Attribute): Int =
       attribute match {
-        case _: AttributeListElementable => 1
+        case _: AttributeListElementable     => 1
         case attributeList: AttributeList[_] => attributeList.list.map(countAttributes).sum
       }
 

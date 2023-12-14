@@ -351,15 +351,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
     // traverse and IO stuff ensures serial execution of the batches
-    batchWorkflowsWithOutputs(workflowsWithOutputs).traverse { batch =>
-      IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
-        handleOutputs(batch, dataAccess)
-      }))
-    }.unsafeToFuture().recoverWith {
-      // If there is something fatally wrong handling outputs for any workflow, mark all the workflows as failed
-      case fatal: RawlsFatalExceptionWithErrorReport =>
-        markWorkflowsFailed(allWorkflows, fatal)
-    } flatMap { _ =>
+    batchWorkflowsWithOutputs(workflowsWithOutputs)
+      .traverse { batch =>
+        IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
+          handleOutputs(batch, dataAccess)
+        }))
+      }
+      .unsafeToFuture()
+      .recoverWith {
+        // If there is something fatally wrong handling outputs for any workflow, mark all the workflows as failed
+        case fatal: RawlsFatalExceptionWithErrorReport =>
+          markWorkflowsFailed(allWorkflows, fatal)
+      } flatMap { _ =>
       // NEW TXN! Update statuses for workflows and submission.
       datasource.inTransaction { dataAccess =>
         // Refetch workflows as some may have been marked as Failed by handleOutputs.
@@ -396,10 +399,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
    * @param workflowsWithOutputs
    * @return
    */
-  def batchWorkflowsWithOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)]): List[Seq[(WorkflowRecord, ExecutionServiceOutputs)]] = {
+  def batchWorkflowsWithOutputs(
+    workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)]
+  ): List[Seq[(WorkflowRecord, ExecutionServiceOutputs)]] = {
     // batch workfowsWithOutpus into groups so as not to exceed config.attributeUpdatesPerWorkflow attributes per transaction
     val countOfAllAttributes = workflowsWithOutputs.foldLeft(0) { case (subTotal, (_, outputs)) =>
-      attributeCount(outputs.outputs.values.collect({ case Left(output) => output })) + subTotal
+      attributeCount(outputs.outputs.values.collect { case Left(output) => output }) + subTotal
     }
     // plus 1 because integer division rounds down
     val batchCount = countOfAllAttributes / config.attributeUpdatesPerWorkflow + 1
