@@ -93,8 +93,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
     outputs:
-      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
-    if: ${{ inputs.build-branch }}
+      custom-version-json: ${{ (inputs.build-branch && steps.render-rawls-version.outputs.custom-version-json) || ''}}
     steps:
       - uses: 'actions/checkout@v3'
         with:
@@ -102,6 +101,7 @@ jobs:
 
       - name: Bump the tag to a new version
         uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
+        if: ${{ inputs.build-branch }}
         id: tag
         env:
           DEFAULT_BUMP: patch
@@ -111,6 +111,7 @@ jobs:
 
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
+        if: ${{ inputs.build-branch }}
         with:
           run-name: "${{ env.RAWLS_BUILD_RUN_NAME }}"
           workflow: rawls-build
@@ -125,6 +126,7 @@ jobs:
           }'
 
       - name: Render Rawls version
+        if: ${{ inputs.build-branch }}
         id: render-rawls-version
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
@@ -136,14 +138,14 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - rawls-build-tag-publish-job
-    if: always()
     permissions:
       contents: 'read'
       id-token: 'write'
     steps:
-#      - name: Echo Rawls version
-#        run: |
-#          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+      - name: Echo Rawls version if branch is being built
+        if: ${{ inputs.build-branch}}
+        run: |
+          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -157,7 +159,8 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
-            "version-template": "${{ inputs.bee-version-template }}"
+            "version-template": "${{ inputs.bee-version-template }}",
+            "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
   # This job can be used for generating parameters for E2E tests (e.g. a random project name).
