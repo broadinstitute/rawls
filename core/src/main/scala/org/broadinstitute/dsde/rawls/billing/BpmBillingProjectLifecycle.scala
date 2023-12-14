@@ -4,8 +4,10 @@ import akka.http.scaladsl.model.StatusCodes.InternalServerError
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
+import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult}
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
+import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -214,7 +216,10 @@ class BpmBillingProjectLifecycle(
   private def cleanupLandingZone(
     landingZoneId: UUID,
     ctx: RawlsRequestContext
-  ): DeleteAzureLandingZoneResult = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
+  ): Option[DeleteAzureLandingZoneResult] = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
+    case Failure(e: ApiException) if e.getCode == HttpStatus.SC_FORBIDDEN =>
+      logger.warn(s"No landing zone available with ID $landingZoneId for BPM-backed billing project.")
+      None
     case Failure(e: ApiException) =>
       val msg = s"Unable to delete landing zone: ${e.getMessage}"
       throw new LandingZoneDeletionException(RawlsErrorReport(StatusCode.int2StatusCode(e.getCode), msg, e))
@@ -234,7 +239,7 @@ class BpmBillingProjectLifecycle(
           throw new LandingZoneDeletionException(
             RawlsErrorReport("WorkspaceManager", msg, status, Seq.empty, Seq.empty, None)
           )
-        case None => landingZoneResponse
+        case None => Some(landingZoneResponse)
       }
   }
 
@@ -257,7 +262,14 @@ class BpmBillingProjectLifecycle(
         logger.info(
           s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
         )
-        billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
+        Try(billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)) match {
+          case Failure(exception: BpmApiException) if exception.getCode == HttpStatus.SC_NOT_FOUND =>
+            logger.info(
+              s"Deleting BPM-backed billing project ${projectName.value}, no billing profile record found for $profileModelId"
+            )
+          case Failure(exception) => throw exception
+          case Success(_)         => ()
+        }
       case num =>
         logger.info(
           s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
@@ -272,7 +284,7 @@ class BpmBillingProjectLifecycle(
       jobControlId <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          Some(UUID.fromString(result.getJobReport.getId))
+          result.map(_.getJobReport.getId).map(UUID.fromString)
         case None =>
           logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
           None

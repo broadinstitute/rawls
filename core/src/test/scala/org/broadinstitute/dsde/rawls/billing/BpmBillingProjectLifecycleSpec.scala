@@ -2,14 +2,11 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
-import bio.terra.workspace.model.{
-  AzureLandingZoneDefinition,
-  CreateLandingZoneResult,
-  DeleteAzureLandingZoneResult,
-  ErrorReport,
-  JobReport
-}
+import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
+import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
@@ -32,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.mockito.ArgumentMatchers.{any, anyMap, anyString, argThat}
-import org.mockito.Mockito.{doNothing, doReturn, verify, when}
+import org.mockito.Mockito.{doNothing, doReturn, doThrow, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -852,9 +849,10 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val jobReportId = UUID.randomUUID()
     when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
       .thenReturn(
-        new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(UUID.randomUUID().toString))
+        new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(jobReportId.toString))
       )
     val bp =
       new BpmBillingProjectLifecycle(mock[SamDAO],
@@ -864,7 +862,29 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                      mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
-    Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf)
+    Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf) shouldBe (Some(jobReportId))
+
+    verify(workspaceManagerDAO).deleteLandingZone(landingZoneId, testContext)
+  }
+
+  it should "succeed returning None when there is no landing zone for the landing zone id" in {
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(Some(landingZoneId.toString)))
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
+      .thenAnswer(_ => throw new ApiException(403, "Forbidden"))
+    val bp =
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
+      )
+
+    Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf) shouldBe None
 
     verify(workspaceManagerDAO).deleteLandingZone(landingZoneId, testContext)
   }
@@ -1016,4 +1036,82 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 
+  it should "succeed if the billing profile does not exist in BPM" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+    val billingProfileId = profileModel.getId
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(Some(billingProfileId.toString)))
+    when(repo.deleteBillingProject(ArgumentMatchers.any())).thenReturn(Future.successful(true))
+    when(repo.getBillingProjectsWithProfile(Some(billingProfileId))).thenReturn(
+      Future.successful(
+        Seq(
+          RawlsBillingProject(
+            billingProjectName,
+            CreationStatuses.Ready,
+            None,
+            None,
+            billingProfileId = Some(billingProfileId.toString)
+          )
+        )
+      )
+    )
+    val bpm = mock[BillingProfileManagerDAO]
+
+    when(bpm.deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext)))
+      .thenAnswer(_ => throw new BpmApiException(HttpStatus.SC_NOT_FOUND, "not found"))
+
+    val bp = new BpmBillingProjectLifecycle(
+      mock[SamDAO],
+      repo,
+      bpm,
+      mock[HttpWorkspaceManagerDAO],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
+
+    Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
+
+    verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
+  }
+
+  it should "fail on non-404 errors from BPM" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+    val billingProfileId = profileModel.getId
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(Some(billingProfileId.toString)))
+    when(repo.deleteBillingProject(ArgumentMatchers.any())).thenReturn(Future.successful(true))
+    when(repo.getBillingProjectsWithProfile(Some(billingProfileId))).thenReturn(
+      Future.successful(
+        Seq(
+          RawlsBillingProject(
+            billingProjectName,
+            CreationStatuses.Ready,
+            None,
+            None,
+            billingProfileId = Some(billingProfileId.toString)
+          )
+        )
+      )
+    )
+    val bpm = mock[BillingProfileManagerDAO]
+
+    when(bpm.deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext)))
+      .thenAnswer(_ => throw new BpmApiException(HttpStatus.SC_FORBIDDEN, "forbidden"))
+
+    val bp = new BpmBillingProjectLifecycle(
+      mock[SamDAO],
+      repo,
+      bpm,
+      mock[HttpWorkspaceManagerDAO],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
+
+    intercept[BpmApiException] {
+      Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
+    }
+    verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
+  }
 }
