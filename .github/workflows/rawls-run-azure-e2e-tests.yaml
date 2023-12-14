@@ -19,10 +19,15 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch of rawls to run tests on (can be empty string to run against rawls version deployed in bee)'
+        description: 'Branch of rawls to run tests on (ignored if build-rawls is false)'
         required: true
         default: 'develop'
         type: string
+      build-branch:
+        description: 'Whether to build a custom image of Rawls from the branch argument specified (default is true). If false, the version installed on the bee is used.'
+        required: true
+        default: true
+        type: boolean
       bee-version-template:
         description: 'The version of services to install on the bee, default is dev'
         required: true
@@ -89,7 +94,7 @@ jobs:
       id-token: 'write'
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
-    if: ${{ (inputs.branch != '') }}
+    if: ${{ inputs.build-branch }}
     steps:
       - uses: 'actions/checkout@v3'
         with:
