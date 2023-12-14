@@ -23,6 +23,11 @@ on:
         required: true
         default: 'develop'
         type: string
+      bee-version-template:
+        description: 'The version of services to install on the bee, default is dev'
+        required: true
+        default: 'dev'
+        type: string
       delete-bee:
         description: 'Delete created bee after running tests'
         required: true
@@ -145,7 +150,7 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
-            "version-template": "dev",
+            "version-template": "${{ inputs.bee-version-template }}",
             "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
