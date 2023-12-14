@@ -315,35 +315,34 @@ jobs:
           # C03F21QEWV7 channel is for #dsp-workspaces-test-alerts
           # C53JYBV9A channel is for #dsde-qa
           channel-id: ${{ inputs.bee-version-template == 'staging' && 'C03F21QEWV7,C53JYBV9A' || 'C03F21QEWV7' }}
-          slack-message: "Azure E2E Tests FAILED, branch: ${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        payload: |
-          {
-            "blocks": [
-              {
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*Azure Workspaces E2E Test*"
-                }
-              },
-              {
-                "type": "section",
-                "fields": [
-                  {
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
                     "type": "mrkdwn",
-                    "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Result:*\n${{ steps.render-slack-status-icon.outputs.result }} ${{ job.status }}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                    "text": "*Azure Workspaces E2E Test*"
                   }
-                ]
-              }
-            ]
-          }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Result:*\n${{ steps.render-slack-status-icon.outputs.result }} ${{ job.status }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                    }
+                  ]
+                }
+              ]
+            }
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
