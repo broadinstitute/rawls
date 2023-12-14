@@ -520,12 +520,12 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           )
       )
 
-      Attributable.attributeCount(map1) shouldBe 1
-      Attributable.attributeCount(map2) shouldBe 0
-      Attributable.attributeCount(map3) shouldBe 0
-      Attributable.attributeCount(map4) shouldBe 3
-      Attributable.attributeCount(map5) shouldBe 2
-      Attributable.attributeCount(map6) shouldBe 6
+      Attributable.attributeCount(map1.values) shouldBe 1
+      Attributable.attributeCount(map2.values) shouldBe 0
+      Attributable.attributeCount(map3.values) shouldBe 0
+      Attributable.attributeCount(map4.values) shouldBe 3
+      Attributable.attributeCount(map5.values) shouldBe 2
+      Attributable.attributeCount(map6.values) shouldBe 6
     }
   }
 

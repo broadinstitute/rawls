@@ -2,6 +2,9 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor._
 import akka.pattern._
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.Counter
@@ -347,9 +350,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // and will be re-processed next time we call queryForWorkflowStatus().
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    datasource.inTransactionWithAttrTempTable { dataAccess =>
-      handleOutputs(workflowsWithOutputs, dataAccess)
-    } recoverWith {
+    // traverse and IO stuff ensures serial execution of the batches
+    batchWorkflowsWithOutputs(workflowsWithOutputs).traverse { batch =>
+      IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
+        handleOutputs(batch, dataAccess)
+      }))
+    }.unsafeToFuture().recoverWith {
       // If there is something fatally wrong handling outputs for any workflow, mark all the workflows as failed
       case fatal: RawlsFatalExceptionWithErrorReport =>
         markWorkflowsFailed(allWorkflows, fatal)
@@ -382,6 +388,22 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
       }
     }
+  }
+
+  /**
+   * Batch workflowsWithOutputs into groups so as not to exceed config.attributeUpdatesPerWorkflow attributes per transaction
+   *
+   * @param workflowsWithOutputs
+   * @return
+   */
+  def batchWorkflowsWithOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)]): List[Seq[(WorkflowRecord, ExecutionServiceOutputs)]] = {
+    // batch workfowsWithOutpus into groups so as not to exceed config.attributeUpdatesPerWorkflow attributes per transaction
+    val countOfAllAttributes = workflowsWithOutputs.foldLeft(0) { case (subTotal, (_, outputs)) =>
+      attributeCount(outputs.outputs.values.collect({ case Left(output) => output })) + subTotal
+    }
+    // plus 1 because integer division rounds down
+    val batchCount = countOfAllAttributes / config.attributeUpdatesPerWorkflow + 1
+    workflowsWithOutputs.grouped(workflowsWithOutputs.size / batchCount + 1).toList
   }
 
   private def toThurloeNotification(submission: Submission,
@@ -659,7 +681,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         val (optEntityUpdates, optWs) = updates
 
         val entityAttributeCount = optEntityUpdates map { update: WorkflowEntityUpdate =>
-          val cnt = attributeCount(update.upserts)
+          val cnt = attributeCount(update.upserts.values)
           logger.debug(
             s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId
                 .getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}"
@@ -668,7 +690,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         } getOrElse 0
 
         val workspaceAttributeCount = optWs map { workspace: Workspace =>
-          val cnt = attributeCount(workspace.attributes)
+          val cnt = attributeCount(workspace.attributes.values)
           logger.debug(
             s"Updating $cnt attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId
                 .getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}"
