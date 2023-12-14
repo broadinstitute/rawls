@@ -289,7 +289,7 @@ jobs:
           }'
           wait-for-completion: false
 
-  notify-slack-on-failure:
+  notify-slack:
     runs-on: ubuntu-latest
     needs:
       - init-github-context
@@ -297,8 +297,18 @@ jobs:
       - create-bee-workflow
       - rawls-swat-e2e-test-job
       - destroy-bee-workflow
-    if: ${{ failure() }} # Want to notify regardless of which step fails
+    if: always()
     steps:
+      - id: render-slack-status-icon
+        name: Render slack result status icon
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            RESULT="✅";
+          else
+            RESULT="❌"
+          fi
+          echo "result=$RESULT" >> $GITHUB_OUTPUT
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
@@ -306,5 +316,34 @@ jobs:
           # C53JYBV9A channel is for #dsde-qa
           channel-id: ${{ inputs.bee-version-template == 'staging' && 'C03F21QEWV7,C53JYBV9A' || 'C03F21QEWV7' }}
           slack-message: "Azure E2E Tests FAILED, branch: ${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        payload: |
+          {
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Azure Workspaces E2E Test*"
+                }
+              },
+              {
+                "type": "section",
+                "fields": [
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Result:*\n${{ steps.render-slack-status-icon.outputs.result }} ${{ job.status }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                  }
+                ]
+              }
+            ]
+          }
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
