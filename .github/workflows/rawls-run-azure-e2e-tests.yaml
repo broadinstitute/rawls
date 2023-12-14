@@ -156,7 +156,7 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
-            "version-template": "${{ inputs.bee-version-template }}",
+            "version-template": "${{ inputs.bee-version-template }}"
           }'
 
   # This job can be used for generating parameters for E2E tests (e.g. a random project name).
