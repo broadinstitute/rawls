@@ -105,6 +105,10 @@ trait WorkflowComponent {
                                                    Seq
     ]
 
+    // the rand() function in MySQL
+    // https://dev.mysql.com/doc/refman/8.0/en/mathematical-functions.html#function_rand
+    val rand = SimpleFunction.nullary[Double]("rand")
+
     def get(workspaceContext: Workspace,
             submissionId: String,
             entityType: String,
@@ -402,8 +406,17 @@ trait WorkflowComponent {
     def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID,
                                                  limit: Int,
                                                  statuses: WorkflowStatuses.WorkflowStatus*
-    ): ReadAction[Seq[WorkflowRecord]] =
-      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind (statuses.map(_.toString))).take(limit).result
+    ): ReadAction[Seq[WorkflowRecord]] = {
+      // grab a random sample of $limit workflows for this submission and statuses
+      val randomSample = findWorkflowsBySubmissionId(submissionId)
+        .filter(_.status inSetBind (statuses.map(_.toString)))
+        .sortBy(_ => rand)
+        .take(limit)
+
+      // sort that random sample by id; when the total number of workflows in the db is less than
+      // $limit, this gives a deterministic result ... which helps with unit tests
+      randomSample.sortBy(x => x.id).result
+    }
 
     def countWorkflowRecsForSubmissionAndStatuses(submissionId: UUID,
                                                   statuses: WorkflowStatuses.WorkflowStatus*
