@@ -142,10 +142,11 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
-      - name: Echo Rawls version if branch is being built
-        if: ${{ inputs.build-branch}}
+      - name: Echo Rawls version and environment template
         run: |
-          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+          echo "built custom Rawls=${{ inputs.build-branch}}"
+          echo "custom build Rawls version=${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
+          echo "version-template=${{ inputs.bee-version-template }}"
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -230,7 +231,7 @@ jobs:
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
-            "ref": "",
+            "ref": "${{ (inputs.build-branch && refs/heads/${{ needs.init-github-context.outputs.branch }}) || '' }}",
             "test-group-name": "workspaces_azure",
             "test-command": "${{ env.rawls_test_command }}",
             "e2e-env": "${{ env.E2E_ENV }}",
