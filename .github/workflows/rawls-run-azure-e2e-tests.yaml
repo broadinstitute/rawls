@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch of rawls to run tests on'
+        description: 'Branch of rawls to run tests on (can be empty string to run against rawls version deployed in bee)'
         required: true
         default: 'develop'
         type: string
@@ -89,6 +89,7 @@ jobs:
       id-token: 'write'
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+    if: ${{ (inputs.branch != '') }}
     steps:
       - uses: 'actions/checkout@v3'
         with:
@@ -134,9 +135,9 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
-      - name: Echo Rawls version
-        run: |
-          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+#      - name: Echo Rawls version
+#        run: |
+#          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -151,7 +152,6 @@ jobs:
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
             "version-template": "${{ inputs.bee-version-template }}",
-            "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
   # This job can be used for generating parameters for E2E tests (e.g. a random project name).
@@ -221,7 +221,7 @@ jobs:
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "ENV": "qa",
-            "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
+            "ref": "",
             "test-group-name": "workspaces_azure",
             "test-command": "${{ env.rawls_test_command }}",
             "e2e-env": "${{ env.E2E_ENV }}",
@@ -283,7 +283,7 @@ jobs:
       - create-bee-workflow
       - rawls-swat-e2e-test-job
       - destroy-bee-workflow
-    if: ${{ failure() }} # Want to notify regardless of which step fails
+    if: ${{ never() }} # Want to notify regardless of which step fails
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
