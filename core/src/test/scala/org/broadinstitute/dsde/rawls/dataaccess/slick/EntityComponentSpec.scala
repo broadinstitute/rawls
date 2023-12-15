@@ -176,7 +176,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             context,
             AttributeEntityReference("Sample", "nonexistent"),
             Map(AttributeName.withDefaultNS("newAttribute") -> AttributeNumber(2)),
-            Seq(AttributeName.withDefaultNS("type"))
+            Seq(AttributeName.withDefaultNS("type")),
+            RawlsTracingContext(None)
           )
         )
       }
@@ -194,7 +195,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             context,
             AttributeEntityReference("Sample", "sample1"),
             Map(AttributeName.withDefaultNS("type") -> AttributeNumber(2)),
-            Seq(AttributeName.withDefaultNS("type"))
+            Seq(AttributeName.withDefaultNS("type")),
+            RawlsTracingContext(None)
           )
         )
       }
@@ -237,7 +239,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val expected = testData.sample1.attributes ++ inserts ++ updates -- deletes
 
       runAndWait {
-        entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), inserts ++ updates, deletes)
+        entityQuery.saveEntityPatch(context,
+                                    AttributeEntityReference("Sample", "sample1"),
+                                    inserts ++ updates,
+                                    deletes,
+                                    RawlsTracingContext(None)
+        )
       }
 
       assertSameElements(
@@ -282,7 +289,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts,
-                                    Seq.empty[AttributeName]
+                                    Seq.empty[AttributeName],
+                                    RawlsTracingContext(None)
         )
       )
 
@@ -307,7 +315,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     updates,
-                                    Seq.empty[AttributeName]
+                                    Seq.empty[AttributeName],
+                                    RawlsTracingContext(None)
         )
       )
 
@@ -328,7 +337,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts,
-                                    Seq.empty[AttributeName]
+                                    Seq.empty[AttributeName],
+                                    RawlsTracingContext(None)
         )
       )
 
@@ -354,7 +364,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     updates,
-                                    Seq.empty[AttributeName]
+                                    Seq.empty[AttributeName],
+                                    RawlsTracingContext(None)
         )
       )
 
@@ -382,7 +393,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts,
-                                    Seq.empty[AttributeName]
+                                    Seq.empty[AttributeName],
+                                    RawlsTracingContext(None)
         )
       )
 
@@ -399,7 +411,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     updates,
-                                    Seq.empty[AttributeName]
+                                    Seq.empty[AttributeName],
+                                    RawlsTracingContext(None)
         )
       )
 
@@ -1614,7 +1627,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(wsctx,
                                     entityToSave.toReference,
                                     Map.empty,
-                                    List(AttributeName.withDefaultNS("attributeListToDelete"))
+                                    List(AttributeName.withDefaultNS("attributeListToDelete")),
+                                    RawlsTracingContext(None)
         )
       )
 

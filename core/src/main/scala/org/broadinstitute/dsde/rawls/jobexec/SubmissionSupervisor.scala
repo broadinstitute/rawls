@@ -262,9 +262,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       case MonitoredSubmissionException(workspaceName, submissionId, cause) =>
         // increment smaRestart counter
         restartCounter(workspaceName, submissionId, cause) += 1
-        logger.error(s"error monitoring submission $submissionId in workspace $workspaceName after $count times", cause)
+        logger.error(
+          s"error monitoring submission $submissionId in workspace $workspaceName after $count times: ${cause.getMessage}",
+          cause
+        )
       case _ =>
-        logger.error(s"error monitoring submission after $count times", throwable)
+        logger.error(s"error monitoring submission after $count times: ${throwable.getMessage}", throwable)
     }
 
     new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)

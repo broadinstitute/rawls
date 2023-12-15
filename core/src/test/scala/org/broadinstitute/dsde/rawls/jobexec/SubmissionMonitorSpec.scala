@@ -828,7 +828,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         workflowRecs.map(r =>
           (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
         ),
-        this
+        this,
+        RawlsTracingContext(Option.empty)
       )
     )
 
@@ -891,7 +892,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs.map(r =>
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -947,7 +949,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs2.map(r =>
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -985,7 +988,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
            )
           )
         ),
-        this
+        this,
+        RawlsTracingContext(Option.empty)
       )
     )
 
@@ -1030,7 +1034,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1055,7 +1060,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         "o1" -> Left(AttributeValueList(Vector(AttributeString("123"), AttributeString("456"), AttributeString("789"))))
       )
       runAndWait(
-        monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))), this)
+        monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))),
+                              this,
+                              RawlsTracingContext(Option.empty)
+        )
       )
 
       assertResult(
@@ -1103,7 +1111,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1133,7 +1142,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1344,7 +1354,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
       runAndWait(
         monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))),
-                              this
+                              this,
+                              RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1428,7 +1439,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs.map(r =>
             (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1575,7 +1587,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1648,7 +1661,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
