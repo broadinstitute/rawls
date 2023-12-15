@@ -303,13 +303,11 @@ jobs:
     steps:
       - name: Set workflow status on failure
         if: ${{ failure() }}
-        run: echo "FAILED" >> "$GITHUB_OUTPUT"
         env:
           WORKFLOW_STATUS: '❌ FAILED'
 
       - name: Set workflow status on success
         if: ${{ success() }}
-        run: echo "PASSED" "$GITHUB_OUTPUT"
         env:
           WORKFLOW_STATUS: '✅ PASSED'
 
