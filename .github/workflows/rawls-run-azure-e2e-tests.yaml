@@ -66,7 +66,36 @@ env:
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
   E2E_ENV: 'azure_e2e.env'
   STAGING_CHANNELS: 'C03F21QEWV7,C53JYBV9A' # C53JYBV9A channel is for #dsde-qa
-  DEV_CHANNELS: 'C03F21QEWV7' #dsp-workspaces-test-alerts
+  DEV_CHANNELS: 'C01GBDNLH18' #dsp-workspaces-test-alerts C03F21QEWV7
+  NOTIFICATION_TEXT: |
+    {
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Azure Workspaces E2E Test*"
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Result:*\nREPLACE_STATUS"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+            }
+          ]
+        }
+      ]
+    }
 
 jobs:
   init-github-context:
@@ -328,35 +357,8 @@ jobs:
         if: success()
         with:
           channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
-          payload: |
-            {
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Azure Workspaces E2E Test*"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Result:*\n✅ PASSED"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
-                    }
-                  ]
-                }
-              ]
-            }
+          payload: ${{ env.NOTIFICATION_TEXT }}
+
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
       - name: Notify slack on failure
