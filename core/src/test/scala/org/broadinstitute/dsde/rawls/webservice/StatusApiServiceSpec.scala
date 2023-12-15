@@ -35,7 +35,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
   // This configures how long the calls to `whenReady(Future)` and `eventually` will wait
   // before giving up and failing the test.
   // See: http://doc.scalatest.org/2.2.4/index.html#org.scalatest.concurrent.Futures
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext

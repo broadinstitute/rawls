@@ -59,19 +59,22 @@ object SubmissionMonitorActor {
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             config: SubmissionMonitorConfig,
+            queryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionMonitorActor(workspaceName,
-                                 submissionId,
-                                 datasource,
-                                 samDAO,
-                                 googleServicesDAO,
-                                 notificationDAO,
-                                 executionServiceCluster,
-                                 credential,
-                                 config,
-                                 workbenchMetricBaseName
+      new SubmissionMonitorActor(
+        workspaceName,
+        submissionId,
+        datasource,
+        samDAO,
+        googleServicesDAO,
+        notificationDAO,
+        executionServiceCluster,
+        credential,
+        config,
+        queryTimeout,
+        workbenchMetricBaseName
       )
     )
 
@@ -114,6 +117,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val config: SubmissionMonitorConfig,
+                             val queryTimeout: Duration,
                              override val workbenchMetricBaseName: String
 ) extends Actor
     with SubmissionMonitor
@@ -176,6 +180,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val config: SubmissionMonitorConfig
+  val queryTimeout: Duration
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
@@ -629,7 +634,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       DBIO.successful(())
     } else {
       DBIO.sequence(entityUpdates map { entityUpd =>
-        dataAccess.entityQuery.saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq())
+        dataAccess.entityQuery
+          .saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq())
+          .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
       })
     }
   }
@@ -650,10 +657,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(
-        s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}"
+        s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs.size} outputs"
       )
       logger.debug(
-        s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap}"
+        s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap.size} expressions"
       )
 
       val parsedExpressions: Seq[Try[OutputExpression]] = outputExpressionMap.map { case (outputName, outputExprStr) =>

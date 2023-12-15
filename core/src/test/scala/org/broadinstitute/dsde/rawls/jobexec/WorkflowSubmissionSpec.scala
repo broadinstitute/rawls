@@ -61,7 +61,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     with MockitoTestUtils
     with RawlsStatsDTestUtils {
   import driver.api._
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockServer = RemoteServicesMockServer()
@@ -399,7 +399,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       }
     }
   }
-
 
   it should "submit a workflow with the right zones for a regional bucket" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)

@@ -132,14 +132,14 @@ trait WorkspaceSupport {
     } yield ()
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
-  def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): ReadWriteAction[Boolean] =
+  def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): Boolean =
     // if the source has any auth domains, the dest must also *at least* have those auth domains
-    if (sourceWorkspaceADs.subsetOf(destWorkspaceADs)) DBIO.successful(true)
+    if (sourceWorkspaceADs.subsetOf(destWorkspaceADs)) true
     else {
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
       val errorMsg =
         s"Source workspace has an Authorization Domain containing the groups ${missingGroups.mkString(", ")}, which are missing on the destination workspace"
-      DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg))
     }
 
   // WorkspaceContext helpers

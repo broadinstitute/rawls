@@ -57,17 +57,20 @@ object SubmissionSupervisor {
             notificationDAO: NotificationDAO,
             bucketCredential: Credential,
             submissionMonitorConfig: SubmissionMonitorConfig,
+            entityQueryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionSupervisor(executionServiceCluster,
-                               datasource,
-                               samDAO,
-                               googleServicesDAO,
-                               notificationDAO,
-                               bucketCredential,
-                               submissionMonitorConfig,
-                               workbenchMetricBaseName
+      new SubmissionSupervisor(
+        executionServiceCluster,
+        datasource,
+        samDAO,
+        googleServicesDAO,
+        notificationDAO,
+        bucketCredential,
+        submissionMonitorConfig,
+        entityQueryTimeout,
+        workbenchMetricBaseName
       )
     )
 }
@@ -87,6 +90,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            notificationDAO: NotificationDAO,
                            bucketCredential: Credential,
                            submissionMonitorConfig: SubmissionMonitorConfig,
+                           entityQueryTimeout: Duration,
                            override val workbenchMetricBaseName: String
 ) extends Actor
     with LazyLogging
@@ -195,6 +199,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           executionServiceCluster,
           credential,
           submissionMonitorConfig,
+          entityQueryTimeout,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher"),

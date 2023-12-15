@@ -5,6 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -30,6 +31,7 @@ import java.util.UUID
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.{Success, Try}
 
@@ -52,7 +54,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()
@@ -1918,6 +1920,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
         new Builder().build(),
         config,
+        ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
         "test"
       )
     )
@@ -1942,6 +1945,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       config,
+      ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
       "test"
     )
   }
@@ -2019,5 +2023,6 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,
+                            val queryTimeout: Duration,
                             override val workbenchMetricBaseName: String
 ) extends SubmissionMonitor {}

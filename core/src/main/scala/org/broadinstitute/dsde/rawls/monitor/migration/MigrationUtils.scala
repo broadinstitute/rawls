@@ -56,7 +56,7 @@ object MigrationUtils {
   }
 
   object Implicits {
-    implicit val outcomeJsonFormat = new RootJsonFormat[Outcome] {
+    implicit val outcomeJsonFormat: RootJsonFormat[Outcome] = new RootJsonFormat[Outcome] {
       val JsSuccess = JsString("success")
 
       object JsFailure {

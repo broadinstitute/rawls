@@ -11,6 +11,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
+import scala.concurrent.ExecutionContext
 import scala.util.Failure
 
 class DataRepoEntityProviderBuilderSpec
@@ -18,7 +19,7 @@ class DataRepoEntityProviderBuilderSpec
     with DataRepoEntityProviderSpecSupport
     with TestDriverComponent
     with Matchers {
-  implicit override val executionContext = TestExecutionContext.testExecutionContext
+  implicit override val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
   val defaultEntityRequestArguments =
     EntityRequestArguments(workspace, testContext, Some(DataReferenceName("referenceName")))
 

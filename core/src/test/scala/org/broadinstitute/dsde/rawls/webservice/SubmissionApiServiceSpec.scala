@@ -41,7 +41,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   // increase the route timeout slightly for this test as the "large submission" tests sometimes
   // bump up against the default 5 second timeout.
-  implicit override val routeTestTimeout = RouteTestTimeout(30.seconds)
+  implicit override val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(30.seconds)
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
 

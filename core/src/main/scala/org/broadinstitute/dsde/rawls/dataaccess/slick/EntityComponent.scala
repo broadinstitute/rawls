@@ -237,7 +237,8 @@ trait EntityComponent {
     // noinspection SqlDialectInspection,DuplicatedCode
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
-      implicit val getEntityRecord = GetResult(r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+      implicit val getEntityRecord: GetResult[EntityRecord] =
+        GetResult(r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] =
         if (entities.isEmpty) {
@@ -317,7 +318,7 @@ trait EntityComponent {
       val driver: JdbcProfile = EntityComponent.this.driver
 
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
-      implicit val getEntityAndAttributesResult = GetResult { r =>
+      implicit val getEntityAndAttributesResult: GetResult[EntityAndAttributesResult] = GetResult { r =>
         // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
         val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
 

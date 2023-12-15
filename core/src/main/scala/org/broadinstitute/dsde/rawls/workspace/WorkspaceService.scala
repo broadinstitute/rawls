@@ -226,7 +226,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   import dataSource.dataAccess.driver.api._
 
-  implicit val errorReportSource = ErrorReportSource("rawls")
+  implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
@@ -1128,8 +1128,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
               val forceEnhancedBucketMonitoring =
-                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceBucketNameOption.exists(
-                  _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceWorkspace.bucketName.startsWith(
+                  s"${config.workspaceBucketNamePrefix}-secure"
                 )
               createNewWorkspaceContext(
                 destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),

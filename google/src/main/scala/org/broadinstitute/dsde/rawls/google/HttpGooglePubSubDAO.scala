@@ -36,7 +36,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   val jsonFactory = GsonFactory.getDefaultInstance
 
   private val characterEncoding = "UTF-8"
-  implicit val service = GoogleInstrumentedService.PubSub
+  implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.PubSub
 
   override def createTopic(topicName: String) =
     retryWithRecoverWhen500orGoogleError { () =>

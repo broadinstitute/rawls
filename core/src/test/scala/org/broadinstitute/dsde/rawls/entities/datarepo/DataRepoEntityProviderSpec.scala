@@ -43,7 +43,7 @@ import org.mockserver.model.HttpResponse.response
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.util.{Random, Success}
@@ -54,7 +54,7 @@ class DataRepoEntityProviderSpec
     with TestDriverComponent
     with Matchers {
 
-  implicit override val executionContext = TestExecutionContext.testExecutionContext
+  implicit override val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
   behavior of "DataRepoEntityProvider.googleProject"
 

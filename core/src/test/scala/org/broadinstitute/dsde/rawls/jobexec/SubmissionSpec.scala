@@ -6,6 +6,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import bio.terra.workspace.model.CloningInstructionsEnum
+import cats.effect.IO
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
@@ -38,7 +39,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
+import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -51,6 +52,7 @@ import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -75,7 +77,7 @@ class SubmissionSpec(_system: ActorSystem)
   import driver.api._
 
   def this() = this(ActorSystem("SubmissionSpec"))
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   val testDbName = "SubmissionSpec"
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
@@ -419,7 +421,7 @@ class SubmissionSpec(_system: ActorSystem)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster =
         MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
-      implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+      implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
       val config =
         SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false)
@@ -427,6 +429,9 @@ class SubmissionSpec(_system: ActorSystem)
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
+
+      val testConf = ConfigFactory.load()
+
       val submissionSupervisor = system.actorOf(
         SubmissionSupervisor
           .props(
@@ -437,13 +442,12 @@ class SubmissionSpec(_system: ActorSystem)
             mockNotificationDAO,
             gcsDAO.getBucketServiceAccountCredential,
             config,
+            testConf.getDuration("entities.queryTimeout").toScala,
             workbenchMetricBaseName = workbenchMetricBaseName
           )
           .withDispatcher("submission-monitor-dispatcher"),
         submissionSupervisorActorName
       )
-
-      val testConf = ConfigFactory.load()
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
@@ -496,6 +500,7 @@ class SubmissionSpec(_system: ActorSystem)
         bigQueryServiceFactory,
         DataRepoEntityProviderConfig(100, 10000, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
 

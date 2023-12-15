@@ -11,6 +11,8 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.InsertExtensionMethod
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import slick.ast.BaseTypedType
+import slick.jdbc.JdbcType
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -189,15 +191,18 @@ trait RawlsBillingProjectComponent {
 
   // these 2 implicits are lazy because there is a timing problem initializing MappedColumnType, if they are not lazy
   // we get null pointer exceptions
-  implicit lazy val googleApiTypeColumnType = MappedColumnType.base[GoogleApiType, String](
-    apiType => apiType.toString,
-    stringValue => GoogleApiTypes.withName(stringValue)
-  )
+  implicit lazy val googleApiTypeColumnType: JdbcType[GoogleApiType] with BaseTypedType[GoogleApiType] =
+    MappedColumnType.base[GoogleApiType, String](
+      apiType => apiType.toString,
+      stringValue => GoogleApiTypes.withName(stringValue)
+    )
 
-  implicit lazy val googleOperationNameColumnType = MappedColumnType.base[GoogleOperationName, String](
-    operationName => operationName.toString,
-    stringValue => GoogleOperationNames.withName(stringValue)
-  )
+  implicit lazy val googleOperationNameColumnType
+    : JdbcType[GoogleOperationName] with BaseTypedType[GoogleOperationName] =
+    MappedColumnType.base[GoogleOperationName, String](
+      operationName => operationName.toString,
+      stringValue => GoogleOperationNames.withName(stringValue)
+    )
 
   class RawlsBillingProjectOperationTable(tag: Tag)
       extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {

@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.BondJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
+import spray.json.RootJsonFormat
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,10 +22,12 @@ case class Providers(providers: List[String])
 object BondJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val BondServiceAccountEmailFormat = jsonFormat1(BondServiceAccountEmail)
-  implicit val BondResponseDataFormat = jsonFormat1(BondResponseData)
+  implicit val BondServiceAccountEmailFormat: RootJsonFormat[BondServiceAccountEmail] = jsonFormat1(
+    BondServiceAccountEmail
+  )
+  implicit val BondResponseDataFormat: RootJsonFormat[BondResponseData] = jsonFormat1(BondResponseData)
 
-  implicit val providersFormat = jsonFormat1(Providers)
+  implicit val providersFormat: RootJsonFormat[Providers] = jsonFormat1(Providers)
 
 }
 

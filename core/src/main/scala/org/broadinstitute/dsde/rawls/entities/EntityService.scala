@@ -540,44 +540,31 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  def copyEntities(entityCopyDef: EntityCopyDefinition,
-                   uri: Uri,
-                   linkExistingEntities: Boolean
-  ): Future[EntityCopyResponse] =
-    getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { destWorkspaceContext =>
-      getV2WorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,
-                                          SamWorkspaceActions.read,
-                                          Some(WorkspaceAttributeSpecs(all = false))
-      ) flatMap { sourceWorkspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          for {
-            sourceAD <- DBIO.from(
-              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, ctx)
-            )
-            destAD <- DBIO.from(
-              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspaceId, ctx)
-            )
-            result <- authDomainCheck(sourceAD.toSet, destAD.toSet) flatMap { _ =>
-              val entityNames = entityCopyDef.entityNames
-              val entityType = entityCopyDef.entityType
-              val copyResults = traceDBIOWithParent("checkAndCopyEntities", ctx)(s1 =>
-                dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext,
-                                                            destWorkspaceContext,
-                                                            entityType,
-                                                            entityNames,
-                                                            linkExistingEntities,
-                                                            s1
-                )
-              )
-              copyResults
-            }
-          } yield result
-        }
-      }
-    }
+  def copyEntities(entityCopyDef: EntityCopyDefinition, linkExistingEntities: Boolean): Future[EntityCopyResponse] =
+    for {
+      destWsCtx <- getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
+                                                       SamWorkspaceActions.write,
+                                                       Some(WorkspaceAttributeSpecs(all = false))
+      )
+      sourceWsCtx <- getV2WorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,
+                                                         SamWorkspaceActions.read,
+                                                         Some(WorkspaceAttributeSpecs(all = false))
+      )
+      sourceAD <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWsCtx.workspaceId, ctx)
+      destAD <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWsCtx.workspaceId, ctx)
+      _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
+      entityRequestArguments = EntityRequestArguments(destWsCtx, ctx, None, None)
+      entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+      entityCopyResponse <- entityProvider
+        .copyEntities(sourceWsCtx,
+                      destWsCtx,
+                      entityCopyDef.entityType,
+                      entityCopyDef.entityNames,
+                      linkExistingEntities,
+                      ctx
+        )
+        .recover(bigQueryRecover)
+    } yield entityCopyResponse
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
                                   entityUpdates: Seq[EntityUpdateDefinition],

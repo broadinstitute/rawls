@@ -5,13 +5,13 @@ import com.typesafe.config.Config
 
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 /**
  * Created by dvoet on 10/9/15.
  */
 object TestExecutionContext {
-  implicit val testExecutionContext = new TestExecutionContext()
+  implicit val testExecutionContext: TestExecutionContext = new TestExecutionContext()
 }
 class TestExecutionContext() extends ExecutionContextExecutor {
   val pool = Executors.newCachedThreadPool()

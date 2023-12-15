@@ -185,7 +185,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     * Zero is an ok status with no messages.
     * Append uses && on the ok flag, and ++ on the messages.
     */
-  implicit private val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
+  implicit private val SubsystemStatusMonoid: Monoid[SubsystemStatus] = new Monoid[SubsystemStatus] {
     def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus =
       SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
     def empty: SubsystemStatus = OkStatus
