@@ -299,19 +299,19 @@ jobs:
       - destroy-bee-workflow
     if: always()
     env:
-      STATUS: ''
+      WORKFLOW_STATUS: ''
     steps:
-      - name: Set status on failure
+      - name: Set workflow status on failure
         if: ${{ failure() }}
-        run: echo "FAILED" >> $GITHUB_ENV
+        run: echo "FAILED" >> "$GITHUB_OUTPUT"
         env:
-          STATUS: '❌ FAILED'
+          WORKFLOW_STATUS: '❌ FAILED'
 
-      - name: Set status on success
+      - name: Set workflow status on success
         if: ${{ success() }}
-        run: echo "PASSED" >> $GITHUB_ENV
+        run: echo "PASSED" "$GITHUB_OUTPUT"
         env:
-          STATUS: '✅ PASSED'
+          WORKFLOW_STATUS: '✅ PASSED'
 
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
@@ -338,7 +338,7 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Result:*\n${{ env.STATUS }}"
+                      "text": "*Result:*\n${{ env.WORKFLOW_STATUS }}"
                     },
                     {
                       "type": "mrkdwn",
