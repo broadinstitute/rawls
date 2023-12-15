@@ -316,6 +316,8 @@ jobs:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
+          # C03F21QEWV7 channel is for #dsp-workspaces-test-alerts
+          # C53JYBV9A channel is for #dsde-qa
           channel-id: ${{ inputs.bee-version-template == 'staging' && 'C03F21QEWV7,C53JYBV9A' || 'C03F21QEWV7' }}
           payload: |
             {
