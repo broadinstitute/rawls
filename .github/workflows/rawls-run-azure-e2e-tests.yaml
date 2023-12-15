@@ -290,72 +290,69 @@ jobs:
 #          }'
 #          wait-for-completion: false
 
-  status-icon:
-    runs-on: ubuntu-latest
-    needs:
-      - init-github-context
-    #      - rawls-build-tag-publish-job
-    #      - create-bee-workflow
-    #      - rawls-swat-e2e-test-job
-    #      - destroy-bee-workflow
-    if: always()
-    steps:
-      - name: Set workflow status on failure
-        if: ${{ failure() }}
-        run: echo "FAILED" >> "$GITHUB_OUTPUT"
-        env:
-          WORKFLOW_STATUS: '❌ FAILED'
-
-      - name: Set workflow status on success
-        if: ${{ success() }}
-        run: echo "PASSED" "$GITHUB_OUTPUT"
-        env:
-          WORKFLOW_STATUS: '✅ PASSED'
-
   notify-slack:
     runs-on: ubuntu-latest
     needs:
-      - status-icon
-#      - rawls-build-tag-publish-job
-#      - create-bee-workflow
-#      - rawls-swat-e2e-test-job
-#      - destroy-bee-workflow
+      - init-github-context
+      #      - rawls-build-tag-publish-job
+      #      - create-bee-workflow
+      #      - rawls-swat-e2e-test-job
+      #      - destroy-bee-workflow
     if: always()
-    steps:
-      - name: Notify slack
-        uses: slackapi/slack-github-action@v1.23.0
-        with:
-          # C03F21QEWV7 channel is for #dsp-workspaces-test-alerts
-          # C53JYBV9A channel is for #dsde-qa
-          channel-id: ${{ inputs.bee-version-template == 'staging' && 'C03F21QEWV7,C53JYBV9A' || 'C03F21QEWV7' }}
-          payload: |
-            {
-              "blocks": [
+    outputs:
+      steps: ${{ steps.workspace.outputs }}
+    jobs:
+      set-status:
+        runs-on: ubuntu-latest
+        outputs:
+          steps: ${{ toJson(steps) }}
+        steps:
+          - name: Set workflow status on failure
+            if: ${{ failure() }}
+            run: echo "::set-output name=workflow_status::❌ FAILED"
+
+          - name: Set workflow status on success
+            if: ${{ success() }}
+            run: echo "::set-output name=workflow_status::✅ PASSED"
+
+      notify:
+        needs: set-status
+        runs-on: ubuntu-latest
+        steps:
+          - name: Notify slack
+            uses: slackapi/slack-github-action@v1.23.0
+            with:
+              # C03F21QEWV7 channel is for #dsp-workspaces-test-alerts
+              # C53JYBV9A channel is for #dsde-qa
+              channel-id: ${{ inputs.bee-version-template == 'staging' && 'C03F21QEWV7,C53JYBV9A' || 'C03F21QEWV7' }}
+              payload: |
                 {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Azure Workspaces E2E Test*"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
+                  "blocks": [
                     {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": "*Azure Workspaces E2E Test*"
+                      }
                     },
                     {
-                      "type": "mrkdwn",
-                      "text": "*Result:*\n${{ env.WORKFLOW_STATUS }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Result:*\n${{ needs.set-status.outputs.workflow_status }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                        }
+                      ]
                     }
                   ]
                 }
-              ]
-            }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
+            env:
+              SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
