@@ -298,7 +298,21 @@ jobs:
       - rawls-swat-e2e-test-job
       - destroy-bee-workflow
     if: always()
+    env:
+      STATUS: ''
     steps:
+      - name: Set status on failure
+        if: ${{ failure() }}
+        run: echo "FAILED" >> $GITHUB_ENV
+        env:
+          STATUS: '❌ FAILED'
+
+      - name: Set status on success
+        if: ${{ success() }}
+        run: echo "PASSED" >> $GITHUB_ENV
+        env:
+          STATUS: '✅ PASSED'
+
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
@@ -322,7 +336,7 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Result:*\n${{ failure() && '❌ FAILED' || '✅ PASSED' }}"
+                      "text": "*Result:*\n${{ env.STATUS }}"
                     },
                     {
                       "type": "mrkdwn",
