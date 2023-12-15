@@ -707,81 +707,83 @@ trait AttributeComponent {
     def rewriteAttrsAction(attributesToSave: Traversable[RECORD],
                            existingAttributes: Traversable[RECORD],
                            insertFunction: Seq[RECORD] => String => WriteAction[Int]
-    ): ReadWriteAction[Set[OWNER_ID]] = {
-      val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
-      val existingAttrMap = toPrimaryKeyMap(existingAttributes)
+    ): ReadWriteAction[Set[OWNER_ID]] =
+      traceDBIOWithParent("AttributeComponent.rewriteAttrsAction", RawlsTracingContext(Option.empty)) {
+        tracingContext =>
+          val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
+          val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
-      // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
-      // therefore, we use this ComparableRecord class which omits the id when checking equality between existing and to-save.
-      // note this does not include transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
-      // here, and transactionId will eventually be going away, so don't bother
-      object ComparableRecord {
-        def fromRecord(rec: RECORD): ComparableRecord =
-          new ComparableRecord(
-            rec.ownerId,
-            rec.namespace,
-            rec.name,
-            rec.valueString,
-            rec.valueNumber,
-            rec.valueBoolean,
-            rec.valueJson,
-            rec.valueEntityRef,
-            rec.listIndex,
-            rec.listLength,
-            rec.deleted,
-            rec.deletedDate
+          // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
+          // therefore, we use this ComparableRecord class which omits the id when checking equality between existing and to-save.
+          // note this does not include transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
+          // here, and transactionId will eventually be going away, so don't bother
+          object ComparableRecord {
+            def fromRecord(rec: RECORD): ComparableRecord =
+              new ComparableRecord(
+                rec.ownerId,
+                rec.namespace,
+                rec.name,
+                rec.valueString,
+                rec.valueNumber,
+                rec.valueBoolean,
+                rec.valueJson,
+                rec.valueEntityRef,
+                rec.listIndex,
+                rec.listLength,
+                rec.deleted,
+                rec.deletedDate
+              )
+          }
+
+          case class ComparableRecord(
+            ownerId: OWNER_ID,
+            namespace: String,
+            name: String,
+            valueString: Option[String],
+            valueNumber: Option[Double],
+            valueBoolean: Option[Boolean],
+            valueJson: Option[String],
+            valueEntityRef: Option[Long],
+            listIndex: Option[Int],
+            listLength: Option[Int],
+            deleted: Boolean,
+            deletedDate: Option[Timestamp]
           )
+
+          // create a set of ComparableRecords representing the existing attributes
+          val existingAttributesSet: Set[ComparableRecord] =
+            existingAttributes.toSet.map(r => ComparableRecord.fromRecord(r))
+
+          val existingKeys = existingAttrMap.keySet
+
+          // insert attributes which are in save but not exists
+          val attributesToInsert = toSaveAttrMap.filterKeys(!existingKeys.contains(_))
+
+          // delete attributes which are in exists but not save
+          val attributesToDelete = existingAttrMap.filterKeys(!toSaveAttrMap.keySet.contains(_))
+
+          val attributesToUpdate = toSaveAttrMap.filter { case (k, v) =>
+            existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
+            !existingAttributesSet.contains(
+              ComparableRecord.fromRecord(v)
+            ) // if the attribute exists and is unchanged, don't update it
+          }
+
+          // collect the parent objects (e.g. entity, workspace) that have writes, so we know which object rows to re-calculate
+          val ownersWithWrites: Set[OWNER_ID] = (attributesToInsert.values.map(_.ownerId) ++
+            attributesToUpdate.values.map(_.ownerId) ++
+            attributesToDelete.values.map(_.ownerId)).toSet
+
+          // perform the inserts/updates/deletes
+          patchAttributesAction(
+            attributesToInsert.values,
+            attributesToUpdate.values,
+            attributesToDelete.values.map(_.id),
+            insertFunction,
+            tracingContext
+          )
+            .map(_ => ownersWithWrites)
       }
-
-      case class ComparableRecord(
-        ownerId: OWNER_ID,
-        namespace: String,
-        name: String,
-        valueString: Option[String],
-        valueNumber: Option[Double],
-        valueBoolean: Option[Boolean],
-        valueJson: Option[String],
-        valueEntityRef: Option[Long],
-        listIndex: Option[Int],
-        listLength: Option[Int],
-        deleted: Boolean,
-        deletedDate: Option[Timestamp]
-      )
-
-      // create a set of ComparableRecords representing the existing attributes
-      val existingAttributesSet: Set[ComparableRecord] =
-        existingAttributes.toSet.map(r => ComparableRecord.fromRecord(r))
-
-      val existingKeys = existingAttrMap.keySet
-
-      // insert attributes which are in save but not exists
-      val attributesToInsert = toSaveAttrMap.filterKeys(!existingKeys.contains(_))
-
-      // delete attributes which are in exists but not save
-      val attributesToDelete = existingAttrMap.filterKeys(!toSaveAttrMap.keySet.contains(_))
-
-      val attributesToUpdate = toSaveAttrMap.filter { case (k, v) =>
-        existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
-        !existingAttributesSet.contains(
-          ComparableRecord.fromRecord(v)
-        ) // if the attribute exists and is unchanged, don't update it
-      }
-
-      // collect the parent objects (e.g. entity, workspace) that have writes, so we know which object rows to re-calculate
-      val ownersWithWrites: Set[OWNER_ID] = (attributesToInsert.values.map(_.ownerId) ++
-        attributesToUpdate.values.map(_.ownerId) ++
-        attributesToDelete.values.map(_.ownerId)).toSet
-
-      // perform the inserts/updates/deletes
-      patchAttributesAction(
-        attributesToInsert.values,
-        attributesToUpdate.values,
-        attributesToDelete.values.map(_.id),
-        insertFunction,
-        RawlsTracingContext(Option(startSpan("rewriteAttrsAction")))
-      )
-        .map(_ => ownersWithWrites)
-    }
 
     // noinspection SqlDialectInspection
     object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {

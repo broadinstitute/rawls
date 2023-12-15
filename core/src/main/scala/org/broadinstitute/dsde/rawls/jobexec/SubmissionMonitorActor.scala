@@ -7,7 +7,6 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
@@ -30,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
@@ -325,81 +324,96 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
    */
   def handleStatusResponses(
     response: ExecutionServiceStatusResponse
-  )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] = {
-    response.statusResponse.collect { case Failure(t) => t }.foreach { t =>
-      logger.error(s"Failure monitoring workflow in submission $submissionId", t)
-    }
-
-    // all workflow records in this status response list
-    val allWorkflows = response.statusResponse.collect { case Success(Some((aWorkflow, _))) =>
-      aWorkflow
-    }
-
-    // just the workflow records in this response list which have outputs
-    val workflowsWithOutputs = response.statusResponse.collect { case Success(Some((workflowRec, Some(outputs)))) =>
-      (workflowRec, outputs)
-    }
-
-    def markWorkflowsFailed(workflows: Seq[WorkflowRecord], fatal: RawlsFatalExceptionWithErrorReport) = {
-      logger.error(
-        s"Marking ${workflows.length} workflows as failed handling outputs in $submissionId with user-visible reason ${fatal.toString})"
-      )
-      datasource.inTransaction { dataAccess =>
-        DBIO.sequence(workflows map { workflowRecord =>
-          dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-            dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
-        })
+  )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] =
+    trace("SubmissionMonitorActor.handleStatusResponses") { rootSpan =>
+      response.statusResponse.collect { case Failure(t) => t }.foreach { t =>
+        logger.error(s"Failure monitoring workflow in submission $submissionId", t)
       }
-    }
 
-    // Attach the outputs in a txn of their own.
-    // If attaching outputs fails for legit reasons (e.g. they're missing), it will mark the workflow as failed. This is correct.
-    // If attaching outputs throws an exception (because e.g. deadlock or ConcurrentModificationException), the status will remain un-updated
-    // and will be re-processed next time we call queryForWorkflowStatus().
-    // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
-    // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    // traverse and IO stuff ensures serial execution of the batches
-    batchWorkflowsWithOutputs(workflowsWithOutputs)
-      .traverse { batch =>
-        IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
-          handleOutputs(batch, dataAccess)
-        }))
+      // all workflow records in this status response list
+      val allWorkflows = response.statusResponse.collect { case Success(Some((aWorkflow, _))) =>
+        aWorkflow
       }
-      .unsafeToFuture()
-      .recoverWith {
-        // If there is something fatally wrong handling outputs for any workflow, mark all the workflows as failed
-        case fatal: RawlsFatalExceptionWithErrorReport =>
-          markWorkflowsFailed(allWorkflows, fatal)
-      } flatMap { _ =>
-      // NEW TXN! Update statuses for workflows and submission.
-      datasource.inTransaction { dataAccess =>
-        // Refetch workflows as some may have been marked as Failed by handleOutputs.
-        dataAccess.workflowQuery.findWorkflowByIds(allWorkflows.map(_.id)).result flatMap { updatedRecs =>
-          // New statuses according to the execution service.
-          val workflowIdToNewStatus = allWorkflows.map(workflowRec => workflowRec.id -> workflowRec.status).toMap
 
-          // No need to update statuses for any workflows that are in terminal statuses.
-          // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
-          val workflowsToUpdate = updatedRecs.filter(rec =>
-            !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status))
-          )
-          val workflowsWithNewStatuses = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
+      // just the workflow records in this response list which have outputs
+      val workflowsWithOutputs = response.statusResponse.collect { case Success(Some((workflowRec, Some(outputs)))) =>
+        (workflowRec, outputs)
+      }
 
-          // to minimize database updates batch 1 update per workflow status
-          DBIO.sequence(workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
-            dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+      def markWorkflowsFailed(workflows: Seq[WorkflowRecord], fatal: RawlsFatalExceptionWithErrorReport) = {
+        logger.error(
+          s"Marking ${workflows.length} workflows as failed handling outputs in $submissionId with user-visible reason ${fatal.toString})"
+        )
+        datasource.inTransaction { dataAccess =>
+          DBIO.sequence(workflows map { workflowRecord =>
+            dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+              dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
           })
+        }
+      }
 
-        } flatMap { _ =>
-          // update submission after workflows are updated
-          updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
-            // return a message about whether our submission is done entirely
-            StatusCheckComplete(shouldStop)
+      // Attach the outputs in a txn of their own.
+      // If attaching outputs fails for legit reasons (e.g. they're missing), it will mark the workflow as failed. This is correct.
+      // If attaching outputs throws an exception (because e.g. deadlock or ConcurrentModificationException), the status will remain un-updated
+      // and will be re-processed next time we call queryForWorkflowStatus().
+      // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
+      // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
+      // traverse and IO stuff ensures serial execution of the batches
+      val batchedWorkflowsWithOutputs = batchWorkflowsWithOutputs(workflowsWithOutputs).zipWithIndex
+
+      traceWithParent("batchedWorkflowsWithOutputs", rootSpan) { span =>
+        span.tracingSpan.foreach { s =>
+          s.putAttribute("numBatches", OpenCensusAttributeValue.longAttributeValue(batchedWorkflowsWithOutputs.length))
+        }
+
+        batchedWorkflowsWithOutputs
+          .traverse { case (batch, idx) =>
+            IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
+              traceDBIOWithParent(s"batch", span) { innerSpan =>
+                innerSpan.tracingSpan.foreach { s =>
+                  s.putAttribute("batchIndex", OpenCensusAttributeValue.longAttributeValue(idx))
+                }
+                handleOutputs(batch, dataAccess, innerSpan)
+              }
+            }))
+          }
+          .unsafeToFuture()
+          .recoverWith {
+            // If there is something fatally wrong handling outputs for any workflow, mark all the workflows as failed
+            case fatal: RawlsFatalExceptionWithErrorReport =>
+              markWorkflowsFailed(allWorkflows, fatal)
+          }
+      } flatMap { _ =>
+        // NEW TXN! Update statuses for workflows and submission.
+        datasource.inTransaction { dataAccess =>
+          // Refetch workflows as some may have been marked as Failed by handleOutputs.
+          dataAccess.workflowQuery.findWorkflowByIds(allWorkflows.map(_.id)).result flatMap { updatedRecs =>
+            // New statuses according to the execution service.
+            val workflowIdToNewStatus = allWorkflows.map(workflowRec => workflowRec.id -> workflowRec.status).toMap
+
+            // No need to update statuses for any workflows that are in terminal statuses.
+            // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
+            val workflowsToUpdate = updatedRecs.filter(rec =>
+              !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status))
+            )
+            val workflowsWithNewStatuses =
+              workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
+
+            // to minimize database updates batch 1 update per workflow status
+            DBIO.sequence(workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
+              dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+            })
+
+          } flatMap { _ =>
+            // update submission after workflows are updated
+            updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
+              // return a message about whether our submission is done entirely
+              StatusCheckComplete(shouldStop)
+            }
           }
         }
       }
     }
-  }
 
   /**
    * Batch workflowsWithOutputs into groups so as not to exceed config.attributeUpdatesPerWorkflow attributes per transaction
@@ -540,65 +554,71 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
-  def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(
-    implicit executionContext: ExecutionContext
+  def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
+                    dataAccess: DataAccess,
+                    tracingContext: RawlsTracingContext
+  )(implicit
+    executionContext: ExecutionContext
   ): ReadWriteAction[Unit] =
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(())
     } else {
-      val rootSpan = RawlsTracingContext(Option(startSpan("SubmissionMonitorActor.handleOutputs")))
-      rootSpan.tracingSpan.foreach { span =>
-        span.putAttribute("submissionId", OpenCensusAttributeValue.stringAttributeValue(submissionId.toString))
-        span.putAttribute("numWorkflowsWithOutputs",
-                          OpenCensusAttributeValue.longAttributeValue(workflowsWithOutputs.length)
-        )
-      }
-
-      for {
-        // load all the starting data
-        workspace <- traceDBIOWithParent("getWorkspace", rootSpan)(_ => getWorkspace(dataAccess)).map(
-          _.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found"))
-        )
-        entitiesById <- traceDBIOWithParent("listWorkflowEntitiesById", rootSpan)(_ =>
-          listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
-        )
-        outputExpressionMap <- traceDBIOWithParent("listMethodConfigOutputsForSubmission", rootSpan)(_ =>
-          listMethodConfigOutputsForSubmission(dataAccess)
-        )
-        emptyOutputs <- traceDBIOWithParent("getSubmissionEmptyOutputParam", rootSpan)(_ =>
-          getSubmissionEmptyOutputParam(dataAccess)
-        )
-
-        // figure out the updates that need to occur to entities and workspaces
-        updatedEntitiesAndWorkspace = attachOutputs(workspace,
-                                                    workflowsWithOutputs,
-                                                    entitiesById,
-                                                    outputExpressionMap,
-                                                    emptyOutputs
-        )
-
-        // for debugging purposes
-        workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
-        entityUpdates = updatedEntitiesAndWorkspace.collect {
-          case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
+      traceDBIOWithParent("handleOutputs", tracingContext) { rootSpan =>
+        rootSpan.tracingSpan.foreach { span =>
+          span.putAttribute("submissionId", OpenCensusAttributeValue.stringAttributeValue(submissionId.toString))
+          span.putAttribute("numWorkflowsWithOutputs",
+                            OpenCensusAttributeValue.longAttributeValue(workflowsWithOutputs.length)
+          )
         }
-        _ =
-          if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
-            logger.info("handleOutputs writing to both workspace and entity attributes")
-          else if (workspacesToUpdate.nonEmpty)
-            logger.info("handleOutputs writing to workspace attributes only")
-          else if (entityUpdates.nonEmpty)
-            logger.info("handleOutputs writing to entity attributes only")
-          else
-            logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
 
-        // save everything to the db
-        _ <- traceDBIOWithParent("saveWorkspace", rootSpan)(_ => saveWorkspace(dataAccess, updatedEntitiesAndWorkspace))
-        _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace, rootSpan) // has its own tracing
-        _ <- traceDBIOWithParent("saveErrors", rootSpan)(_ =>
-          saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess)
-        )
-      } yield ()
+        for {
+          // load all the starting data
+          workspace <- traceDBIOWithParent("getWorkspace", rootSpan)(_ => getWorkspace(dataAccess)).map(
+            _.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found"))
+          )
+          entitiesById <- traceDBIOWithParent("listWorkflowEntitiesById", rootSpan)(_ =>
+            listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
+          )
+          outputExpressionMap <- traceDBIOWithParent("listMethodConfigOutputsForSubmission", rootSpan)(_ =>
+            listMethodConfigOutputsForSubmission(dataAccess)
+          )
+          emptyOutputs <- traceDBIOWithParent("getSubmissionEmptyOutputParam", rootSpan)(_ =>
+            getSubmissionEmptyOutputParam(dataAccess)
+          )
+
+          // figure out the updates that need to occur to entities and workspaces
+          updatedEntitiesAndWorkspace = attachOutputs(workspace,
+                                                      workflowsWithOutputs,
+                                                      entitiesById,
+                                                      outputExpressionMap,
+                                                      emptyOutputs
+          )
+
+          // for debugging purposes
+          workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
+          entityUpdates = updatedEntitiesAndWorkspace.collect {
+            case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
+          }
+          _ =
+            if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to both workspace and entity attributes")
+            else if (workspacesToUpdate.nonEmpty)
+              logger.info("handleOutputs writing to workspace attributes only")
+            else if (entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to entity attributes only")
+            else
+              logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
+
+          // save everything to the db
+          _ <- traceDBIOWithParent("saveWorkspace", rootSpan)(_ =>
+            saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
+          )
+          _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace, rootSpan) // has its own tracing
+          _ <- traceDBIOWithParent("saveErrors", rootSpan)(_ =>
+            saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess)
+          )
+        } yield ()
+      }
     }
 
   def getWorkspace(dataAccess: DataAccess): ReadAction[Option[Workspace]] =
