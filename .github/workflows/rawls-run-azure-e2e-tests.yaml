@@ -65,7 +65,6 @@ env:
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
   E2E_ENV: 'azure_e2e.env'
-  WORKFLOW_STATUS: ''
 
 jobs:
   init-github-context:
@@ -304,11 +303,11 @@ jobs:
     steps:
       - name: Set workflow status on failure
         if: ${{ failure() }}
-        run: echo "workflow-status=❌ FAILED" >> "$GITHUB_OUTPUT"
+        run: echo "workflow-status=❌ FAILED" >> $GITHUB_OUTPUT
 
       - name: Set workflow status on success
         if: ${{ success() }}
-        run: echo "workflow-status=✅ PASSED" >> "$GITHUB_OUTPUT"
+        run: echo "workflow-status=✅ PASSED" >> $GITHUB_OUTPUT
 
   notify-slack:
     runs-on: ubuntu-latest
