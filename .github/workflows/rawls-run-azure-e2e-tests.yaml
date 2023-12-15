@@ -301,12 +301,11 @@ jobs:
     steps:
       - id: render-slack-status-icon
         name: Render slack result status icon
-        if: always()
         run: |
-          if [ ${{ job.status }} == 'success' ]; then
-            RESULT="✅";
+          if [ ${{ failure() }} ]; then
+            RESULT="✅ PASSED";
           else
-            RESULT="❌"
+            RESULT="❌ FAILED"
           fi
           echo "result=$RESULT" >> $GITHUB_OUTPUT
       - name: Notify slack
@@ -334,7 +333,7 @@ jobs:
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*Result:*\n${{ steps.render-slack-status-icon.outputs.result }} ${{ job.status }}"
+                      "text": "*Result:*\n${{ steps.render-slack-status-icon.outputs.result }}"
                     },
                     {
                       "type": "mrkdwn",
