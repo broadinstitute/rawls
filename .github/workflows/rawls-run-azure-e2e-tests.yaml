@@ -169,19 +169,19 @@ jobs:
 #            "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
 #          }'
 #
-#  # This job can be used for generating parameters for E2E tests (e.g. a random project name).
-#  params-gen:
-#    runs-on: ubuntu-latest
-#    outputs:
-#      project-name: ${{ steps.gen.outputs.project_name }}
-#    steps:
-#      - uses: 'actions/checkout@v3'
-#
-#      - name: Generate a random billing project name
-#        id: 'gen'
-#        run: |
-#          project_name=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
-#          echo "project_name=${project_name}" >> $GITHUB_OUTPUT
+  # This job can be used for generating parameters for E2E tests (e.g. a random project name).
+  params-gen:
+    runs-on: ubuntu-latest
+    outputs:
+      project-name: ${{ steps.gen.outputs.project_name }}
+    steps:
+      - uses: 'actions/checkout@v3'
+
+      - name: Generate a random billing project name
+        id: 'gen'
+        run: |
+          project_name=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
+          echo "project_name=${project_name}" >> $GITHUB_OUTPUT
 #
 #  # Azure Managed App Coordinates are defined in the following workflow:
 #  #   https://github.com/broadinstitute/terra-github-workflows/blob/main/.github/workflows/attach-landing-zone-to-bee.yaml
@@ -249,7 +249,7 @@ jobs:
     needs:
       - init-github-context
       - params-gen
-      - rawls-swat-e2e-test-job
+      # - rawls-swat-e2e-test-job
     if: always()
     steps:
       - name: dispatch to terra-github-workflows
