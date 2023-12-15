@@ -67,7 +67,7 @@ env:
   E2E_ENV: 'azure_e2e.env'
   STAGING_CHANNELS: 'C03F21QEWV7,C53JYBV9A' # C53JYBV9A channel is for #dsde-qa
   DEV_CHANNELS: 'C01GBDNLH18' #dsp-workspaces-test-alerts C03F21QEWV7
-  NOTIFICATION_TEXT: |
+  NOTIFICATION_TEXT: >
     {
       "blocks": [
         {
