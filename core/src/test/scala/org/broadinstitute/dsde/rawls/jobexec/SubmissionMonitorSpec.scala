@@ -108,6 +108,36 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       }
   }
 
+  Set((5, 1000), (5, 1002), (5000, 1002), (5000, 0)).foreach { case (workflowsPerBatch, workflowCount) =>
+    it should s"batchWorkflowsWithOutputs workflowsPerBatch=$workflowsPerBatch, workflowCount=$workflowCount" in withDefaultTestDatabase {
+      dataSource: SlickDataSource =>
+        val status = WorkflowStatuses.Succeeded
+        val attributesPerWorkflow = outputs.outputs.size * workflowsPerBatch
+        val monitor = createSubmissionMonitor(
+          dataSource,
+          mockSamDAO,
+          mockGoogleServicesDAO,
+          testData.submissionUpdateEntity,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(status.toString),
+          attributesPerWorkflow
+        )
+
+        val workflowsRecs = runAndWait(
+          workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+        )
+        val result = monitor.batchWorkflowsWithOutputs(Seq.fill(workflowCount)((workflowsRecs.head, outputs))).size
+        val expected = if (workflowCount % workflowsPerBatch == 0) {
+          workflowCount / workflowsPerBatch
+        } else {
+          workflowCount / workflowsPerBatch + 1
+        }
+        assertResult(expected) {
+          result
+        }
+    }
+  }
+
   it should "queryExecutionServiceForStatus submitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val monitor = createSubmissionMonitor(
       dataSource,
@@ -1901,9 +1931,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               googleServicesDAO: GoogleServicesDAO,
                               submission: Submission,
                               wsName: WorkspaceName,
-                              execSvcDAO: ExecutionServiceDAO
+                              execSvcDAO: ExecutionServiceDAO,
+                              attributesPerWorkflow: Int = 10
   ): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, 10, true)
+    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
