@@ -301,11 +301,11 @@ jobs:
     #      - create-bee-workflow
     #      - rawls-swat-e2e-test-job
     #      - destroy-bee-workflow
-    if: always()
+    if: ${{ failure() }}
     steps:
       - name: Notify slack on success
         uses: slackapi/slack-github-action@v1.23.0
-        if: success()
+        if: ${{ success() }}
         with:
           channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
           payload: |
@@ -341,7 +341,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
       - name: Notify slack on failure
         uses: slackapi/slack-github-action@v1.23.0
-        if: failure()
+        if: ${{ failure() }}
         with:
           channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
           payload: |
