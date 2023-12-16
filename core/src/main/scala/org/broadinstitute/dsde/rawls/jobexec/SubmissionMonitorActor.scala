@@ -326,6 +326,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     response: ExecutionServiceStatusResponse
   )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] =
     trace("SubmissionMonitorActor.handleStatusResponses") { rootSpan =>
+      rootSpan.tracingSpan.foreach { s =>
+        s.putAttribute("submissionId", OpenCensusAttributeValue.stringAttributeValue(submissionId.toString))
+        s.putAttribute("workspaceNamespace", OpenCensusAttributeValue.stringAttributeValue(workspaceName.namespace))
+        s.putAttribute("workspaceName", OpenCensusAttributeValue.stringAttributeValue(workspaceName.name))
+      }
+
       response.statusResponse.collect { case Failure(t) => t }.foreach { t =>
         logger.error(s"Failure monitoring workflow in submission $submissionId", t)
       }
