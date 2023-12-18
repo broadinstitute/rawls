@@ -18,10 +18,20 @@ on:
     - cron: "0 10/12 * * *"
   workflow_dispatch:
     inputs:
+      build-branch:
+        description: 'Build a custom image of Rawls from the specified branch. Default is true; if false, the tests run against the version specified by bee-version-template.'
+        required: true
+        default: true
+        type: boolean
       branch:
-        description: 'Branch of rawls to run tests on'
+        description: 'Branch of Rawls to build a custom image from. Ignored if custom image option is false.'
         required: true
         default: 'develop'
+        type: string
+      bee-version-template:
+        description: 'The version of services to install on the bee (default is dev, staging is supported). If the custom image option is false, this will also specify the Rawls version.'
+        required: true
+        default: 'dev'
         type: string
       delete-bee:
         description: 'Delete created bee after running tests'
@@ -55,12 +65,15 @@ env:
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}-dev'
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
   E2E_ENV: 'azure_e2e.env'
+  STAGING_CHANNELS: 'C03F21QEWV7,C53JYBV9A' # C53JYBV9A channel is for #dsde-qa
+  DEV_CHANNELS: 'C03F21QEWV7' #dsp-workspaces-test-alerts
 
 jobs:
   init-github-context:
     runs-on: ubuntu-latest
     outputs:
       branch: ${{ steps.extract-inputs.outputs.branch }}
+      fully-specified-branch: refs/heads/${{ steps.extract-inputs.outputs.branch }}
       delete-bee: ${{ steps.extract-inputs.outputs.delete-bee }}
       student-subjects: ${{ steps.extract-inputs.outputs.student-subjects }}
       owner-subject: ${{ steps.extract-inputs.outputs.owner-subject }}
@@ -83,14 +96,16 @@ jobs:
       contents: 'read'
       id-token: 'write'
     outputs:
-      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+      custom-version-json: ${{ inputs.build-branch && steps.render-rawls-version.outputs.custom-version-json || ''}}
     steps:
       - uses: 'actions/checkout@v3'
+        if: ${{ inputs.build-branch }}
         with:
           ref: ${{ needs.init-github-context.outputs.branch }}
 
       - name: Bump the tag to a new version
         uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
+        if: ${{ inputs.build-branch }}
         id: tag
         env:
           DEFAULT_BUMP: patch
@@ -100,20 +115,23 @@ jobs:
 
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
+        if: ${{ inputs.build-branch }}
         with:
           run-name: "${{ env.RAWLS_BUILD_RUN_NAME }}"
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
-          inputs: '{
-            "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
-            "repository": "${{ github.event.repository.full_name }}",
-            "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
-            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
-          }'
+          inputs: |
+            {
+              "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
+              "repository": "${{ github.event.repository.full_name }}",
+              "ref": "${{ needs.init-github-context.outputs.fully-specified-branch }}",
+              "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
+            }
 
       - name: Render Rawls version
+        if: ${{ inputs.build-branch }}
         id: render-rawls-version
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
@@ -129,9 +147,11 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
-      - name: Echo Rawls version
+      - name: Echo Rawls version and version template
         run: |
-          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+          echo "built custom Rawls=${{ inputs.build-branch}}"
+          echo "custom build Rawls version=${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
+          echo "version-template=${{ inputs.bee-version-template }}"
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -145,7 +165,7 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
-            "version-template": "dev",
+            "version-template": "${{ inputs.bee-version-template }}",
             "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
@@ -211,17 +231,18 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
-          inputs: '{
-            "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":\"${{ needs.params-gen.outputs.project-name }}\"}",
-            "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
-            "bee-name": "${{ env.BEE_NAME }}",
-            "ENV": "qa",
-            "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}",
-            "test-group-name": "workspaces_azure",
-            "test-command": "${{ env.rawls_test_command }}",
-            "e2e-env": "${{ env.E2E_ENV }}",
-            "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
-          }'
+          inputs: |
+            {
+              "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":\"${{ needs.params-gen.outputs.project-name }}\"}",
+              "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
+              "bee-name": "${{ env.BEE_NAME }}",
+              "ENV": "qa",
+              "ref": "${{ inputs.build-branch && needs.init-github-context.outputs.fully-specified-branch || '' }}",
+              "test-group-name": "workspaces_azure",
+              "test-command": "${{ env.rawls_test_command }}",
+              "e2e-env": "${{ env.E2E_ENV }}",
+              "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
+            }
 
   delete-billing-project-v2-from-bee-workflow:
     runs-on: ubuntu-latest
@@ -270,21 +291,86 @@ jobs:
           }'
           wait-for-completion: false
 
-  notify-slack-on-failure:
+  notify-slack-on-success:
     runs-on: ubuntu-latest
     needs:
-      - init-github-context
-      - rawls-build-tag-publish-job
-      - create-bee-workflow
-      - rawls-swat-e2e-test-job
       - destroy-bee-workflow
-    if: ${{ failure() }} # Want to notify regardless of which step fails
+    if: ${{ success() }}
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
-          # Channel is for #dsp-workspaces-test-alerts
-          channel-id: 'C03F21QEWV7'
-          slack-message: "Azure E2E Tests FAILED, branch: ${{ needs.init-github-context.outputs.branch }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Azure Workspaces E2E Test*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Result:*\n✅ PASSED"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
+
+  notify-slack-on-failure:
+    runs-on: ubuntu-latest
+    needs:
+      - destroy-bee-workflow
+    if: ${{ failure() }}
+    steps:
+      - name: Notify slack
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Azure Workspaces E2E Test*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Result:*\n❌ FAILED"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Link to workflow run>"
+                    }
+                  ]
+                }
+              ]
+            }
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
