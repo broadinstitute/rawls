@@ -44,6 +44,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   private def getControlledAzureResourceApi(ctx: RawlsRequestContext) =
     apiClientProvider.getControlledAzureResourceApi(ctx)
 
+  private def getControlledGcpResourceApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getControlledGcpResourceApi(ctx)
+
   private def getLandingZonesApi(ctx: RawlsRequestContext) =
     apiClientProvider.getLandingZonesApi(ctx)
 
@@ -127,12 +130,13 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   ): CloneWorkspaceResult =
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
+  override def createWorkspaceCloudContext(workspaceId: UUID,
+                                                cloudPlatform: CloudPlatform,
                                                 ctx: RawlsRequestContext
   ): CreateCloudContextResult = {
     val jobControlId = UUID.randomUUID().toString
     getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
-                                              .cloudPlatform(CloudPlatform.AZURE)
+                                              .cloudPlatform(cloudPlatform)
                                               .jobControl(new JobControl().id(jobControlId)),
                                             workspaceId
     )
@@ -230,6 +234,23 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
     getControlledAzureResourceApi(ctx)
       .createAzureStorageContainer(requestBody, workspaceId)
+  }
+
+  override def createGcpStorageBucket(workspaceId: UUID,
+                                      bucketName: String,
+                                      ctx: RawlsRequestContext
+  ): CreatedControlledGcpGcsBucket = {
+
+    val creationParams =
+      new GcpGcsBucketCreationParameters().name(bucketName)
+
+    val requestBody = new CreateControlledGcpGcsBucketRequestBody()
+      .common(
+        createCommonFields(bucketName).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      )
+      .gcsBucket(creationParams)
+
+    getControlledGcpResourceApi(ctx).createBucket(requestBody, workspaceId)
   }
 
   override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,

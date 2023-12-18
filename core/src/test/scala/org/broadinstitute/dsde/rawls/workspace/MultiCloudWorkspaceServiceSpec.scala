@@ -428,8 +428,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )
     Mockito
       .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
+      .createWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -480,8 +481,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.namespace shouldEqual namespace
     Mockito
       .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
+      .createWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -535,8 +537,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.namespace shouldEqual namespace
     Mockito
       .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
+      .createWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(testContext)
       )
     Mockito

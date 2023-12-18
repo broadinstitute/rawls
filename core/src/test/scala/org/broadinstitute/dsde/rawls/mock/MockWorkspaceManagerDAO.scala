@@ -215,7 +215,7 @@ class MockWorkspaceManagerDAO(
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
+  override def createWorkspaceCloudContext(workspaceId: UUID, cloudPlatform: CloudPlatform, ctx: RawlsRequestContext): CreateCloudContextResult =
     mockInitialCreateAzureCloudContextResult()
 
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
@@ -264,6 +264,16 @@ class MockWorkspaceManagerDAO(
                                           ctx: RawlsRequestContext
   ): JobResult =
     new JobResult().jobReport(new JobReport().id(jobControlId).status(StatusEnum.SUCCEEDED))
+
+  /**
+    * TODO
+    *
+    * @param workspaceId
+    * @param bucketName
+    * @param ctx
+    * @return
+    */
+  override def createGcpStorageBucket(workspaceId: UUID, bucketName: String, ctx: RawlsRequestContext): CreatedControlledGcpGcsBucket = ???
 }
 
 object MockWorkspaceManagerDAO {

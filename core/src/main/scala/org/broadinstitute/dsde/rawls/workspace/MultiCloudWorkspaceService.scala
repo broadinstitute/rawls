@@ -237,10 +237,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       workspaceOpt <- Apply[Option]
         .product(multiCloudWorkspaceConfig.azureConfig, billingProfileOpt)
         .traverse { case (azureConfig, profileModel) =>
-          // "MultiCloud" workspaces are limited to azure-hosted workspaces for now.
-          // This will likely change when the functionality for GCP workspaces gets moved out of Rawls
           Option(profileModel.getCloudPlatform)
-            .filter(_ == CloudPlatform.AZURE)
             .traverse { _ =>
               traceWithParent("createMultiCloudWorkspace", parentContext) { s =>
                 createMultiCloudWorkspace(
@@ -271,40 +268,43 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     */
   def getBillingProfile(billingProject: RawlsBillingProject,
                         parentContext: RawlsRequestContext = ctx
-  ): Future[Option[ProfileModel]] =
-    billingProject.billingProfileId.traverse { profileIdString =>
-      for {
-        // bad state - the billing profile id got corrupted somehow
-        profileId <- Try(UUID.fromString(profileIdString))
-          .map(Future.successful)
-          .getOrElse(
-            Future.failed(
-              RawlsExceptionWithErrorReport(
-                ErrorReport(
-                  StatusCodes.InternalServerError,
-                  s"Invalid billing profile id '$profileIdString' on billing project '${billingProject.projectName}'."
-                )
+  ): Future[Option[ProfileModel]] = {
+    // TODO HARDCODING to test
+    val profileIdString = "76b469d6-0759-44e0-a563-b6c5dd25b569"
+    // billingProject.billingProfileId.traverse { profileIdString =>
+    for {
+      // bad state - the billing profile id got corrupted somehow
+      profileId <- Try(UUID.fromString(profileIdString))
+        .map(Future.successful)
+        .getOrElse(
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.InternalServerError,
+                s"Invalid billing profile id '$profileIdString' on billing project '${billingProject.projectName}'."
               )
             )
           )
+        )
 
-        // fail if the billing project lists a billing profile that doesn't exist
-        profileModel <- traceWithParent("getBillingProfile", parentContext) { s =>
-          Future(blocking {
-            billingProfileManagerDAO
-              .getBillingProfile(profileId, s)
-              .getOrElse(
-                throw RawlsExceptionWithErrorReport(
-                  ErrorReport(
-                    StatusCodes.InternalServerError,
-                    s"Unable to find billing profile with billingProfileId: $profileId"
-                  )
+      // fail if the billing project lists a billing profile that doesn't exist
+      profileModel <- traceWithParent("getBillingProfile", parentContext) { s =>
+        Future(blocking {
+          billingProfileManagerDAO
+            .getBillingProfile(profileId, s)
+            .getOrElse(
+              throw RawlsExceptionWithErrorReport(
+                ErrorReport(
+                  StatusCodes.InternalServerError,
+                  s"Unable to find billing profile with billingProfileId: $profileId"
                 )
               )
-          })
-        }
-      } yield profileModel
-    }
+            )
+        })
+      }
+    } yield Some(profileModel)
+  }
+  //  }
 
   def cloneMultiCloudWorkspace(wsService: WorkspaceService,
                                sourceWorkspaceName: WorkspaceName,
@@ -493,10 +493,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                 profile: ProfileModel,
                                 parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
-    if (!multiCloudWorkspaceConfig.multiCloudWorkspacesEnabled) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
-    }
-
     assertBillingProfileCreationDate(profile)
 
     traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
@@ -507,6 +503,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   }
 
   def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
+    if (profile.getCloudPlatform == CloudPlatform.GCP) {
+      return
+    }
     val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
     val isTestProfile = profile.getCreatedDate == null || profile.getCreatedDate == ""
     if (!isTestProfile && DateTime.parse(profile.getCreatedDate).isBefore(previewDate)) {
@@ -622,9 +621,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       }
       _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
-      cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
+      cloudContextCreateResult <- traceWithParent("createCloudContextInWSM", parentContext)(_ =>
         Future(
-          workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
+          workspaceManagerDAO.createWorkspaceCloudContext(workspaceId,
+                                                          bpmCloudPlatformToWsm(profile.getCloudPlatform),
+                                                          ctx
+          )
         )
       )
       jobControlId = cloudContextCreateResult.getJobReport.getId
@@ -640,21 +642,39 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
-        Future(
-          workspaceManagerDAO.createAzureStorageContainer(
-            workspaceId,
-            MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
-            ctx
-          )
-        )
+      containerId <- traceWithParent("createStorageContainer", parentContext)(_ =>
+        profile.getCloudPlatform match {
+          case CloudPlatform.AZURE =>
+            Future {
+              val result = workspaceManagerDAO.createAzureStorageContainer(
+                workspaceId,
+                MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+                ctx
+              )
+              result.getResourceId
+            }
+          case CloudPlatform.GCP =>
+            Future {
+              val result = workspaceManagerDAO.createGcpStorageBucket(
+                workspaceId,
+                MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+                ctx
+              )
+              result.getResourceId
+            }
+        }
       )
       _ = logger.info(
-        s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
+        s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerId}]"
       )
 
       // create a WDS application in Leo
-      _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+      _ <- profile.getCloudPlatform match {
+        case CloudPlatform.AZURE =>
+          createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+        case CloudPlatform.GCP => Future.successful()
+        case _                 => throw new RuntimeException("not supported")
+      }
 
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
@@ -673,6 +693,13 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
     }
   }
+
+  private def bpmCloudPlatformToWsm(bpmCloudPlatform: CloudPlatform): bio.terra.workspace.model.CloudPlatform =
+    bpmCloudPlatform match {
+      case CloudPlatform.GCP   => bio.terra.workspace.model.CloudPlatform.GCP
+      case CloudPlatform.AZURE => bio.terra.workspace.model.CloudPlatform.AZURE
+      case _                   => throw new RuntimeException("Unsupported")
+    }
 
   private def buildPolicyInputs(workspaceRequest: WorkspaceRequest) = {
     val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {

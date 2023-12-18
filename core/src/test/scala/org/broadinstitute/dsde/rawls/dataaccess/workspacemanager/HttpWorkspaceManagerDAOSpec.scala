@@ -53,6 +53,8 @@ class HttpWorkspaceManagerDAOSpec
     override def getJobsApi(ctx: RawlsRequestContext): JobsApi = ???
 
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
+
+    override def getControlledGcpResourceApi(ctx: RawlsRequestContext): ControlledGcpResourceApi = ???
   }
 
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,

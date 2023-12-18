@@ -1,15 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import bio.terra.common.tracing.JerseyTracingFilter
-import bio.terra.workspace.api.{
-  ControlledAzureResourceApi,
-  JobsApi,
-  LandingZonesApi,
-  ResourceApi,
-  UnauthenticatedApi,
-  WorkspaceApi,
-  WorkspaceApplicationApi
-}
+import bio.terra.workspace.api.{ControlledAzureResourceApi, ControlledGcpResourceApi, JobsApi, LandingZonesApi, ResourceApi, UnauthenticatedApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import io.opencensus.trace.Tracing
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -25,6 +17,8 @@ trait WorkspaceManagerApiClientProvider {
   def getJobsApi(ctx: RawlsRequestContext): JobsApi
 
   def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi
+
+  def getControlledGcpResourceApi(ctx: RawlsRequestContext): ControlledGcpResourceApi
 
   def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi
 
@@ -57,6 +51,9 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
 
   def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi =
     new ControlledAzureResourceApi(getApiClient(ctx))
+
+  def getControlledGcpResourceApi(ctx: RawlsRequestContext): ControlledGcpResourceApi =
+    new ControlledGcpResourceApi(getApiClient(ctx))
 
   def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi =
     new WorkspaceApplicationApi(getApiClient(ctx))
