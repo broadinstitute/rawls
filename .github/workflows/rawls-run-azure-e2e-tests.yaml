@@ -36,8 +36,11 @@ on:
       delete-bee:
         description: 'Delete created bee after running tests'
         required: true
-        default: true
-        type: boolean
+        default: 'true'
+        type: choice
+        options:
+          - true
+          - false
       owner-subject:
         description: 'Owner subject (used for creating billing project in E2E testing)'
         required: true
