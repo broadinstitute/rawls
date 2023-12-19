@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -177,7 +178,12 @@ class BillingProfileManagerDAOImpl(
     }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
-    apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)
+    Try(apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)) match {
+      case Failure(exception: ApiException) if exception.getCode == HttpStatus.SC_NOT_FOUND =>
+        logger.info(s"No billing profile record found for $billingProfileId when deleting BPM-backed billing project")
+      case Failure(t) => throw t
+      case Success(_) => ()
+    }
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 

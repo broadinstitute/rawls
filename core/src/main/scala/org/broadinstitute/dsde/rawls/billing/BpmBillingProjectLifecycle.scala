@@ -217,19 +217,14 @@ class BpmBillingProjectLifecycle(
     landingZoneId: UUID,
     ctx: RawlsRequestContext
   ): Option[DeleteAzureLandingZoneResult] = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
-    // The service returns a 403 instead of a 404 when there's no landing zone present.
-    // It's fine to move on here, because if this was a 403 for permission reasons, we won't be able to delete the billing profile anyway,
-    // and we don't have a valid instance of a user having access to the billing project but not the underlying resources.
-    case Failure(e: ApiException) if e.getCode == HttpStatus.SC_FORBIDDEN || e.getCode == HttpStatus.SC_NOT_FOUND =>
-      logger.warn(s"No landing zone available with ID $landingZoneId for BPM-backed billing project.")
-      None
     case Failure(e: ApiException) =>
       val msg = s"Unable to delete landing zone: ${e.getMessage}"
       throw new LandingZoneDeletionException(RawlsErrorReport(StatusCode.int2StatusCode(e.getCode), msg, e))
     case Failure(t) =>
       logger.warn(s"Unable to delete landing zone with ID $landingZoneId for BPM-backed billing project.", t)
       throw new LandingZoneDeletionException(RawlsErrorReport(t))
-    case Success(landingZoneResponse) =>
+    case Success(None) => None
+    case Success(Some(landingZoneResponse)) =>
       logger.info(
         s"Initiated deletion of landing zone $landingZoneId for BPM-backed billing project."
       )
@@ -265,14 +260,7 @@ class BpmBillingProjectLifecycle(
         logger.info(
           s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
         )
-        Try(billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)) match {
-          case Failure(exception: BpmApiException) if exception.getCode == HttpStatus.SC_NOT_FOUND =>
-            logger.info(
-              s"Deleting BPM-backed billing project ${projectName.value}, no billing profile record found for $profileModelId"
-            )
-          case Failure(exception) => throw exception
-          case Success(_)         => ()
-        }
+        billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
       case num =>
         logger.info(
           s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
