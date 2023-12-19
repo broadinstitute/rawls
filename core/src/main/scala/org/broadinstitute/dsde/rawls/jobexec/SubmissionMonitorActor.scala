@@ -374,14 +374,21 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
         batchedWorkflowsWithOutputs
           .traverse { case (batch, idx) =>
-            IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
+            logger.info(s"batch ${idx + 1}/${batchedWorkflowsWithOutputs.size} for ${submissionId} starting ...")
+            val tick = System.currentTimeMillis()
+            val batchResponse = IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
               traceDBIOWithParent(s"batch", span) { innerSpan =>
                 innerSpan.tracingSpan.foreach { s =>
-                  s.putAttribute("batchIndex", OpenCensusAttributeValue.longAttributeValue(idx))
+                  s.putAttribute("batchIndex", OpenCensusAttributeValue.longAttributeValue(idx + 1))
                 }
                 handleOutputs(batch, dataAccess, innerSpan)
               }
             }))
+            val tock = System.currentTimeMillis() - tick
+            logger.info(
+              s"batch ${idx + 1}/${batchedWorkflowsWithOutputs.size} for ${submissionId} complete in $tock ms"
+            )
+            batchResponse
           }
           .unsafeToFuture()
           .recoverWith {
@@ -846,7 +853,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
       .recover { case NonFatal(e) =>
         // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
-        logger.error("Error occurred checking current workflow status counts", e)
+        logger.error(s"Error occurred checking current workflow status counts for submission $submissionId", e)
         (Map.empty[WorkflowStatus, Int], Map.empty[SubmissionStatus, Int])
       }
       .map { case (wfCounts, subCounts) =>
