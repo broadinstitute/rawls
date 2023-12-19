@@ -72,7 +72,7 @@ env:
   TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
   E2E_ENV: 'azure_e2e.env'
   STAGING_CHANNELS: 'C03F21QEWV7,C53JYBV9A' # C53JYBV9A channel is for #dsde-qa
-  DEV_CHANNELS: 'C01GBDNLH18' #dsp-workspaces-test-alerts
+  DEV_CHANNELS: 'C03F21QEWV7' #dsp-workspaces-test-alerts
 
 jobs:
   init-github-context:
