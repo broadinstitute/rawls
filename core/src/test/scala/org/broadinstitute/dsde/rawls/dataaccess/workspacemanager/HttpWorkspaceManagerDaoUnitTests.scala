@@ -17,7 +17,12 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 
-class HttpWorkspaceManagerDaoUnitTests extends AnyFlatSpec with OptionValues with MockitoSugar with MockitoTestUtils with Matchers {
+class HttpWorkspaceManagerDaoUnitTests
+    extends AnyFlatSpec
+    with OptionValues
+    with MockitoSugar
+    with MockitoTestUtils
+    with Matchers {
 
   implicit val actorSystem: ActorSystem = ActorSystem("HttpWorkspaceManagerDAOSpec")
   implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
@@ -41,7 +46,7 @@ class HttpWorkspaceManagerDaoUnitTests extends AnyFlatSpec with OptionValues wit
     wsmDao.deleteLandingZone(landingZoneId, testContext) shouldBe None
 
     verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
-      ArgumentMatchers.eq(landingZoneId)
+                                                   ArgumentMatchers.eq(landingZoneId)
     )
 
   }
@@ -63,11 +68,10 @@ class HttpWorkspaceManagerDaoUnitTests extends AnyFlatSpec with OptionValues wit
     wsmDao.deleteLandingZone(landingZoneId, testContext) shouldBe None
 
     verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
-      ArgumentMatchers.eq(landingZoneId)
+                                                   ArgumentMatchers.eq(landingZoneId)
     )
 
   }
-
 
   it should "rethrow an API exception that is not a 404 or 403" in {
 
@@ -83,10 +87,10 @@ class HttpWorkspaceManagerDaoUnitTests extends AnyFlatSpec with OptionValues wit
 
     val testContext = mock[RawlsRequestContext]
 
-    intercept[ApiException] { wsmDao.deleteLandingZone(landingZoneId, testContext) } shouldBe a[ApiException]
+    intercept[ApiException](wsmDao.deleteLandingZone(landingZoneId, testContext)) shouldBe a[ApiException]
 
     verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
-      ArgumentMatchers.eq(landingZoneId)
+                                                   ArgumentMatchers.eq(landingZoneId)
     )
 
   }
