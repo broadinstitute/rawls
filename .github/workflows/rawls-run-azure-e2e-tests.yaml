@@ -19,13 +19,16 @@ on:
   workflow_dispatch:
     inputs:
       build-branch:
-        description: 'Build a custom image of Rawls from the specified branch. Default is true; if false, the tests run against the version specified by bee-version-template.'
+        description: 'Build a custom image of Rawls from the specified branch. Default is false, meaning tests are run against the version specified by bee-version-template.'
         required: true
-        default: true
-        type: boolean
+        default: 'false'
+        type: choice
+        options:
+          - true
+          - false
       branch:
         description: 'Branch of Rawls to build a custom image from. Ignored if custom image option is false.'
-        required: true
+        required: false
         default: 'develop'
         type: string
       bee-version-template:
@@ -36,8 +39,11 @@ on:
       delete-bee:
         description: 'Delete created bee after running tests'
         required: true
-        default: true
-        type: boolean
+        default: 'true'
+        type: choice
+        options:
+          - true
+          - false
       owner-subject:
         description: 'Owner subject (used for creating billing project in E2E testing)'
         required: true
@@ -72,7 +78,9 @@ jobs:
   init-github-context:
     runs-on: ubuntu-latest
     outputs:
+      build-branch: ${{ steps.extract-inputs.outputs.build-branch }}
       branch: ${{ steps.extract-inputs.outputs.branch }}
+      bee-version-template: ${{ steps.extract-inputs.outputs.bee-version-template }}
       fully-specified-branch: refs/heads/${{ steps.extract-inputs.outputs.branch }}
       delete-bee: ${{ steps.extract-inputs.outputs.delete-bee }}
       student-subjects: ${{ steps.extract-inputs.outputs.student-subjects }}
@@ -82,8 +90,10 @@ jobs:
       - name: Get inputs or use defaults
         id: extract-inputs
         run: |
+          echo "build-branch=${{ inputs.build-branch                || 'false' }}" >> "$GITHUB_OUTPUT"
           echo "branch=${{ inputs.branch                            || 'develop' }}" >> "$GITHUB_OUTPUT"
-          echo "delete-bee=${{ inputs.delete-bee                    || false }}" >> "$GITHUB_OUTPUT"
+          echo "bee-version-template=${{ inputs.bee-version-template || 'dev' }}" >> "$GITHUB_OUTPUT"
+          echo "delete-bee=${{ inputs.delete-bee                    || 'true' }}" >> "$GITHUB_OUTPUT"
           echo "owner-subject=${{ inputs.owner-subject              || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
           echo "student-subjects=${{ toJson(inputs.student-subjects || '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]') }}" >> "$GITHUB_OUTPUT"
           echo "service-account=${{ inputs.service-account          || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
@@ -96,16 +106,16 @@ jobs:
       contents: 'read'
       id-token: 'write'
     outputs:
-      custom-version-json: ${{ inputs.build-branch && steps.render-rawls-version.outputs.custom-version-json || ''}}
+      custom-version-json: ${{ needs.init-github-context.outputs.build-branch == 'true' && steps.render-rawls-version.outputs.custom-version-json || ''}}
     steps:
       - uses: 'actions/checkout@v3'
-        if: ${{ inputs.build-branch }}
+        if: ${{ needs.init-github-context.outputs.build-branch == 'true' }}
         with:
           ref: ${{ needs.init-github-context.outputs.branch }}
 
       - name: Bump the tag to a new version
         uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
-        if: ${{ inputs.build-branch }}
+        if: ${{ needs.init-github-context.outputs.build-branch == 'true' }}
         id: tag
         env:
           DEFAULT_BUMP: patch
@@ -115,7 +125,7 @@ jobs:
 
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
-        if: ${{ inputs.build-branch }}
+        if: ${{ needs.init-github-context.outputs.build-branch == 'true' }}
         with:
           run-name: "${{ env.RAWLS_BUILD_RUN_NAME }}"
           workflow: rawls-build
@@ -131,7 +141,7 @@ jobs:
             }
 
       - name: Render Rawls version
-        if: ${{ inputs.build-branch }}
+        if: ${{ needs.init-github-context.outputs.build-branch == 'true' }}
         id: render-rawls-version
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
@@ -142,6 +152,7 @@ jobs:
   create-bee-workflow:
     runs-on: ubuntu-latest
     needs:
+      - init-github-context
       - rawls-build-tag-publish-job
     permissions:
       contents: 'read'
@@ -149,9 +160,9 @@ jobs:
     steps:
       - name: Echo Rawls version and version template
         run: |
-          echo "built custom Rawls=${{ inputs.build-branch}}"
+          echo "built custom Rawls=${{ needs.init-github-context.outputs.build-branch}}"
           echo "custom build Rawls version=${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
-          echo "version-template=${{ inputs.bee-version-template }}"
+          echo "version-template=${{ needs.init-github-context.outputs.bee-version-template }}"
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -165,7 +176,7 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}",
             "bee-name": "${{ env.BEE_NAME }}",
             "bee-template-name": "rawls-e2e-azure-tests",
-            "version-template": "${{ inputs.bee-version-template }}",
+            "version-template": "${{ needs.init-github-context.outputs.bee-version-template }}",
             "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
@@ -237,7 +248,7 @@ jobs:
               "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}",
               "bee-name": "${{ env.BEE_NAME }}",
               "ENV": "qa",
-              "ref": "${{ inputs.build-branch && needs.init-github-context.outputs.fully-specified-branch || '' }}",
+              "ref": "${{ needs.init-github-context.outputs.build-branch == 'true' && needs.init-github-context.outputs.fully-specified-branch || '' }}",
               "test-group-name": "workspaces_azure",
               "test-command": "${{ env.rawls_test_command }}",
               "e2e-env": "${{ env.E2E_ENV }}",
@@ -275,7 +286,7 @@ jobs:
       - init-github-context
       - rawls-swat-e2e-test-job
       - delete-billing-project-v2-from-bee-workflow
-    if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
+    if: ${{ needs.init-github-context.outputs.delete-bee == 'true' }}
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -294,13 +305,14 @@ jobs:
   notify-slack-on-success:
     runs-on: ubuntu-latest
     needs:
+      - init-github-context
       - destroy-bee-workflow
     if: ${{ success() }}
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
-          channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
+          channel-id: ${{ needs.init-github-context.outputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
           payload: |
             {
               "blocks": [
@@ -316,7 +328,7 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                      "text": "*Environment:*\n${{ needs.init-github-context.outputs.build-branch == 'true' && needs.init-github-context.outputs.branch || needs.init-github-context.outputs.bee-version-template }}"
                     },
                     {
                       "type": "mrkdwn",
@@ -336,13 +348,14 @@ jobs:
   notify-slack-on-failure:
     runs-on: ubuntu-latest
     needs:
+      - init-github-context
       - destroy-bee-workflow
     if: ${{ failure() }}
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
-          channel-id: ${{ inputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
+          channel-id: ${{ needs.init-github-context.outputs.bee-version-template == 'staging' && env.STAGING_CHANNELS || env.DEV_CHANNELS }}
           payload: |
             {
               "blocks": [
@@ -358,7 +371,7 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Environment:*\n${{ inputs.build-branch && needs.init-github-context.outputs.branch || inputs.bee-version-template }}"
+                      "text": "*Environment:*\n${{ needs.init-github-context.outputs.build-branch == 'true' && needs.init-github-context.outputs.branch || needs.init-github-context.outputs.bee-version-template }}"
                     },
                     {
                       "type": "mrkdwn",
