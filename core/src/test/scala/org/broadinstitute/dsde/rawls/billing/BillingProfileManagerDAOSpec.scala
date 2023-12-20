@@ -9,7 +9,14 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.BpmAzureReportErrorMessageJsonProtocol._
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, RawlsBillingAccountName, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  RawlsBillingAccountName,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  UserInfo
+}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.any
@@ -43,7 +50,10 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar with Mo
     None
   )
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
-  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("fake_app_id", Duration(1, "second"), Duration(1, "second")), azConfig)
+  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
+    MultiCloudWorkspaceManagerConfig("fake_app_id", Duration(1, "second"), Duration(1, "second")),
+    azConfig
+  )
 
   behavior of "getBillingProfile"
 
