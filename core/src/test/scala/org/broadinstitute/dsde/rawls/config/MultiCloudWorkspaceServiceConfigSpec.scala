@@ -47,6 +47,9 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     config.azureConfig.get.landingZoneParameters shouldBe Map("FAKE_PARAMETER" -> "fake_value",
                                                               "ANOTHER_FAKE_ONE" -> "still_not_real"
     )
+    config.azureConfig.get.costSavingLandingZoneParameters shouldBe Map("FAKE_PARAMETER" -> "fake_value",
+                                                                        "ANOTHER_FAKE_ONE" -> "still_not_real"
+    )
     config.workspaceManager.get.pollTimeout shouldEqual 60.seconds
     config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }
