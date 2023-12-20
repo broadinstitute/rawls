@@ -401,6 +401,10 @@ multiCloudWorkspaces {
       "AKS_AUTOSCALING_MAX": "100"
       "AKS_MACHINE_TYPE": "Standard_D4as_v5"
     }
+    costSavingLandingZoneParameters = {
+      "AKS_COST_SAVING_SPOT_NODES_ENABLED": "true"
+      "AKS_COST_SAVING_VPA_ENABLED": "true"
+    }
   },
   workspaceManager {
     pollTimeoutSeconds = 80 seconds,

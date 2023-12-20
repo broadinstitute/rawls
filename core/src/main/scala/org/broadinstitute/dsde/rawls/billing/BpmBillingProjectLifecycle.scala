@@ -119,7 +119,10 @@ class BpmBillingProjectLifecycle(
       }
 
       val maybeAttach = if (lzId.isDefined) Map("attach" -> "true") else Map.empty
-      val params = config.azureConfig.get.landingZoneParameters ++ maybeAttach
+      val costSavingParams =
+        if (createProjectRequest.costSavings.getOrElse(false)) config.azureConfig.get.costSavingLandingZoneParameters
+        else Map.empty
+      val params = config.azureConfig.get.landingZoneParameters ++ maybeAttach ++ costSavingParams
 
       val lzDefinition = createProjectRequest.protectedData match {
         case Some(true) => config.azureConfig.get.protectedDataLandingZoneDefinition

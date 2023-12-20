@@ -23,6 +23,7 @@ final case class AzureConfig(landingZoneDefinition: String,
                              protectedDataLandingZoneDefinition: String,
                              landingZoneVersion: String,
                              landingZoneParameters: Map[String, String],
+                             costSavingLandingZoneParameters: Map[String, String],
                              landingZoneAllowAttach: Boolean
 )
 
