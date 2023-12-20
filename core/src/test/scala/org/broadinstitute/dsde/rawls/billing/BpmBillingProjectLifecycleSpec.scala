@@ -70,11 +70,13 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   val protectedLandingZoneDefinition = "fake-protected-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
   val landingZoneParameters = Map("fake_parameter" -> "fake_value")
+  val costSavingLandingZoneParameters = Map("fake_parameter" -> "fake_value")
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
     protectedLandingZoneDefinition,
     landingZoneVersion,
     landingZoneParameters,
+    costSavingLandingZoneParameters,
     false
   )
   val landingZoneId = UUID.randomUUID()
@@ -217,6 +219,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                   protectedLandingZoneDefinition,
                   landingZoneVersion,
                   landingZoneParameters,
+                  costSavingLandingZoneParameters,
                   landingZoneAllowAttach = true
       )
     val createRequestWithExistingLz = CreateRawlsV2BillingProjectFullRequest(
