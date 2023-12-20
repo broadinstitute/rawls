@@ -6,7 +6,6 @@ import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.apache.http.HttpStatus
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -28,7 +27,6 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
-
 import org.mockito.ArgumentMatchers.{any, anyString, argThat}
 import org.mockito.Mockito.{doNothing, doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}

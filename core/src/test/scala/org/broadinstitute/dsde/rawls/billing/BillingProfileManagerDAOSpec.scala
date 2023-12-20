@@ -229,7 +229,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       provider,
-      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+      multiCloudWorkspaceConfig
     )
     when(profileApi.deleteProfile(profileId)).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "not found"))
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
