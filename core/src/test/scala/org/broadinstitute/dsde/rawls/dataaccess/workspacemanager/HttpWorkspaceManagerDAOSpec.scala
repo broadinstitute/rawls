@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import bio.terra.workspace.api._
-import bio.terra.workspace.client.ApiClient
+import bio.terra.workspace.client.{ApiClient, ApiException}
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -230,6 +230,22 @@ class HttpWorkspaceManagerDAOSpec
     verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
                                                    ArgumentMatchers.eq(landingZoneId)
     )
+  }
+
+  it should "return None a 403 is returned to indicate the landing zone is not present when deleting" in {
+    val landingZonesApi = mock[LandingZonesApi]
+    when(landingZonesApi.deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody], any[UUID]))
+      .thenThrow(new ApiException(403, "Forbidden"))
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(landingZonesApi = landingZonesApi))
+    val landingZoneId = UUID.randomUUID()
+
+    wsmDao.deleteLandingZone(landingZoneId, testContext) shouldBe None
+
+    verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
+                                                   ArgumentMatchers.eq(landingZoneId)
+    )
+
   }
 
   behavior of "clone"

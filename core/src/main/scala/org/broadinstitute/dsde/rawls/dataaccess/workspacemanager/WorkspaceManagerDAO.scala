@@ -154,7 +154,12 @@ trait WorkspaceManagerDAO {
 
   def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
 
-  def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
+  /**
+   * Initiate deletion of a landing zone.
+    * This will either return the delete result, which will contain a job ID that can be used to check the status of the deletion,
+    * or None if there is no job to wait for (such as the landing zone already being deleted, if WSM returns a 404).
+   */
+  def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): Option[DeleteAzureLandingZoneResult]
 
   def getDeleteLandingZoneResult(jobId: String,
                                  landingZoneId: UUID,

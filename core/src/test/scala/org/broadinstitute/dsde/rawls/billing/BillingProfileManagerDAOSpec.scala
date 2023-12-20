@@ -222,6 +222,22 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     verify(profileApi).deleteProfile(profileId)
   }
 
+  it should "not fail if BPM returns a 404" in {
+    val profileId = UUID.randomUUID()
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+    when(profileApi.deleteProfile(profileId)).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "not found"))
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+
+    billingProfileManagerDAO.deleteBillingProfile(profileId, testContext)
+    verify(profileApi).deleteProfile(profileId)
+  }
+
   behavior of "listManagedApps"
 
   it should "return the list of managed apps from billing profile manager" in {
