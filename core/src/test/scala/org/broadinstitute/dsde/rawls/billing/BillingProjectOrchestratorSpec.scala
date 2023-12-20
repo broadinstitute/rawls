@@ -2,33 +2,16 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  CreationStatuses,
-  ErrorReport,
-  ProjectAccessUpdate,
-  ProjectRoles,
-  RawlsBillingAccountName,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  SamBillingProjectActions,
-  SamBillingProjectPolicyNames,
-  SamCreateResourceResponse,
-  SamResourceTypeNames,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ProjectAccessUpdate, ProjectRoles, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{never, verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, never, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
@@ -53,6 +36,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   val userInfo: UserInfo =
     UserInfo(RawlsUserEmail("fake@example.com"), OAuth2BearerToken("fake_token"), 0, RawlsUserSubjectId("sub"), None)
   val testContext = RawlsRequestContext(userInfo)
+  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("fake_app_id", Duration(1, "second"), Duration(1, "second")), azConfig)
 
   behavior of "creation request validation"
 
@@ -107,7 +91,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
     val bpCreator = mock[BillingProjectLifecycle]
     val bpCreatorReturnedStatus = CreationStatuses.CreatingLandingZone
-    val multiCloudWorkspaceConfig = new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
     when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.successful(bpCreatorReturnedStatus))
@@ -244,7 +227,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val creator = mock[BillingProjectLifecycle]
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
                                                     ArgumentMatchers.eq(testContext)
