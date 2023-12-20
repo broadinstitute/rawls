@@ -194,7 +194,7 @@ case class CreateRawlsV2BillingProjectFullRequest(
   members: Option[Set[ProjectAccessUpdate]],
   inviteUsersNotFound: Option[Boolean],
   protectedData: Option[Boolean] = Option(false),
-  costSavings: Option[Boolean] = Option(false),
+  costSavings: Option[Boolean] = Option(false)
 ) {
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {

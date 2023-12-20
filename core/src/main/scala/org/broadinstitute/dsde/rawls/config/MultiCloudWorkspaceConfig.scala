@@ -44,6 +44,14 @@ case object MultiCloudWorkspaceConfig {
                 entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
               }
               .toMap,
+            azc
+              .getConfig("costSavingLandingZoneParameters")
+              .entrySet()
+              .asScala
+              .map { entry =>
+                entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
+              }
+              .toMap,
             azc.getBooleanOption("landingZoneAllowAttach").getOrElse(false)
           )
         )
