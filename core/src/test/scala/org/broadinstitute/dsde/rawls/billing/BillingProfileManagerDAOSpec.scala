@@ -24,7 +24,6 @@ import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
-import org.scalatestplus.mockito.MockitoSugar
 import spray.json._
 
 import java.util.{Date, UUID}
@@ -32,7 +31,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 import scala.jdk.CollectionConverters.SeqHasAsJava
 
-class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar with MockitoTestUtils {
+class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
