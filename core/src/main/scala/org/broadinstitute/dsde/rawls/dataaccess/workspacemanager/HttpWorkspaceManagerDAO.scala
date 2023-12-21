@@ -1,11 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCode
 import akka.stream.Materializer
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
-import bio.terra.workspace.client.ApiClient
+import bio.terra.workspace.client.{ApiClient, ApiException}
 import bio.terra.workspace.model._
+import com.typesafe.scalalogging.LazyLogging
+import org.apache.http.HttpStatus
+import org.broadinstitute.dsde.rawls.billing.LandingZoneDeletionException
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceDescriptionField,
@@ -14,17 +18,20 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.rawls.model.{ErrorReport => RawlsErrorReport}
 
 import java.util.UUID
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit
   val system: ActorSystem,
   val materializer: Materializer,
   val executionContext: ExecutionContext
-) extends WorkspaceManagerDAO {
+) extends WorkspaceManagerDAO
+    with LazyLogging {
 
   private def getApiClient(ctx: RawlsRequestContext): ApiClient =
     apiClientProvider.getApiClient(ctx)
@@ -317,13 +324,28 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =
     getLandingZonesApi(ctx).getCreateAzureLandingZoneResult(jobId)
 
-  override def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = {
+  /**
+    *
+    * @param landingZoneId
+    * @param ctx
+    * @return
+    */
+  override def deleteLandingZone(landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): Option[DeleteAzureLandingZoneResult] = {
     val jobControlId = UUID.randomUUID().toString
-    getLandingZonesApi(ctx).deleteAzureLandingZone(
-      new DeleteAzureLandingZoneRequestBody()
-        .jobControl(new JobControl().id(jobControlId)),
-      landingZoneId
-    )
+    val body = new DeleteAzureLandingZoneRequestBody().jobControl(new JobControl().id(jobControlId))
+
+    Try(getLandingZonesApi(ctx).deleteAzureLandingZone(body, landingZoneId)) match {
+      // The service returns a 403 instead of a 404 when there's no landing zone present.
+      // It's fine to move on here, because if this was a 403 for permission reasons, we won't be able to delete the billing profile anyway,
+      // and we don't have a valid instance of a user having access to the billing project but not the underlying resources.
+      case Failure(e: ApiException) if e.getCode == HttpStatus.SC_FORBIDDEN || e.getCode == HttpStatus.SC_NOT_FOUND =>
+        logger.warn(s"No landing zone available with ID $landingZoneId for BPM-backed billing project.")
+        None
+      case Failure(t)      => throw t
+      case Success(result) => Some(result)
+    }
   }
 
   def getDeleteLandingZoneResult(jobId: String,
