@@ -31,6 +31,11 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |        "ANOTHER_FAKE_ONE": "still_not_real"
         |      }
         |    },
+        |      costSavingLandingZoneParameters = {
+        |        "FAKE_PARAMETER": "fake_value",
+        |        "ANOTHER_FAKE_ONE": "still_not_real"
+        |      }
+        |    },
         |    workspaceManager {
         |      pollTimeoutSeconds = 60 seconds,
         |      deletionPollTimeoutSeconds = 120 seconds,
