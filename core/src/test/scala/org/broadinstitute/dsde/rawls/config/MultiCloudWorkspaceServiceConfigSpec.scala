@@ -30,7 +30,6 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |        "FAKE_PARAMETER": "fake_value",
         |        "ANOTHER_FAKE_ONE": "still_not_real"
         |      }
-        |    },
         |      costSavingLandingZoneParameters = {
         |        "FAKE_PARAMETER": "fake_value",
         |        "ANOTHER_FAKE_ONE": "still_not_real"
