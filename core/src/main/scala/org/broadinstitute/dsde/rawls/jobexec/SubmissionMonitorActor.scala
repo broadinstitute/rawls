@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{addSpanAttribute, trace, traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
@@ -47,6 +47,8 @@ import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import spray.json._
+
+import scala.Option
 
 /**
  * Created by dvoet on 6/26/15.
@@ -242,6 +244,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           abortResults <- Future.traverse(workflowRecs) { workflowRec =>
             Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
           }
+          // TODO: should this also mark the workflows as Aborted in the Rawls db???
         } yield abortResults
       }
 
@@ -315,13 +318,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
 
   /**
-   * once all the execution service queries have completed this function is called to handle the responses
-    * the WorkflowRecords in ExecutionServiceStatus response have not been saved to the database but have been updated with their status from Cromwell.
+    * once all the execution service queries have completed this function is called to handle the responses
+    * the WorkflowRecords in ExecutionServiceStatus response have not been saved to the database but
+    * have been updated with their status from Cromwell.
     *
-    * @param response
-   * @param executionContext
-   * @return
-   */
+    * @param response all workflows in this submission whose statuses are different in Cromwell than in Rawls. If a
+    *                 workflow has outputs in Cromwell, those outputs are included here.
+    * @param executionContext
+    * @return
+    */
   def handleStatusResponses(
     response: ExecutionServiceStatusResponse
   )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] =
@@ -332,6 +337,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         s.putAttribute("workspaceName", OpenCensusAttributeValue.stringAttributeValue(workspaceName.name))
       }
 
+      // log any failures.
       response.statusResponse.collect { case Failure(t) => t }.foreach { t =>
         logger.error(s"Failure monitoring workflow in submission $submissionId", t)
       }
@@ -341,19 +347,45 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         aWorkflow
       }
 
-      // just the workflow records in this response list which have outputs
-      val workflowsWithOutputs = response.statusResponse.collect { case Success(Some((workflowRec, Some(outputs)))) =>
-        (workflowRec, outputs)
-      }
+      // partition into two variables: those workflows that do have
+      // outputs vs. those workflows that do not have outputs
+      val (yesOutputs, noOutputs) = response.statusResponse
+        .collect { case Success(Some((workflowRec, maybeOutputs))) =>
+          (workflowRec, maybeOutputs)
+        }
+        .partition(_._2.isDefined)
 
-      // Loop over each workflow that has outputs. For each workflow, persist the outputs, then update the workflow's
-      // status.
-      logger.info(s"will process ${workflowsWithOutputs.size} workflow(s) for submission $submissionId")
+      // collapse the option for the workflow records in this response list which have outputs
+      val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = yesOutputs.collect {
+        case (workflowRec, Some(outputs)) => (workflowRec, outputs)
+      }
+      logger.info(
+        s"will process ${noOutputs.size} workflow(s) without outputs and ${workflowsWithOutputs.size} workflow(s) with outputs for submission $submissionId"
+      )
+
       traceWithParent("workflows", rootSpan) { workflowsSpan =>
         workflowsSpan.tracingSpan.foreach { s =>
           s.putAttribute("numWorkflows", OpenCensusAttributeValue.longAttributeValue(workflowsWithOutputs.size))
         }
-        workflowsWithOutputs.zipWithIndex
+
+        // Loop over those workflows that do not have outputs, and update their status to match what is in Cromwell.
+        // This makes Rawls aware of any workflows that have failed or been aborted in Cromwell.
+        val workflowsWithoutOutputsFuture = noOutputs
+          .traverse { case (workflowRec, _) =>
+            IO.fromFuture(IO(datasource.inTransaction { dataAccess =>
+              for {
+                currentRec <- dataAccess.workflowQuery.findWorkflowById(workflowRec.id).result.head
+                numRowsUpdated <- dataAccess.workflowQuery.updateStatus(currentRec,
+                                                                        WorkflowStatuses.withName(workflowRec.status)
+                )
+              } yield numRowsUpdated
+            }))
+          }
+          .unsafeToFuture()
+
+        // Loop over each workflow that has outputs. For each workflow, persist the outputs, then update the workflow's
+        // status.
+        val workflowsWithOutputsFuture = workflowsWithOutputs.zipWithIndex
           .traverse { case ((workflowRec, execServiceOutputs), idx) =>
             logger.info(
               s"processing workflow ${idx + 1}/${workflowsWithOutputs.size} with id ${externalId(workflowRec)} for submission $submissionId"
@@ -369,34 +401,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             }))
           }
           .unsafeToFuture()
-          .flatMap { _ =>
+
+        workflowsWithoutOutputsFuture flatMap { _ =>
+          workflowsWithOutputsFuture flatMap { _ =>
             datasource.inTransaction { dataAccess =>
-              // Refetch workflows as some may have been marked as Failed by handleOutputs.
-              dataAccess.workflowQuery.findWorkflowByIds(allWorkflows.map(_.id)).result flatMap { updatedRecs =>
-                // New statuses according to the execution service.
-                val workflowIdToNewStatus = allWorkflows.map(workflowRec => workflowRec.id -> workflowRec.status).toMap
-
-                // No need to update statuses for any workflows that are in terminal statuses.
-                // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
-                val workflowsToUpdate = updatedRecs
-                  .filter(rec => !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status)))
-                val workflowsWithNewStatuses =
-                  workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
-
-                // to minimize database updates batch 1 update per workflow status
-                DBIO.sequence(workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
-                  dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
-                })
-
-              } flatMap { _ =>
-                // update submission after workflows are updated
-                updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
-                  // return a message about whether our submission is done entirely
-                  StatusCheckComplete(shouldStop)
-                }
+              // update submission after workflows are updated
+              updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
+                // return a message about whether our submission is done entirely
+                StatusCheckComplete(shouldStop)
               }
             }
           }
+        }
       }
     }
 
@@ -415,50 +431,36 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def processWorkflow(workflowRec: WorkflowRecord,
                               execServiceOutputs: ExecutionServiceOutputs,
                               workflowSpan: RawlsTracingContext
-  )(implicit executionContext: ExecutionContext): Future[Int] = {
+  )(implicit executionContext: ExecutionContext): Future[Int] =
     // Attach the outputs in a txn of their own.
     // If attaching outputs fails for legit reasons (e.g. they're missing), it will mark the workflow as failed. This is correct.
     // If attaching outputs throws an exception (because e.g. deadlock or ConcurrentModificationException), the status will remain un-updated
     // and will be re-processed next time we call queryForWorkflowStatus().
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    // traverse and IO stuff ensures serial execution of the batches
-    val handleOutputsFuture = datasource
+    datasource
       .inTransactionWithAttrTempTable { dataAccess =>
-        handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, workflowSpan)
+        for {
+          // write the outputs
+          _ <- handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, workflowSpan)
+          // refetch the workflow record; this ensures that 1) its record version is up to date, and 2) that we can
+          // check its status to see if handleOutputs marked it as failed
+          currentRec <- dataAccess.workflowQuery.findWorkflowById(workflowRec.id).result.head
+          // No need to update statuses for any workflows that are in terminal statuses.
+          // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by handleOutputs.
+          doRecordUpdate = !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(currentRec.status))
+          numRowsUpdated <-
+            if (doRecordUpdate)
+              dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
+            else DBIO.successful(0)
+        } yield numRowsUpdated
       }
       .recoverWith {
         // fatal error writing outputs for this workflow. Mark it as failed.
         case fatal: RawlsFatalExceptionWithErrorReport =>
           markWorkflowFailed(workflowRec, fatal)
+          Future.successful(-1)
       }
-
-    handleOutputsFuture.flatMap { handleOutputsResult =>
-      traceWithParent("update workflow status", workflowSpan) { workflowStatusSpan =>
-        datasource.inTransaction { dataAccess =>
-          // Re-fetch the workflow as it may have been marked as Failed by handleOutputs.
-          dataAccess.workflowQuery.findWorkflowByIds(Seq(workflowRec.id)).result flatMap { updatedRecs =>
-            // No need to update status if the workflow is in a terminal status.
-            // Doing so would potentially overwrite it with the execution service status if it has been marked as failed by attachOutputs.
-            val workflowsToUpdate = updatedRecs.filter(rec =>
-              !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status))
-            )
-            if (workflowsToUpdate.nonEmpty) {
-              logger.info(
-                s"Updating workflow ${externalId(workflowRec)} to status ${workflowRec.status} in submission $submissionId"
-              )
-              // update status for this workflow
-              dataAccess.workflowQuery.batchUpdateStatus(workflowsToUpdate,
-                                                         WorkflowStatuses.withName(workflowRec.status)
-              )
-            } else {
-              DBIO.successful(0)
-            }
-          }
-        }
-      }
-    }
-  }
 
   private def toThurloeNotification(submission: Submission,
                                     workspaceName: WorkspaceName,
