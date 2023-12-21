@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{addSpanAttribute, trace, traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
@@ -370,12 +370,30 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
           .unsafeToFuture()
           .flatMap { _ =>
-            // finally, after processing all workflows, check for updates to the status of the submission itself
             datasource.inTransaction { dataAccess =>
-              // update submission after workflows are updated
-              updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
-                // return a message about whether our submission is done entirely
-                StatusCheckComplete(shouldStop)
+              // Refetch workflows as some may have been marked as Failed by handleOutputs.
+              dataAccess.workflowQuery.findWorkflowByIds(allWorkflows.map(_.id)).result flatMap { updatedRecs =>
+                // New statuses according to the execution service.
+                val workflowIdToNewStatus = allWorkflows.map(workflowRec => workflowRec.id -> workflowRec.status).toMap
+
+                // No need to update statuses for any workflows that are in terminal statuses.
+                // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
+                val workflowsToUpdate = updatedRecs
+                  .filter(rec => !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status)))
+                val workflowsWithNewStatuses =
+                  workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
+
+                // to minimize database updates batch 1 update per workflow status
+                DBIO.sequence(workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
+                  dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+                })
+
+              } flatMap { _ =>
+                // update submission after workflows are updated
+                updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
+                  // return a message about whether our submission is done entirely
+                  StatusCheckComplete(shouldStop)
+                }
               }
             }
           }
