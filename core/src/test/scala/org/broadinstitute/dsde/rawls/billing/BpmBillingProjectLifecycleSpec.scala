@@ -70,7 +70,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   val protectedLandingZoneDefinition = "fake-protected-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
   val landingZoneParameters = Map("fake_parameter" -> "fake_value")
-  val costSavingLandingZoneParameters = Map("fake_parameter" -> "fake_value")
+  val costSavingLandingZoneParameters = Map("fake_parameter" -> "false")
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
     protectedLandingZoneDefinition,
