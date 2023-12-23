@@ -64,14 +64,18 @@ class LandingZoneCreationStatusRunner(
       case Success(userCtx) =>
         Try(workspaceManagerDAO.getCreateAzureLandingZoneResult(job.jobControlId.toString, userCtx)) match {
           case Failure(exception) =>
-            val message = Some(s"Api call to get landing zone from workspace manager failed: ${exception.getMessage}")
+            val message =
+              Some(s"Api call to get landing zone result from workspace manager failed: ${exception.getMessage}")
             billingRepository
               .updateCreationStatus(billingProjectName, CreationStatuses.Error, message)
               .map(_ => Incomplete)
           case Success(result) =>
             Option(result.getJobReport).map(_.getStatus) match {
-              case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)
+              case Some(JobReport.StatusEnum.RUNNING) =>
+                logger.info(s"Landing zone creation still running, jobControlId = ${job.jobControlId}")
+                Future.successful(Incomplete)
               case Some(JobReport.StatusEnum.SUCCEEDED) =>
+                logger.info(s"Landing zone creation succeeded, jobControlId = ${job.jobControlId}")
                 billingRepository
                   .updateCreationStatus(billingProjectName, CreationStatuses.Ready, None)
                   .map(_ => Complete)
@@ -80,6 +84,7 @@ class LandingZoneCreationStatusRunner(
                 val msg = Option(result.getErrorReport)
                   .map(_.getMessage)
                   .getOrElse("Failure Reported, but no errors returned")
+                logger.warn(s"Landing zone creation failed, jobControlId = ${job.jobControlId}, message = ${msg}")
                 billingRepository
                   .updateCreationStatus(
                     billingProjectName,

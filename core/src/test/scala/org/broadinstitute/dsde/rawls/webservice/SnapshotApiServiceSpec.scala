@@ -74,16 +74,16 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       apiService.cleanupSupervisor
   }
 
-  def withApiServicesSecure[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(
+  def withApiServicesSecure[T](dataSource: SlickDataSource, withUser: String = testData.userOwner.userEmail.value)(
     testCode: TestApiService => T
   ): T = {
     val apiService = new TestApiService(dataSource,
-                                        user,
+                                        withUser,
                                         new MockGoogleServicesDAO("test"),
                                         new MockGooglePubSubDAO,
                                         new SnapshotApiServiceSpecWorkspaceManagerDAO()
     ) {
-      override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
+      override val samDAO: MockSamDAO = new MockSamDAO(this.dataSource) {
         override def userHasAction(resourceTypeName: SamResourceTypeName,
                                    resourceId: String,
                                    action: SamResourceAction,

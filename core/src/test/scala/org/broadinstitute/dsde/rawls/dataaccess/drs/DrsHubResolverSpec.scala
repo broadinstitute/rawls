@@ -10,12 +10,12 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
 
 class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with AnyFlatSpecLike {
-  implicit val executionContext = ExecutionContext.global
+  implicit val executionContext: ExecutionContextExecutor = ExecutionContext.global
 
   val mockDrsHubResolver = spy(new DrsHubResolver("foo@bar.com"))
   val mockUserInfo = mock[UserInfo](RETURNS_SMART_NULLS)

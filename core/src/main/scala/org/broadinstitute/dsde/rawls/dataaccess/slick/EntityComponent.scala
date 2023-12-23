@@ -237,7 +237,8 @@ trait EntityComponent {
     // noinspection SqlDialectInspection,DuplicatedCode
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
-      implicit val getEntityRecord = GetResult(r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+      implicit val getEntityRecord: GetResult[EntityRecord] =
+        GetResult(r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] =
         if (entities.isEmpty) {
@@ -317,7 +318,7 @@ trait EntityComponent {
       val driver: JdbcProfile = EntityComponent.this.driver
 
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
-      implicit val getEntityAndAttributesResult = GetResult { r =>
+      implicit val getEntityAndAttributesResult: GetResult[EntityAndAttributesResult] = GetResult { r =>
         // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
         val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
 
@@ -1095,27 +1096,31 @@ trait EntityComponent {
     private def applyEntityPatch(workspaceContext: Workspace,
                                  entityRecord: EntityRecord,
                                  upserts: AttributeMap,
-                                 deletes: Traversable[AttributeName]
-    ) =
-      // yank the attribute list for this entity to determine what to do with upserts
-      entityAttributeShardQuery(workspaceContext)
-        .findByOwnerQuery(Seq(entityRecord.id))
-        .map(attr => (attr.namespace, attr.name, attr.id))
-        .result flatMap { attrCols =>
-        val existingAttrsToRecordIds: Map[AttributeName, Set[Long]] =
-          attrCols
-            .groupBy { case (namespace, name, _) =>
-              (namespace, name)
-            }
-            .map { case ((namespace, name), ids) =>
-              AttributeName(namespace, name) -> ids
-                .map(_._3)
-                .toSet // maintain the full list of attribute ids since list members are stored as individual attributes
-            }
+                                 deletes: Traversable[AttributeName],
+                                 tracingContext: RawlsTracingContext
+    ) = {
+      traceDBIOWithParent("applyEntityPatch", tracingContext) { span =>
+        // yank the attribute list for this entity to determine what to do with upserts
+        traceDBIOWithParent("findByOwnerQuery", span)(_ =>
+          entityAttributeShardQuery(workspaceContext)
+            .findByOwnerQuery(Seq(entityRecord.id))
+            .map(attr => (attr.namespace, attr.name, attr.id))
+            .result
+        ) flatMap { attrCols =>
+          val existingAttrsToRecordIds: Map[AttributeName, Set[Long]] =
+            attrCols
+              .groupBy { case (namespace, name, _) =>
+                (namespace, name)
+              }
+              .map { case ((namespace, name), ids) =>
+                AttributeName(namespace, name) -> ids
+                  .map(_._3)
+                  .toSet // maintain the full list of attribute ids since list members are stored as individual attributes
+              }
 
-        val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
+          val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
-        /*
+          /*
           Additional check for resizing entities whose Attribute value type is AttributeList[_] in response to bugs
           mentioned in WA-32 and WA-153. Currently the update query is such that it matches the listIndex of each
           attribute value and updates the list index and list size. Previously if the size of the list changes, those
@@ -1126,45 +1131,46 @@ trait EntityComponent {
           or delete extra records from the entity table respectively.
 
           NOTE: Attributes that are not lists are treated as a list of size one.
-         */
+           */
 
-        // Tuple of
-        // insertRecs: Seq[EntityAttributeRecord]
-        // updateRecs: Seq[EntityAttributeRecord]
-        // extraDeleteIds: Seq[Long]
-        type AttributeModifications = (Seq[EntityAttributeRecord], Seq[EntityAttributeRecord], Seq[Long])
+          // Tuple of
+          // insertRecs: Seq[EntityAttributeRecord]
+          // updateRecs: Seq[EntityAttributeRecord]
+          // extraDeleteIds: Seq[Long]
+          type AttributeModifications = (Seq[EntityAttributeRecord], Seq[EntityAttributeRecord], Seq[Long])
 
-        def checkAndUpdateRecSize(name: AttributeName,
-                                  existingAttrSize: Int,
-                                  updateAttrSize: Int,
-                                  attrRecords: Seq[EntityAttributeRecord]
-        ): AttributeModifications =
-          if (updateAttrSize > existingAttrSize) {
-            // since the size of the "list" has increased, move these new records to insertRecs
-            val (newInsertRecs, newUpdateRecs) = attrRecords.partition {
-              _.listIndex.getOrElse(0) > (existingAttrSize - 1)
+          def checkAndUpdateRecSize(name: AttributeName,
+                                    existingAttrSize: Int,
+                                    updateAttrSize: Int,
+                                    attrRecords: Seq[EntityAttributeRecord]
+          ): AttributeModifications =
+            if (updateAttrSize > existingAttrSize) {
+              // since the size of the "list" has increased, move these new records to insertRecs
+              val (newInsertRecs, newUpdateRecs) = attrRecords.partition {
+                _.listIndex.getOrElse(0) > (existingAttrSize - 1)
+              }
+
+              (newInsertRecs, newUpdateRecs, Seq.empty[Long])
+            } else if (updateAttrSize < existingAttrSize) {
+              // since the size of the list has decreased, delete the extra rows from table
+              val deleteIds = existingAttrsToRecordIds(name).toSeq.takeRight(existingAttrSize - updateAttrSize)
+              (Seq.empty[EntityAttributeRecord], attrRecords, deleteIds)
+            } else (Seq.empty[EntityAttributeRecord], attrRecords, Seq.empty[Long]) // the list size hasn't changed
+
+          def recordsForUpdateAttribute(name: AttributeName,
+                                        attribute: Attribute,
+                                        attrRecords: Seq[EntityAttributeRecord]
+          ): AttributeModifications = {
+            val existingAttrSize = existingAttrsToRecordIds.get(name).map(_.size).getOrElse(0)
+            attribute match {
+              case list: AttributeList[_] => checkAndUpdateRecSize(name, existingAttrSize, list.list.size, attrRecords)
+              case _                      => checkAndUpdateRecSize(name, existingAttrSize, 1, attrRecords)
             }
-
-            (newInsertRecs, newUpdateRecs, Seq.empty[Long])
-          } else if (updateAttrSize < existingAttrSize) {
-            // since the size of the list has decreased, delete the extra rows from table
-            val deleteIds = existingAttrsToRecordIds(name).toSeq.takeRight(existingAttrSize - updateAttrSize)
-            (Seq.empty[EntityAttributeRecord], attrRecords, deleteIds)
-          } else (Seq.empty[EntityAttributeRecord], attrRecords, Seq.empty[Long]) // the list size hasn't changed
-
-        def recordsForUpdateAttribute(name: AttributeName,
-                                      attribute: Attribute,
-                                      attrRecords: Seq[EntityAttributeRecord]
-        ): AttributeModifications = {
-          val existingAttrSize = existingAttrsToRecordIds.get(name).map(_.size).getOrElse(0)
-          attribute match {
-            case list: AttributeList[_] => checkAndUpdateRecSize(name, existingAttrSize, list.list.size, attrRecords)
-            case _                      => checkAndUpdateRecSize(name, existingAttrSize, 1, attrRecords)
           }
-        }
 
-        lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord.toReference)) flatMap {
-          entityRefRecs =>
+          traceDBIOWithParent("lookupNotYetLoadedReferences", span)(_ =>
+            lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord.toReference))
+          ) flatMap { entityRefRecs =>
             val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) // re-add the current entity
             val refsToIds = allTheEntityRefs.map(e => e.toReference -> e.id).toMap
 
@@ -1198,48 +1204,69 @@ trait EntityComponent {
               insertRecs,
               updateRecs,
               totalDeleteIds,
-              entityAttributeTempQuery.insertScratchAttributes
+              entityAttributeTempQuery.insertScratchAttributes,
+              span
             )
+          }
         }
       }
+    }
 
     // "patch" this entity by applying the upserts and the deletes to its attributes, then save. a little more database efficient than a "full" save, but requires the entity already exist.
     def saveEntityPatch(workspaceContext: Workspace,
                         entityRef: AttributeEntityReference,
                         upserts: AttributeMap,
-                        deletes: Traversable[AttributeName]
-    ) = {
-      val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
-      if (upserts.isEmpty && deletes.isEmpty) {
-        DBIO.successful(()) // no-op
-      } else if (deleteIntersectUpsert.nonEmpty) {
-        DBIO.failed(
-          new RawlsException(
-            s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"
+                        deletes: Traversable[AttributeName],
+                        tracingContext: RawlsTracingContext
+    ) =
+      traceDBIOWithParent("saveEntityPatch", tracingContext) { span =>
+        span.tracingSpan.foreach { s =>
+          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+          s.putAttribute("workspace",
+                         OpenCensusAttributeValue.stringAttributeValue(workspaceContext.toWorkspaceName.toString)
           )
-        )
-      } else {
-        getEntityRecords(workspaceContext.workspaceIdAsUUID, Set(entityRef)) flatMap { entityRecs =>
-          if (entityRecs.length != 1) {
-            throw new RawlsException(
-              s"saveEntityPatch looked up $entityRef expecting 1 record, got ${entityRecs.length} instead"
+          s.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityRef.entityType))
+          s.putAttribute("entityName", OpenCensusAttributeValue.stringAttributeValue(entityRef.entityName))
+          s.putAttribute("numUpserts", OpenCensusAttributeValue.longAttributeValue(upserts.size))
+          s.putAttribute("numDeletes", OpenCensusAttributeValue.longAttributeValue(deletes.size))
+        }
+        val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
+        if (upserts.isEmpty && deletes.isEmpty) {
+          DBIO.successful(()) // no-op
+        } else if (deleteIntersectUpsert.nonEmpty) {
+          DBIO.failed(
+            new RawlsException(
+              s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"
             )
-          }
+          )
+        } else {
+          traceDBIOWithParent("getEntityRecords", span)(_ =>
+            getEntityRecords(workspaceContext.workspaceIdAsUUID, Set(entityRef))
+          ) flatMap { entityRecs =>
+            if (entityRecs.length != 1) {
+              throw new RawlsException(
+                s"saveEntityPatch looked up $entityRef expecting 1 record, got ${entityRecs.length} instead"
+              )
+            }
 
-          val entityRecord = entityRecs.head
-          upserts.keys.foreach { attrName =>
-            validateUserDefinedString(attrName.name)
-            validateAttributeName(attrName, entityRecord.entityType)
-          }
+            val entityRecord = entityRecs.head
+            upserts.keys.foreach { attrName =>
+              validateUserDefinedString(attrName.name)
+              validateAttributeName(attrName, entityRecord.entityType)
+            }
 
-          for {
-            _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
-            updatedEntities <- entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, Seq(entityRecord.id))
-            _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
-          } yield {}
+            for {
+              _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes, span)
+              updatedEntities <- traceDBIOWithParent("getEntities", span)(_ =>
+                entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, Seq(entityRecord.id))
+              )
+              _ <- traceDBIOWithParent("optimisticLockUpdate", span)(_ =>
+                entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
+              )
+            } yield {}
+          }
         }
       }
-    }
 
     private def lookupNotYetLoadedReferences(workspaceContext: Workspace,
                                              entities: Traversable[Entity],

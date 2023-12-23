@@ -7,6 +7,7 @@ import org.apache.commons.io.IOUtils
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.io.ByteArrayInputStream
@@ -23,8 +24,8 @@ import scala.concurrent.ExecutionContext
  */
 class GoogleBigQueryServiceFactory(pathToCredentialJson: String)(implicit executionContext: ExecutionContext) {
 
-  implicit lazy val logger = Slf4jLogger.getLogger[IO]
-  implicit lazy val timer = Temporal[IO]
+  implicit lazy val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+  implicit lazy val timer: Temporal[IO] = Temporal[IO]
 
   def getServiceForPet(petKey: String,
                        projectId: GoogleProject

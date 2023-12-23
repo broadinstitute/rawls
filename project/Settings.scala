@@ -81,7 +81,7 @@ object Settings {
     Global / scalafmtFilter := "diff-ref=HEAD^"
   )
 
-  val scala213 = "2.13.10"
+  val scala213 = "2.13.12"
 
   // common settings for all sbt subprojects, without enforcing that a database is present (for tests)
   val commonSettingsWithoutDb =

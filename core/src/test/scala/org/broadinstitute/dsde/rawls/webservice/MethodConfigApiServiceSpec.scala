@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent with ScalaFutures {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
-  implicit override val routeTestTimeout = RouteTestTimeout(500.seconds)
+  implicit override val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(500.seconds)
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext

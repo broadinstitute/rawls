@@ -9,7 +9,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   MockShardedExecutionServiceCluster,
   SlickDataSource
 }
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeEntityReference,
+  AttributeName,
+  AttributeString,
+  RawlsTracingContext,
+  WorkflowStatuses
+}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -18,7 +24,6 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.sql.BatchUpdateException
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString}
 import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
@@ -98,7 +103,8 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
         runAndWait(
           submissionMonitorActorRef.underlyingActor.saveEntities(dataSource.dataAccess,
                                                                  workspaceContext,
-                                                                 updatedEntitiesAndWorkspace
+                                                                 updatedEntitiesAndWorkspace,
+                                                                 RawlsTracingContext(None)
           ),
           Duration.create(lockTime, SECONDS)
         )

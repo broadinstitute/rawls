@@ -95,8 +95,8 @@ object Boot extends IOApp with LazyLogging {
     val gcsConfig = conf.getConfig("gcs")
 
     // we need an ActorSystem to host our application in
-    implicit val system = ActorSystem("rawls")
-    implicit val materializer = ActorMaterializer()
+    implicit val system: ActorSystem = ActorSystem("rawls")
+    implicit val materializer: ActorMaterializer = ActorMaterializer()
 
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
 

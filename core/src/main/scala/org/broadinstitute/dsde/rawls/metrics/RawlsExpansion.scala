@@ -30,7 +30,7 @@ object RawlsExpansion {
     * This takes an upper type bound {{{A <: RawlsEnumeration}}} so it can work with any
     * subtype of RawlsEnumeration.
     */
-  implicit def RawlsEnumerationExpansion[A <: RawlsEnumeration[_]] = new Expansion[A] {}
+  implicit def RawlsEnumerationExpansion[A <: RawlsEnumeration[_]]: Expansion[A] = new Expansion[A] {}
 
   /**
     * Creates an expansion for Uri which redacts pieces of the Uri matched by the provided PathMatcher.
