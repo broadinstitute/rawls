@@ -310,11 +310,17 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                                                                           childContext
           )
         } yield {
-          // TODO: is this expectedPageCount logic solid?
-          val expectedPageCount: Int = if (filteredCount < query.pageSize) filteredCount else query.pageSize
+          val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+          if (filteredCount > 0 && query.page > pageCount) {
+            throw new DataEntityException(
+              code = StatusCodes.BadRequest,
+              message = s"requested page ${query.page} is greater than the number of pages $pageCount"
+            )
+          }
+
           // TODO: replicate the createEntityQueryResponse logic for page > available pages?
           val metadata: EntityQueryResultMetadata =
-            EntityQueryResultMetadata(unfilteredCount, filteredCount, expectedPageCount)
+            EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
           val allAttrsStream =
             dataAccess.entityQuery
               .loadEntityPageSource(workspaceContext, entityType, query, childContext)
