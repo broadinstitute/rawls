@@ -645,6 +645,27 @@ trait EntityComponent {
 
       // actions which may include "deleted" hidden entities
 
+      def streamForTypeName(workspaceContext: Workspace,
+                            entityType: String,
+                            entityName: String,
+                            desiredFields: Set[AttributeName]
+      ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
+        // user requested specific attributes. include them in the where clause.
+        val attrNamespaceNameTuples = reduceSqlActionsWithDelim(desiredFields.toSeq.map { attrName =>
+          sql"(${attrName.namespace}, ${attrName.name})"
+        })
+        val attributesFilter =
+          if (desiredFields.isEmpty) sql""
+          else concatSqlActions(sql" and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
+
+        concatSqlActions(
+          sql"""#${baseEntityAndAttributeSql(
+              workspaceContext
+            )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""",
+          attributesFilter
+        ).as[EntityAndAttributesResult]
+      }
+
       def actionForTypeName(workspaceContext: Workspace,
                             entityType: String,
                             entityName: String,
@@ -997,9 +1018,35 @@ trait EntityComponent {
                              entityType: String,
                              entityQuery: model.EntityQuery,
                              parentContext: RawlsRequestContext
-    ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
-      EntityAndAttributesRawSqlQuery
-        .activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
+    ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
+      // look for a columnFilter that specifies the primary key for this entityType;
+      // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
+      val nameFilter: Option[String] = entityQuery.columnFilter match {
+        case Some(colFilter)
+            if colFilter.attributeName == AttributeName.withDefaultNS(
+              entityType + Attributable.entityIdAttributeSuffix
+            ) =>
+          Option(colFilter.term)
+        case _ => None
+      }
+
+      // if filtering by name, retrieve that entity directly, else do the full query:
+      nameFilter match {
+        case Some(entityName) =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
+          }
+          val desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
+          EntityAndAttributesRawSqlQuery
+            .streamForTypeName(workspaceContext, entityType, entityName, desiredFields)
+        case _ =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
+          }
+          EntityAndAttributesRawSqlQuery
+            .activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
+      }
+    }
 
     @deprecated("Don't use this one, it materializes", "2023-12-12")
     // get paginated entities for UI display, as a result of executing a query

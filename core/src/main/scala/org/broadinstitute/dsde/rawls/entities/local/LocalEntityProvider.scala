@@ -30,7 +30,9 @@ import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
   AttributeEntityReference,
+  AttributeName,
   AttributeValue,
   Entity,
   EntityCopyDefinition,
@@ -292,54 +294,87 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def queryEntitiesSource(entityType: String,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
-    // TODO: add tracing back in
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
-        childContext.tracingSpan.foreach { s1 =>
-          s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
-          s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
-          s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
-          s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
-          s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
-        }
-        for {
-          (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
-                                                                                          entityType,
-                                                                                          query,
-                                                                                          childContext
-          )
-        } yield {
-          val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-          if (filteredCount > 0 && query.page > pageCount) {
-            throw new DataEntityException(
-              code = StatusCodes.BadRequest,
-              message = s"requested page ${query.page} is greater than the number of pages $pageCount"
-            )
-          }
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
+    // look for a columnFilter that specifies the primary key for this entityType;
+    // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
+    val nameFilter: Option[String] = query.columnFilter match {
+      case Some(colFilter)
+          if colFilter.attributeName == AttributeName.withDefaultNS(
+            entityType + Attributable.entityIdAttributeSuffix
+          ) =>
+        Option(colFilter.term)
+      case _ => None
+    }
 
-          // TODO: replicate the createEntityQueryResponse logic for page > available pages?
+    // if filtering by name, retrieve that entity directly, else do the full query:
+    nameFilter match {
+      case Some(entityName) =>
+        parentContext.tracingSpan.map { span =>
+          span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
+        }
+        dataSource.inTransaction { dataAccess =>
+          dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query)
+        } map { case (unfilteredCount, filteredCount, entity) =>
+          val pageCount = if (entity.nonEmpty) 1 else 0
+          val entitySource = if (entity.nonEmpty) Source.single(entity.head) else Source.empty
+
           val metadata: EntityQueryResultMetadata =
             EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
-          val allAttrsStream =
-            dataAccess.entityQuery
-              .loadEntityPageSource(workspaceContext, entityType, query, childContext)
-              .transactionally
-              .withTransactionIsolation(TransactionIsolation.ReadCommitted)
-              .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                                       rsConcurrency = ResultSetConcurrency.ReadOnly,
-                                       fetchSize = dataSource.dataAccess.fetchSize
-              )
-          val dbSource: Source[EntityAndAttributesResult, NotUsed] =
-            Source.fromPublisher(dataSource.database.stream(allAttrsStream))
-
-          val entitySource = EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-
           (metadata, entitySource)
         }
 
-      }
+      case _ =>
+        dataSource.inTransaction { dataAccess =>
+          traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
+            childContext.tracingSpan.foreach { s1 =>
+              s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
+              s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
+              s1.putAttribute("filterTerms",
+                              OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse(""))
+              )
+              s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
+              s1.putAttribute("sortDirection",
+                              OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString)
+              )
+            }
+            for {
+              (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
+                                                                                              entityType,
+                                                                                              query,
+                                                                                              childContext
+              )
+            } yield {
+              val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+              if (filteredCount > 0 && query.page > pageCount) {
+                throw new DataEntityException(
+                  code = StatusCodes.BadRequest,
+                  message = s"requested page ${query.page} is greater than the number of pages $pageCount"
+                )
+              }
+
+              val metadata: EntityQueryResultMetadata =
+                EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+              val allAttrsStream =
+                dataAccess.entityQuery
+                  .loadEntityPageSource(workspaceContext, entityType, query, childContext)
+                  .transactionally
+                  .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+                  .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                           rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                           fetchSize = dataSource.dataAccess.fetchSize
+                  )
+              val dbSource: Source[EntityAndAttributesResult, NotUsed] =
+                Source.fromPublisher(dataSource.database.stream(allAttrsStream))
+
+              val entitySource = EntityStreamingUtils.gatherEntities(dataSource, dbSource)
+
+              (metadata, entitySource)
+            }
+
+          }
+        }
     }
+  }
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
