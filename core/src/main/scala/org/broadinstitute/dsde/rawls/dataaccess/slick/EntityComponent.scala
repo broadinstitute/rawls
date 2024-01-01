@@ -421,6 +421,7 @@ trait EntityComponent {
         )
       }
 
+      // TODO AJ-1347: is this duplicated elsewhere?
       // generate the clause to filter based on user search terms
       def paginationFilterSql(prefix: String, alias: String, entityQuery: model.EntityQuery) = {
         val filtersOption = entityQuery.filterTerms.map {
@@ -625,6 +626,7 @@ trait EntityComponent {
       }
       // END activeActionForEntityAndAttributesSource
 
+      // TODO AJ-1347: can this be removed?
       @deprecated("Don't use this one; it materializes", "2023-12-12")
       def activeActionForPagination(workspaceContext: Workspace,
                                     entityType: String,
@@ -666,6 +668,7 @@ trait EntityComponent {
         ).as[EntityAndAttributesResult]
       }
 
+      // TODO AJ-1347: can `actionForTypeName` be removed in favor of streamForTypeName?
       def actionForTypeName(workspaceContext: Workspace,
                             entityType: String,
                             entityName: String,
@@ -1014,6 +1017,7 @@ trait EntityComponent {
     ): ReadWriteAction[(Int, Int)] =
       EntityAndAttributesRawSqlQuery.activeActionForMetadata(workspaceContext, entityType, entityQuery, parentContext)
 
+    // TODO AJ-1347: document and assess tracing
     def loadEntityPageSource(workspaceContext: Workspace,
                              entityType: String,
                              entityQuery: model.EntityQuery,

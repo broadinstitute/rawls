@@ -72,6 +72,7 @@ trait EntityProvider {
                           parentContext: RawlsRequestContext
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
 
+  // TODO AJ-1347: can this be removed?
   def queryEntities(entityType: String,
                     query: EntityQuery,
                     parentContext: RawlsRequestContext

@@ -291,6 +291,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
+  // TODO AJ-1347: document; assess tracing
   override def queryEntitiesSource(entityType: String,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx

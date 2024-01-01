@@ -94,13 +94,9 @@ trait EntityApiService extends UserInfoDirectives {
                       columnFilter.flatMap(_.toOption)
                     )
 
+                    // TODO AJ-1347: move all this serialization logic out of EntityApiService and try to rely on
+                    //  a JsonFormat instead of handcoding the response
                     val newline = ByteString("\n")
-//                    implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport
-//                      .json()
-//                      .withFramingRenderer(
-//                        // this enables new-line delimited JSON streaming
-//                        Flow[ByteString].map(byteString => byteString ++ newline)
-//                      )
 
                     onSuccess(
                       entityServiceConstructor(ctx).queryEntitiesSource(WorkspaceName(workspaceNamespace,
@@ -112,11 +108,7 @@ trait EntityApiService extends UserInfoDirectives {
                                                                         billingProject
                       )
                     ) { (entityQueryResultMetadata, resultsSource) =>
-//                      val byteStream = ByteString("""{"parameters": {}, "resultMetadata": {}}""")
-
                       import spray.json._
-
-                      // val jsonEntityStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
 
                       val entitiesSource: Source[ByteString, _] =
                         resultsSource
@@ -148,18 +140,6 @@ trait EntityApiService extends UserInfoDirectives {
                       complete(HttpEntity(ContentTypes.`application/json`, responseSource))
 
                     }
-
-                    // deliver a source of:
-                    // { "parameters": + EntityQueryResponse.parameters + ",
-
-//                    complete {
-//                      entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
-//                                                                  dataReference,
-//                                                                  entityType,
-//                                                                  entityQuery,
-//                                                                  billingProject
-//                      )
-//                    }
                   } else {
                     complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
                   }
