@@ -9,13 +9,6 @@ import scala.concurrent.duration._
 class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
   val testConf: Config = ConfigFactory.load()
 
-  it should "default to not enabled if no config is present" in {
-    val config = MultiCloudWorkspaceConfig.apply(ConfigFactory.empty())
-
-    config.multiCloudWorkspacesEnabled shouldBe false
-    config.azureConfig shouldBe None
-  }
-
   it should "Parse config when present" in {
     val enabledConfig =
       """
@@ -41,13 +34,12 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     val parsed = ConfigFactory.parseString(enabledConfig)
     val config = MultiCloudWorkspaceConfig.apply(parsed)
 
-    config.multiCloudWorkspacesEnabled shouldBe true
-    config.azureConfig.get.landingZoneDefinition shouldBe "fake_landing_zone_definition"
-    config.azureConfig.get.landingZoneVersion shouldBe "fake_landing_zone_version"
-    config.azureConfig.get.landingZoneParameters shouldBe Map("FAKE_PARAMETER" -> "fake_value",
-                                                              "ANOTHER_FAKE_ONE" -> "still_not_real"
+    config.azureConfig.landingZoneDefinition shouldBe "fake_landing_zone_definition"
+    config.azureConfig.landingZoneVersion shouldBe "fake_landing_zone_version"
+    config.azureConfig.landingZoneParameters shouldBe Map("FAKE_PARAMETER" -> "fake_value",
+                                                          "ANOTHER_FAKE_ONE" -> "still_not_real"
     )
-    config.workspaceManager.get.pollTimeout shouldEqual 60.seconds
-    config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
+    config.workspaceManager.pollTimeout shouldEqual 60.seconds
+    config.workspaceManager.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }
 }
