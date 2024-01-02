@@ -79,7 +79,8 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.15.1"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.1"
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.2.0"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
+  // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
 
   val workbenchLibsHash = "8ccaa6d"
 
