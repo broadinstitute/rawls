@@ -6,13 +6,12 @@ import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.apache.http.HttpStatus
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,
@@ -27,6 +26,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.mockito.ArgumentMatchers.{any, anyString, argThat}
 import org.mockito.Mockito.{doNothing, doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -45,10 +45,10 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
   val userInfo: UserInfo =
     UserInfo(RawlsUserEmail("fake@example.com"), OAuth2BearerToken("fake_token"), 0, RawlsUserSubjectId("sub"), None)
-  val testContext = RawlsRequestContext(userInfo)
-  val coords = AzureManagedAppCoordinates(UUID.randomUUID, UUID.randomUUID, "fake")
-  val billingProjectName = RawlsBillingProjectName("fake_name")
-  val createRequest = CreateRawlsV2BillingProjectFullRequest(
+  val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
+  val coords: AzureManagedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID, UUID.randomUUID, "fake")
+  val billingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("fake_name")
+  val createRequest: CreateRawlsV2BillingProjectFullRequest = CreateRawlsV2BillingProjectFullRequest(
     billingProjectName,
     None,
     None,
@@ -56,7 +56,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     None,
     None
   )
-  val createProtectedRequest = CreateRawlsV2BillingProjectFullRequest(
+  val createProtectedRequest: CreateRawlsV2BillingProjectFullRequest = CreateRawlsV2BillingProjectFullRequest(
     billingProjectName,
     None,
     None,
@@ -65,20 +65,24 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     None,
     Some(true)
   )
-  val profileModel = new ProfileModel().id(UUID.randomUUID())
+  val profileModel: ProfileModel = new ProfileModel().id(UUID.randomUUID())
   val landingZoneDefinition = "fake-landing-zone-definition"
   val protectedLandingZoneDefinition = "fake-protected-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
-  val landingZoneParameters = Map("fake_parameter" -> "fake_value")
+  val landingZoneParameters: Map[String, String] = Map("fake_parameter" -> "fake_value")
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
     protectedLandingZoneDefinition,
     landingZoneVersion,
     landingZoneParameters,
-    false
+    landingZoneAllowAttach = false
   )
-  val landingZoneId = UUID.randomUUID()
-  val landingZoneJobId = UUID.randomUUID()
+  val landingZoneId: UUID = UUID.randomUUID()
+  val landingZoneJobId: UUID = UUID.randomUUID()
+  val multiCloudWorkspaceConfig = new MultiCloudWorkspaceConfig(
+    MultiCloudWorkspaceManagerConfig("fake_app_id", Duration(1, "second"), Duration(1, "second")),
+    azConfig
+  )
 
   behavior of "validateBillingProjectCreationRequest"
 
@@ -191,7 +195,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     intercept[LandingZoneCreationException] {
       Await.result(bp.postCreationSteps(
                      createRequestWithExistingLz,
-                     new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                     multiCloudWorkspaceConfig,
                      testContext
                    ),
                    Duration.Inf
@@ -265,7 +269,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
                      createRequestWithExistingLz,
-                     new MultiCloudWorkspaceConfig(true, None, Some(lzAttachAzConfig)),
+                     new MultiCloudWorkspaceConfig(null, lzAttachAzConfig),
                      testContext
                    ),
                    Duration.Inf
@@ -322,7 +326,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
                      createRequest,
-                     new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                     multiCloudWorkspaceConfig,
                      testContext
                    ),
                    Duration.Inf
@@ -404,7 +408,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
-                   new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                   multiCloudWorkspaceConfig,
                    testContext
                  ),
                  Duration.Inf
@@ -497,7 +501,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
                      createProtectedRequest,
-                     new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                     multiCloudWorkspaceConfig,
                      testContext
                    ),
                    Duration.Inf
@@ -562,7 +566,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      multiCloudWorkspaceConfig,
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -620,7 +624,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      multiCloudWorkspaceConfig,
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -673,7 +677,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      multiCloudWorkspaceConfig,
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -736,7 +740,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      multiCloudWorkspaceConfig,
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -805,7 +809,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      multiCloudWorkspaceConfig,
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
