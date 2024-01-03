@@ -60,16 +60,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   implicit val workbenchMetricBaseName: ShardId = "test"
 
   def activeMcWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
-    multiCloudWorkspacesEnabled = true,
-    Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds, 120 seconds)),
-    Some(
-      AzureConfig(
-        "fake-landing-zone-definition",
-        "fake-protected-landing-zone-definition",
-        "fake-landing-zone-version",
-        Map("fake_parameter" -> "fake_value"),
-        landingZoneAllowAttach = false
-      )
+    MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds, 120 seconds),
+    AzureConfig(
+      "fake-landing-zone-definition",
+      "fake-protected-landing-zone-definition",
+      "fake-landing-zone-version",
+      Map("fake_parameter" -> "fake_value"),
+      landingZoneAllowAttach = false
     )
   )
 
@@ -269,29 +266,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   }
 
   behavior of "createMultiCloudWorkspace"
-
-  it should "throw an exception if creating a multi-cloud workspace is not enabled" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
-    val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      config,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest("fake", "fake_name", Map.empty)
-
-    val actual = intercept[RawlsExceptionWithErrorReport] {
-      mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID()))
-    }
-
-    actual.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
-  }
 
   it should "throw an exception if a workspace with the same name already exists" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()

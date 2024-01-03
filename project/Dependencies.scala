@@ -50,7 +50,7 @@ object Dependencies {
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20230119-" + googleV)
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20230112-" + googleV)
   val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20230109-" + googleV)
-  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "32.1.3-jre"
+  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.0.0-jre"
 
   // metrics4-scala and metrics3-statsd are pulled in by workbench-metrics, which is pulled in by
   // workbench-google (workbenchGoogle variable in this file). Thus, anything that depends on workbench-google, such as
@@ -61,11 +61,11 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.15.3"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.16.1"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.5"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.34.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.1.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.50"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
@@ -79,7 +79,8 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.15.1"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.1"
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.2.0"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
+  // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
 
   val workbenchLibsHash = "8ccaa6d"
 
@@ -104,11 +105,11 @@ object Dependencies {
   val workbenchOpenTelemetry: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV
   val workbenchOpenTelemetryTests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.7" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.8" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.15.1"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
   // should we prefer jakarta over javax.xml?
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
@@ -129,7 +130,7 @@ object Dependencies {
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client-javax" % "0.254.995-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client-javax" % "0.1.236-SNAPSHOT")
+  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client-javax" % "0.1.493-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.95-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-d606036")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
