@@ -186,11 +186,6 @@ class BillingProfileManagerDAOImpl(
     }
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
-
-    if (!config.multiCloudWorkspacesEnabled) {
-      return Future.successful(Seq())
-    }
-
     val profileApi = apiClientProvider.getProfileApi(ctx)
 
     @tailrec

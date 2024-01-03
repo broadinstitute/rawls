@@ -9,10 +9,7 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
-final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
-                                           workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
-                                           azureConfig: Option[AzureConfig]
-)
+final case class MultiCloudWorkspaceConfig(workspaceManager: MultiCloudWorkspaceManagerConfig, azureConfig: AzureConfig)
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String,
                                                   pollTimeout: FiniteDuration,
@@ -29,50 +26,39 @@ final case class AzureConfig(landingZoneDefinition: String,
 
 case object MultiCloudWorkspaceConfig {
   def apply[T <: MultiCloudWorkspaceConfig](conf: Config): MultiCloudWorkspaceConfig = {
-    val azureConfig: Option[AzureConfig] = conf.getConfigOption("multiCloudWorkspaces.azureConfig") match {
-      case Some(azc) =>
-        Some(
-          AzureConfig(
-            azc.getString("landingZoneDefinition"),
-            azc.getString("protectedDataLandingZoneDefinition"),
-            azc.getString("landingZoneVersion"),
-            azc
-              .getConfig("landingZoneParameters")
-              .entrySet()
-              .asScala
-              .map { entry =>
-                entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
-              }
-              .toMap,
-            azc
-              .getConfig("costSavingLandingZoneParameters")
-              .entrySet()
-              .asScala
-              .map { entry =>
-                entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
-              }
-              .toMap,
-            azc.getBooleanOption("landingZoneAllowAttach").getOrElse(false)
-          )
-        )
-      case _ => None
-    }
+    val azc = conf.getConfig("multiCloudWorkspaces.azureConfig")
+    val azureConfig =
+      AzureConfig(
+        azc.getString("landingZoneDefinition"),
+        azc.getString("protectedDataLandingZoneDefinition"),
+        azc.getString("landingZoneVersion"),
+        azc
+          .getConfig("landingZoneParameters")
+          .entrySet()
+          .asScala
+          .map { entry =>
+            entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
+          }
+          .toMap,
+        azc
+          .getConfig("costSavingLandingZoneParameters")
+          .entrySet()
+          .asScala
+          .map { entry =>
+            entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
+          }
+          .toMap,
+        azc.getBooleanOption("landingZoneAllowAttach").getOrElse(false)
+      )
 
-    conf.getConfigOption("multiCloudWorkspaces") match {
-      case Some(mc) =>
-        new MultiCloudWorkspaceConfig(
-          mc.getBoolean("enabled"),
-          Some(
-            MultiCloudWorkspaceManagerConfig(
-              mc.getString("workspaceManager.leonardoWsmApplicationId"),
-              util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds")),
-              util.toScalaDuration(mc.getDuration("workspaceManager.deletionPollTimeoutSeconds"))
-            )
-          ),
-          azureConfig
-        )
-      case None =>
-        new MultiCloudWorkspaceConfig(false, None, None)
-    }
+    val mc = conf.getConfig("multiCloudWorkspaces")
+    new MultiCloudWorkspaceConfig(
+      MultiCloudWorkspaceManagerConfig(
+        mc.getString("workspaceManager.leonardoWsmApplicationId"),
+        util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds")),
+        util.toScalaDuration(mc.getDuration("workspaceManager.deletionPollTimeoutSeconds"))
+      ),
+      azureConfig
+    )
   }
 }
