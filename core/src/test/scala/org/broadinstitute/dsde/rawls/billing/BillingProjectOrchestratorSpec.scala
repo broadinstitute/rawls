@@ -47,6 +47,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     "fake-protected-landing-zone-definition",
     "fake-landing-zone-version",
     Map("fake_parameter" -> "fake_value"),
+    Map("fake_parameter" -> "fake_value"),
     landingZoneAllowAttach = false
   )
 
