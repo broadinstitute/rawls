@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # The CloudSQL console simply states "MySQL 5.7" so we may not match the minor version number
+MYSQL_IMAGE=mysql
 MYSQL_VERSION=5.7
 start() {
 
@@ -10,11 +11,23 @@ start() {
 
     # start up mysql
     echo "starting up mysql container..."
-    docker run --name $CONTAINER -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d -p 3310:3306 mysql/mysql-server:$MYSQL_VERSION --character-set-server=utf8
+    # flags for this mysql server:
+    #   binlog-format=ROW matches CloudSQL: https://cloud.google.com/sql/docs/mysql/flags#system_flags_changed_in
+    #   log_bin_trust_function_creators=ON enables create function and create trigger without the SUPER privilege
+    docker run --name $CONTAINER \
+                  -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test \
+                  -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb \
+                  -d -p 3310:3306 $MYSQL_IMAGE:$MYSQL_VERSION \
+                  --character-set-server=utf8 \
+                  --binlog-format=ROW \
+                  --log_bin_trust_function_creators=ON
 
     # validate mysql
     echo "running mysql validation..."
-    docker run --rm --link $CONTAINER:mysql -v $PWD/docker/sql_validate.sh:/working/sql_validate.sh broadinstitute/dsde-toolbox /working/sql_validate.sh rawls
+    docker run --rm --link $CONTAINER:mysql \
+                  -v $PWD/docker/sql_validate.sh:/working/sql_validate.sh \
+                  broadinstitute/dsde-toolbox:mysql8 \
+                  /working/sql_validate.sh rawls
     if [ 0 -eq $? ]; then
         echo "mysql validation succeeded."
     else
