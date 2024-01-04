@@ -70,11 +70,13 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   val protectedLandingZoneDefinition = "fake-protected-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
   val landingZoneParameters: Map[String, String] = Map("fake_parameter" -> "fake_value")
+  val costSavingLandingZoneParameters: Map[String, String] = Map("fake_parameter" -> "false")
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
     protectedLandingZoneDefinition,
     landingZoneVersion,
     landingZoneParameters,
+    costSavingLandingZoneParameters,
     landingZoneAllowAttach = false
   )
   val landingZoneId: UUID = UUID.randomUUID()
@@ -217,11 +219,13 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
     val lzAttachAzConfig =
-      AzureConfig(landingZoneDefinition,
-                  protectedLandingZoneDefinition,
-                  landingZoneVersion,
-                  landingZoneParameters,
-                  landingZoneAllowAttach = true
+      AzureConfig(
+        landingZoneDefinition,
+        protectedLandingZoneDefinition,
+        landingZoneVersion,
+        landingZoneParameters,
+        costSavingLandingZoneParameters,
+        landingZoneAllowAttach = true
       )
     val createRequestWithExistingLz = CreateRawlsV2BillingProjectFullRequest(
       billingProjectName,
