@@ -18,12 +18,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{
-  BillingAccount,
-  ListBillingAccountsResponse,
-  ProjectBillingInfo,
-  TestIamPermissionsRequest
-}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -42,8 +37,6 @@ import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
 import com.google.cloud.storage.{StorageClass, StorageException}
-import io.opencensus.scala.Tracing._
-import io.opencensus.trace.{AttributeValue, Span}
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
@@ -53,6 +46,7 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceFutureWithParent, traceNakedWithParent}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
@@ -191,7 +185,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                               bucketName: GcsBucketName,
                               labels: Map[String, String],
-                              parentSpan: Span = null,
+                              requestContext: RawlsRequestContext,
                               bucketLocation: Option[String]
   ): Future[GoogleWorkspaceInfo] = {
     def insertInitialStorageLog: Future[Unit] = {
@@ -218,7 +212,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- traceWithParent("insertBucket", parentSpan)(_ =>
+      _ <- traceFutureWithParent("insertBucket", requestContext)(_ =>
         googleStorageService
           .insertBucket(
             googleProject = GoogleProject(googleProject.value),
@@ -244,10 +238,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
               throw new RawlsExceptionWithErrorReport(errorReport)
           }
       ) // ACL = None because bucket IAM will be set separately in updateBucketIam
-      updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ =>
+      updateBucketIamFuture = traceFutureWithParent("updateBucketIam", requestContext)(_ =>
         updateBucketIam(bucketName, policyGroupsByAccessLevel)
       )
-      insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ =>
+      insertInitialStorageLogFuture = traceFutureWithParent("insertInitialStorageLog", requestContext)(_ =>
         insertInitialStorageLog
       )
       _ <- updateBucketIamFuture
@@ -780,46 +774,36 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
    */
   override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                      billingAccountName: RawlsBillingAccountName,
-                                     span: Span = null
+                                     tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo] = {
     // Since this method should only be called with a non-empty Billing Account Name, then Rawls should also make sure
     // that Billing is enabled for the Google Project, otherwise users' projects could get "stuck" in a Disabled Billing
     // state with no way to reenable because they do not have permissions to do this directly on the Google Project.
     val newProjectBillingInfo =
       new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true)
-    updateBillingInfo(googleProjectId, newProjectBillingInfo, span)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo, tracingContext)
   }
 
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] = {
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] = {
     val newProjectBillingInfo = new ProjectBillingInfo().setBillingEnabled(false)
-    updateBillingInfo(googleProjectId, newProjectBillingInfo)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo, tracingContext)
   }
 
   private def updateBillingInfo(googleProjectId: GoogleProjectId,
                                 projectBillingInfo: ProjectBillingInfo,
-                                parentSpan: Span = null
+                                tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo] = {
     implicit val service = GoogleInstrumentedService.Billing
     val billingSvcCred = getBillingServiceAccountCredential
     val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
 
-    traceWithParent("cloudBillingProjectsApi.updateBillingInfo", parentSpan) { s =>
+    traceFutureWithParent("cloudBillingProjectsApi.updateBillingInfo", tracingContext) { childContext =>
       val updater = cloudBillingProjectsApi.updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo)
       retryWithRecoverWhen500orGoogleError { () =>
         blocking {
-          val span = startSpanWithParent("executeGoogleRequest", s)
-          span.putAttribute("googleProjectId", AttributeValue.stringAttributeValue(googleProjectId.value))
-          span.putAttribute("billingAccount",
-                            AttributeValue.stringAttributeValue(Option(projectBillingInfo.getBillingAccountName) match {
-                              case Some(value) => value
-                              case None        => ""
-                            })
-          )
-
-          try
+          traceNakedWithParent("executeGoogleRequest", childContext) { _ =>
             executeGoogleRequest(updater)
-          finally
-            span.end()
+          }
         }
       } {
         case e: GoogleJsonResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>

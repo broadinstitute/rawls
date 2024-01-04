@@ -7,7 +7,6 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
@@ -21,7 +20,7 @@ import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
-trait AdminApiService extends UserInfoDirectives {
+trait AdminApiService extends UserInfoDirectives with TracingDirectives {
   implicit val executionContext: ExecutionContext
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
@@ -31,9 +30,9 @@ trait AdminApiService extends UserInfoDirectives {
   val userServiceConstructor: RawlsRequestContext => UserService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
-  val adminRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  val adminRoutes: server.Route = traceRequest { otelContext =>
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("admin" / "billing" / Segment) { projectId =>
         delete {
           entity(as[Map[String, String]]) { ownerInfo =>

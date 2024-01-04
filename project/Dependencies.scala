@@ -135,10 +135,22 @@ object Dependencies {
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-d606036")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
 
-  val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
-  val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
-  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.31.1" excludeAll(excludeProtobufJavalite)
-  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.31.1"
+  // OpenTelemetry
+  val openTelemetryVersion = "1.31.0"
+  val otelApi: ModuleID = "io.opentelemetry" % "opentelemetry-api" % openTelemetryVersion
+  val otelSdk: ModuleID = "io.opentelemetry" % "opentelemetry-sdk" % openTelemetryVersion
+  val otelSdkMetrics: ModuleID = "io.opentelemetry" % "opentelemetry-sdk-metrics" % openTelemetryVersion
+  val otelExporterLogging: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-logging" % openTelemetryVersion
+  val otelSemconv: ModuleID = "io.opentelemetry.semconv" % "opentelemetry-semconv" % "1.21.0-alpha"
+  val otelAnnotation: ModuleID = "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-annotations" % openTelemetryVersion
+  val otelInstrumentationApi: ModuleID = "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api" % openTelemetryVersion
+  val otelInstrumentationApiSemconv: ModuleID =
+    "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api-semconv" % (openTelemetryVersion + "-alpha")
+  val otelPrometheusExporter: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-prometheus" % (openTelemetryVersion + "-alpha")
+
+  // Google cloud open telemetry exporters
+  var gcpOpenTelemetryExporterVersion = "0.25.2"
+  var googleTraceExporter: ModuleID = "com.google.cloud.opentelemetry" % "exporter-trace" % gcpOpenTelemetryExporterVersion
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
@@ -152,11 +164,17 @@ object Dependencies {
     "org.glassfish.jersey.core"     % "jersey-client"         % "2.36" // scala-steward:off (must match TDR)
   )
 
-  val openCensusDependencies = Seq(
-    opencensusScalaCode,
-    opencensusAkkaHttp,
-    opencensusStackDriverExporter,
-    opencensusLoggingExporter
+  val openTelemetryDependencies = Seq(
+    otelApi,
+    otelSdk,
+    otelSdkMetrics,
+    otelExporterLogging,
+    otelSemconv,
+    otelAnnotation,
+    otelInstrumentationApi,
+    otelInstrumentationApiSemconv,
+    otelPrometheusExporter,
+    googleTraceExporter
   )
 
   val metricsDependencies = Seq(
@@ -222,7 +240,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openTelemetryDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,

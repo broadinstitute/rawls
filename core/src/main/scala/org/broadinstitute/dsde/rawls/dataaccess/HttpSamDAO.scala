@@ -42,7 +42,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
 
     val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
       .readTimeout(timeout.toJava)
-    ctx.tracingSpan.foreach(span =>
+    ctx.otelContext.foreach(span =>
       okHttpClientWithTracingBuilder
         .addInterceptor(new SpanSettingInterceptor(span))
         .addInterceptor(new OkHttpClientTracingInterceptor(Tracing.getTracer))

@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -15,7 +14,7 @@ import scala.concurrent.ExecutionContext
   * Created by dvoet on 6/4/15.
   */
 
-trait BillingApiService extends UserInfoDirectives {
+trait BillingApiService extends UserInfoDirectives with TracingDirectives {
   implicit val executionContext: ExecutionContext
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
@@ -23,9 +22,9 @@ trait BillingApiService extends UserInfoDirectives {
 
   val userServiceConstructor: RawlsRequestContext => UserService
 
-  val billingRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  val billingRoutes: server.Route = traceRequest { otelContext =>
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / Segment) { projectId =>
         path("members") {
           get {

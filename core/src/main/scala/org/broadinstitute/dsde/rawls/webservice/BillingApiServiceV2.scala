@@ -4,7 +4,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.unmarshalling.Unmarshaller
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
@@ -20,7 +19,7 @@ import scala.concurrent.ExecutionContext
   * Created by dvoet on 11/2/2020.
   */
 
-trait BillingApiServiceV2 extends UserInfoDirectives {
+trait BillingApiServiceV2 extends UserInfoDirectives with TracingDirectives {
   implicit val executionContext: ExecutionContext
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
@@ -55,9 +54,9 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
 
   implicit def dateTimeUnmarshaller: Unmarshaller[String, DateTime] = Unmarshaller.strict(DateTime.parse)
 
-  val billingRoutesV2: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  val billingRoutesV2: server.Route = traceRequest { otelContext =>
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / "v2") {
 
         pathPrefix(Segment) { projectId =>

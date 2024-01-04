@@ -4,7 +4,6 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -19,14 +18,14 @@ import scala.concurrent.ExecutionContext
   * Created by dvoet on 6/4/15.
   */
 
-trait MethodConfigApiService extends UserInfoDirectives {
+trait MethodConfigApiService extends UserInfoDirectives with TracingDirectives {
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
 
-  val methodConfigRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  val methodConfigRoutes: server.Route = traceRequest { otelContext =>
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
         get {
           parameters("allRepos".as[Boolean] ? false) { allRepos =>

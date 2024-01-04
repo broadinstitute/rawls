@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -16,13 +15,13 @@ import scala.concurrent.ExecutionContext
   * Created with dvoet on 6/12/19.
   */
 
-trait ServicePerimeterApiService extends UserInfoDirectives {
+trait ServicePerimeterApiService extends UserInfoDirectives with TracingDirectives {
   implicit val executionContext: ExecutionContext
 
   val userServiceConstructor: RawlsRequestContext => UserService
-  val servicePerimeterRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  val servicePerimeterRoutes: server.Route = traceRequest { otelContext =>
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
         put {
           complete {

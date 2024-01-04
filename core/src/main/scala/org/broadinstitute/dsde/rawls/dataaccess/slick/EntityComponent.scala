@@ -2,18 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
+import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
-import org.broadinstitute.dsde.rawls.{
-  model,
-  RawlsException,
-  RawlsExceptionWithErrorReport,
-  RawlsFatalExceptionWithErrorReport
-}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceDBIOWithParent}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.dbio.Effect.Read
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 import slick.sql.SqlStreamingAction
@@ -496,14 +491,10 @@ trait EntityComponent {
         val filterByColumn =
           entityQuery.columnFilter match {
             case None =>
-              parentContext.tracingSpan.map { span =>
-                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(false))
-              }
+              setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByColumn"), java.lang.Boolean.FALSE)
               sql""
             case Some(columnFilter) =>
-              parentContext.tracingSpan.map { span =>
-                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(true))
-              }
+              setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByColumn"), java.lang.Boolean.TRUE)
               val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
               sql""" and e.id in (
@@ -982,14 +973,10 @@ trait EntityComponent {
       // if filtering by name, retrieve that entity directly, else do the full query:
       nameFilter match {
         case Some(entityName) =>
-          parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
-          }
+          setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByName"), java.lang.Boolean.TRUE)
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
-          parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
-          }
+          setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByName"), java.lang.Boolean.FALSE)
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
                                                                    entityQuery,
@@ -1177,16 +1164,12 @@ trait EntityComponent {
                         tracingContext: RawlsTracingContext
     ) =
       traceDBIOWithParent("saveEntityPatch", tracingContext) { span =>
-        span.tracingSpan.foreach { s =>
-          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-          s.putAttribute("workspace",
-                         OpenCensusAttributeValue.stringAttributeValue(workspaceContext.toWorkspaceName.toString)
-          )
-          s.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityRef.entityType))
-          s.putAttribute("entityName", OpenCensusAttributeValue.stringAttributeValue(entityRef.entityName))
-          s.putAttribute("numUpserts", OpenCensusAttributeValue.longAttributeValue(upserts.size))
-          s.putAttribute("numDeletes", OpenCensusAttributeValue.longAttributeValue(deletes.size))
-        }
+        setTraceSpanAttribute(span, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
+        setTraceSpanAttribute(span, AttributeKey.stringKey("workspace"), workspaceContext.toWorkspaceName.toString)
+        setTraceSpanAttribute(span, AttributeKey.stringKey("entityType"), entityRef.entityType)
+        setTraceSpanAttribute(span, AttributeKey.stringKey("entityName"), entityRef.entityName)
+        setTraceSpanAttribute(span, AttributeKey.longKey("numUpserts"), java.lang.Long.valueOf(upserts.size))
+        setTraceSpanAttribute(span, AttributeKey.longKey("numDeletes"), java.lang.Long.valueOf(deletes.size))
         val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
         if (upserts.isEmpty && deletes.isEmpty) {
           DBIO.successful(()) // no-op
@@ -1390,15 +1373,9 @@ trait EntityComponent {
       val entitiesToCopyRefs = entityNames.map(name => AttributeEntityReference(entityType, name))
 
       traceDBIOWithParent("EntityComponent.checkAndCopyEntities", parentContext) { childContext =>
-        childContext.tracingSpan.foreach { s =>
-          s.putAttribute("destWorkspaceId",
-                         OpenCensusAttributeValue.stringAttributeValue(destWorkspaceContext.workspaceId)
-          )
-          s.putAttribute("sourceWorkspaceId",
-                         OpenCensusAttributeValue.stringAttributeValue(sourceWorkspaceContext.workspaceId)
-          )
-          s.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entityNames.length))
-        }
+        setTraceSpanAttribute(childContext, AttributeKey.stringKey("destWorkspaceId"), destWorkspaceContext.workspaceId)
+        setTraceSpanAttribute(childContext, AttributeKey.stringKey("sourceWorkspaceId"), destWorkspaceContext.toWorkspaceName.toString)
+        setTraceSpanAttribute(childContext, AttributeKey.longKey("numEntities"), java.lang.Long.valueOf(entityNames.length))
         traceDBIOWithParent("getHardConflicts", childContext)(s2 =>
           getActiveRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet).flatMap {
             case Seq() =>

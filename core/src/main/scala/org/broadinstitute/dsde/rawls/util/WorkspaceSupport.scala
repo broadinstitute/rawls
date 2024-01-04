@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceAttributeSpecs,
   WorkspaceName
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -118,7 +118,7 @@ trait WorkspaceSupport {
                                        parentContext: RawlsRequestContext
   ): Future[Unit] =
     for {
-      billingProjectRoles <- traceWithParent("listUserRolesForResource", parentContext)(context =>
+      billingProjectRoles <- traceFutureWithParent("listUserRolesForResource", parentContext)(context =>
         samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, context)
       )
       _ <- ApplicativeThrow[Future].raiseUnless(billingProjectRoles.contains(SamBillingProjectRoles.owner)) {

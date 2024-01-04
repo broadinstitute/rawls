@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import bio.terra.workspace.model._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, RawlsRequestContext, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -14,15 +13,15 @@ import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 
-trait SnapshotApiService extends UserInfoDirectives {
+trait SnapshotApiService extends UserInfoDirectives with TracingDirectives {
 
   implicit val executionContext: ExecutionContext
 
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService
 
-  val snapshotRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  val snapshotRoutes: server.Route = traceRequest { otelContext =>
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>

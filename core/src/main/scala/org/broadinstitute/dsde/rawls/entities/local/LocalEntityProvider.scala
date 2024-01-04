@@ -3,44 +3,18 @@ package org.broadinstitute.dsde.rawls.entities.local
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
-import org.broadinstitute.dsde.rawls.entities.base.{
-  EntityProvider,
-  ExpressionEvaluationContext,
-  ExpressionEvaluationSupport,
-  ExpressionValidator
-}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException
-}
+import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
-  AttributeValue,
-  Entity,
-  EntityCopyDefinition,
-  EntityCopyResponse,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  ErrorReport,
-  RawlsRequestContext,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationValue,
-  Workspace,
-  WorkspaceAttributeSpecs
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityCopyDefinition, EntityCopyResponse, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace, WorkspaceAttributeSpecs}
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 import slick.jdbc.TransactionIsolation
@@ -76,14 +50,11 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     // start performance tracing
-    traceWithParent("LocalEntityProvider.entityTypeMetadata", requestArguments.ctx) { localContext =>
-      localContext.tracingSpan.foreach { s =>
-        s.putAttribute("workspace",
-                       OpenCensusAttributeValue.stringAttributeValue(workspaceContext.toWorkspaceName.toString)
-        )
-        s.putAttribute("useCache", OpenCensusAttributeValue.booleanAttributeValue(useCache))
-        s.putAttribute("cacheEnabled", OpenCensusAttributeValue.booleanAttributeValue(cacheEnabled))
-      }
+    traceFutureWithParent("LocalEntityProvider.entityTypeMetadata", requestArguments.ctx) { localContext =>
+      setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspace"), workspaceContext.toWorkspaceName.toString)
+      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("useCache"), java.lang.Boolean.valueOf(useCache))
+      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("cacheEnabled"), java.lang.Boolean.valueOf(cacheEnabled))
+
       // start transaction
       dataSource.inTransaction(
         dataAccess =>
@@ -120,14 +91,14 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                 // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
                 cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
                   if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                    localContext.tracingSpan.foreach { s =>
-                      s.putAttribute("alwaysCacheTypeCountsFeatureFlag",
-                                     OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts)
-                      )
-                      s.putAttribute("alwaysCacheAttributesFeatureFlag",
-                                     OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes)
-                      )
-                    }
+                    setTraceSpanAttribute(localContext,
+                                          AttributeKey.booleanKey("alwaysCacheTypeCountsFeatureFlag"),
+                                          java.lang.Boolean.valueOf(flags.alwaysCacheTypeCounts)
+                    )
+                    setTraceSpanAttribute(localContext,
+                                          AttributeKey.booleanKey("alwaysCacheAttributesFeatureFlag"),
+                                          java.lang.Boolean.valueOf(flags.alwaysCacheAttributes)
+                    )
                     logger.info(
                       s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
                     )
@@ -171,10 +142,14 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIOWithParent("LocalEntityProvider.deleteEntities", requestArguments.ctx) { localContext =>
-        localContext.tracingSpan.foreach { s =>
-          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-          s.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entRefs.length))
-        }
+        setTraceSpanAttribute(localContext,
+                              AttributeKey.stringKey("workspaceId"),
+                              workspaceContext.workspaceId
+        )
+        setTraceSpanAttribute(localContext,
+                              AttributeKey.longKey("numEntities"),
+                              java.lang.Long.valueOf(entRefs.length)
+        )
         withAllEntityRefs(workspaceContext, dataAccess, entRefs, localContext) { _ =>
           traceDBIOWithParent("entityQuery.getAllReferringEntities", localContext)(innerSpan =>
             dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap {
@@ -197,10 +172,14 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def deleteEntitiesOfType(entityType: String): Future[Int] =
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("LocalEntityProvider.deleteEntitiesOfType", requestArguments.ctx) { localContext =>
-        localContext.tracingSpan.foreach { s =>
-          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-          s.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
-        }
+        setTraceSpanAttribute(localContext,
+                              AttributeKey.stringKey("workspaceId"),
+                              workspaceContext.workspaceId
+        )
+        setTraceSpanAttribute(localContext,
+                              AttributeKey.stringKey("entityType"),
+                              entityType
+        )
 
         dataAccess.entityQuery.countReferringEntitiesForType(workspaceContext, entityType) flatMap {
           referringEntitiesCount =>
@@ -288,13 +267,26 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[EntityQueryResponse] =
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
-        childContext.tracingSpan.foreach { s1 =>
-          s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
-          s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
-          s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
-          s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
-          s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
-        }
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.longKey("pageSize"),
+                              java.lang.Long.valueOf(query.pageSize)
+        )
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.longKey("page"),
+                              java.lang.Long.valueOf(query.page)
+        )
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.stringKey("filterTerms"),
+                              query.filterTerms.getOrElse("")
+        )
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.stringKey("sortField"),
+                              query.sortField
+        )
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.stringKey("sortDirection"),
+                              query.sortDirection.toString
+        )
 
         dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, childContext)
       } map { case (unfilteredCount, filteredCount, entities) =>
@@ -326,15 +318,23 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       operation <- update.operations
     } yield operation.name
 
-    traceWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", requestArguments.ctx) { localContext =>
-      localContext.tracingSpan.foreach { s =>
-        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-        s.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
-        s.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
-        s.putAttribute("entityOperationsCount",
-                       OpenCensusAttributeValue.longAttributeValue(entityUpdates.map(_.operations.length).sum)
-        )
-      }
+    traceFutureWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", requestArguments.ctx) { localContext =>
+      setTraceSpanAttribute(localContext,
+                            AttributeKey.stringKey("workspaceId"),
+                            workspaceContext.workspaceId
+      )
+      setTraceSpanAttribute(localContext,
+                              AttributeKey.booleanKey("upsert"),
+                              java.lang.Boolean.valueOf(upsert)
+      )
+      setTraceSpanAttribute(localContext,
+                              AttributeKey.longKey("entityUpdatesCount"),
+                              java.lang.Long.valueOf(entityUpdates.length)
+      )
+      setTraceSpanAttribute(localContext,
+                              AttributeKey.longKey("entityOperationsCount"),
+                              java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
+      )
 
       withAttributeNamespaceCheck(namesToCheck) {
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
@@ -416,7 +416,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] =
-    traceWithParent("checkAndCopyEntities", parentContext)(_ =>
+    traceFutureWithParent("checkAndCopyEntities", parentContext)(_ =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext,
                                                     destWorkspaceContext,

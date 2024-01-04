@@ -8,37 +8,25 @@ import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import io.opentelemetry.api.common.AttributeKey
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.expressions.{
-  BoundOutputExpression,
-  OutputExpression,
-  ThisEntityTarget,
-  WorkspaceTarget
-}
+import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
-  CheckCurrentWorkflowStatusCounts,
-  SaveCurrentWorkflowStatusCounts
-}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePrint, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.util.{AuthUtil, FutureSupport, addJitter}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceDBIOWithParent, traceFuture, traceFutureWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.model.Notifications.{
-  AbortedSubmissionNotification,
-  FailedSubmissionNotification,
-  Notification,
-  SuccessfulSubmissionNotification
-}
+import org.broadinstitute.dsde.workbench.model.Notifications.{AbortedSubmissionNotification, FailedSubmissionNotification, Notification, SuccessfulSubmissionNotification}
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -325,12 +313,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   def handleStatusResponses(
     response: ExecutionServiceStatusResponse
   )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] =
-    trace("SubmissionMonitorActor.handleStatusResponses") { rootSpan =>
-      rootSpan.tracingSpan.foreach { s =>
-        s.putAttribute("submissionId", OpenCensusAttributeValue.stringAttributeValue(submissionId.toString))
-        s.putAttribute("workspaceNamespace", OpenCensusAttributeValue.stringAttributeValue(workspaceName.namespace))
-        s.putAttribute("workspaceName", OpenCensusAttributeValue.stringAttributeValue(workspaceName.name))
-      }
+    traceFuture("SubmissionMonitorActor.handleStatusResponses") { rootSpan =>
+      setTraceSpanAttribute(rootSpan, AttributeKey.stringKey("submissionId"), submissionId.toString)
+      setTraceSpanAttribute(rootSpan, AttributeKey.stringKey("workspaceNamespace"), workspaceName.namespace)
+      setTraceSpanAttribute(rootSpan, AttributeKey.stringKey("workspaceName"), workspaceName.name)
 
       response.statusResponse.collect { case Failure(t) => t }.foreach { t =>
         logger.error(s"Failure monitoring workflow in submission $submissionId", t)
@@ -367,18 +353,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // traverse and IO stuff ensures serial execution of the batches
       val batchedWorkflowsWithOutputs = batchWorkflowsWithOutputs(workflowsWithOutputs).zipWithIndex
 
-      traceWithParent("batchedWorkflowsWithOutputs", rootSpan) { span =>
-        span.tracingSpan.foreach { s =>
-          s.putAttribute("numBatches", OpenCensusAttributeValue.longAttributeValue(batchedWorkflowsWithOutputs.length))
-        }
+      traceFutureWithParent("batchedWorkflowsWithOutputs", rootSpan) { span =>
+        setTraceSpanAttribute(span, AttributeKey.longKey("numBatches"), java.lang.Long.valueOf(batchedWorkflowsWithOutputs.length))
 
         batchedWorkflowsWithOutputs
           .traverse { case (batch, idx) =>
             IO.fromFuture(IO(datasource.inTransactionWithAttrTempTable { dataAccess =>
               traceDBIOWithParent(s"batch", span) { innerSpan =>
-                innerSpan.tracingSpan.foreach { s =>
-                  s.putAttribute("batchIndex", OpenCensusAttributeValue.longAttributeValue(idx))
-                }
+                setTraceSpanAttribute(innerSpan, AttributeKey.longKey("batchIndex"), java.lang.Long.valueOf(idx))
                 handleOutputs(batch, dataAccess, innerSpan)
               }
             }))
@@ -570,12 +552,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       DBIO.successful(())
     } else {
       traceDBIOWithParent("handleOutputs", tracingContext) { rootSpan =>
-        rootSpan.tracingSpan.foreach { span =>
-          span.putAttribute("submissionId", OpenCensusAttributeValue.stringAttributeValue(submissionId.toString))
-          span.putAttribute("numWorkflowsWithOutputs",
-                            OpenCensusAttributeValue.longAttributeValue(workflowsWithOutputs.length)
-          )
-        }
+        setTraceSpanAttribute(rootSpan, AttributeKey.stringKey("submissionId"), submissionId.toString)
+        setTraceSpanAttribute(rootSpan, AttributeKey.longKey("numWorkflowsWithOutputs"), java.lang.Long.valueOf(workflowsWithOutputs.length))
 
         for {
           // load all the starting data
@@ -677,9 +655,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       val entityUpdates = updatedEntitiesAndWorkspace.collect {
         case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
       }
-      span.tracingSpan.foreach { s =>
-        s.putAttribute("numEntityUpdates", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
-      }
+      setTraceSpanAttribute(span, AttributeKey.longKey("numEntityUpdates"), java.lang.Long.valueOf(entityUpdates.length))
       if (entityUpdates.isEmpty) {
         DBIO.successful(())
       } else {

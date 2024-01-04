@@ -29,7 +29,7 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
     val client: ApiClient = new ApiClient() {
       override def performAdditionalClientConfiguration(clientConfig: ClientConfig): Unit = {
         super.performAdditionalClientConfiguration(clientConfig)
-        ctx.tracingSpan.foreach { span =>
+        ctx.otelContext.foreach { span =>
           clientConfig.register(new WithSpanFilter(span))
           clientConfig.register(new JerseyTracingFilter(Tracing.getTracer))
         }
