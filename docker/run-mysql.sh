@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 # The CloudSQL console simply states "MySQL 5.7" so we may not match the minor version number
-MYSQL_IMAGE=mysql
+# The docker version installed on DSP Jenkins does not like the "mysql" docker image, so we use "mysql/mysql-server"
+#     instead. Re-evaluate this sometime after Jenkins is no longer in use.
+MYSQL_IMAGE=mysql/mysql-server
 MYSQL_VERSION=5.7
 start() {
 
