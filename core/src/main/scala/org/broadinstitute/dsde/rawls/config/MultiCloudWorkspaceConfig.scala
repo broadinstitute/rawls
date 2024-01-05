@@ -20,6 +20,7 @@ final case class AzureConfig(landingZoneDefinition: String,
                              protectedDataLandingZoneDefinition: String,
                              landingZoneVersion: String,
                              landingZoneParameters: Map[String, String],
+                             costSavingLandingZoneParameters: Map[String, String],
                              landingZoneAllowAttach: Boolean
 )
 
@@ -33,6 +34,14 @@ case object MultiCloudWorkspaceConfig {
         azc.getString("landingZoneVersion"),
         azc
           .getConfig("landingZoneParameters")
+          .entrySet()
+          .asScala
+          .map { entry =>
+            entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
+          }
+          .toMap,
+        azc
+          .getConfig("costSavingLandingZoneParameters")
           .entrySet()
           .asScala
           .map { entry =>

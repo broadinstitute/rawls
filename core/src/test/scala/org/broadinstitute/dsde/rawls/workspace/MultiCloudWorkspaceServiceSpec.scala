@@ -66,6 +66,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake-protected-landing-zone-definition",
       "fake-landing-zone-version",
       Map("fake_parameter" -> "fake_value"),
+      Map("fake_parameter" -> "fake_value"),
       landingZoneAllowAttach = false
     )
   )

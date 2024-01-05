@@ -39,6 +39,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     "fake-protected-landing-zone-definition",
     "fake-landing-zone-version",
     Map("fake_parameter" -> "fake_value"),
+    Map("fake_parameter" -> "fake_value"),
     landingZoneAllowAttach = false
   )
   val userInfo: UserInfo = UserInfo(
