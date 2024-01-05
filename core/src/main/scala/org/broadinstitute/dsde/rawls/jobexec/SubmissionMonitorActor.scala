@@ -351,8 +351,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         .partition(_._2.isDefined)
 
       // extra logic just for logging
-      val noOutputsGrouped = noOutputs.groupBy(_._1.status).view.mapValues(v => v.size)
-      val yesOutputsGrouped = yesOutputs.groupBy(_._1.status).view.mapValues(v => v.size)
+      val noOutputsGrouped = noOutputs.groupBy(_._1.status).view.mapValues(v => v.size).toMap
+      val yesOutputsGrouped = yesOutputs.groupBy(_._1.status).view.mapValues(v => v.size).toMap
 
       logger.info(
         s"will process ${noOutputs.size} workflow(s) without outputs ($noOutputsGrouped) and ${yesOutputs.size} workflow(s) with outputs ($yesOutputsGrouped) for submission $submissionId"
