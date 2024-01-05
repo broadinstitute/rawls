@@ -350,8 +350,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
         .partition(_._2.isDefined)
 
+      // extra logic just for logging
+      val noOutputsGrouped = noOutputs.groupBy(_._1.status).view.mapValues(v => v.size)
+      val yesOutputsGrouped = yesOutputs.groupBy(_._1.status).view.mapValues(v => v.size)
+
       logger.info(
-        s"will process ${noOutputs.size} workflow(s) without outputs and ${yesOutputs.size} workflow(s) with outputs for submission $submissionId"
+        s"will process ${noOutputs.size} workflow(s) without outputs ($noOutputsGrouped) and ${yesOutputs.size} workflow(s) with outputs ($yesOutputsGrouped) for submission $submissionId"
       )
 
       /**
@@ -435,9 +439,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by handleOutputs.
             doRecordUpdate = !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(currentRec.status))
             numRowsUpdated <-
-              if (doRecordUpdate)
-                dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
-              else DBIO.successful(0)
+              if (doRecordUpdate) {
+                for {
+                  updateResult <- dataAccess.workflowQuery.updateStatus(currentRec,
+                                                                        WorkflowStatuses.withName(workflowRec.status)
+                  )
+                  _ = logger.info(
+                    s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"
+                  )
+                } yield updateResult
+              } else DBIO.successful(0)
           } yield numRowsUpdated
         }
       }
@@ -717,10 +728,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(
-        s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs.size} outputs"
-      )
-      logger.debug(
-        s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap.size} expressions"
+        s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId
+            .getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap.size} expressions, ${outputs.size} outputs"
       )
 
       val parsedExpressions: Seq[Try[OutputExpression]] = outputExpressionMap.map { case (outputName, outputExprStr) =>
@@ -756,7 +765,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           val cnt = attributeCount(update.upserts.values)
           logger.debug(
             s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId
-                .getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}"
+                .getOrElse("MISSING_WORKFLOW")}. ${safePrint(update.upserts)}"
           )
           cnt
         } getOrElse 0
