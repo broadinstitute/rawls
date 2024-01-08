@@ -49,7 +49,7 @@ class MethodRepoJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val AgoraEntityFormat = jsonFormat10(AgoraEntity)
+  implicit val AgoraEntityFormat: RootJsonFormat[AgoraEntity] = jsonFormat10(AgoraEntity)
 
 }
 

@@ -61,6 +61,7 @@ import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time.DateTime
+import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
 
@@ -101,7 +102,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
-  implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
+  implicit val log4CatsLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole =
     "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)

@@ -145,6 +145,7 @@ class EntityServiceSpec
         bigQueryServiceFactory,
         DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       ),
       7 // <-- specifically chosen to be lower than the number of samples in "workspace" within testData

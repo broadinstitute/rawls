@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -15,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   RawlsRequestContext
 }
-import spray.json.DefaultJsonProtocol
+import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
@@ -26,7 +27,9 @@ import scala.util.{Failure, Success, Try}
 case class BpmAzureReportErrorMessage(message: String, statusCode: Int)
 
 object BpmAzureReportErrorMessageJsonProtocol extends DefaultJsonProtocol {
-  implicit val bpmAzureReportErrorMessageFormat = jsonFormat2(BpmAzureReportErrorMessage.apply)
+  implicit val bpmAzureReportErrorMessageFormat: RootJsonFormat[BpmAzureReportErrorMessage] = jsonFormat2(
+    BpmAzureReportErrorMessage.apply
+  )
 }
 
 import spray.json._
@@ -175,14 +178,14 @@ class BillingProfileManagerDAOImpl(
     }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
-    apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)
-
-  def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
-
-    if (!config.multiCloudWorkspacesEnabled) {
-      return Future.successful(Seq())
+    Try(apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)) match {
+      case Failure(exception: ApiException) if exception.getCode == HttpStatus.SC_NOT_FOUND =>
+        logger.info(s"No billing profile record found for $billingProfileId when deleting BPM-backed billing project")
+      case Failure(t) => throw t
+      case Success(_) => ()
     }
 
+  def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
     val profileApi = apiClientProvider.getProfileApi(ctx)
 
     @tailrec

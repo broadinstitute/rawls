@@ -122,7 +122,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
                                         new MockGoogleServicesDAO("test"),
                                         new MockGooglePubSubDAO
     ) {
-      override val samDAO = new MockSamDAO(dataSource) {
+      override val samDAO = new MockSamDAO(this.dataSource) {
 
         override def userHasAction(resourceTypeName: SamResourceTypeName,
                                    resourceId: String,

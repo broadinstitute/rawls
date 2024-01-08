@@ -1665,7 +1665,8 @@ class AttributeComponentSpec
       workspaceAttributeQuery.patchAttributesAction(Seq(insert),
                                                     Seq(update),
                                                     Seq(),
-                                                    workspaceAttributeTempQuery.insertScratchAttributes
+                                                    workspaceAttributeTempQuery.insertScratchAttributes,
+                                                    RawlsTracingContext(None)
       )
     )
     assertExpectedRecords(Seq(existing.head, update, insert): _*)
@@ -1675,7 +1676,8 @@ class AttributeComponentSpec
       workspaceAttributeQuery.patchAttributesAction(Seq(),
                                                     Seq(),
                                                     existing.map(_.id),
-                                                    workspaceAttributeTempQuery.insertScratchAttributes
+                                                    workspaceAttributeTempQuery.insertScratchAttributes,
+                                                    RawlsTracingContext(None)
       )
     )
     assertExpectedRecords(Seq(insert): _*)
@@ -1871,7 +1873,8 @@ class AttributeComponentSpec
             context,
             testData.sample1.toReference,
             inserts,
-            Seq.empty[AttributeName]
+            Seq.empty[AttributeName],
+            RawlsTracingContext(None)
           )
         )
 
@@ -1885,7 +1888,12 @@ class AttributeComponentSpec
         val expectedAfterUpdate = testData.sample1.attributes ++ updates
 
         runAndWait(
-          entityQuery.saveEntityPatch(context, testData.sample1.toReference, updates, Seq.empty[AttributeName])
+          entityQuery.saveEntityPatch(context,
+                                      testData.sample1.toReference,
+                                      updates,
+                                      Seq.empty[AttributeName],
+                                      RawlsTracingContext(None)
+          )
         )
 
         val resultAfterUpdate = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
@@ -1988,6 +1996,7 @@ class AttributeComponentSpec
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
                                                            updatesCaptor.capture(),
                                                            deletesCaptor.capture(),
+                                                           any(),
                                                            any()
     )
 
@@ -2050,6 +2059,7 @@ class AttributeComponentSpec
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
                                                            updatesCaptor.capture(),
                                                            deletesCaptor.capture(),
+                                                           any(),
                                                            any()
     )
 
@@ -2112,6 +2122,7 @@ class AttributeComponentSpec
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
                                                            updatesCaptor.capture(),
                                                            deletesCaptor.capture(),
+                                                           any(),
                                                            any()
     )
 
@@ -2170,6 +2181,7 @@ class AttributeComponentSpec
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
                                                            updatesCaptor.capture(),
                                                            deletesCaptor.capture(),
+                                                           any(),
                                                            any()
     )
 
@@ -2236,6 +2248,7 @@ class AttributeComponentSpec
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
                                                            updatesCaptor.capture(),
                                                            deletesCaptor.capture(),
+                                                           any(),
                                                            any()
     )
 

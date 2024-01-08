@@ -57,17 +57,20 @@ object SubmissionSupervisor {
             notificationDAO: NotificationDAO,
             bucketCredential: Credential,
             submissionMonitorConfig: SubmissionMonitorConfig,
+            entityQueryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionSupervisor(executionServiceCluster,
-                               datasource,
-                               samDAO,
-                               googleServicesDAO,
-                               notificationDAO,
-                               bucketCredential,
-                               submissionMonitorConfig,
-                               workbenchMetricBaseName
+      new SubmissionSupervisor(
+        executionServiceCluster,
+        datasource,
+        samDAO,
+        googleServicesDAO,
+        notificationDAO,
+        bucketCredential,
+        submissionMonitorConfig,
+        entityQueryTimeout,
+        workbenchMetricBaseName
       )
     )
 }
@@ -87,6 +90,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            notificationDAO: NotificationDAO,
                            bucketCredential: Credential,
                            submissionMonitorConfig: SubmissionMonitorConfig,
+                           entityQueryTimeout: Duration,
                            override val workbenchMetricBaseName: String
 ) extends Actor
     with LazyLogging
@@ -195,6 +199,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           executionServiceCluster,
           credential,
           submissionMonitorConfig,
+          entityQueryTimeout,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher"),
@@ -257,9 +262,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       case MonitoredSubmissionException(workspaceName, submissionId, cause) =>
         // increment smaRestart counter
         restartCounter(workspaceName, submissionId, cause) += 1
-        logger.error(s"error monitoring submission $submissionId in workspace $workspaceName after $count times", cause)
+        logger.error(
+          s"error monitoring submission $submissionId in workspace $workspaceName after $count times: ${cause.getMessage}",
+          cause
+        )
       case _ =>
-        logger.error(s"error monitoring submission after $count times", throwable)
+        logger.error(s"error monitoring submission after $count times: ${throwable.getMessage}", throwable)
     }
 
     new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)
