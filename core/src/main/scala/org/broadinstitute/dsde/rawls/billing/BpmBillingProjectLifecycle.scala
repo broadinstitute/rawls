@@ -112,24 +112,26 @@ class BpmBillingProjectLifecycle(
     // completes and then updates the billing project status accordingly.
     def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] = {
       val lzId = createProjectRequest.managedAppCoordinates.get.landingZoneId
-      if (lzId.isDefined && !config.azureConfig.get.landingZoneAllowAttach) {
+      if (lzId.isDefined && !config.azureConfig.landingZoneAllowAttach) {
         throw new LandingZoneCreationException(
           RawlsErrorReport("Landing Zone ID provided but attachment is not permitted in this environment")
         )
       }
 
       val maybeAttach = if (lzId.isDefined) Map("attach" -> "true") else Map.empty
-      val params = config.azureConfig.get.landingZoneParameters ++ maybeAttach
-
+      val costSavingParams =
+        if (createProjectRequest.costSavings.contains(true)) config.azureConfig.costSavingLandingZoneParameters
+        else Map.empty
+      val params = config.azureConfig.landingZoneParameters ++ maybeAttach ++ costSavingParams
       val lzDefinition = createProjectRequest.protectedData match {
-        case Some(true) => config.azureConfig.get.protectedDataLandingZoneDefinition
-        case _          => config.azureConfig.get.landingZoneDefinition
+        case Some(true) => config.azureConfig.protectedDataLandingZoneDefinition
+        case _          => config.azureConfig.landingZoneDefinition
       }
 
       Future(blocking {
         workspaceManagerDAO.createLandingZone(
           lzDefinition,
-          config.azureConfig.get.landingZoneVersion,
+          config.azureConfig.landingZoneVersion,
           params,
           profileModel.getId,
           ctx,
