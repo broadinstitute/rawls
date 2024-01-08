@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
+import spray.json.RootJsonFormat
 
 /**
   * Created by rtitle on 5/24/17.
@@ -74,9 +75,9 @@ object Subsystems {
 object StatusJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val SubsystemFormat = rawlsEnumerationFormat(Subsystems.withName)
+  implicit val SubsystemFormat: RootJsonFormat[Subsystem] = rawlsEnumerationFormat(Subsystems.withName)
 
-  implicit val SubsystemStatusFormat = jsonFormat2(SubsystemStatus)
+  implicit val SubsystemStatusFormat: RootJsonFormat[SubsystemStatus] = jsonFormat2(SubsystemStatus)
 
-  implicit val StatusCheckResponseFormat = jsonFormat2(StatusCheckResponse)
+  implicit val StatusCheckResponseFormat: RootJsonFormat[StatusCheckResponse] = jsonFormat2(StatusCheckResponse)
 }

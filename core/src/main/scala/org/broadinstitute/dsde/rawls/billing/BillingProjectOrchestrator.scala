@@ -57,7 +57,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     extends StringValidationUtils
     with UserUtils
     with LazyLogging {
-  implicit val errorReportSource = ErrorReportSource("rawls")
+  implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   /**
    * Creates a "v2" billing project, using either Azure managed app coordinates or a Google Billing Account

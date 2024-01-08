@@ -235,7 +235,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
 
       workspaceOpt <- Apply[Option]
-        .product(multiCloudWorkspaceConfig.azureConfig, billingProfileOpt)
+        .product(Option(multiCloudWorkspaceConfig.azureConfig), billingProfileOpt)
         .traverse { case (azureConfig, profileModel) =>
           // "MultiCloud" workspaces are limited to azure-hosted workspaces for now.
           // This will likely change when the functionality for GCP workspaces gets moved out of Rawls
@@ -352,7 +352,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     assertBillingProfileCreationDate(profile)
 
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
-      .getOrElse(throw new RawlsException("WSM app config not present"))
     val workspaceId = UUID.randomUUID()
 
     for {
@@ -493,10 +492,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                 profile: ProfileModel,
                                 parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
-    if (!multiCloudWorkspaceConfig.multiCloudWorkspacesEnabled) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
-    }
-
     assertBillingProfileCreationDate(profile)
 
     traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
@@ -526,7 +521,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     */
   def deleteWorkspaceInWSM(workspaceId: UUID): Future[Unit] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
-      .getOrElse(throw new RawlsException("WSM app config not present"))
     getWorkspaceFromWsm(workspaceId, ctx).getOrElse(return Future.successful())
     for {
       // kick off the deletion job w/WSM
@@ -595,7 +589,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                               parentContext: RawlsRequestContext
   ): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
-      .getOrElse(throw new RawlsException("WSM app config not present"))
 
     val spendProfileId = profile.getId.toString
     val workspaceId = UUID.randomUUID()

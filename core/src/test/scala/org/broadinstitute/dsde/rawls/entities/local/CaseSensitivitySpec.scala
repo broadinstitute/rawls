@@ -48,7 +48,9 @@ import scala.concurrent.duration.Duration
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
-  implicit val actorSystem = ActorSystem() // needed for stream materialization
+  implicit val actorSystem: ActorSystem = ActorSystem() // needed for stream materialization
+
+  val testConf = ConfigFactory.load()
 
   // ===================================================================================================================
   // exemplar data used in multiple tests
@@ -99,6 +101,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                  slickDataSource,
                                                  false,
+                                                 testConf.getDuration("entities.queryTimeout"),
                                                  "metricsBaseName"
           )
           // get metadata
@@ -172,6 +175,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
             provider.deleteEntitiesOfType(typeUnderTest).futureValue
@@ -241,6 +245,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
             // get results for one specific type
@@ -287,6 +292,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                  slickDataSource,
                                                  false,
+                                                 testConf.getDuration("entities.queryTimeout"),
                                                  "metricsBaseName"
           )
           // test gets
@@ -305,6 +311,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -340,6 +347,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -378,6 +386,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
               val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                      slickDataSource,
                                                      false,
+                                                     testConf.getDuration("entities.queryTimeout"),
                                                      "metricsBaseName"
               )
 
@@ -416,6 +425,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -464,6 +474,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -514,6 +525,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -557,6 +569,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -603,6 +616,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                false,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
         // get metadata
@@ -622,6 +636,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
         provider.entityTypeMetadata(true).futureValue
@@ -642,6 +657,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
 
@@ -664,6 +680,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
 
@@ -683,6 +700,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
 
@@ -755,6 +773,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
 
@@ -794,6 +813,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
 
@@ -821,6 +841,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                slickDataSource,
                                                true,
+                                               testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
 
@@ -853,6 +874,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext),
                                                    slickDataSource,
                                                    false,
+                                                   testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
 
@@ -926,6 +948,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         bigQueryServiceFactory,
         DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
         "testMetricBaseName"
       ),
       1000

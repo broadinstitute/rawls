@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model._
 import spray.json.DefaultJsonProtocol._
+import spray.json.RootJsonFormat
 
 /*
   Resource type names
@@ -169,22 +170,37 @@ case class SamUserResource(resourceId: String,
 case class SamUserStatusResponse(userSubjectId: String, userEmail: String, enabled: Boolean)
 
 object SamModelJsonSupport extends JsonSupport {
-  implicit val SamFullyQualifiesResourceIdFormat = jsonFormat2(SamFullyQualifiedResourceId)
-  implicit val SamResourcePolicyNameFormat = ValueObjectFormat(SamResourcePolicyName)
-  implicit val SamResourceActionFormat = ValueObjectFormat(SamResourceAction)
-  implicit val SamResourceRoleFormat = ValueObjectFormat(SamResourceRole)
+  implicit val SamFullyQualifiesResourceIdFormat: RootJsonFormat[SamFullyQualifiedResourceId] = jsonFormat2(
+    SamFullyQualifiedResourceId
+  )
+  implicit val SamResourcePolicyNameFormat: ValueObjectFormat[SamResourcePolicyName] = ValueObjectFormat(
+    SamResourcePolicyName
+  )
+  implicit val SamResourceActionFormat: ValueObjectFormat[SamResourceAction] = ValueObjectFormat(SamResourceAction)
+  implicit val SamResourceRoleFormat: ValueObjectFormat[SamResourceRole] = ValueObjectFormat(SamResourceRole)
 
-  implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
-  implicit val SamPolicyWithNameAndEmailFormat = jsonFormat3(SamPolicyWithNameAndEmail)
-  implicit val SamResourceWithPoliciesFormat = jsonFormat5(SamResourceWithPolicies)
-  implicit val SamResourceIdWithPolicyNameFormat = jsonFormat5(SamResourceIdWithPolicyName)
-  implicit val SamPolicySyncStatusFormat = jsonFormat2(SamPolicySyncStatus)
+  implicit val SamPolicyFormat: RootJsonFormat[SamPolicy] = jsonFormat3(SamPolicy)
+  implicit val SamPolicyWithNameAndEmailFormat: RootJsonFormat[SamPolicyWithNameAndEmail] = jsonFormat3(
+    SamPolicyWithNameAndEmail
+  )
+  implicit val SamResourceWithPoliciesFormat: RootJsonFormat[SamResourceWithPolicies] = jsonFormat5(
+    SamResourceWithPolicies
+  )
+  implicit val SamResourceIdWithPolicyNameFormat: RootJsonFormat[SamResourceIdWithPolicyName] = jsonFormat5(
+    SamResourceIdWithPolicyName
+  )
+  implicit val SamPolicySyncStatusFormat: RootJsonFormat[SamPolicySyncStatus] = jsonFormat2(SamPolicySyncStatus)
 
-  implicit val SamCreateResourceAccessPolicyIdResponseFormat = jsonFormat2(SamCreateResourceAccessPolicyIdResponse)
-  implicit val samCreateResourcePolicyResponseFormat = jsonFormat2(SamCreateResourcePolicyResponse)
-  implicit val SamCreateResourceResponseFormat = jsonFormat4(SamCreateResourceResponse)
+  implicit val SamCreateResourceAccessPolicyIdResponseFormat: RootJsonFormat[SamCreateResourceAccessPolicyIdResponse] =
+    jsonFormat2(SamCreateResourceAccessPolicyIdResponse)
+  implicit val samCreateResourcePolicyResponseFormat: RootJsonFormat[SamCreateResourcePolicyResponse] = jsonFormat2(
+    SamCreateResourcePolicyResponse
+  )
+  implicit val SamCreateResourceResponseFormat: RootJsonFormat[SamCreateResourceResponse] = jsonFormat4(
+    SamCreateResourceResponse
+  )
 
-  implicit val SamRolesAndActionsFormat = jsonFormat2(SamRolesAndActions)
-  implicit val SamUserResourceFormat = jsonFormat6(SamUserResource)
-  implicit val SamUserStatusResponseFormat = jsonFormat3(SamUserStatusResponse)
+  implicit val SamRolesAndActionsFormat: RootJsonFormat[SamRolesAndActions] = jsonFormat2(SamRolesAndActions)
+  implicit val SamUserResourceFormat: RootJsonFormat[SamUserResource] = jsonFormat6(SamUserResource)
+  implicit val SamUserStatusResponseFormat: RootJsonFormat[SamUserStatusResponse] = jsonFormat3(SamUserStatusResponse)
 }

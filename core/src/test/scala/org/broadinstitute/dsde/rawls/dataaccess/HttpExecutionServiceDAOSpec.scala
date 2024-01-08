@@ -40,8 +40,8 @@ class HttpExecutionServiceDAOSpec
     with MockitoTestUtils
     with RawlsStatsDTestUtils {
 
-  implicit val materializer = ActorMaterializer()
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   val mockServer = RemoteServicesMockServer()
   val userInfo = UserInfo(RawlsUserEmail("owner-access"),

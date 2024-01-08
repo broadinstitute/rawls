@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.model.{ImportStatuses, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
+import spray.json.RootJsonFormat
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,7 +18,7 @@ import scala.concurrent.{ExecutionContext, Future}
 object ImportServiceJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val importServiceResponseFormat = jsonFormat2(ImportServiceResponse)
+  implicit val importServiceResponseFormat: RootJsonFormat[ImportServiceResponse] = jsonFormat2(ImportServiceResponse)
 }
 
 class HttpImportServiceDAO(url: String)(implicit

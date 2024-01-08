@@ -192,9 +192,12 @@ class SpendReportingJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SpendReportingAggregationKeyParameterFormat = jsonFormat2(SpendReportingAggregationKeyWithSub)
+  implicit val SpendReportingAggregationKeyParameterFormat: RootJsonFormat[SpendReportingAggregationKeyWithSub] =
+    jsonFormat2(SpendReportingAggregationKeyWithSub)
 
-  implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
+  implicit val BillingProjectSpendConfigurationFormat: RootJsonFormat[BillingProjectSpendConfiguration] = jsonFormat2(
+    BillingProjectSpendConfiguration
+  )
 
   implicit val SpendReportingAggregationFormat: JsonFormat[SpendReportingAggregation] = lazyFormat(
     jsonFormat2(SpendReportingAggregation.apply)

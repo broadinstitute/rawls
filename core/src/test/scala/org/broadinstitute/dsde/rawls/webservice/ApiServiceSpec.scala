@@ -9,6 +9,7 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKitBase
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -61,7 +62,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
-import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
+import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
@@ -70,6 +71,7 @@ import spray.json._
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -92,10 +94,10 @@ trait ApiServiceSpec
 
   // increase the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
-  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+  implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(5.seconds)
 
   // this gets fed into sealRoute so that exceptions are handled the same in tests as in real life
-  implicit val exceptionHandler = RawlsApiService.exceptionHandler
+  implicit val exceptionHandler: ExceptionHandler = RawlsApiService.exceptionHandler
 
   override val workbenchMetricBaseName = "test"
 
@@ -165,9 +167,9 @@ trait ApiServiceSpec
 
     def actorRefFactory = system
 
-    implicit override val materializer = ActorMaterializer()
+    implicit override val materializer: ActorMaterializer = ActorMaterializer()
 
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     override val workbenchMetricBaseName: String = "test"
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -188,6 +190,7 @@ trait ApiServiceSpec
     )
 
     val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
+    val testConf = ConfigFactory.load()
     val submissionSupervisor = system.actorOf(
       SubmissionSupervisor
         .props(
@@ -198,12 +201,11 @@ trait ApiServiceSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           config,
+          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher")
     )
-
-    val testConf = ConfigFactory.load()
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
@@ -318,6 +320,7 @@ trait ApiServiceSpec
       bigQueryServiceFactory,
       DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 

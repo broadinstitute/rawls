@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -38,7 +39,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam._
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
+import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -51,6 +52,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -107,7 +109,7 @@ class FastPassMonitorSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
@@ -147,6 +149,7 @@ class FastPassMonitorSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
+          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")
@@ -227,6 +230,7 @@ class FastPassMonitorSpec
       bigQueryServiceFactory,
       DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 
@@ -325,7 +329,7 @@ class FastPassMonitorSpec
   }
 
   "FastPassMonitor" should "remove expired fastpass grants" in withTestDataServicesFastPassGrantPeriodZero { services =>
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     val fastPassMonitor =
       system.actorOf(FastPassMonitor.props(services.slickDataSource, services.googleIamDAO, services.googleStorageDAO))
@@ -388,7 +392,7 @@ class FastPassMonitorSpec
   }
 
   it should "continue cleaning up even if it encounters an error" in withTestDataServicesFastPassGrantPeriodZero {
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
     services =>
       when(
         services.googleStorageDAO.removeIamRoles(

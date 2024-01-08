@@ -37,14 +37,14 @@ object Attributable {
       .map(AttributeName.withDefaultNS)
   type AttributeMap = Map[AttributeName, Attribute]
 
-  def attributeCount(map: AttributeMap): Int = {
+  def attributeCount(values: Iterable[Attribute]): Int = {
     def countAttributes(attribute: Attribute): Int =
       attribute match {
         case _: AttributeListElementable     => 1
         case attributeList: AttributeList[_] => attributeList.list.map(countAttributes).sum
       }
 
-    map.values.map(countAttributes).sum
+    values.map(countAttributes).sum
   }
 
   def safePrint(map: AttributeMap, depth: Int = 10): String = {

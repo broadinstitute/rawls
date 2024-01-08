@@ -16,7 +16,7 @@ trait DriverComponent extends StringValidationUtils {
   val batchSize: Int // used for writes to group inserts/updates; must be explicitly utilized via custom business logic
   val fetchSize: Int // used during Slick streaming to set the size of pages; must be explicitly set via withStatementParameters
   implicit val executionContext: ExecutionContext
-  implicit override val errorReportSource = ErrorReportSource("rawls")
+  implicit override val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   // needed by MySQL but not actually used; we will always overwrite
   val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
@@ -108,8 +108,9 @@ trait RawSqlQuery {
 
   import driver.api._
 
-  implicit val GetUUIDResult = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
-  implicit val GetUUIDOptionResult = GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
+  implicit val GetUUIDResult: GetResult[UUID] = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
+  implicit val GetUUIDOptionResult: GetResult[Option[UUID]] =
+    GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
   implicit object SetUUIDParameter extends SetParameter[UUID] {
     def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) }
   }

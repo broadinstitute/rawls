@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{Http, HttpExt}
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, Rawl
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtils, HttpClientUtilsGzipInstrumented}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -38,11 +38,11 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     with LazyLogging
     with RawlsInstrumented {
 
-  implicit private lazy val baseMetricBuilder =
+  implicit private lazy val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Cromwell)
 
-  override val http = Http(system)
-  override val httpClientUtils = HttpClientUtilsGzipInstrumented()
+  override val http: HttpExt = Http(system)
+  override val httpClientUtils: HttpClientUtils = HttpClientUtilsGzipInstrumented()
 
   // Strip out workflow IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(

@@ -14,6 +14,7 @@ import bio.terra.workspace.model.{
   WsmPolicyInput,
   WsmPolicyPair
 }
+import cats.effect.IO
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -59,7 +60,7 @@ import org.broadinstitute.dsde.workbench.model.google.{
   IamPermission
 }
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
-import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
+import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -80,6 +81,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -132,7 +134,7 @@ class WorkspaceServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
@@ -170,6 +172,7 @@ class WorkspaceServiceSpec
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
+          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")
@@ -250,6 +253,7 @@ class WorkspaceServiceSpec
       bigQueryServiceFactory,
       DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 

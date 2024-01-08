@@ -150,10 +150,12 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       val workspaceContext = runAndWait(
         slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
       ).get
-      val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                        slickDataSource,
-                                                        cacheEnabled = true,
-                                                        workbenchMetricBaseName
+      val localEntityProvider = new LocalEntityProvider(
+        EntityRequestArguments(workspaceContext, testContext),
+        slickDataSource,
+        cacheEnabled = true,
+        testConf.getDuration("entities.queryTimeout"),
+        workbenchMetricBaseName
       )
 
       // Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
@@ -201,10 +203,12 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       val workspaceContext = runAndWait(
         slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
       ).get
-      val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
-                                                        slickDataSource,
-                                                        cacheEnabled = true,
-                                                        workbenchMetricBaseName
+      val localEntityProvider = new LocalEntityProvider(
+        EntityRequestArguments(workspaceContext, testContext),
+        slickDataSource,
+        cacheEnabled = true,
+        testConf.getDuration("entities.queryTimeout"),
+        workbenchMetricBaseName
       )
 
       // Update the entityCacheLastUpdated field to be older than lastModified, so we can test our scenario of having a stale cache

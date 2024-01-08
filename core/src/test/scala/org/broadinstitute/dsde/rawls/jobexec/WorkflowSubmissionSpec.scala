@@ -61,7 +61,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     with MockitoTestUtils
     with RawlsStatsDTestUtils {
   import driver.api._
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockServer = RemoteServicesMockServer()

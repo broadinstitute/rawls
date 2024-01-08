@@ -5,6 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -30,6 +31,7 @@ import java.util.UUID
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.{Success, Try}
 
@@ -52,7 +54,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
-  implicit val materializer = ActorMaterializer()
+  implicit val materializer: ActorMaterializer = ActorMaterializer()
 
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()
@@ -104,6 +106,36 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ) {
         ignoreStatusLastChangedDate(await(monitor.queryExecutionServiceForStatus()))
       }
+  }
+
+  Set((5, 1000), (5, 1002), (5000, 1002), (5000, 0)).foreach { case (workflowsPerBatch, workflowCount) =>
+    it should s"batchWorkflowsWithOutputs workflowsPerBatch=$workflowsPerBatch, workflowCount=$workflowCount" in withDefaultTestDatabase {
+      dataSource: SlickDataSource =>
+        val status = WorkflowStatuses.Succeeded
+        val attributesPerWorkflow = outputs.outputs.size * workflowsPerBatch
+        val monitor = createSubmissionMonitor(
+          dataSource,
+          mockSamDAO,
+          mockGoogleServicesDAO,
+          testData.submissionUpdateEntity,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(status.toString),
+          attributesPerWorkflow
+        )
+
+        val workflowsRecs = runAndWait(
+          workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+        )
+        val result = monitor.batchWorkflowsWithOutputs(Seq.fill(workflowCount)((workflowsRecs.head, outputs))).size
+        val expected = if (workflowCount % workflowsPerBatch == 0) {
+          workflowCount / workflowsPerBatch
+        } else {
+          workflowCount / workflowsPerBatch + 1
+        }
+        assertResult(expected) {
+          result
+        }
+    }
   }
 
   it should "queryExecutionServiceForStatus submitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
@@ -796,7 +828,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         workflowRecs.map(r =>
           (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
         ),
-        this
+        this,
+        RawlsTracingContext(Option.empty)
       )
     )
 
@@ -859,7 +892,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs.map(r =>
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -915,7 +949,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs2.map(r =>
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -953,7 +988,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
            )
           )
         ),
-        this
+        this,
+        RawlsTracingContext(Option.empty)
       )
     )
 
@@ -998,7 +1034,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1023,7 +1060,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         "o1" -> Left(AttributeValueList(Vector(AttributeString("123"), AttributeString("456"), AttributeString("789"))))
       )
       runAndWait(
-        monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))), this)
+        monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))),
+                              this,
+                              RawlsTracingContext(Option.empty)
+        )
       )
 
       assertResult(
@@ -1071,7 +1111,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1101,7 +1142,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1312,7 +1354,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
       runAndWait(
         monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))),
-                              this
+                              this,
+                              RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1396,7 +1439,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs.map(r =>
             (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1543,7 +1587,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1616,7 +1661,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
              )
             )
           ),
-          this
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1888,6 +1934,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
         new Builder().build(),
         config,
+        ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
         "test"
       )
     )
@@ -1898,9 +1945,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               googleServicesDAO: GoogleServicesDAO,
                               submission: Submission,
                               wsName: WorkspaceName,
-                              execSvcDAO: ExecutionServiceDAO
+                              execSvcDAO: ExecutionServiceDAO,
+                              attributesPerWorkflow: Int = 10
   ): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, 10, true)
+    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -1911,6 +1959,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       config,
+      ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
       "test"
     )
   }
@@ -1988,5 +2037,6 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,
+                            val queryTimeout: Duration,
                             override val workbenchMetricBaseName: String
 ) extends SubmissionMonitor {}
