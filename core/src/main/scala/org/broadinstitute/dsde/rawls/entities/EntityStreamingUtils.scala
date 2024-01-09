@@ -5,12 +5,15 @@ import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import akka.stream.scaladsl.{Concat, Source}
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import akka.util.ByteString
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityAndAttributesResult
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.{Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata}
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+
+import java.util.concurrent.ConcurrentHashMap
 
 object EntityStreamingUtils {
 
@@ -40,13 +43,30 @@ object EntityStreamingUtils {
      * Given the previous and current stream elements, which are produced by the EntityCollector,
      * calculate the AttrAccum to be output
      */
-    def gatherOrOutput(previous: AttributeStreamElement, current: AttributeStreamElement): AttrAccum = {
+    def gatherOrOutput(previous: AttributeStreamElement,
+                       current: AttributeStreamElement,
+                       seen: java.util.Set[Long]
+    ): AttrAccum = {
       // utility function called when an entity is finished or when the stream is finished
-      def entityFinished(prevAttrs: Seq[EntityAndAttributesResult], nextAttrs: Seq[EntityAndAttributesResult]) = {
+      def entityFinished(prevAttrs: Seq[EntityAndAttributesResult],
+                         nextAttrs: Seq[EntityAndAttributesResult],
+                         seen: java.util.Set[Long]
+      ) = {
         val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(prevAttrs)
         // safety check - did the attributes we gathered all marshal into a single entity?
-        if (unmarshalled.size != 1)
+        if (unmarshalled.size != 1) {
           throw new DataEntityException(s"gatherOrOutput expected only one entity, found ${unmarshalled.size}")
+        }
+        // safety check - has the entity we just unmarshalled already been seen?
+        // this check uses the Long id from the db instead of the entity type and name for efficiency
+        val currEntityId = prevAttrs.head.entityRecord.id
+        if (seen.contains(currEntityId)) {
+          throw new DataEntityException(
+            "Unexpected internal error; the previous results may be incomplete. Cause: entity source input is in unexpected order."
+          )
+        }
+        seen.add(currEntityId)
+
         AttrAccum(nextAttrs, Some(unmarshalled.head))
       }
 
@@ -71,22 +91,12 @@ object EntityStreamingUtils {
         // marshal them into an Entity object, emit that Entity, and start a new accumulator
         // for the new/current entity
         case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id =>
-          entityFinished(prev.accum, curr.accum)
-
-        // TODO AJ-1347: should we have another accumulator (set of entity type/names) that tracks if we see the
-        //    same entity twice in the stream?
-        // midstream, we notice that the current entity's id is LESS than the previous entity's id.
-        // this breaks the assumption that entities are ordered by their ids ascending, and indicates a coding
-        // error. Throw an exception.
-//        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id > curr.accum.head.entityRecord.id =>
-//          throw new RawlsException(
-//            "Unexpected internal error; the previous results may be incomplete. Cause: entity source input is in unexpected order."
-//          )
+          entityFinished(prev.accum, curr.accum, seen)
 
         // if current is empty but previous is not, it means the stream has finished.
         // Marshal and output the final Entity.
         case (prev: AttrAccum, EmptyElement) =>
-          entityFinished(prev.accum, Seq())
+          entityFinished(prev.accum, Seq(), seen)
 
         // relief valve, this should not happen, but if it does we should log it
         case _ =>
@@ -108,6 +118,8 @@ object EntityStreamingUtils {
 
       override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
         private var prev: AttributeStreamElement = EmptyElement // note: var!
+        // to ensure we don't emit the same entity twice
+        private val seen: java.util.Set[Long] = ConcurrentHashMap.newKeySet()
 
         // if our downstream pulls on us, propagate that pull to our upstream
         setHandler(out,
@@ -122,7 +134,7 @@ object EntityStreamingUtils {
             // when a new element arrives ...
             override def onPush(): Unit = {
               // send it to gatherOrOutput which has most of the logic
-              val next = gatherOrOutput(prev, grab(in))
+              val next = gatherOrOutput(prev, grab(in), seen)
               // save the current element to "prev" to prepare for the next iteration
               prev = next
               // emit whatever gatherOrOutput returned
@@ -132,7 +144,7 @@ object EntityStreamingUtils {
             // when the upstream finishes ...
             override def onUpstreamFinish(): Unit = {
               // ensure we marshal and emit the last entity
-              emit(out, gatherOrOutput(prev, EmptyElement))
+              emit(out, gatherOrOutput(prev, EmptyElement, seen))
               completeStage()
             }
           }
