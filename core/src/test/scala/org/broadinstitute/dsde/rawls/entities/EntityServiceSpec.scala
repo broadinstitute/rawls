@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -376,11 +377,17 @@ class EntityServiceSpec
     List(1, 5, 6, 7) foreach { pageSize =>
       withClue(s"for page size '$pageSize':") {
         val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
-        val queryResult = Await.result(
-          services.entityService.queryEntities(testData.wsName, None, testData.sample1.entityType, entityQuery, None),
+        val (_, entitySource) = Await.result(
+          services.entityService.queryEntitiesSource(testData.wsName,
+                                                     None,
+                                                     testData.sample1.entityType,
+                                                     entityQuery,
+                                                     None
+          ),
           waitDuration
         )
-        queryResult.results should not be empty
+        val actualEntities = Await.result(entitySource.runWith(Sink.seq), waitDuration)
+        actualEntities should not be empty
       }
     }
     // these should fail
@@ -389,7 +396,7 @@ class EntityServiceSpec
         val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
         val ex = intercept[RawlsExceptionWithErrorReport] {
           Await.result(
-            services.entityService.queryEntities(testData.wsName, None, testData.sample1.entityType, entityQuery, None),
+            services.entityService.queryEntitiesSource(testData.wsName, None, testData.sample1.entityType, entityQuery, None),
             waitDuration
           )
         }

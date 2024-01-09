@@ -1,10 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities
 
 import akka.NotUsed
-import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
-import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
@@ -30,7 +28,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName,
   _
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -395,44 +392,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         metadataAndEntitySource <- entityProvider.queryEntitiesSource(entityType, query, ctx)
       } yield metadataAndEntitySource
-
-      queryFuture.recover(bigQueryRecover)
-    }
-  }
-
-  // TODO AJ-1347: can this be removed?
-  /**
-    * Obsolete all-in-one operation that returns both the metadata and the results. Don't use this one.
-    * @param workspaceName
-    * @param dataReference
-    * @param entityType
-    * @param query
-    * @param billingProject
-    * @return
-    */
-  @deprecated("Use streaming API instead", "2023-12-11")
-  def queryEntities(workspaceName: WorkspaceName,
-                    dataReference: Option[DataReferenceName],
-                    entityType: String,
-                    query: EntityQuery,
-                    billingProject: Option[GoogleProjectId]
-  ): Future[EntityQueryResponse] = {
-    if (query.pageSize > pageSizeLimit) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $pageSizeLimit")
-      )
-    }
-
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.read,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
-
-      val queryFuture = for {
-        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        entities <- entityProvider.queryEntities(entityType, query, ctx)
-      } yield entities
 
       queryFuture.recover(bigQueryRecover)
     }
