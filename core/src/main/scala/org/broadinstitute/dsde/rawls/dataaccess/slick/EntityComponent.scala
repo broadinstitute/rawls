@@ -625,25 +625,6 @@ trait EntityComponent {
       }
       // END activeActionForEntityAndAttributesSource
 
-      // TODO AJ-1347: can this be removed?
-      @deprecated("Don't use this one; it materializes", "2023-12-12")
-      def activeActionForPagination(workspaceContext: Workspace,
-                                    entityType: String,
-                                    entityQuery: model.EntityQuery,
-                                    parentContext: RawlsRequestContext
-      ): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] =
-        for {
-          (unfilteredCount, filteredCount) <- activeActionForMetadata(workspaceContext,
-                                                                      entityType,
-                                                                      entityQuery,
-                                                                      parentContext
-          )
-          page <- traceDBIOWithParent("pageQuery", parentContext)(_ =>
-            activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
-          )
-        } yield (unfilteredCount, filteredCount, page)
-      // END activeActionForPagination
-
       // actions which may include "deleted" hidden entities
 
       def streamForTypeName(workspaceContext: Workspace,
@@ -1026,48 +1007,6 @@ trait EntityComponent {
           }
           EntityAndAttributesRawSqlQuery
             .activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
-      }
-    }
-
-    @deprecated("Don't use this one, it materializes", "2023-12-12")
-    // get paginated entities for UI display, as a result of executing a query
-    def loadEntityPage(workspaceContext: Workspace,
-                       entityType: String,
-                       entityQuery: model.EntityQuery,
-                       parentContext: RawlsRequestContext
-    ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
-      // look for a columnFilter that specifies the primary key for this entityType;
-      // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
-      val nameFilter: Option[String] = entityQuery.columnFilter match {
-        case Some(colFilter)
-            if colFilter.attributeName == AttributeName.withDefaultNS(
-              entityType + Attributable.entityIdAttributeSuffix
-            ) =>
-          Option(colFilter.term)
-        case _ => None
-      }
-
-      // Note: if the user specified a column filter, we do not validate the specified column
-      // exists. Instead, we return 0 results. We may want to add such validation at a later point.
-
-      // if filtering by name, retrieve that entity directly, else do the full query:
-      nameFilter match {
-        case Some(entityName) =>
-          parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
-          }
-          loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
-        case _ =>
-          parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
-          }
-          EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
-                                                                   entityType,
-                                                                   entityQuery,
-                                                                   parentContext
-          ) map { case (unfilteredCount, filteredCount, pagination) =>
-            (unfilteredCount, filteredCount, unmarshalEntities(pagination, validateOrdering = true))
-          }
       }
     }
 
