@@ -763,7 +763,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
         val entityAttributeCount = optEntityUpdates map { update: WorkflowEntityUpdate =>
           val cnt = attributeCount(update.upserts.values)
-          logger.debug(
+          logger.trace(
             s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId
                 .getOrElse("MISSING_WORKFLOW")}. ${safePrint(update.upserts)}"
           )
@@ -772,7 +772,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
         val workspaceAttributeCount = optWs map { workspace: Workspace =>
           val cnt = attributeCount(workspace.attributes.values)
-          logger.debug(
+          logger.trace(
             s"Updating $cnt attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId
                 .getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}"
           )
