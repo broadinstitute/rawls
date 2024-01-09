@@ -394,22 +394,6 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  def createEntityQueryResponse(query: EntityQuery,
-                                unfilteredCount: Int,
-                                filteredCount: Int,
-                                page: Seq[Entity]
-  ): EntityQueryResponse = {
-    val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-    if (filteredCount > 0 && query.page > pageCount) {
-      throw new DataEntityException(code = StatusCodes.BadRequest,
-                                    message =
-                                      s"requested page ${query.page} is greater than the number of pages $pageCount"
-      )
-    } else {
-      EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
-    }
-  }
-
   def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
                               upsert: Boolean
   ): Future[Traversable[Entity]] = {
