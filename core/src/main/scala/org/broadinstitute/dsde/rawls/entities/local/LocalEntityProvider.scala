@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -377,23 +378,19 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
+  /* as of this writing, only used in tests. This queryEntities method materializes the entire result set of
+   *  entities and is therefore memory-hungry. Runtime code should not use this and should call queryEntitiesSource
+   *  instead. This method is still useful for testing and is called by multiple tests.
+   * */
+  @deprecated("use queryEntitiesSource instead.", "2024-01-09")
   override def queryEntities(entityType: String,
                              query: EntityQuery,
                              parentContext: RawlsRequestContext = requestArguments.ctx
   ): Future[EntityQueryResponse] =
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
-        childContext.tracingSpan.foreach { s1 =>
-          s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
-          s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
-          s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
-          s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
-          s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
-        }
-
-        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, childContext)
-      } map { case (unfilteredCount, filteredCount, entities) =>
-        createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
+    queryEntitiesSource(entityType, query, parentContext) flatMap { case (entityQueryResultMetadata, entitySource) =>
+      implicit val actorSystem: ActorSystem = ActorSystem()
+      entitySource.runWith(Sink.seq) map { entities =>
+        EntityQueryResponse(query, entityQueryResultMetadata, entities)
       }
     }
 
