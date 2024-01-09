@@ -421,7 +421,6 @@ trait EntityComponent {
         )
       }
 
-      // TODO AJ-1347: is this duplicated elsewhere?
       // generate the clause to filter based on user search terms
       def paginationFilterSql(prefix: String, alias: String, entityQuery: model.EntityQuery) = {
         val filtersOption = entityQuery.filterTerms.map {
@@ -652,28 +651,6 @@ trait EntityComponent {
                             entityName: String,
                             desiredFields: Set[AttributeName]
       ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
-        // user requested specific attributes. include them in the where clause.
-        val attrNamespaceNameTuples = reduceSqlActionsWithDelim(desiredFields.toSeq.map { attrName =>
-          sql"(${attrName.namespace}, ${attrName.name})"
-        })
-        val attributesFilter =
-          if (desiredFields.isEmpty) sql""
-          else concatSqlActions(sql" and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
-
-        concatSqlActions(
-          sql"""#${baseEntityAndAttributeSql(
-              workspaceContext
-            )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""",
-          attributesFilter
-        ).as[EntityAndAttributesResult]
-      }
-
-      // TODO AJ-1347: can `actionForTypeName` be removed in favor of streamForTypeName?
-      def actionForTypeName(workspaceContext: Workspace,
-                            entityType: String,
-                            entityName: String,
-                            desiredFields: Set[AttributeName]
-      ): ReadAction[Seq[EntityAndAttributesResult]] = {
         // user requested specific attributes. include them in the where clause.
         val attrNamespaceNameTuples = reduceSqlActionsWithDelim(desiredFields.toSeq.map { attrName =>
           sql"(${attrName.namespace}, ${attrName.name})"
@@ -921,7 +898,7 @@ trait EntityComponent {
             entityName: String,
             desiredFields: Set[AttributeName] = Set.empty
     ): ReadAction[Option[Entity]] =
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName, desiredFields) map (
+      EntityAndAttributesRawSqlQuery.streamForTypeName(workspaceContext, entityType, entityName, desiredFields) map (
         query => unmarshalEntities(query)
       ) map (_.headOption)
 
