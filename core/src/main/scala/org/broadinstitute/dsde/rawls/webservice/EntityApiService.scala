@@ -6,11 +6,11 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.model.StatusCodes.BadRequest
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.stream.scaladsl.{Concat, Flow, Source}
+import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.{EntityService, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   AttributeUpdateOperationFormat,
@@ -19,12 +19,12 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
 import org.broadinstitute.dsde.rawls.model.FilterOperators.And
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityQueryResultMetadata, _}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
 import spray.json.DefaultJsonProtocol._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -94,10 +94,6 @@ trait EntityApiService extends UserInfoDirectives {
                       columnFilter.flatMap(_.toOption)
                     )
 
-                    // TODO AJ-1347: move all this serialization logic out of EntityApiService and try to rely on
-                    //  a JsonFormat instead of handcoding the response
-                    val newline = ByteString("\n")
-
                     onSuccess(
                       entityServiceConstructor(ctx).queryEntitiesSource(WorkspaceName(workspaceNamespace,
                                                                                       workspaceName
@@ -108,37 +104,9 @@ trait EntityApiService extends UserInfoDirectives {
                                                                         billingProject
                       )
                     ) { (entityQueryResultMetadata, resultsSource) =>
-                      import spray.json._
-
-                      val entitiesSource: Source[ByteString, _] =
-                        resultsSource
-                          .map { entity =>
-                            ByteString(entity.toJson.prettyPrint)
-                          }
-                          .intersperse(ByteString("["), ByteString(","), ByteString("]"))
-
-                      val responseSource: Source[ByteString, _] = Source.combine(
-                        Source.single(ByteString("""{"parameters": """)),
-                        Source.single(ByteString(entityQuery.toJson.prettyPrint)),
-                        Source.single(ByteString(""",""")),
-                        Source.single(newline),
-                        Source.single(ByteString(""""resultMetadata": """)),
-                        Source.single(
-                          ByteString(
-                            entityQueryResultMetadata.toJson.prettyPrint
-                          )
-                        ),
-                        Source.single(ByteString(""",""")),
-                        Source.single(newline),
-                        Source.single(ByteString(""""results": """)),
-                        Source.single(newline),
-                        entitiesSource,
-                        Source.single(newline),
-                        Source.single(ByteString("""}"""))
-                      )(Concat(_))
-
+                      val responseSource: Source[ByteString, _] =
+                        EntityStreamingUtils.createResponseSource(resultsSource, entityQuery, entityQueryResultMetadata)
                       complete(HttpEntity(ContentTypes.`application/json`, responseSource))
-
                     }
                   } else {
                     complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
