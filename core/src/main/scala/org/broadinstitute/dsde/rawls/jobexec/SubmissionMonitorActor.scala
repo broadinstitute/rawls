@@ -729,7 +729,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       val outputs = outputsResponse.outputs
       logger.debug(
         s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId
-            .getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap.size} expressions, ${outputs.size} outputs"
+            .getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap.size} expressions, ${outputs.size} attribute values"
       )
 
       val parsedExpressions: Seq[Try[OutputExpression]] = outputExpressionMap.map { case (outputName, outputExprStr) =>
