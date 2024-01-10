@@ -975,7 +975,16 @@ trait EntityComponent {
     ): ReadWriteAction[(Int, Int)] =
       EntityAndAttributesRawSqlQuery.activeActionForMetadata(workspaceContext, entityType, entityQuery, parentContext)
 
-    // TODO AJ-1347: document and assess tracing
+    /**
+      * Returns a streaming result set of EntityAndAttributesResult objects, representing the individual attributes
+      * within a set of Entities. Respects pagination, filtering, sorting, and other features of EntityQuery.
+      *
+      * @param workspaceContext the workspace containing the entities to be queried
+      * @param entityType the type of entities to be queried
+      * @param entityQuery criteria for querying entities
+      * @param parentContext a tracing context under which this method should add its own traces
+      * @return the result set, configured for streaming
+      */
     def loadEntityPageSource(workspaceContext: Workspace,
                              entityType: String,
                              entityQuery: model.EntityQuery,
@@ -993,22 +1002,20 @@ trait EntityComponent {
       }
 
       // if filtering by name, retrieve that entity directly, else do the full query:
+      parentContext.tracingSpan.foreach { span =>
+        span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(nameFilter.isDefined))
+      }
       nameFilter match {
         case Some(entityName) =>
-          parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
-          }
           val desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
           EntityAndAttributesRawSqlQuery
             .streamForTypeName(workspaceContext, entityType, entityName, desiredFields)
         case _ =>
-          parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
-          }
           EntityAndAttributesRawSqlQuery
             .activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
       }
     }
+    // END loadEntityPageSource
 
     // create or replace entities
 

@@ -292,7 +292,17 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  // TODO AJ-1347: document; assess tracing
+  /**
+    * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
+    * This method returns fully materialized metadata (row counts, page size, etc) as EntityQueryResultMetadata, and
+    * also returns a streaming Source of Entity objects. We avoid materializing the full set of Entity objects for
+    * performance and memory reasons.
+    *
+    * @param entityType the type of entities to return in the result set
+    * @param query criteria for filtering and paginating the result set
+    * @param parentContext tracing context into which this method will add traces
+    * @return a tuple of 1) the fully materialized metadata, and 2) a streaming Source of Entity objects
+    */
   override def queryEntitiesSource(entityType: String,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx
@@ -308,12 +318,12 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       case _ => None
     }
 
+    parentContext.tracingSpan.foreach { span =>
+      span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(nameFilter.isDefined))
+    }
     // if filtering by name, retrieve that entity directly, else do the full query:
     nameFilter match {
       case Some(entityName) =>
-        parentContext.tracingSpan.map { span =>
-          span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
-        }
         dataSource.inTransaction { dataAccess =>
           dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query)
         } map { case (unfilteredCount, filteredCount, entity) =>
