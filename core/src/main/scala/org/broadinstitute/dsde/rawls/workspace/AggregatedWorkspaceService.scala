@@ -115,6 +115,9 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
       aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo)
     } catch {
       case e: ApiException =>
+//        if (e.getCode == StatusCodes.NotFound.intValue && workspace.workspaceType == WorkspaceType.RawlsWorkspace) {
+//          return AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
+//        }
         if (e.getCode == StatusCodes.NotFound.intValue) {
           throw new AggregateWorkspaceNotFoundException(errorReport = ErrorReport(StatusCodes.NotFound, e))
         } else {
@@ -133,7 +136,8 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   def optimizedFetchAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace =
     workspace.workspaceType match {
       case WorkspaceType.RawlsWorkspace =>
-        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
+        fetchAggregatedWorkspace(workspace, ctx)
+        //AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
       case WorkspaceType.McWorkspace =>
         fetchAggregatedWorkspace(workspace, ctx)
     }
