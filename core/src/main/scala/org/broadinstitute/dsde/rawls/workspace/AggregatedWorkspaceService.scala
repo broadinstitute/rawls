@@ -47,32 +47,49 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     val span = startSpanWithParent("listWorkspacesFromWorkspaceManager", ctx.tracingSpan.orNull)
     try {
       val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx).groupBy(_.getId)
-      workspaces.map(workspace =>
-        workspace.workspaceType match {
-          case WorkspaceType.RawlsWorkspace =>
-            AggregatedWorkspace(workspace,
-                                Some(workspace.googleProjectId),
-                                azureCloudContext = None,
-                                policies = List.empty
-            )
-          case WorkspaceType.McWorkspace =>
-            val id = workspace.workspaceIdAsUUID
-            wsmResponse
-              .get(id)
-              .map(wsmInfo =>
-                Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
-                  case e: InvalidCloudContextException =>
-                    val ws = workspace.copy(errorMessage =
-                      Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}")
-                    )
-                    AggregatedWorkspace(ws, None, None, policies = List.empty)
-                }.get
-              )
-              .getOrElse {
-                val ws = workspace.copy(errorMessage = Some("Workspace not found in Workspace Manager"))
+      workspaces.map(workspace => {
+        val id = workspace.workspaceIdAsUUID
+        wsmResponse
+          .get(id)
+          .map(wsmInfo =>
+            Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
+              case e: InvalidCloudContextException =>
+                val ws = workspace.copy(errorMessage =
+                  Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}")
+                )
                 AggregatedWorkspace(ws, None, None, policies = List.empty)
-              }
+            }.get
+          )
+          .getOrElse {
+            val ws = workspace.copy(errorMessage = Some("Workspace not found in Workspace Manager"))
+            AggregatedWorkspace(ws, Option(workspace.googleProjectId), None, policies = List.empty)
+          }
         }
+//        workspace.workspaceType match {
+//          case WorkspaceType.RawlsWorkspace =>
+//            AggregatedWorkspace(workspace,
+//                                Some(workspace.googleProjectId),
+//                                azureCloudContext = None,
+//                                policies = List.empty
+//            )
+//          case WorkspaceType.McWorkspace =>
+//            val id = workspace.workspaceIdAsUUID
+//            wsmResponse
+//              .get(id)
+//              .map(wsmInfo =>
+//                Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
+//                  case e: InvalidCloudContextException =>
+//                    val ws = workspace.copy(errorMessage =
+//                      Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}")
+//                    )
+//                    AggregatedWorkspace(ws, None, None, policies = List.empty)
+//                }.get
+//              )
+//              .getOrElse {
+//                val ws = workspace.copy(errorMessage = Some("Workspace not found in Workspace Manager"))
+//                AggregatedWorkspace(ws, None, None, policies = List.empty)
+//              }
+//        }
       )
     } finally
       span.end()
@@ -126,7 +143,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   ): AggregatedWorkspace =
     (wsmInfo.getStage, Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext), workspace.state) match {
       case (WorkspaceStageModel.RAWLS_WORKSPACE, _, _, _) =>
-        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
+        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = convertPolicies(wsmInfo))
       case (WorkspaceStageModel.MC_WORKSPACE, None, Some(azureContext), _) =>
         AggregatedWorkspace(
           workspace,
