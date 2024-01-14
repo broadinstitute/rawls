@@ -138,11 +138,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository],
-                                                bpm,
-                                                samDAO,
-                                                mock[GoogleServicesDAO]
-    )
+    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository], bpm, samDAO, mock[GoogleServicesDAO])
 
     when(
       bpm.createBillingProfile(

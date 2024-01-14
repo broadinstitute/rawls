@@ -151,7 +151,7 @@ class BillingProfileManagerDAOImpl(
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(ctx)
     val createProfileRequest = billingInfo match {
-      case Left(billingAccountName) => {
+      case Left(billingAccountName) =>
         val rawlsBillingAccountName = billingAccountName
         new CreateProfileRequest()
           .billingAccountId(rawlsBillingAccountName.value)
@@ -160,7 +160,7 @@ class BillingProfileManagerDAOImpl(
           .biller("direct") // community terra is always 'direct' (i.e., no reseller)
           .cloudPlatform(CloudPlatform.GCP)
           .policies(policyInputs)
-      } // OH, BUT IT COULD BE!!!!
+
       case Right(coords) =>
         val azureManagedAppCoordinates = coords
         new CreateProfileRequest()

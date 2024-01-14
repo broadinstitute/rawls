@@ -4,10 +4,8 @@ import akka.http.scaladsl.model.StatusCodes.InternalServerError
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult}
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
-import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -34,7 +32,7 @@ import scala.util.{Failure, Success, Try}
   * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
   * billing profile manager service.
   */
-class BpmBillingProjectLifecycle(
+class AzureBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
   billingProfileManagerDAO: BillingProfileManagerDAO,

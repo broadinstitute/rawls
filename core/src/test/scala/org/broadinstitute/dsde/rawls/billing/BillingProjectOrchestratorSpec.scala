@@ -81,7 +81,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       gbp,
-      mock[BpmBillingProjectLifecycle],
+      mock[AzureBillingProjectLifecycle],
       mock[MultiCloudWorkspaceConfig],
       mock[WorkspaceManagerResourceMonitorRecordDao]
     )

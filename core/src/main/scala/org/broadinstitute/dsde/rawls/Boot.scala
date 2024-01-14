@@ -539,11 +539,11 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           billingRepository,
           new GoogleBillingProjectLifecycle(billingRepository, billingProfileManagerDAO, samDAO, gcsDAO),
-          new BpmBillingProjectLifecycle(samDAO,
-                                         billingRepository,
-                                         billingProfileManagerDAO,
-                                         workspaceManagerDAO,
-                                         workspaceManagerResourceMonitorRecordDao
+          new AzureBillingProjectLifecycle(samDAO,
+                                           billingRepository,
+                                           billingProfileManagerDAO,
+                                           workspaceManagerDAO,
+                                           workspaceManagerResourceMonitorRecordDao
           ),
           workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig

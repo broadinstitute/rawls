@@ -223,7 +223,7 @@ object BillingProjectOrchestrator {
     notificationDAO: NotificationDAO,
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-    bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
+    bpmBillingProjectLifecycle: AzureBillingProjectLifecycle,
     resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
     config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =

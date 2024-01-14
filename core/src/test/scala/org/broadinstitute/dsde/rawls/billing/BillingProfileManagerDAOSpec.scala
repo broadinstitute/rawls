@@ -173,7 +173,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     assertResult(coords.managedResourceGroupId)(createProfileRequestCaptor.getValue.getManagedResourceGroupId)
     assertResult(coords.tenantId)(createProfileRequestCaptor.getValue.getTenantId)
     assertResult(coords.subscriptionId)(createProfileRequestCaptor.getValue.getSubscriptionId)
-}
+  }
 
   it should "include an empty set of policy inputs if no policies are present" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
