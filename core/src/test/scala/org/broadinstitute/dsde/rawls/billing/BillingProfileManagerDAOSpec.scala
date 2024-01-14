@@ -137,7 +137,25 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     }
   }
 
-  it should "create the profile in billing profile manager" in {
+  it should "create a GCP profile in billing profile manager if given RawlsBillingAccountName" in {
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val expectedProfile = new ProfileModel().id(UUID.randomUUID())
+    val billingAccountName = RawlsBillingAccountName("fake")
+    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
+
+    val profile = bpmDAO.createBillingProfile("fake", Left(billingAccountName), Map.empty, testContext)
+
+    assertResult(expectedProfile)(profile)
+    val createProfileRequestCaptor = captor[CreateProfileRequest]
+    verify(profileApi).createProfile(createProfileRequestCaptor.capture)
+    assertResult(CloudPlatform.GCP)(createProfileRequestCaptor.getValue.getCloudPlatform)
+    assertResult(billingAccountName.value)(createProfileRequestCaptor.getValue.getBillingAccountId)
+  }
+
+  it should "create an Azure profile in billing profile manager if given AzureManagedAppCoordinates" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val expectedProfile = new ProfileModel().id(UUID.randomUUID())
@@ -149,8 +167,13 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     val profile = bpmDAO.createBillingProfile("fake", Right(coords), Map.empty, testContext)
 
     assertResult(expectedProfile)(profile)
-    verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
-  }
+    val createProfileRequestCaptor = captor[CreateProfileRequest]
+    verify(profileApi).createProfile(createProfileRequestCaptor.capture)
+    assertResult(CloudPlatform.AZURE)(createProfileRequestCaptor.getValue.getCloudPlatform)
+    assertResult(coords.managedResourceGroupId)(createProfileRequestCaptor.getValue.getManagedResourceGroupId)
+    assertResult(coords.tenantId)(createProfileRequestCaptor.getValue.getTenantId)
+    assertResult(coords.subscriptionId)(createProfileRequestCaptor.getValue.getSubscriptionId)
+}
 
   it should "include an empty set of policy inputs if no policies are present" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)

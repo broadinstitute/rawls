@@ -131,10 +131,6 @@ class BillingProfileManagerDAOImpl(
     policies: Map[String, List[(String, String)]] = Map.empty,
     ctx: RawlsRequestContext
   ): ProfileModel = {
-    val azureManagedAppCoordinates = billingInfo match {
-      case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
-      case Right(coords) => coords
-    }
 
     val policyInputs = new BpmApiPolicyInputs().inputs(
       policies
@@ -154,15 +150,29 @@ class BillingProfileManagerDAOImpl(
 
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(ctx)
-    val createProfileRequest = new CreateProfileRequest()
-      .tenantId(azureManagedAppCoordinates.tenantId)
-      .subscriptionId(azureManagedAppCoordinates.subscriptionId)
-      .managedResourceGroupId(azureManagedAppCoordinates.managedResourceGroupId)
-      .displayName(displayName)
-      .id(UUID.randomUUID())
-      .biller("direct") // community terra is always 'direct' (i.e., no reseller)
-      .cloudPlatform(CloudPlatform.AZURE)
-      .policies(policyInputs)
+    val createProfileRequest = billingInfo match {
+      case Left(billingAccountName) => {
+        val rawlsBillingAccountName = billingAccountName
+        new CreateProfileRequest()
+          .billingAccountId(rawlsBillingAccountName.value)
+          .displayName(displayName)
+          .id(UUID.randomUUID())
+          .biller("direct") // community terra is always 'direct' (i.e., no reseller)
+          .cloudPlatform(CloudPlatform.GCP)
+          .policies(policyInputs)
+      } // OH, BUT IT COULD BE!!!!
+      case Right(coords) =>
+        val azureManagedAppCoordinates = coords
+        new CreateProfileRequest()
+          .tenantId(azureManagedAppCoordinates.tenantId)
+          .subscriptionId(azureManagedAppCoordinates.subscriptionId)
+          .managedResourceGroupId(azureManagedAppCoordinates.managedResourceGroupId)
+          .displayName(displayName)
+          .id(UUID.randomUUID())
+          .biller("direct") // community terra is always 'direct' (i.e., no reseller)
+          .cloudPlatform(CloudPlatform.AZURE)
+          .policies(policyInputs)
+    }
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
     profileApi.createProfile(createProfileRequest)

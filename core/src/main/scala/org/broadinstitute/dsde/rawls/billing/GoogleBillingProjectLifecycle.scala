@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.model.ProfileModel
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   GoogleBillingProjectDelete,
@@ -23,10 +25,11 @@ import org.broadinstitute.dsde.rawls.user.UserService.{
 }
 
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 class GoogleBillingProjectLifecycle(
   val billingRepository: BillingRepository,
+  val billingProfileManagerDAO: BillingProfileManagerDAO,
   val samDAO: SamDAO,
   gcsDAO: GoogleServicesDAO
 )(implicit
@@ -60,10 +63,47 @@ class GoogleBillingProjectLifecycle(
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
                                  ctx: RawlsRequestContext
-  ): Future[CreationStatus] =
+  ): Future[CreationStatus] = {
+    val projectName = createProjectRequest.projectName
+
+    // This is where we create a billing profile in the BPM case.
+    def createBillingProfile: Future[ProfileModel] =
+      Future(blocking {
+        val policies: Map[String, List[(String, String)]] =
+          if (createProjectRequest.protectedData.getOrElse(false)) Map("protected-data" -> List[(String, String)]())
+          else Map.empty
+        val profileModel = billingProfileManagerDAO.createBillingProfile(
+          projectName.value,
+          createProjectRequest.billingInfo,
+          policies,
+          ctx
+        )
+        logger.info(
+          s"Creating BPM-backed billing project ${projectName.value}, created profile with ID ${profileModel.getId}."
+        )
+        profileModel
+      })
+
+    def addMembersToBillingProfile(profileModel: ProfileModel): Future[Set[Unit]] = {
+      val members = createProjectRequest.members.getOrElse(Set.empty)
+      Future.traverse(members) { member =>
+        Future(blocking {
+          billingProfileManagerDAO.addProfilePolicyMember(profileModel.getId,
+                                                          ProfilePolicy.fromProjectRole(member.role),
+                                                          member.email,
+                                                          ctx
+          )
+        })
+      }
+    }
+
     for {
+      - <- createBillingProfile.flatMap { profileModel =>
+        addMembersToBillingProfile(profileModel)
+      }
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
+  }
 
   override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
