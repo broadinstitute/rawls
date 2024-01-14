@@ -128,15 +128,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
   behavior of "createBillingProfile"
 
-  it should "fail when provided with Google billing account information" in {
-    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
-    val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
-
-    intercept[NotImplementedError] {
-      bpmDAO.createBillingProfile("fake", Left(RawlsBillingAccountName("fake")), Map.empty, testContext)
-    }
-  }
-
   it should "create a GCP profile in billing profile manager if given RawlsBillingAccountName" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)

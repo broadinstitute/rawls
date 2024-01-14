@@ -6,7 +6,6 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult}
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
@@ -35,7 +34,7 @@ import scala.util.{Failure, Success, Try}
 class AzureBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
-  billingProfileManagerDAO: BillingProfileManagerDAO,
+  val billingProfileManagerDAO: BillingProfileManagerDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
@@ -89,23 +88,6 @@ class AzureBillingProjectLifecycle(
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
 
-    def createBillingProfile: Future[ProfileModel] =
-      Future(blocking {
-        val policies: Map[String, List[(String, String)]] =
-          if (createProjectRequest.protectedData.getOrElse(false)) Map("protected-data" -> List[(String, String)]())
-          else Map.empty
-        val profileModel = billingProfileManagerDAO.createBillingProfile(
-          projectName.value,
-          createProjectRequest.billingInfo,
-          policies,
-          ctx
-        )
-        logger.info(
-          s"Creating BPM-backed billing project ${projectName.value}, created profile with ID ${profileModel.getId}."
-        )
-        profileModel
-      })
-
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
     def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] = {
@@ -138,21 +120,8 @@ class AzureBillingProjectLifecycle(
       })
     }
 
-    def addMembersToBillingProfile(profileModel: ProfileModel): Future[Set[Unit]] = {
-      val members = createProjectRequest.members.getOrElse(Set.empty)
-      Future.traverse(members) { member =>
-        Future(blocking {
-          billingProfileManagerDAO.addProfilePolicyMember(profileModel.getId,
-                                                          ProfilePolicy.fromProjectRole(member.role),
-                                                          member.email,
-                                                          ctx
-          )
-        })
-      }
-    }
-
-    createBillingProfile.flatMap { profileModel =>
-      addMembersToBillingProfile(profileModel).flatMap { _ =>
+    createBillingProfile(createProjectRequest, ctx).flatMap { profileModel =>
+      addMembersToBillingProfile(profileModel, createProjectRequest, ctx).flatMap { _ =>
         createLandingZone(profileModel)
           .flatMap { landingZone =>
             (for {
@@ -295,5 +264,4 @@ class AzureBillingProjectLifecycle(
         Future.successful()
     }
   } yield unregisterBillingProject(projectName, ctx)
-
 }
