@@ -154,7 +154,7 @@ class BillingProfileManagerDAOImpl(
       case Left(billingAccountName) =>
         val rawlsBillingAccountName = billingAccountName
         new CreateProfileRequest()
-          .billingAccountId(rawlsBillingAccountName.value)
+          .billingAccountId(rawlsBillingAccountName.withoutPrefix())
           .displayName(displayName)
           .id(UUID.randomUUID())
           .biller("direct") // community terra is always 'direct' (i.e., no reseller)
