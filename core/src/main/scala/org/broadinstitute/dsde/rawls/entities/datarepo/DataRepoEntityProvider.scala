@@ -142,7 +142,10 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
-    throw new UnsupportedEntityOperationException("queryEntitiesSource not supported by this provider.")
+    // delegate to queryEntities, then transform its materialized result back into a Source
+    queryEntities(entityType, query, parentContext) map { entityQueryResponse =>
+      (entityQueryResponse.resultMetadata, Source.fromIterator(() => entityQueryResponse.results.iterator))
+    }
 
   override def queryEntities(entityType: String,
                              incomingQuery: EntityQuery,
