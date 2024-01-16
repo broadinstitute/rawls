@@ -223,18 +223,20 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         )
       }
 
-    def getWorkspaceAndSubmitter(dataAccess: DataAccess): ReadWriteAction[(RawlsUserEmail, WorkspaceRecord)] =
+    def getWorkspace(dataAccess: DataAccess, workspaceId: UUID): ReadWriteAction[WorkspaceRecord] =
       for {
-        submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
-        workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
-      } yield (RawlsUserEmail(submissionRec.submitterEmail), workspaceRec)
+        workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(workspaceId).result.map(_.head)
+      } yield workspaceRec
 
-    def abortActiveWorkflows(submissionId: UUID): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] =
+    def abortActiveWorkflows(
+      submissionRec: SubmissionRecord
+    ): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] =
       datasource.inTransaction { dataAccess =>
         for {
           // look up abortable WorkflowRecs for this submission
           wfRecs <- dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
-          (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
+          submitter = RawlsUserEmail(submissionRec.submitterEmail)
+          workspaceRec <- getWorkspace(dataAccess, submissionRec.workspaceId)
         } yield (wfRecs, submitter, workspaceRec)
       } flatMap { case (workflowRecs, submitter, workspaceRec) =>
         for {
@@ -255,14 +257,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         })
       }
 
-    def queryForWorkflowStatuses() =
+    def queryForWorkflowStatuses(submissionRec: SubmissionRecord) =
       datasource.inTransaction { dataAccess =>
         for {
           wfRecs <- dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
             submissionId,
             WorkflowStatuses.runningStatuses: _*
           )
-          (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
+          submitter = RawlsUserEmail(submissionRec.submitterEmail)
+          workspaceRec <- getWorkspace(dataAccess, submissionRec.workspaceId)
         } yield (wfRecs, submitter, workspaceRec)
       } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
         for {
@@ -273,17 +276,17 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       } map ExecutionServiceStatusResponse
 
     submissionFuture flatMap {
-      case Some(submission) =>
-        val abortFuture = if (SubmissionStatuses.withName(submission.status) == SubmissionStatuses.Aborting) {
+      case Some(submissionRec) =>
+        val abortFuture = if (SubmissionStatuses.withName(submissionRec.status) == SubmissionStatuses.Aborting) {
           // abort workflows if necessary
           for {
             _ <- abortQueuedWorkflows(submissionId)
-            _ <- abortActiveWorkflows(submissionId)
+            _ <- abortActiveWorkflows(submissionRec)
           } yield {}
         } else {
           Future.successful(())
         }
-        abortFuture flatMap (_ => queryForWorkflowStatuses())
+        abortFuture flatMap (_ => queryForWorkflowStatuses(submissionRec))
       case None =>
         // submission has been deleted, most likely because the owning workspace has been deleted
         // treat this as a failure and let it get caught when we pipe it to ourselves
