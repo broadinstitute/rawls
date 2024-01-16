@@ -132,7 +132,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val expectedProfile = new ProfileModel().id(UUID.randomUUID())
-    val billingAccountName = RawlsBillingAccountName("fake")
+    val billingAccountName = RawlsBillingAccountName("billingAccounts/billingAccountName")
     when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
@@ -143,7 +143,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     val createProfileRequestCaptor = captor[CreateProfileRequest]
     verify(profileApi).createProfile(createProfileRequestCaptor.capture)
     assertResult(CloudPlatform.GCP)(createProfileRequestCaptor.getValue.getCloudPlatform)
-    assertResult(billingAccountName.value)(createProfileRequestCaptor.getValue.getBillingAccountId)
+    assertResult("billingAccountName")(createProfileRequestCaptor.getValue.getBillingAccountId)
   }
 
   it should "create an Azure profile in billing profile manager if given AzureManagedAppCoordinates" in {
