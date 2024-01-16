@@ -212,7 +212,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[ExecutionServiceStatusResponse] = {
     val submissionFuture = datasource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.loadSubmission(submissionId)
+      dataAccess.uniqueResult[SubmissionRecord](dataAccess.submissionQuery.findById(submissionId))
     }
 
     def abortQueuedWorkflows(submissionId: UUID) =
@@ -274,7 +274,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     submissionFuture flatMap {
       case Some(submission) =>
-        val abortFuture = if (submission.status == SubmissionStatuses.Aborting) {
+        val abortFuture = if (SubmissionStatuses.withName(submission.status) == SubmissionStatuses.Aborting) {
           // abort workflows if necessary
           for {
             _ <- abortQueuedWorkflows(submissionId)
