@@ -1608,64 +1608,13 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
 
     def unmarshalEntities(
-      entityAttributeRecords: Seq[EntityAndAttributesResult],
-      validateOrdering: Boolean = false
+      entityAttributeRecords: Seq[EntityAndAttributesResult]
     ): Seq[Entity] =
-      unmarshalEntitiesWithIds(entityAttributeRecords, validateOrdering).map { case (_, entity) => entity }
-
-    // tail-recursive method that validates if all entity ids are contiguous within the Seq[EntityAndAttributesResult]
-    // an order of 3,3,3,2,2,2,1,1 is ok
-    // an order of 1,2,3,1 is bad, because the 1 is repeated non-contiguously
-    // Returns an Option[EntityRecord]. If the Option is None, the rows are ordered as expected.
-    // if the Option is Some(entityRecord), the entityRecord is the first row that was found to
-    // be non-contiguous.
-    @tailrec
-    def validateEntityIdOrdering(prevId: Long,
-                                 current: EntityAndAttributesResult,
-                                 accum: Set[Long],
-                                 remain: Seq[EntityAndAttributesResult]
-    ): Option[EntityRecord] = {
-      if (prevId != current.entityRecord.id && accum.contains(current.entityRecord.id)) {
-        return Option(current.entityRecord)
-      }
-      if (remain.isEmpty) {
-        // we've iterated through all rows; return
-        return None;
-      }
-      // there are rows left; recurse
-      validateEntityIdOrdering(current.entityRecord.id, remain.head, accum + current.entityRecord.id, remain.tail)
-    }
+      unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
 
     def unmarshalEntitiesWithIds(
-      entityAttributeRecords: Seq[EntityAndAttributesResult],
-      validateOrdering: Boolean = false
+      entityAttributeRecords: Seq[EntityAndAttributesResult]
     ): Seq[(Long, Entity)] = {
-      // TEMP: inspect how the `entityAttributeRecords` argument is ordered. We are gathering this info
-      // in prep for changing how this method works.
-
-      // short-circuit if empty.
-      if (entityAttributeRecords.isEmpty) {
-        return Seq.empty[(Long, Entity)]
-      }
-
-      if (validateOrdering) {
-        val orderingProblem: Option[EntityRecord] =
-          validateEntityIdOrdering(-1, entityAttributeRecords.head, Set.empty[Long], entityAttributeRecords.tail)
-
-        if (orderingProblem.isEmpty) {
-          logger.info(
-            s"entityAttributeRecords is properly ordered? TRUE; length: ${entityAttributeRecords.length}"
-          )
-        } else {
-          val rec = orderingProblem.get
-          logger.info(
-            s"entityAttributeRecords is properly ordered? FALSE; length: ${entityAttributeRecords.length}; " +
-              s"workspaceId: ${rec.workspaceId}; entityType: ${rec.entityType}; first offender: ${rec.name}"
-          )
-        }
-      }
-      // TEMP: end validation
-
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below
