@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.scaladsl.Source
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
@@ -42,6 +43,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
+  EntityQueryResultMetadata,
   EntityTypeMetadata,
   ErrorReport,
   GoogleProjectId,
@@ -135,6 +137,15 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     queryResultsToEntity(queryResults, entityType, pk)
     resultIO.unsafeToFuture()
   }
+
+  override def queryEntitiesSource(entityType: EntityName,
+                                   query: EntityQuery,
+                                   parentContext: RawlsRequestContext
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    // delegate to queryEntities, then transform its materialized result back into a Source
+    queryEntities(entityType, query, parentContext) map { entityQueryResponse =>
+      (entityQueryResponse.resultMetadata, Source.fromIterator(() => entityQueryResponse.results.iterator))
+    }
 
   override def queryEntities(entityType: String,
                              incomingQuery: EntityQuery,
