@@ -24,9 +24,8 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doReturn, verify, when}
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -134,9 +133,9 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     when(
       samDAO.syncPolicyToGoogle(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+        SamResourceTypeNames.billingProject,
+        createRequest.projectName.value,
+        SamBillingProjectPolicyNames.owner
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val gbp = new GoogleBillingProjectLifecycle(repo, bpm, samDAO, mock[GoogleServicesDAO])
@@ -148,7 +147,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequest.projectName.value),
         ArgumentMatchers.eq(createRequest.billingInfo),
-        any(),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -158,11 +157,11 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], testContext), Duration.Inf)
     }
 
-    verify(samDAO, Mockito.times(1))
+    verify(samDAO)
       .syncPolicyToGoogle(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+        SamResourceTypeNames.billingProject,
+        createRequest.projectName.value,
+        SamBillingProjectPolicyNames.owner
       )
   }
 
@@ -186,7 +185,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequest.projectName.value),
         ArgumentMatchers.eq(createRequest.billingInfo),
-        any(),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -194,9 +193,9 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     when(
       samDAO.syncPolicyToGoogle(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+        SamResourceTypeNames.billingProject,
+        createRequest.projectName.value,
+        SamBillingProjectPolicyNames.owner
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
 
@@ -205,7 +204,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     doReturn(Future.successful())
       .when(wsmResourceRecordDao)
-      .create(any)
+      .create(ArgumentMatchers.any)
 
     Await.result(bp.postCreationSteps(
                    createRequest,
@@ -215,7 +214,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
                  Duration.Inf
     )
 
-    verify(repo, Mockito.times(1)).setBillingProfileId(
+    verify(repo).setBillingProfileId(
       createRequest.projectName,
       profileModel.getId
     )
@@ -246,7 +245,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       bpm.createBillingProfile(
         ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
         ArgumentMatchers.eq(createRequestWithMembers.billingInfo),
-        any(),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(testContext)
       )
     )
@@ -254,9 +253,9 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     when(
       samDAO.syncPolicyToGoogle(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+        SamResourceTypeNames.billingProject,
+        createRequest.projectName.value,
+        SamBillingProjectPolicyNames.owner
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
 
@@ -265,7 +264,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     doReturn(Future.successful())
       .when(wsmResourceRecordDao)
-      .create(any)
+      .create(ArgumentMatchers.any)
 
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
@@ -275,16 +274,23 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
                  Duration.Inf
     )
 
-    verify(bpm, Mockito.times(2)).addProfilePolicyMember(
+    verify(bpm).addProfilePolicyMember(
       ArgumentMatchers.eq(profileModel.getId),
       ArgumentMatchers.eq(ProfilePolicy.Owner),
-      ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)),
-      any[RawlsRequestContext]
+      ArgumentMatchers.eq(user1Email),
+      ArgumentMatchers.any[RawlsRequestContext]
     )
-    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId),
-                                                         ArgumentMatchers.eq(ProfilePolicy.User),
-                                                         ArgumentMatchers.eq(user3Email),
-                                                         any[RawlsRequestContext]
+    verify(bpm).addProfilePolicyMember(
+      ArgumentMatchers.eq(profileModel.getId),
+      ArgumentMatchers.eq(ProfilePolicy.Owner),
+      ArgumentMatchers.eq(user2Email),
+      ArgumentMatchers.any[RawlsRequestContext]
+    )
+    verify(bpm).addProfilePolicyMember(
+      ArgumentMatchers.eq(profileModel.getId),
+      ArgumentMatchers.eq(ProfilePolicy.User),
+      ArgumentMatchers.eq(user3Email),
+      ArgumentMatchers.any[RawlsRequestContext]
     )
   }
 }

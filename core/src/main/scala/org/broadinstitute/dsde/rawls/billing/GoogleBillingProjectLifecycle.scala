@@ -63,10 +63,9 @@ class GoogleBillingProjectLifecycle(
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] =
     for {
-      - <- createBillingProfile(createProjectRequest, ctx).flatMap { profileModel =>
-        addMembersToBillingProfile(profileModel, createProjectRequest, ctx)
-        billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
-      }
+      profileModel <- createBillingProfile(createProjectRequest, ctx)
+      _ <- addMembersToBillingProfile(profileModel, createProjectRequest, ctx)
+      _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
 

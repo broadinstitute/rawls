@@ -418,16 +418,23 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                  Duration.Inf
     )
 
-    verify(bpm, Mockito.times(2)).addProfilePolicyMember(
+    verify(bpm).addProfilePolicyMember(
       ArgumentMatchers.eq(profileModel.getId),
       ArgumentMatchers.eq(ProfilePolicy.Owner),
-      ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)),
-      any[RawlsRequestContext]
+      ArgumentMatchers.eq(user1Email),
+      ArgumentMatchers.any[RawlsRequestContext]
     )
-    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId),
-                                                         ArgumentMatchers.eq(ProfilePolicy.User),
-                                                         ArgumentMatchers.eq(user3Email),
-                                                         any[RawlsRequestContext]
+    verify(bpm).addProfilePolicyMember(
+      ArgumentMatchers.eq(profileModel.getId),
+      ArgumentMatchers.eq(ProfilePolicy.Owner),
+      ArgumentMatchers.eq(user2Email),
+      ArgumentMatchers.any[RawlsRequestContext]
+    )
+    verify(bpm).addProfilePolicyMember(
+      ArgumentMatchers.eq(profileModel.getId),
+      ArgumentMatchers.eq(ProfilePolicy.User),
+      ArgumentMatchers.eq(user3Email),
+      ArgumentMatchers.any[RawlsRequestContext]
     )
   }
 

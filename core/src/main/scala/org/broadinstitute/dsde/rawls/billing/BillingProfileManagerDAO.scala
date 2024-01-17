@@ -150,28 +150,28 @@ class BillingProfileManagerDAOImpl(
 
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(ctx)
+
+    val commonCreateProfileRequest =
+      new CreateProfileRequest()
+        .displayName(displayName)
+        .id(UUID.randomUUID())
+        .biller("direct") // community terra is always 'direct' (i.e., no reseller)
+        .policies(policyInputs)
+
     val createProfileRequest = billingInfo match {
       case Left(billingAccountName) =>
         val rawlsBillingAccountName = billingAccountName
-        new CreateProfileRequest()
+        commonCreateProfileRequest
           .billingAccountId(rawlsBillingAccountName.withoutPrefix())
-          .displayName(displayName)
-          .id(UUID.randomUUID())
-          .biller("direct") // community terra is always 'direct' (i.e., no reseller)
           .cloudPlatform(CloudPlatform.GCP)
-          .policies(policyInputs)
 
       case Right(coords) =>
         val azureManagedAppCoordinates = coords
-        new CreateProfileRequest()
+        commonCreateProfileRequest
           .tenantId(azureManagedAppCoordinates.tenantId)
           .subscriptionId(azureManagedAppCoordinates.subscriptionId)
           .managedResourceGroupId(azureManagedAppCoordinates.managedResourceGroupId)
-          .displayName(displayName)
-          .id(UUID.randomUUID())
-          .biller("direct") // community terra is always 'direct' (i.e., no reseller)
           .cloudPlatform(CloudPlatform.AZURE)
-          .policies(policyInputs)
     }
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
