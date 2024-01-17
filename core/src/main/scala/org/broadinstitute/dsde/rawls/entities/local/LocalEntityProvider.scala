@@ -336,56 +336,88 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         }
 
       case _ =>
-        dataSource.inTransaction { dataAccess =>
-          traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
-            childContext.tracingSpan.foreach { s1 =>
-              s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
-              s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
-              s1.putAttribute("filterTerms",
-                              OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse(""))
-              )
-              s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
-              s1.putAttribute("sortDirection",
-                              OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString)
-              )
-            }
-            for {
-              (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
-                                                                                              entityType,
-                                                                                              query,
-                                                                                              childContext
-              )
-            } yield {
-              val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-              if (filteredCount > 0 && query.page > pageCount) {
-                throw new DataEntityException(
-                  code = StatusCodes.BadRequest,
-                  message = s"requested page ${query.page} is greater than the number of pages $pageCount"
-                )
-              }
-
-              val metadata: EntityQueryResultMetadata =
-                EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
-              val allAttrsStream =
-                dataAccess.entityQuery
-                  .loadEntityPageSource(workspaceContext, entityType, query, childContext)
-                  .transactionally
-                  .withTransactionIsolation(TransactionIsolation.ReadCommitted)
-                  .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                                           rsConcurrency = ResultSetConcurrency.ReadOnly,
-                                           fetchSize = dataSource.dataAccess.fetchSize
-                  )
-              val dbSource: Source[EntityAndAttributesResult, NotUsed] =
-                Source.fromPublisher(dataSource.database.stream(allAttrsStream))
-
-              val entitySource = EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-
-              (metadata, entitySource)
-            }
-
+        traceWithParent("loadEntityPage", parentContext) { childContext =>
+          childContext.tracingSpan.foreach { s1 =>
+            s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
+            s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
+            s1.putAttribute("filterTerms",
+                            OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse(""))
+            )
+            s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
+            s1.putAttribute("sortDirection",
+                            OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString)
+            )
           }
+
+          // query for the fully-materialized metadata and for the streaming result set, return the two of these
+          // as a tuple
+          for {
+            metadata <- queryForMetadata(entityType, query, childContext)
+            entitySource = queryForResultSource(entityType, query, childContext)
+          } yield (metadata, entitySource)
         }
     }
+  }
+
+  /**
+    * generates the metadata (pagination, etc) or the incoming query.
+    * Called by queryEntitiesSource.
+    *
+    * @param entityType the type of entities to query for metadata
+    * @param query criteria for filtering and paginating the result set
+    * @param parentContext tracing context into which this method will add traces
+    * @return the query result metadata
+    */
+  private def queryForMetadata(entityType: String,
+                               query: EntityQuery,
+                               parentContext: RawlsRequestContext
+  ): Future[EntityQueryResultMetadata] =
+    dataSource.inTransaction { dataAccess =>
+      for {
+        (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
+                                                                                        entityType,
+                                                                                        query,
+                                                                                        parentContext
+        )
+      } yield {
+        val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+        if (filteredCount > 0 && query.page > pageCount) {
+          throw new DataEntityException(
+            code = StatusCodes.BadRequest,
+            message = s"requested page ${query.page} is greater than the number of pages $pageCount"
+          )
+        }
+
+        EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+      }
+    }
+
+  /**
+   * generates a Source[Entity, _] representing the individual Entity results for the incoming query.
+    * Called by queryEntitiesSource.
+   *
+   * @param entityType the type of entities to return in the result set
+   * @param query criteria for filtering and paginating the result set
+   * @param parentContext tracing context into which this method will add traces
+   * @return a streaming Source of the query results
+   */
+  private def queryForResultSource(entityType: String,
+                                   query: EntityQuery,
+                                   parentContext: RawlsRequestContext
+  ): Source[Entity, _] = {
+    val allAttrsStream =
+      dataSource.dataAccess.entityQuery
+        .loadEntityPageSource(workspaceContext, entityType, query, parentContext)
+        .transactionally
+        .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+        .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                 rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                 fetchSize = dataSource.dataAccess.fetchSize
+        )
+    val dbSource: Source[EntityAndAttributesResult, NotUsed] =
+      Source.fromPublisher(dataSource.database.stream(allAttrsStream))
+
+    EntityStreamingUtils.gatherEntities(dataSource, dbSource)
   }
 
   /* as of this writing, only used in tests. This queryEntities method materializes the entire result set of
