@@ -162,7 +162,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
   }
 
-  it should "add additional members to the BPM policy if specified during billing project creation" in {
+  it should "store the billing profile ID add additional members to the BPM policy during billing project creation" in {
     val repo = mock[BillingRepository]
     val bpm = mock[BillingProfileManagerDAO]
     val samDAO = mock[SamDAO]
@@ -226,6 +226,10 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                          ArgumentMatchers.eq(ProfilePolicy.User),
                                                          ArgumentMatchers.eq(user3Email),
                                                          any[RawlsRequestContext]
+    )
+    verify(repo, Mockito.times(1)).setBillingProfileId(
+      createRequestWithMembers.projectName,
+      profileModel.getId
     )
   }
 }

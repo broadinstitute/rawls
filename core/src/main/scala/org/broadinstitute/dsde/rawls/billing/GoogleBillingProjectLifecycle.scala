@@ -65,6 +65,7 @@ class GoogleBillingProjectLifecycle(
     for {
       - <- createBillingProfile(createProjectRequest, ctx).flatMap { profileModel =>
         addMembersToBillingProfile(profileModel, createProjectRequest, ctx)
+        billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       }
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
