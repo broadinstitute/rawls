@@ -81,6 +81,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.2.0"
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
+  val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "3.0.0"
 
   val workbenchLibsHash = "8ccaa6d"
 
@@ -127,12 +128,12 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.967-SNAPSHOT")
-  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
-  val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client-javax" % "0.1.493-SNAPSHOT")
-  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.95-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-d606036")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.997-SNAPSHOT")
+  val dataRepo = excludeJakarta("bio.terra" % "datarepo-jakarta-client" % "1.568.0-SNAPSHOT")
+  val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
+  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.493-SNAPSHOT")
+  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.1.9-SNAPSHOT" classifier "plain"))
+  val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-70fda75")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
 
   // OpenTelemetry
@@ -283,7 +284,8 @@ object Dependencies {
     workbenchOpenTelemetryTests,
     terraCommonLib,
     sam,
-    leonardo
+    leonardo,
+    jakartaWsRs
   )
 
   val pact4sV = "0.7.0"

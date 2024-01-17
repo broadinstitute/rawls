@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import bio.terra.common.tracing.JerseyTracingFilter
+import bio.terra.common.tracing.JakartaTracingFilter
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi, UnauthenticatedApi}
 import bio.terra.profile.client.ApiClient
 import io.opencensus.trace.Tracing
+import io.opentelemetry.api.GlobalOpenTelemetry
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.WithSpanFilter
 import org.glassfish.jersey.client.ClientConfig
@@ -29,9 +30,9 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
     val client: ApiClient = new ApiClient() {
       override def performAdditionalClientConfiguration(clientConfig: ClientConfig): Unit = {
         super.performAdditionalClientConfiguration(clientConfig)
-        ctx.otelContext.foreach { span =>
-          clientConfig.register(new WithSpanFilter(span))
-          clientConfig.register(new JerseyTracingFilter(Tracing.getTracer))
+        ctx.otelContext.foreach { otelContext =>
+          clientConfig.register(new WithSpanFilter(otelContext))
+          clientConfig.register(new JakartaTracingFilter(GlobalOpenTelemetry.get()))
         }
       }
     }
