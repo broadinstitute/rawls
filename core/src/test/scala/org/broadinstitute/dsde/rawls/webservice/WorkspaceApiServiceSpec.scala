@@ -7,10 +7,11 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
+import bio.terra.workspace.model.{AzureContext, JobReport, JobResult, WorkspaceDescription, ErrorReport => _}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
@@ -32,7 +33,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
-import spray.json.{enrichAny, JsObject}
+import spray.json.{JsObject, enrichAny}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
@@ -47,7 +48,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(span: Option[Span]): Directive1[UserInfo] =
+    def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
       // just return the cookie text as the common name
       user match {
         case testData.userProjectOwner.userEmail.value =>
@@ -1950,7 +1951,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         .when(services.gcsDAO)
         .setBillingAccountName(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
                                any[RawlsBillingAccountName],
-                               any[Span]
+                               any[RawlsTracingContext]
         )
       when(services.gcsDAO.getGoogleProject(any[GoogleProjectId]))
         .thenReturn(Future.successful(new Project().setProjectNumber(null)))
@@ -1972,7 +1973,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
           any[GcsBucketName],
           any[Map[String, String]],
-          any[Span],
+          any[RawlsRequestContext],
           ArgumentMatchers.eq(newBucketLocation)
         )
       )
@@ -2003,7 +2004,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
               any[GcsBucketName],
               any[Map[String, String]],
-              any[Span],
+              any[RawlsRequestContext],
               ArgumentMatchers.eq(newBucketLocation)
             )
           }

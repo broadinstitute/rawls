@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import io.opencensus.trace.Span
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -24,7 +25,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(span: Option[Span]): Directive1[UserInfo] =
+    def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
       // just return the cookie text as the common name
       user match {
         case testData.userProjectOwner.userEmail.value =>

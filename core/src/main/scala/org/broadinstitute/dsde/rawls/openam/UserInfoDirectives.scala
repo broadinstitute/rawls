@@ -9,5 +9,5 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
  * Directives to get user information.
  */
 trait UserInfoDirectives {
-  def requireUserInfo(span: Option[Context] = None): Directive1[UserInfo]
+  def requireUserInfo(otelContext: Option[Context] = None): Directive1[UserInfo]
 }
