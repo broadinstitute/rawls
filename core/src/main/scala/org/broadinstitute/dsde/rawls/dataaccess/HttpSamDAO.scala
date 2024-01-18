@@ -6,7 +6,8 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.common.tracing.OkHttpClientTracingInterceptor
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{Span, Tracing}
+import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.context.Context
 import okhttp3.{Interceptor, Protocol, Response}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -42,10 +43,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
 
     val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
       .readTimeout(timeout.toJava)
-    ctx.otelContext.foreach(span =>
+    ctx.otelContext.foreach(otelContext =>
       okHttpClientWithTracingBuilder
-        .addInterceptor(new SpanSettingInterceptor(span))
-        .addInterceptor(new OkHttpClientTracingInterceptor(Tracing.getTracer))
+        .addInterceptor(new OtelContextSettingInterceptor(otelContext))
+        .addInterceptor(new OkHttpClientTracingInterceptor(GlobalOpenTelemetry.get()))
     )
 
     val samApiClient = new ApiClient(okHttpClientWithTracingBuilder.protocols(Seq(Protocol.HTTP_1_1).asJava).build())
@@ -687,9 +688,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
   }
 }
 
-class SpanSettingInterceptor(span: Span) extends Interceptor {
-  override def intercept(chain: Interceptor.Chain): Response =
-    Using(Tracing.getTracer.withSpan(span)) { _ =>
+class OtelContextSettingInterceptor(otelContext: Context) extends Interceptor {
+  override def intercept(chain: Interceptor.Chain): Response = {
+    Using(otelContext.makeCurrent()) { _ =>
       chain.proceed(chain.request())
     }.get
+  }
 }

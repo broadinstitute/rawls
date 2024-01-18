@@ -33,7 +33,7 @@ object TracingUtils {
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
 
-      case None =>
+      case _ =>
         f(parentContext)
     }
   }
@@ -53,7 +53,7 @@ object TracingUtils {
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
 
-      case None =>
+      case _ =>
         f(parentContext)
     }
 
@@ -71,7 +71,7 @@ object TracingUtils {
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
 
-      case None =>
+      case _ =>
         f(parentContext)
     }
   }
@@ -91,7 +91,7 @@ object TracingUtils {
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
 
-      case None =>
+      case _ =>
         f(parentContext)
     }
   }
@@ -109,7 +109,7 @@ object TracingUtils {
         val result = Try(f(parentContext.copy(otelContext = Option(childContext))))
         instrumenter.end(childContext, name, name, result.failed.toOption.orNull)
         result.get
-      case None =>
+      case _ =>
         f(parentContext)
     }
   }
@@ -123,7 +123,7 @@ object TracingUtils {
           result <- f(tracingContext.copy(otelContext = Option(childContext))).attempt
           _ = instrumenter.end(childContext, name, name, result.toTry.failed.toOption.orNull)
         } yield result.toTry.get
-      case None =>
+      case _ =>
         f(tracingContext)
     }
 

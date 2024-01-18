@@ -1,19 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import bio.terra.common.tracing.JerseyTracingFilter
-import bio.terra.workspace.api.{
-  ControlledAzureResourceApi,
-  JobsApi,
-  LandingZonesApi,
-  ResourceApi,
-  UnauthenticatedApi,
-  WorkspaceApi,
-  WorkspaceApplicationApi
-}
+import bio.terra.common.tracing.JakartaTracingFilter
+import bio.terra.workspace.api.{ControlledAzureResourceApi, JobsApi, LandingZonesApi, ResourceApi, UnauthenticatedApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import io.opencensus.trace.Tracing
+import io.opentelemetry.api.GlobalOpenTelemetry
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
-import org.broadinstitute.dsde.rawls.util.WithSpanFilter
+import org.broadinstitute.dsde.rawls.util.WithOtelContextFilter
 import org.glassfish.jersey.client.ClientConfig
 
 /**
@@ -44,8 +37,8 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
       override def performAdditionalClientConfiguration(clientConfig: ClientConfig): Unit = {
         super.performAdditionalClientConfiguration(clientConfig)
         ctx.otelContext.foreach { span =>
-          clientConfig.register(new WithSpanFilter(span))
-          clientConfig.register(new JerseyTracingFilter(Tracing.getTracer))
+          clientConfig.register(new WithOtelContextFilter(span))
+          clientConfig.register(new JakartaTracingFilter(GlobalOpenTelemetry.get()))
         }
       }
     }
