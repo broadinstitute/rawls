@@ -31,6 +31,8 @@ import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 import org.broadinstitute.dsde.test.pipeline._
 
+import scala.util.{Failure, Try}
+
 @WorkspacesAzureTest
 class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // The values of the following vars are injected from the pipeline.
@@ -58,11 +60,14 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
-  def logFailure(String message, f: Future[_]): Unit = {
-    f.onFailure {
-      case t => logger.error(message, t)
+  def logFailure[T](message: String)(fun: => T): T =
+    try
+      fun
+    catch {
+      case e: Exception =>
+        logger.error(message)
+        throw e
     }
-  }
 
   "Other Terra services" should "include Leonardo" in {
     implicit val token = ownerAuthToken
@@ -282,7 +287,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       response.workspace.name should be(workspaceName)
       response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
       val workspaceId = response.workspace.workspaceId
-      val creationTimeout = 100 //900
+      val creationTimeout = 100 // 900
 
       logFailure(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
         awaitCond(
