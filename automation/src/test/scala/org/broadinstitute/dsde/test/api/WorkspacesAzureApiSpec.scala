@@ -289,6 +289,8 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       val workspaceId = response.workspace.workspaceId
       val creationTimeout = 60 // 900
 
+      logger.info(s"creationTimeout is ${creationTimeout} seconds")
+
       logFailure(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
         awaitCond(
           isWdsDeletable(workspaceId, token),
