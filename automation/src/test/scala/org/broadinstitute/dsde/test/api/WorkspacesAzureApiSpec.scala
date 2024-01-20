@@ -63,8 +63,9 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
   def logFailure[T](message: String)(fun: => T): T =
     try {
       logger.info("in logFailure")
-      fun
-      logger.info("after function call in logger.info");
+      val result = fun
+      logger.info("after function call in logger.info")
+      result
     } catch {
       case e: Exception =>
         logger.info(message)
