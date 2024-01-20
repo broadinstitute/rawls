@@ -64,9 +64,8 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     try {
       fun
     } catch {
-      logger.info("in catch");
-      case e =>
-        logger.info("in case");
+      case e: Throwable =>
+        logger.info("in case")
         logger.info(message)
         throw e
     }
