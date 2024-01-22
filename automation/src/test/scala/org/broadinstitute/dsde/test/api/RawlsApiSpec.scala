@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembershi
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
+import org.scalatest.CancelAfterFailure
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpecLike
@@ -47,7 +48,8 @@ class RawlsApiSpec
     with WorkspaceFixtures
     with SubWorkflowFixtures
     with RawlsTestSuite
-    with MethodFixtures {
+    with MethodFixtures
+    with CancelAfterFailure {
 
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)

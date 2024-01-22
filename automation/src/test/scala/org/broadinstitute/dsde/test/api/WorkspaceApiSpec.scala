@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembershi
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
+import org.scalatest.CancelAfterFailure
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -46,7 +47,8 @@ class WorkspaceApiSpec
     with Retry
     with ScalaFutures
     with WorkspaceFixtures
-    with MethodFixtures {
+    with MethodFixtures
+    with CancelAfterFailure {
 
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()

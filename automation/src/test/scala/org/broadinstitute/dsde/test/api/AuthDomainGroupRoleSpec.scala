@@ -10,11 +10,12 @@ import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtur
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
 import org.broadinstitute.dsde.workbench.service.{Rawls, Sam}
+import org.scalatest.CancelAfterFailure
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
 @AuthDomainsTest
-class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with GroupFixtures with Matchers {
+class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with GroupFixtures with Matchers with CancelAfterFailure {
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 

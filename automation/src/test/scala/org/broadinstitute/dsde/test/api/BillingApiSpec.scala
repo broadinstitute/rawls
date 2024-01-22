@@ -5,12 +5,13 @@ import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.Rawls
+import org.scalatest.CancelAfterFailure
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
 @BillingsTest
-class BillingApiSpec extends AnyFreeSpec with MethodFixtures with Matchers with TestReporterFixture with LazyLogging {
+class BillingApiSpec extends AnyFreeSpec with MethodFixtures with Matchers with TestReporterFixture with LazyLogging with CancelAfterFailure {
 
   "A user with a billing account" - {
     "can create a new billing project with v2 api" in {

@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig,
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service._
+import org.scalatest.CancelAfterFailure
 import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -22,7 +23,8 @@ class AuthDomainGroupApiSpec
     with Matchers
     with WorkspaceFixtures
     with GroupFixtures
-    with Eventually {
+    with Eventually
+    with CancelAfterFailure {
 
   /*
    * Unless otherwise declared, this auth token will be used for API calls.
