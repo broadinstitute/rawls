@@ -10,7 +10,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
@@ -301,7 +301,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                    params: WorkspaceFieldSpecs,
                    parentContext: RawlsRequestContext = ctx
   ): Future[JsObject] = {
-    val (options, attrSpecs) = processOptions(params)
+    val (options, attrSpecs) = processOptions(params, fieldNames = WorkspaceFieldNames.workspaceResponseFieldNames)
 
     // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
@@ -442,12 +442,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     )
   }
 
-  private def processOptions(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int = -1): (Set[LookupExpression], WorkspaceAttributeSpecs) =
-    traceNakedWithParent("processOptions", ctx.toTracingContext)(_ => {
+  private def processOptions(params: WorkspaceFieldSpecs,
+                             stringAttributeMaxLength: Int = -1,
+                             fieldNames: Set[LookupExpression]
+  ): (Set[LookupExpression], WorkspaceAttributeSpecs) =
+    traceNakedWithParent("processOptions", ctx.toTracingContext) { _ =>
       // validate the inbound parameters
-      val options = Try(validateParams(params, WorkspaceFieldNames.workspaceResponseFieldNames)) match {
+      val options = Try(validateParams(params, fieldNames)) match {
         case Success(opts) => opts
-        case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
+        case Failure(ex)   => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
       }
 
       // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
@@ -460,7 +463,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         stringAttributeMaxLength
       )
       (options, attrSpecs)
-    })
+    }
 
   def getWorkspaceById(workspaceId: String,
                        params: WorkspaceFieldSpecs,
@@ -563,10 +566,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] =
     traceFutureWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
-        traceFutureWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap { maybeMcWorkspace =>
-          traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 =>
-            deleteWorkspaceInternal(workspace, maybeMcWorkspace, s1)
-          )
+        traceFutureWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap {
+          maybeMcWorkspace =>
+            traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 =>
+              deleteWorkspaceInternal(workspace, maybeMcWorkspace, s1)
+            )
         }
       }
     )
@@ -930,7 +934,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     } yield result
 
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
-    val (options, attributeSpecs) = processOptions(params, stringAttributeMaxLength)
+    val (options, attributeSpecs) =
+      processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
 
     // Can this be shared with get-workspace somehow?
     val optionsExist = options.nonEmpty

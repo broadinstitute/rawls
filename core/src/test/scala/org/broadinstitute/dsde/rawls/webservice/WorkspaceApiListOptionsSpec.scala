@@ -223,6 +223,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
             status
           }
 
+          println(responseAs[String])
+
           val dateTime = currentTime()
           assertResult(
             Set(
