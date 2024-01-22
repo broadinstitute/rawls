@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.test.CleanUp
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
@@ -16,7 +17,7 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoog
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, CreateResourceRequest}
 import org.broadinstitute.dsde.workbench.service._
-import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
+import org.broadinstitute.dsde.workbench.service.test.RandomUtil
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.CancelAfterFailure
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
