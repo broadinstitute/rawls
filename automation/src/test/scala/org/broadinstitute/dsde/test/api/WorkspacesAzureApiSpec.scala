@@ -65,7 +65,6 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       fun
     } catch {
       case e: Throwable =>
-        logger.info("in case")
         logger.info(message)
         throw e
     }
@@ -288,9 +287,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       response.workspace.name should be(workspaceName)
       response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
       val workspaceId = response.workspace.workspaceId
-      val creationTimeout = 60 // 900
-
-      logger.info(s"creationTimeout is ${creationTimeout} seconds")
+      val creationTimeout = 900
 
       logFailure(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
         awaitCond(
