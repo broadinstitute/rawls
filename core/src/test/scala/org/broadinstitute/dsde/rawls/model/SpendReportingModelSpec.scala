@@ -26,10 +26,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
       new SpendReport()
         .spendSummary(
           buildSpendReportingForDateRange("0.00",
-            "n/a",
-            null,
-            from.toString(ISODateTimeFormat.date()),
-            to.toString(ISODateTimeFormat.date())
+                                          "n/a",
+                                          null,
+                                          from.toString(ISODateTimeFormat.date()),
+                                          to.toString(ISODateTimeFormat.date())
           )
         )
         .spendDetails(
@@ -45,10 +45,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
       new SpendReport()
         .spendSummary(
           buildSpendReportingForDateRange(costs.values.sum.toString(),
-            defaultCurrency,
-            null,
-            from.toString(ISODateTimeFormat.date()),
-            to.toString(ISODateTimeFormat.date())
+                                          defaultCurrency,
+                                          null,
+                                          from.toString(ISODateTimeFormat.date()),
+                                          to.toString(ISODateTimeFormat.date())
           )
         )
         .spendDetails(
@@ -62,7 +62,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
                                         category: SpendReportingForDateRangeBPM.CategoryEnum,
                                         from: String,
                                         to: String
-                                       ): SpendReportingForDateRangeBPM =
+    ): SpendReportingForDateRangeBPM =
       new SpendReportingForDateRangeBPM()
         .cost(cost)
         .credits(defaultAzureCredits)
@@ -75,10 +75,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
       val categoriesCosts = costs
         .map(costPerCategoryKvp =>
           buildSpendReportingForDateRange(costPerCategoryKvp._2.toString,
-            defaultCurrency,
-            costPerCategoryKvp._1,
-            null,
-            null
+                                          defaultCurrency,
+                                          costPerCategoryKvp._1,
+                                          null,
+                                          null
           )
         )
         .asJavaCollection
@@ -107,7 +107,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     val computeCost: BigDecimal = 100.20
     val storageCost: BigDecimal = 54.32
     val k8sInfrastructureCost: BigDecimal = 75.15
-    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost, CategoryEnum.STORAGE -> storageCost, CategoryEnum.WORKSPACEINFRASTRUCTURE -> k8sInfrastructureCost)
+    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost,
+                              CategoryEnum.STORAGE -> storageCost,
+                              CategoryEnum.WORKSPACEINFRASTRUCTURE -> k8sInfrastructureCost
+    )
     val someReport = TestData.someBPMNonEmptyReport(from, to, categoriesCosts)
 
     val result = SpendReportingResults(someReport)
@@ -116,12 +119,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     result.spendSummary shouldNot equal(null)
     result.spendSummary.cost shouldBe categoriesCosts.values.sum.toString()
     result.spendDetails shouldNot equal(null)
-    result.spendDetails(0) shouldNot equal(null)
-    result.spendDetails(0).spendData should have size categoriesCosts.size
+    result.spendDetails.head shouldNot equal(null)
+    result.spendDetails.head.spendData should have size categoriesCosts.size
 
-    val computeDetails = result
-      .spendDetails(0)
-      .spendData
+    val computeDetails = result.spendDetails.head.spendData
       .find(v => v.category.nonEmpty && v.category.get.equals(TerraSpendCategories.Compute))
     computeDetails.nonEmpty shouldBe true
     computeDetails.get.cost shouldBe computeCost.toString()
@@ -129,9 +130,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     computeDetails.get.currency shouldBe TestData.defaultCurrency
     computeDetails.get.category.get shouldBe TerraSpendCategories.Compute
 
-    val storageDetails = result
-      .spendDetails(0)
-      .spendData
+    val storageDetails = result.spendDetails.head.spendData
       .find(v => v.category.nonEmpty && v.category.get.equals(TerraSpendCategories.Storage))
     storageDetails.nonEmpty shouldBe true
     storageDetails.get.cost shouldBe storageCost.toString()
@@ -139,9 +138,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     storageDetails.get.currency shouldBe TestData.defaultCurrency
     storageDetails.get.category.get shouldBe TerraSpendCategories.Storage
 
-    val k8sDetails = result
-      .spendDetails(0)
-      .spendData
+    val k8sDetails = result.spendDetails.head.spendData
       .find(v => v.category.nonEmpty && v.category.get.equals(TerraSpendCategories.WorkspaceInfrastructure))
     k8sDetails.nonEmpty shouldBe true
     k8sDetails.get.cost shouldBe k8sInfrastructureCost.toString()
@@ -160,10 +157,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
 
     val spendReportingForDateRangeBPM =
       TestData.buildSpendReportingForDateRange(cost,
-        TestData.defaultCurrency,
-        category,
-        from.toString(ISODateTimeFormat.date()),
-        to.toString(ISODateTimeFormat.date())
+                                               TestData.defaultCurrency,
+                                               category,
+                                               from.toString(ISODateTimeFormat.date()),
+                                               to.toString(ISODateTimeFormat.date())
       )
 
     val result = SpendReportingForDateRange(spendReportingForDateRangeBPM)
@@ -186,7 +183,10 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     val computeCost: BigDecimal = 1000.20
     val storageCost: BigDecimal = 900.32
     val workspaceInfrastructureCost: BigDecimal = 2500.01
-    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost, CategoryEnum.STORAGE -> storageCost, CategoryEnum.WORKSPACEINFRASTRUCTURE -> workspaceInfrastructureCost)
+    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost,
+                              CategoryEnum.STORAGE -> storageCost,
+                              CategoryEnum.WORKSPACEINFRASTRUCTURE -> workspaceInfrastructureCost
+    )
 
     val spendReportingAggregationBPM = TestData.buildSpendReportingAggregation(categoriesCosts)
     val result = SpendReportingAggregation(spendReportingAggregationBPM)
@@ -212,7 +212,9 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     storageCategory.get.category.get shouldBe TerraSpendCategories.Storage
 
     val workspaceInfrastructureCategory =
-      result.spendData.find(sd => sd.category.nonEmpty && sd.category.get.equals(TerraSpendCategories.WorkspaceInfrastructure))
+      result.spendData.find(sd =>
+        sd.category.nonEmpty && sd.category.get.equals(TerraSpendCategories.WorkspaceInfrastructure)
+      )
     workspaceInfrastructureCategory.nonEmpty shouldBe true
     workspaceInfrastructureCategory.get.cost shouldBe workspaceInfrastructureCost.toString()
     workspaceInfrastructureCategory.get.credits shouldBe TestData.defaultAzureCredits
