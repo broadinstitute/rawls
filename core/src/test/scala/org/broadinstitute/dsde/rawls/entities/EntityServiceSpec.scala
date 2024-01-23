@@ -396,7 +396,12 @@ class EntityServiceSpec
         val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
         val ex = intercept[RawlsExceptionWithErrorReport] {
           Await.result(
-            services.entityService.queryEntitiesSource(testData.wsName, None, testData.sample1.entityType, entityQuery, None),
+            services.entityService.queryEntitiesSource(testData.wsName,
+                                                       None,
+                                                       testData.sample1.entityType,
+                                                       entityQuery,
+                                                       None
+            ),
             waitDuration
           )
         }
