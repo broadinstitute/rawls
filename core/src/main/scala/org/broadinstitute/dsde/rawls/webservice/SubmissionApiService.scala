@@ -4,6 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -26,7 +27,7 @@ trait SubmissionApiService extends UserInfoDirectives with TracingDirectives {
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val submissionTimeout: FiniteDuration
 
-  val submissionRoutes: server.Route = traceRequest { otelContext =>
+  def submissionRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>

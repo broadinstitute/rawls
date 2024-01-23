@@ -1,14 +1,17 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.server.Directives.provide
 import akka.http.scaladsl.server.PathMatchers.Segment
 import akka.http.scaladsl.server.directives.BasicDirectives.{extractRequest, mapResponse}
 import akka.http.scaladsl.server.directives.PathDirectives._
-import akka.http.scaladsl.server.{Directive0, PathMatcher, PathMatcher0}
+import akka.http.scaladsl.server.{Directive0, Directive1, PathMatcher, PathMatcher0}
+import io.opentelemetry.context.Context
+import io.opentelemetry.instrumentation.api.instrumenter.http.{HttpServerRoute, HttpServerRouteSource}
 
 import java.util.concurrent.TimeUnit
 
-trait InstrumentationDirectives extends RawlsInstrumented {
+trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives {
 
   // Like Segment in that it matches and consumes any path segment, but does not extract a value.
   private val SegmentIgnore: PathMatcher0 = Segment.tmap(_ => PathMatcher.provide(()))
@@ -96,15 +99,17 @@ trait InstrumentationDirectives extends RawlsInstrumented {
     * Important note: the route passed into this directive in test code must be sealed
     * otherwise exceptions escape and are not instrumented appropriately.
     */
-  def instrumentRequest: Directive0 = extractRequest flatMap { request =>
-    val timeStamp = System.currentTimeMillis
-    mapResponse { response =>
-      val elapsed = System.currentTimeMillis - timeStamp
-      globalRequestCounter.inc()
-      globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
-      httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
-      httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
-      response
+  def instrumentRequest: Directive1[Context] =
+    (traceRequest & extractRequest).tflatMap { case (otelContext, request) =>
+      val timeStamp = System.currentTimeMillis
+      mapResponse { response =>
+        val elapsed = System.currentTimeMillis - timeStamp
+        globalRequestCounter.inc()
+        globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
+        httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
+        httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
+        HttpServerRoute.update(otelContext, HttpServerRouteSource.CONTROLLER, httpRequestRoute(request))
+        response
+      } & provide(otelContext)
     }
-  }
 }

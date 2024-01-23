@@ -14,6 +14,7 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
+import io.opentelemetry.context.Context
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
@@ -125,8 +126,20 @@ trait RawlsApiService
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes =
-    workspaceRoutesV2 ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+  val baseApiRoutes = (otelContext: Context) => {
+    workspaceRoutesV2(otelContext) ~
+    workspaceRoutes(otelContext) ~
+    entityRoutes(otelContext) ~
+    methodConfigRoutes(otelContext) ~
+    submissionRoutes(otelContext) ~
+    adminRoutes(otelContext) ~
+    userRoutes(otelContext) ~
+    billingRoutesV2(otelContext) ~
+    billingRoutes(otelContext) ~
+    notificationsRoutes ~
+    servicePerimeterRoutes(otelContext) ~
+    snapshotRoutes(otelContext)
+  }
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 

@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.BadRequest
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
@@ -31,7 +32,7 @@ trait EntityApiService extends UserInfoDirectives with TracingDirectives {
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val batchUpsertMaxBytes: Long
 
-  val entityRoutes: server.Route = traceRequest { otelContext =>
+  def entityRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       parameters("dataReference".?, "billingProject".?) { (dataReferenceString, billingProjectString) =>

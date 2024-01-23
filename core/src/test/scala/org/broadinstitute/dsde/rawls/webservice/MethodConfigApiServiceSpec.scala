@@ -123,7 +123,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         AgoraMethod("dsde", "three_step", 1)
       )
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -171,7 +171,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     )
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -227,7 +227,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       )
 
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -265,7 +265,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       )
 
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -294,7 +294,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
 
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -326,7 +326,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       revokeCuratorRole(services)
 
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -380,7 +380,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
 
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -415,7 +415,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
       def create(mc: MethodConfiguration) =
         Post(s"${testData.workspace.path}/methodconfigs", httpJson(mc)) ~>
-          sealRoute(services.methodConfigRoutes) ~>
+          sealRoute(services.methodConfigRoutes()) ~>
           check {
             assertResult(StatusCodes.Created) {
               status
@@ -436,7 +436,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
       def get(mc: MethodConfiguration) =
         Get(s"${testData.workspace.path}/methodconfigs/${mc.namespace}/${mc.name}") ~>
-          sealRoute(services.methodConfigRoutes) ~>
+          sealRoute(services.methodConfigRoutes()) ~>
           check {
             assertResult(StatusCodes.OK) {
               status
@@ -454,7 +454,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         )
       )
     ) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -575,14 +575,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           )
         )
       ) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
           }
         }
       Get(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
         }
@@ -599,7 +599,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           )
         )
       ) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -624,7 +624,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   /*
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.agoraMethodConfig.path(testData.workspace)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -638,7 +638,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.methodConfig3.path(testData.workspace)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -674,7 +674,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         assertSubsetOf(expected, capturedMetrics)
       }
       Get(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
         }
@@ -683,7 +683,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices {
     services =>
       Delete(testData.agoraMethodConfig.copy(name = "DNE").path(testData.workspace)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -724,7 +724,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       val fooFactor = pair._3
 
       httpMethod(original.path(testData.workspace), httpJson(edited)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             println(original)
@@ -797,7 +797,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     )
 
     httpMethod(testData.goodAndBadMethodConfig.path(testData.workspace), httpJson(testData.goodAndBadMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -847,7 +847,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     val expectedFailureOutputs = Map.empty[String, String]
 
     httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -876,7 +876,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     val expectedFailureOutputs = Map.empty[String, String]
 
     Put(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -900,7 +900,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
                                           testData.agoraMethodConfig.inputs + ("param2" -> AttributeString("foo2"))
         )
       Put(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -913,7 +913,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       val modifiedMethodConfig =
         testData.methodConfig2.copy(inputs = testData.agoraMethodConfig.inputs + ("param2" -> AttributeString("foo2")))
       Post(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Conflict) {
             status
@@ -949,7 +949,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     runAndWait(methodConfigurationQuery.create(testData.workspace, mc))
 
     Get(s"${mc.path(testData.workspace)}/validate") ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -997,7 +997,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       runAndWait(methodConfigurationQuery.create(testData.workspace, mc))
 
       Get(s"${mc.path(testData.workspace)}/validate") ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -1014,7 +1014,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/methodconfigs/update}", httpJson(testData.agoraMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1024,7 +1024,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 201 on copy method Agora configuration" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreated)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1042,7 +1042,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 201 on copy Dockstore method configuration" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreatedDockstore)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1061,14 +1061,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "update the destination workspace last modified date on copy method configuration" in withTestDataApiServices {
     services =>
       Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreated)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
           }
         }
       Get(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
         }
@@ -1076,7 +1076,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 409 on copy method configuration to existing name" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairConflict)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -1086,7 +1086,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 404 on copy method configuration from bogus source" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairNotFound)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1097,7 +1097,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "not allow copy method configuration with library attributes in outputs by curator" in withTestDataApiServices {
     services =>
       Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1110,7 +1110,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       revokeCuratorRole(services)
 
       Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1123,7 +1123,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 200 on copy Agora method configuration to Agora" in withTestDataApiServices { services =>
     withStatsD {
       Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.agoraMethodConfigName))) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -1153,7 +1153,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 404 on copy method configuration to method repo if config dne" in withTestDataApiServices {
     services =>
       Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName3))) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -1166,7 +1166,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "foo return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
     withStatsD {
       Post(copyFromMethodRepo, httpJson(testData.methodRepoGood)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -1196,7 +1196,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       val existingMethodConfigCopy =
         MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, testData.agoraMethodConfigName)
       Post(copyFromMethodRepo, httpJson(existingMethodConfigCopy)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Conflict) {
             status
@@ -1207,7 +1207,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 404 on copy method configuration from bogus source in method repo" in withTestDataApiServices {
     services =>
       Post(copyFromMethodRepo, httpJson(testData.methodRepoMissing)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -1218,7 +1218,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 422 on copy method configuration when method repo payload is missing" in withTestDataApiServices {
     services =>
       Post(copyFromMethodRepo, httpJson(testData.methodRepoEmptyPayload)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.UnprocessableEntity) {
             status
@@ -1247,7 +1247,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "not allow copy method configuration from repo with library attributes in outputs by curator" in withTestDataApiServices {
     services =>
       Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1260,7 +1260,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       revokeCuratorRole(services)
 
       Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1272,7 +1272,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     services =>
       val method = AgoraMethod("dsde", "three_step", 1)
       Post("/methodconfigs/template", httpJson(method)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           val methodConfiguration = MethodConfiguration(
             "namespace",
@@ -1295,7 +1295,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     services =>
       val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
       Post("/methodconfigs/template", httpJson(method)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           val methodConfiguration = MethodConfiguration(
             "namespace",
@@ -1319,7 +1319,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     withStatsD {
       val method = AgoraMethod("dsde", "three_step", 1)
       Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
           val expectedIn = Seq(MethodInput("three_step.cgrep.pattern", "String", false))
@@ -1346,7 +1346,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     services =>
       val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
       Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
           val expectedIn = Seq(MethodInput("three_step_dockstore.cgrep.pattern", "String", false))
@@ -1364,7 +1364,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 400 for a method inputs and outputs request missing method name" in withTestDataApiServices {
     services =>
       Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde", "", 2))) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest)(status)
           val responseString = Unmarshal(response.entity).to[String].futureValue
@@ -1375,7 +1375,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices {
     services =>
       Post("/methodconfigs/template", httpJson(AgoraMethod("dsde", "three_step", 2))) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound)(status)
         }
@@ -1384,7 +1384,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "return 404 getting method inputs and outputs from a missing method" in withTestDataApiServices {
     services =>
       Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde", "three_step", 2))) ~>
-        sealRoute(services.methodConfigRoutes) ~>
+        sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound)(status)
         }
@@ -1432,7 +1432,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return 200 on get method configuration" in withTestDataApiServices { services =>
     Get(testData.agoraMethodConfig.path(testData.workspace)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1456,7 +1456,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "list method Configurations for Agora by default" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs") ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1470,7 +1470,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "list method Configurations for Agora with allRepos=false" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs?allRepos=false") ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1484,7 +1484,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "return Bad Request if you use a bogus value for allRepos" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs?allRepos=banana") ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -1494,7 +1494,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "list method Configurations for all repos with allRepos=true" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs?allRepos=true") ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status

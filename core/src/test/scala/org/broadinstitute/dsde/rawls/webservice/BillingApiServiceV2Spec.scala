@@ -125,7 +125,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       val project = createProject("new_project")
 
       Put(s"/billing/v2/${project.projectName.value}/members/user/${testData.userWriter.userEmail.value}") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -133,7 +133,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         }
 
       Put(s"/billing/v2/${project.projectName.value}/members/owner/${testData.userWriter.userEmail.value}") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -190,7 +190,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       )
 
       Put(s"/billing/v2/${project.projectName.value}/members/user/nobody") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -208,7 +208,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     ).thenReturn(Future.successful(false))
 
     Put(s"/billing/v2/missing_project/members/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -243,7 +243,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       ).thenReturn(Future.successful(false))
 
       Delete(s"/billing/v2/${project.projectName.value}/members/owner/${testData.userWriter.userEmail.value}") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -265,7 +265,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ""))))
 
       Delete(s"/billing/v2/${project.projectName.value}/members/user/nobody") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -283,7 +283,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       ).thenReturn(Future.successful(false))
       Delete(s"/billing/v2/missing_project/members/user/${testData.userOwner.userEmail.value}") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -306,7 +306,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                                   None
            )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -345,7 +345,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           None
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.Conflict, responseAs[String]) {
             status
@@ -375,7 +375,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           Some(true)
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -403,7 +403,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
 
       Post("/billing/v2", request) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.BadRequest, responseAs[String]) {
             status
@@ -423,7 +423,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                                None
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -443,7 +443,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                                None
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -463,7 +463,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                                None
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -560,7 +560,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       )
 
       Get(s"/billing/v2/${project.projectName.value}/members") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -601,7 +601,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       )
 
       Get(s"/billing/v2/${project.projectName.value}/members") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -640,7 +640,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                  Set.empty
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -676,7 +676,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                  Set.empty
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.Conflict) {
             status
@@ -716,7 +716,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                  Set.empty
         )
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -746,7 +746,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                Set.empty
       )
     ) ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -772,7 +772,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     )
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -803,7 +803,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     )
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -828,7 +828,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       .thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
     Get(s"/billing/v2/$projectName") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {
           status
@@ -847,7 +847,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     ).thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {
           status
@@ -911,7 +911,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         .thenReturn(Future.successful())
 
       Delete(s"/billing/v2/${project.projectName.value}") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.NoContent, responseAs[String]) {
             status
@@ -955,7 +955,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       .thenReturn(Future.successful())
 
     Delete(s"/billing/v2/${project.projectName.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NoContent, responseAs[String]) {
           status
@@ -1007,7 +1007,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       .thenReturn(Future.successful())
 
     Delete(s"/billing/v2/${project.projectName.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
@@ -1027,7 +1027,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     ).thenReturn(Future.successful(false))
 
     Delete(s"/billing/v2/${project.projectName.value}") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.Forbidden, responseAs[String]) {
           status
@@ -1119,7 +1119,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
     }
     Get(s"/billing/v2") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -1149,7 +1149,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       Put(s"/billing/v2/${project.projectName.value}/billingAccount",
           UpdateRawlsBillingAccountRequest(services.gcsDAO.accessibleBillingAccountName)
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
@@ -1176,7 +1176,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     Put(s"/billing/v2/${project.projectName.value}/billingAccount",
         UpdateRawlsBillingAccountRequest(services.gcsDAO.inaccessibleBillingAccountName)
     ) ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
@@ -1202,7 +1202,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       )
       Delete(s"/billing/v2/${project.projectName.value}/billingAccount") ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
@@ -1242,7 +1242,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         val project = createProject("project")
 
         Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-03-06&endDate=2022-03-07") ~>
-          sealRoute(services.billingRoutesV2) ~>
+          sealRoute(services.billingRoutesV2()) ~>
           check {
             assertResult(StatusCodes.OK, responseAs[String]) {
               status
@@ -1300,7 +1300,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       Get(
         s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-03-06&endDate=2022-03-07&aggregationKey=Workspace~Daily&aggregationKey=Category&aggregationKey=Category~Category"
       ) ~>
-        sealRoute(services.billingRoutesV2) ~>
+        sealRoute(services.billingRoutesV2()) ~>
         check {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
@@ -1320,7 +1320,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val project = createProject("project")
 
     Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=nothing&endDate=20-020-123556") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
@@ -1334,7 +1334,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     Get(
       s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-02-03&endDate=2022-02-04&aggregationKey=Fake&aggregationKey=Workspace~bad"
     ) ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
@@ -1348,7 +1348,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     Get(
       s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-02-03&endDate=2022-02-04&aggregationKey=Category-Workspace"
     ) ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
@@ -1362,7 +1362,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     Get(
       s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-02-03&endDate=2022-02-04&aggregationKey=aggregationKey=Category~Workspace~Daily"
     ) ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
@@ -1374,7 +1374,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val project = createProject("project")
 
     Get(s"/billing/v2/${project.projectName.value}/spendReport") ~>
-      sealRoute(services.billingRoutesV2) ~>
+      sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {
           status

@@ -267,7 +267,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     services =>
       implicit val timeout: Duration = 10.seconds
       Get(testWorkspaces.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -298,7 +298,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   "WorkspaceApi, when using fields param" should "include accessLevel when asked to" in withTestWorkspacesApiServices {
     services =>
       Get(testWorkspaces.workspace.path + "?fields=accessLevel") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
           val actual = responseAs[String].parseJson.asJsObject
@@ -309,7 +309,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include bucketOptions" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=bucketOptions") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -320,7 +320,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include canCompute" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=canCompute") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -331,7 +331,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include canShare" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=canShare") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -342,7 +342,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include catalog" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=catalog") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -353,7 +353,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include owners" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=owners") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -364,7 +364,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include workspace.attributes" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspace.attributes") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -380,7 +380,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include individual keys inside workspace.attributes" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspace.attributes.description") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -396,7 +396,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include workspace.authorizationDomain" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspace.authorizationDomain") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -416,7 +416,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include workspaceSubmissionStats" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspaceSubmissionStats") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -438,7 +438,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     it should s"include $workspaceKey subkey of workspace when specifying the top-level key" in withTestWorkspacesApiServices {
       services =>
         Get(testWorkspaces.workspace.path + "?fields=workspace") ~>
-          sealRoute(services.workspaceRoutes) ~>
+          sealRoute(services.workspaceRoutes()) ~>
           check {
             assertResult(StatusCodes.OK)(status)
             val actual = responseAs[String].parseJson.asJsObject
@@ -450,7 +450,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "include multiple keys simultaneously when asked to" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=canShare,workspace.attributes,accessLevel") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -468,7 +468,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   // this test targets a specific bug that arose during development; worth keeping in.
   it should "include workspace.attributes even when attributes are empty" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace2.path + "?fields=workspace.attributes") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -479,7 +479,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   it should "handle duplicate values just fine" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=accessLevel,accessLevel") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -492,7 +492,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     Get(
       testWorkspaces.workspace.path + "?fields=workspace.attributes.description,workspace.attributes.tag:tags,workspace.attributes.library:orsp"
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson.asJsObject
@@ -510,7 +510,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   it should s"return 400 Bad Request for unknown fields value in querystring" in withTestWorkspacesApiServices {
     services =>
       Get(testWorkspaces.workspace.path + "?fields=accessLevel,IntentionallyBadValueForUnitTest,AnotherBadOne") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -525,7 +525,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   it should s"return 400 Bad Request if fields param is specified multiple times" in withTestWorkspacesApiServices {
     services =>
       Get(testWorkspaces.workspace.path + "?fields=accessLevel&fields=canShare,workspace.attributes") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -544,7 +544,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       Get(
         s"/workspaces/id/${testWorkspaces.workspace.workspaceId}" + "?fields=canShare,workspace.attributes,accessLevel"
       ) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
           val actual = responseAs[String].parseJson.asJsObject

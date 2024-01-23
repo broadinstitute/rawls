@@ -121,7 +121,7 @@ trait ApiServiceSpec
 
   def revokeCuratorRole(services: ApiServices, user: RawlsUser = testData.userOwner): Unit = {
     Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -129,7 +129,7 @@ trait ApiServiceSpec
       }
 
     Delete(s"/admin/user/role/curator/${user.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -137,7 +137,7 @@ trait ApiServiceSpec
       }
 
     Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -405,10 +405,18 @@ trait ApiServiceSpec
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = instrumentRequest {
+    val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
       sealRoute(
-        adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-          submissionRoutes ~ userRoutes ~ workspaceRoutes
+        adminRoutes(otelContext) ~
+          billingRoutesV2(otelContext) ~
+          billingRoutes(otelContext) ~
+          entityRoutes(otelContext) ~
+          methodConfigRoutes(otelContext) ~
+          notificationsRoutes ~
+          statusRoute ~
+          submissionRoutes(otelContext) ~
+          userRoutes(otelContext) ~
+          workspaceRoutes(otelContext)
       )
     }
 

@@ -79,7 +79,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       Post(s"/admin/project/registration",
            httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
       ) ~>
-        sealRoute(services.adminRoutes) ~>
+        sealRoute(services.adminRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -89,7 +89,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       Post(s"/admin/project/registration",
            httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
       ) ~>
-        sealRoute(services.adminRoutes) ~>
+        sealRoute(services.adminRoutes()) ~>
         check {
           assertResult(StatusCodes.InternalServerError) {
             status
@@ -104,7 +104,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       s"/admin/project/registration",
       httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
     ) ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -114,7 +114,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/project/registration/$projectName",
            httpJson(Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.token))
     ) ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent, responseAs[String]) {
           status
@@ -125,7 +125,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices {
     services =>
       Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -133,7 +133,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
       Get(s"/admin/submissions") ~>
-        sealRoute(services.adminRoutes) ~>
+        sealRoute(services.adminRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -175,7 +175,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(
       s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/${testData.submissionTerminateTest.submissionId}"
     ) ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
@@ -183,7 +183,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when aborting a bogus active submission" in withTestDataApiServices { services =>
     Delete(s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/fake") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -192,7 +192,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
     val testUser = "foo@bar.com"
     Put(s"/admin/user/role/curator/${testUser}") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
@@ -201,12 +201,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when removing a library curator" in withTestDataApiServices { services =>
     val testUser = "foo@bar.com"
     Put(s"/admin/user/role/curator/${testUser}") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
     Delete(s"/admin/user/role/curator/${testUser}") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
@@ -214,7 +214,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
     Get(s"/admin/workspaces") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         // TODO: why is this result returned out of order?
@@ -224,7 +224,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when getting workspaces by a string attribute" in withConstantTestDataApiServices { services =>
     Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertWorkspaceResult(Seq(constantData.workspace))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
@@ -233,7 +233,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when getting workspaces by a numeric attribute" in withConstantTestDataApiServices { services =>
     Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertWorkspaceResult(Seq(constantData.workspace))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
@@ -242,7 +242,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when getting workspaces by a boolean attribute" in withTestDataApiServices { services =>
     Get(s"/admin/workspaces?attributeName=library%3Apublished&valueBoolean=true") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertWorkspaceResult(Seq(testData.workspacePublished))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
@@ -289,7 +289,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
 
     Get("/admin/submissions/queueStatusByUser") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -327,7 +327,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val flagApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/flags"
     // workspace should start with zero flags
     Get(flagApiUrl) ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertResult(List.empty[String])(responseAs[List[String]])
@@ -345,7 +345,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     flagAttempts foreach { flags =>
       withClue(s"when attempting to put feature flags $flags ... ") {
         Put(flagApiUrl, flags) ~>
-          sealRoute(services.adminRoutes) ~>
+          sealRoute(services.adminRoutes()) ~>
           check {
             assertResult(StatusCodes.OK)(status)
             responseAs[List[String]] should contain theSameElementsAs flags
@@ -354,7 +354,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
       withClue(s"when attempting to get feature flags, expecting $flags ... ") {
         Get(flagApiUrl) ~>
-          sealRoute(services.adminRoutes) ~>
+          sealRoute(services.adminRoutes()) ~>
           check {
             assertResult(StatusCodes.OK)(status)
             responseAs[List[String]] should contain theSameElementsAs flags
