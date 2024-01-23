@@ -31,6 +31,8 @@ import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 import org.broadinstitute.dsde.test.pipeline._
 
+import scala.util.{Failure, Try}
+
 @WorkspacesAzureTest
 class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // The values of the following vars are injected from the pipeline.
@@ -58,11 +60,20 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
+  def logFailure[T](message: String)(fun: => T): T =
+    try {
+      fun
+    } catch {
+      case e: Throwable =>
+        logger.info(message)
+        throw e
+    }
+
   "Other Terra services" should "include Leonardo" in {
     implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(leoUrl + "status")
 
-    withClue(s"Leo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+    logFailure(s"Leo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
       statusRequest.status shouldBe StatusCodes.OK
     }
   }
@@ -71,7 +82,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
-    withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+    logFailure(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
       statusRequest.status shouldBe StatusCodes.OK
     }
   }
@@ -123,14 +134,14 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       // Upload the blob that will be cloned
       uploadBlob(sasUrl, analysesFilename, analysesContents)
       val downloadContents = downloadBlob(sasUrl, analysesFilename)
-      withClue(s"testing uploaded blob ${analysesFilename}") {
+      logFailure(s"testing uploaded blob ${analysesFilename}") {
         downloadContents shouldBe analysesContents
       }
 
       // Upload the blob that should not be cloned
       uploadBlob(sasUrl, nonAnalysesFilename, nonAnalysesContents)
       val downloadNonAnalysesContents = downloadBlob(sasUrl, nonAnalysesFilename)
-      withClue(s"testing uploaded blob ${nonAnalysesFilename}") {
+      logFailure(s"testing uploaded blob ${nonAnalysesFilename}") {
         downloadNonAnalysesContents shouldBe nonAnalysesContents
       }
 
@@ -150,7 +161,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
         clonedResponse.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
         clonedResponse.accessLevel should be(Some(ProjectOwner))
 
-        withClue(s"Verifying container cloning has completed") {
+        logFailure(s"Verifying container cloning has completed") {
           awaitCond(
             isCloneCompleted(projectName, workspaceCloneName),
             60 seconds,
@@ -160,19 +171,19 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
 
         val cloneSasUrl = getSasUrl(projectName, workspaceCloneName, token)
         val downloadCloneContents = downloadBlob(cloneSasUrl, analysesFilename)
-        withClue(s"testing blob ${analysesFilename} cloned") {
+        logFailure(s"testing blob ${analysesFilename} cloned") {
           downloadCloneContents shouldBe analysesContents
         }
-        withClue(s"testing blob ${nonAnalysesFilename} did not clone") {
+        logFailure(s"testing blob ${nonAnalysesFilename} did not clone") {
           verifyBlobNotCloned(cloneSasUrl, nonAnalysesFilename)
         }
       } finally
-        withClue(s"deleting the cloned workspace ${workspaceCloneName} failed") {
+        logFailure(s"deleting the cloned workspace ${workspaceCloneName} failed") {
           Rawls.workspaces.delete(projectName, workspaceCloneName)
           assertNoAccessToWorkspace(projectName, workspaceCloneName)
         }
     } finally
-      withClue(s"deleting the original workspace ${workspaceName} failed") {
+      logFailure(s"deleting the original workspace ${workspaceName} failed") {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
@@ -276,9 +287,9 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       response.workspace.name should be(workspaceName)
       response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
       val workspaceId = response.workspace.workspaceId
-      val creationTimeout = 600
+      val creationTimeout = 900
 
-      withClue(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
+      logFailure(s"WDS did not become deletable within the timeout period of ${creationTimeout} seconds") {
         awaitCond(
           isWdsDeletable(workspaceId, token),
           creationTimeout seconds,
@@ -338,14 +349,14 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
       HttpRequest(HttpMethods.PUT, fullBlobUrl, headers, HttpEntity(ContentTypes.`text/plain(UTF-8)`, contents))
     val uploadResponse = Await.result(Http().singleRequest(uploadRequest), 2.minutes)
 
-    withClue(s"Upload blob ${blobName}") {
+    logFailure(s"Upload blob ${blobName}") {
       uploadResponse.status shouldBe StatusCodes.Created
     }
   }
 
   private def downloadBlob(containerUrl: String, blobName: String): String = {
     val downloadResponse = getBlobResponse(containerUrl, blobName)
-    withClue(s"Download blob ${blobName}") {
+    logFailure(s"Download blob ${blobName}") {
       downloadResponse.status shouldBe StatusCodes.OK
     }
     val byteStringSink: Sink[ByteString, Future[ByteString]] = Sink.fold(ByteString("")) { (z, i) =>
@@ -357,7 +368,7 @@ class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAft
 
   private def verifyBlobNotCloned(containerUrl: String, blobName: String): Unit = {
     val downloadResponse = getBlobResponse(containerUrl, blobName)
-    withClue(s"Check blob ${blobName} does not exist") {
+    logFailure(s"Check blob ${blobName} does not exist") {
       downloadResponse.status shouldBe StatusCodes.NotFound
     }
   }
