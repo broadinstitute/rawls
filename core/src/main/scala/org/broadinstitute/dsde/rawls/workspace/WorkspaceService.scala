@@ -3102,6 +3102,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def setupGoogleProjectIam(googleProjectId: GoogleProjectId,
                             policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                             billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                            actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail],
                             parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =
     traceWithParent("updateGoogleProjectIam", parentContext) { _ =>
@@ -3119,27 +3120,43 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
       // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-      List(
-        billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole,
-                                              terraWorkspaceCanComputeRole,
-                                              terraWorkspaceNextflowRole
-        ),
-        policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole,
-                                                                 terraWorkspaceNextflowRole
-        ),
-        policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole,
-                                                                      terraWorkspaceNextflowRole
-        )
-      )
-        .traverse_ { case (email, roles) =>
-          googleIamDao.addRoles(
-            GoogleProject(googleProjectId.value),
-            email,
-            IamMemberTypes.Group,
-            roles,
-            retryIfGroupDoesNotExist = true
+      for {
+        _ <- List(
+          billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole,
+                                                terraWorkspaceCanComputeRole,
+                                                terraWorkspaceNextflowRole
+          ),
+          policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole,
+                                                                   terraWorkspaceNextflowRole
+          ),
+          policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole,
+                                                                        terraWorkspaceNextflowRole
           )
-        }
+        )
+          .traverse_ { case (email, roles) =>
+            googleIamDao.addRoles(
+              GoogleProject(googleProjectId.value),
+              email,
+              IamMemberTypes.Group,
+              roles,
+              retryIfGroupDoesNotExist = true
+            )
+          }
+        _ <- List(
+          actionServiceAccountsByAction(SamWorkspaceActions.compute) -> Set(terraWorkspaceCanComputeRole,
+                                                                            terraWorkspaceNextflowRole
+          )
+        )
+          .traverse_ { case (email, roles) =>
+            googleIamDao.addRoles(
+              GoogleProject(googleProjectId.value),
+              email,
+              IamMemberTypes.ServiceAccount,
+              roles
+            )
+          }
+      } yield ()
+
     }
 
   /**
@@ -3325,6 +3342,21 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     )
 
+  private def createActionServiceAccountsInSam(workspaceId: String,
+                                               googleProjectId: GoogleProjectId,
+                                               actions: Set[SamResourceAction],
+                                               parentContext: RawlsRequestContext
+  ): Future[Map[SamResourceAction, WorkbenchEmail]] =
+    traceWithParent("createActionServiceAccountsInSam", parentContext)(_ =>
+      Future
+        .traverse(actions) { action =>
+          samDAO
+            .getActionServiceAccount(googleProjectId, SamResourceTypeNames.workspace, workspaceId, action, ctx)
+            .map(action -> _)
+        }
+        .map(_.toMap)
+    )
+
   private def createWorkspaceInDatabase(workspaceId: String,
                                         workspaceRequest: WorkspaceRequest,
                                         bucketName: String,
@@ -3447,7 +3479,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
         ).sequence_
       }
-      (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentContext) { span =>
+      (googleProjectId, googleProjectNumber, actionServiceAccountsByAction) <- traceDBIOWithParent("setupGoogleProject",
+                                                                                                   parentContext
+      ) { span =>
         DBIO.from(
           for {
             (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject,
@@ -3456,8 +3490,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             )
             _ <- setProjectBillingAccount(googleProjectId, billingProject, billingAccount, workspaceId, span)
             _ <- renameAndLabelProject(googleProjectId, workspaceId, workspaceName, span)
-            _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, span)
-          } yield (googleProjectId, googleProjectNumber)
+            actionsForServiceAccounts = Set(SamWorkspaceActions.read,
+                                            SamWorkspaceActions.write,
+                                            SamWorkspaceActions.compute
+            )
+            actionServiceAccountsByAction <- createActionServiceAccountsInSam(workspaceId,
+                                                                              googleProjectId,
+                                                                              actionsForServiceAccounts,
+                                                                              parentContext
+            )
+            _ <- setupGoogleProjectIam(googleProjectId,
+                                       policyEmailsByName,
+                                       billingProjectOwnerPolicyEmail,
+                                       actionServiceAccountsByAction,
+                                       span
+            )
+          } yield (googleProjectId, googleProjectNumber, actionServiceAccountsByAction)
         )
       }
       savedWorkspace <- traceDBIOWithParent("createWorkspaceInDatabase", parentContext)(span =>
@@ -3530,7 +3578,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             GcsBucketName(bucketName),
             getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList),
             childContext.tracingSpan.orNull,
-            workspaceBucketLocation
+            workspaceBucketLocation,
+            actionServiceAccountsByAction
           )
         )
       )
