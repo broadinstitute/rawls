@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
@@ -21,7 +20,7 @@ import scala.concurrent.duration.FiniteDuration
 /**
   * Created by dvoet on 6/4/15.
   */
-trait SubmissionApiService extends UserInfoDirectives with TracingDirectives {
+trait SubmissionApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService

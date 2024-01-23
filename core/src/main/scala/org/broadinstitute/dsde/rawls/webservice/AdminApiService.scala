@@ -10,7 +10,6 @@ import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -22,7 +21,7 @@ import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
-trait AdminApiService extends UserInfoDirectives with TracingDirectives {
+trait AdminApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._

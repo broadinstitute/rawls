@@ -4,7 +4,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -17,7 +16,7 @@ import scala.concurrent.ExecutionContext
   * Created with dvoet on 6/12/19.
   */
 
-trait ServicePerimeterApiService extends UserInfoDirectives with TracingDirectives {
+trait ServicePerimeterApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val userServiceConstructor: RawlsRequestContext => UserService

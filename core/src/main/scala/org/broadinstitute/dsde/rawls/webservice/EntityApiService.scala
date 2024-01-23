@@ -9,7 +9,6 @@ import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.And
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
@@ -26,7 +25,7 @@ import scala.util.{Failure, Success, Try}
  * Created by dvoet on 6/4/15.
  */
 
-trait EntityApiService extends UserInfoDirectives with TracingDirectives {
+trait EntityApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val entityServiceConstructor: RawlsRequestContext => EntityService

@@ -6,7 +6,6 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
@@ -17,7 +16,7 @@ import spray.json.{JsObject, _}
 
 import scala.concurrent.ExecutionContext
 
-trait WorkspaceApiServiceV2 extends UserInfoDirectives with TracingDirectives {
+trait WorkspaceApiServiceV2 extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService

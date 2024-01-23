@@ -8,7 +8,6 @@ import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -21,7 +20,7 @@ import scala.concurrent.ExecutionContext
   * Created by dvoet on 11/2/2020.
   */
 
-trait BillingApiServiceV2 extends UserInfoDirectives with TracingDirectives {
+trait BillingApiServiceV2 extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._

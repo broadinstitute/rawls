@@ -6,7 +6,6 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, RawlsRequestContext, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -15,7 +14,7 @@ import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 
-trait SnapshotApiService extends UserInfoDirectives with TracingDirectives {
+trait SnapshotApiService extends UserInfoDirectives {
 
   implicit val executionContext: ExecutionContext
 
