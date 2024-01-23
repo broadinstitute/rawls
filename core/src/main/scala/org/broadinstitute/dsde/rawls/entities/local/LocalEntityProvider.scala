@@ -17,8 +17,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
-import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException}
+import org.broadinstitute.dsde.rawls.entities.base.{
+  EntityProvider,
+  ExpressionEvaluationContext,
+  ExpressionEvaluationSupport,
+  ExpressionValidator
+}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException
+}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -79,9 +88,15 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     // start performance tracing
     traceFutureWithParent("LocalEntityProvider.entityTypeMetadata", requestArguments.ctx) { localContext =>
-      setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspace"), workspaceContext.toWorkspaceName.toString)
+      setTraceSpanAttribute(localContext,
+                            AttributeKey.stringKey("workspace"),
+                            workspaceContext.toWorkspaceName.toString
+      )
       setTraceSpanAttribute(localContext, AttributeKey.booleanKey("useCache"), java.lang.Boolean.valueOf(useCache))
-      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("cacheEnabled"), java.lang.Boolean.valueOf(cacheEnabled))
+      setTraceSpanAttribute(localContext,
+                            AttributeKey.booleanKey("cacheEnabled"),
+                            java.lang.Boolean.valueOf(cacheEnabled)
+      )
 
       // start transaction
       dataSource.inTransaction(
@@ -170,14 +185,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIOWithParent("LocalEntityProvider.deleteEntities", requestArguments.ctx) { localContext =>
-        setTraceSpanAttribute(localContext,
-                              AttributeKey.stringKey("workspaceId"),
-                              workspaceContext.workspaceId
-        )
-        setTraceSpanAttribute(localContext,
-                              AttributeKey.longKey("numEntities"),
-                              java.lang.Long.valueOf(entRefs.length)
-        )
+        setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
+        setTraceSpanAttribute(localContext, AttributeKey.longKey("numEntities"), java.lang.Long.valueOf(entRefs.length))
         withAllEntityRefs(workspaceContext, dataAccess, entRefs, localContext) { _ =>
           traceDBIOWithParent("entityQuery.getAllReferringEntities", localContext)(innerSpan =>
             dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap {
@@ -200,14 +209,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def deleteEntitiesOfType(entityType: String): Future[Int] =
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("LocalEntityProvider.deleteEntitiesOfType", requestArguments.ctx) { localContext =>
-        setTraceSpanAttribute(localContext,
-                              AttributeKey.stringKey("workspaceId"),
-                              workspaceContext.workspaceId
-        )
-        setTraceSpanAttribute(localContext,
-                              AttributeKey.stringKey("entityType"),
-                              entityType
-        )
+        setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
+        setTraceSpanAttribute(localContext, AttributeKey.stringKey("entityType"), entityType)
 
         dataAccess.entityQuery.countReferringEntitiesForType(workspaceContext, entityType) flatMap {
           referringEntitiesCount =>
@@ -315,7 +318,10 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       case _ => None
     }
 
-    setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByName"), java.lang.Boolean.valueOf(nameFilter.isDefined))
+    setTraceSpanAttribute(parentContext,
+                          AttributeKey.booleanKey("isFilterByName"),
+                          java.lang.Boolean.valueOf(nameFilter.isDefined)
+    )
     // if filtering by name, retrieve that entity directly, else do the full query:
     nameFilter match {
       case Some(entityName) =>
@@ -434,21 +440,15 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     } yield operation.name
 
     traceFutureWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", requestArguments.ctx) { localContext =>
+      setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
+      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("upsert"), java.lang.Boolean.valueOf(upsert))
       setTraceSpanAttribute(localContext,
-                            AttributeKey.stringKey("workspaceId"),
-                            workspaceContext.workspaceId
+                            AttributeKey.longKey("entityUpdatesCount"),
+                            java.lang.Long.valueOf(entityUpdates.length)
       )
       setTraceSpanAttribute(localContext,
-                              AttributeKey.booleanKey("upsert"),
-                              java.lang.Boolean.valueOf(upsert)
-      )
-      setTraceSpanAttribute(localContext,
-                              AttributeKey.longKey("entityUpdatesCount"),
-                              java.lang.Long.valueOf(entityUpdates.length)
-      )
-      setTraceSpanAttribute(localContext,
-                              AttributeKey.longKey("entityOperationsCount"),
-                              java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
+                            AttributeKey.longKey("entityOperationsCount"),
+                            java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
       )
 
       withAttributeNamespaceCheck(namesToCheck) {

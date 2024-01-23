@@ -8,7 +8,12 @@ import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceDBIOWithParent}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{
+  model,
+  RawlsException,
+  RawlsExceptionWithErrorReport,
+  RawlsFatalExceptionWithErrorReport
+}
 import slick.dbio.Effect.Read
 import slick.jdbc.{GetResult, JdbcProfile, ResultSetConcurrency, ResultSetType, SQLActionBuilder, TransactionIsolation}
 import slick.sql.SqlStreamingAction
@@ -993,7 +998,10 @@ trait EntityComponent {
       }
 
       // if filtering by name, retrieve that entity directly, else do the full query:
-      setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByName"), java.lang.Boolean.valueOf(nameFilter.isDefined))
+      setTraceSpanAttribute(parentContext,
+                            AttributeKey.booleanKey("isFilterByName"),
+                            java.lang.Boolean.valueOf(nameFilter.isDefined)
+      )
       nameFilter match {
         case Some(entityName) =>
           val desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
@@ -1393,8 +1401,14 @@ trait EntityComponent {
 
       traceDBIOWithParent("EntityComponent.checkAndCopyEntities", parentContext) { childContext =>
         setTraceSpanAttribute(childContext, AttributeKey.stringKey("destWorkspaceId"), destWorkspaceContext.workspaceId)
-        setTraceSpanAttribute(childContext, AttributeKey.stringKey("sourceWorkspaceId"), destWorkspaceContext.toWorkspaceName.toString)
-        setTraceSpanAttribute(childContext, AttributeKey.longKey("numEntities"), java.lang.Long.valueOf(entityNames.length))
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.stringKey("sourceWorkspaceId"),
+                              destWorkspaceContext.toWorkspaceName.toString
+        )
+        setTraceSpanAttribute(childContext,
+                              AttributeKey.longKey("numEntities"),
+                              java.lang.Long.valueOf(entityNames.length)
+        )
         traceDBIOWithParent("getHardConflicts", childContext)(s2 =>
           getActiveRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet).flatMap {
             case Seq() =>

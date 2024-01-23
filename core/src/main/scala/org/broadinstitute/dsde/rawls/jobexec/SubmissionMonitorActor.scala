@@ -13,20 +13,38 @@ import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
+import org.broadinstitute.dsde.rawls.expressions.{
+  BoundOutputExpression,
+  OutputExpression,
+  ThisEntityTarget,
+  WorkspaceTarget
+}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
+  CheckCurrentWorkflowStatusCounts,
+  SaveCurrentWorkflowStatusCounts
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
+import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePrint, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{AuthUtil, FutureSupport, addJitter}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceDBIOWithParent, traceFuture, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{
+  setTraceSpanAttribute,
+  traceDBIOWithParent,
+  traceFuture,
+  traceFutureWithParent
+}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.model.Notifications.{AbortedSubmissionNotification, FailedSubmissionNotification, Notification, SuccessfulSubmissionNotification}
+import org.broadinstitute.dsde.workbench.model.Notifications.{
+  AbortedSubmissionNotification,
+  FailedSubmissionNotification,
+  Notification,
+  SuccessfulSubmissionNotification
+}
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -359,7 +377,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         tracingLabel: String
       ) =
         traceFutureWithParent(tracingLabel, rootContext) { innerContext =>
-          setTraceSpanAttribute(innerContext, AttributeKey.longKey("numWorkflows"), java.lang.Long.valueOf(workflowGroup.size))
+          setTraceSpanAttribute(innerContext,
+                                AttributeKey.longKey("numWorkflows"),
+                                java.lang.Long.valueOf(workflowGroup.size)
+          )
           workflowGroup
             .traverse { case (workflowRec, outputsOption) =>
               IO.fromFuture(IO(processWorkflow(workflowRec, outputsOption, innerContext)))
@@ -577,7 +598,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     } else {
       traceDBIOWithParent("handleOutputs", tracingContext) { rootSpan =>
         setTraceSpanAttribute(rootSpan, AttributeKey.stringKey("submissionId"), submissionId.toString)
-        setTraceSpanAttribute(rootSpan, AttributeKey.longKey("numWorkflowsWithOutputs"), java.lang.Long.valueOf(workflowsWithOutputs.length))
+        setTraceSpanAttribute(rootSpan,
+                              AttributeKey.longKey("numWorkflowsWithOutputs"),
+                              java.lang.Long.valueOf(workflowsWithOutputs.length)
+        )
 
         for {
           // load all the starting data
@@ -679,7 +703,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       val entityUpdates = updatedEntitiesAndWorkspace.collect {
         case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
       }
-      setTraceSpanAttribute(span, AttributeKey.longKey("numEntityUpdates"), java.lang.Long.valueOf(entityUpdates.length))
+      setTraceSpanAttribute(span,
+                            AttributeKey.longKey("numEntityUpdates"),
+                            java.lang.Long.valueOf(entityUpdates.length)
+      )
       if (entityUpdates.isEmpty) {
         DBIO.successful(())
       } else {
