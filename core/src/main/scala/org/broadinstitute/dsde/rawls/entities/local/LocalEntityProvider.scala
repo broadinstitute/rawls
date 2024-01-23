@@ -1,23 +1,51 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  EntityAndAttributesResult,
+  EntityRecord,
+  ReadWriteAction
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityCopyDefinition, EntityCopyResponse, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace, WorkspaceAttributeSpecs}
+import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
+  AttributeEntityReference,
+  AttributeName,
+  AttributeValue,
+  Entity,
+  EntityCopyDefinition,
+  EntityCopyResponse,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntityTypeMetadata,
+  ErrorReport,
+  RawlsRequestContext,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  SubmissionValidationEntityInputs,
+  SubmissionValidationValue,
+  Workspace,
+  WorkspaceAttributeSpecs
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
-import slick.jdbc.TransactionIsolation
+import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
@@ -261,54 +289,141 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
+  /**
+    * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
+    * This method returns fully materialized metadata (row counts, page size, etc) as EntityQueryResultMetadata, and
+    * also returns a streaming Source of Entity objects. We avoid materializing the full set of Entity objects for
+    * performance and memory reasons.
+    *
+    * @param entityType the type of entities to return in the result set
+    * @param query criteria for filtering and paginating the result set
+    * @param parentContext tracing context into which this method will add traces
+    * @return a tuple of 1) the fully materialized metadata, and 2) a streaming Source of Entity objects
+    */
+  override def queryEntitiesSource(entityType: String,
+                                   query: EntityQuery,
+                                   parentContext: RawlsRequestContext = requestArguments.ctx
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
+    // look for a columnFilter that specifies the primary key for this entityType;
+    // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
+    val nameFilter: Option[String] = query.columnFilter match {
+      case Some(colFilter)
+          if colFilter.attributeName == AttributeName.withDefaultNS(
+            entityType + Attributable.entityIdAttributeSuffix
+          ) =>
+        Option(colFilter.term)
+      case _ => None
+    }
+
+    setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByName"), java.lang.Boolean.valueOf(nameFilter.isDefined))
+    // if filtering by name, retrieve that entity directly, else do the full query:
+    nameFilter match {
+      case Some(entityName) =>
+        dataSource.inTransaction { dataAccess =>
+          dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query)
+        } map { case (unfilteredCount, filteredCount, entity) =>
+          val pageCount = if (entity.nonEmpty) 1 else 0
+          val entitySource = if (entity.nonEmpty) Source.single(entity.head) else Source.empty
+
+          val metadata: EntityQueryResultMetadata =
+            EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+          (metadata, entitySource)
+        }
+
+      case _ =>
+        traceFutureWithParent("loadEntityPage", parentContext) { childContext =>
+          setTraceSpanAttribute(childContext, AttributeKey.longKey("pageSize"), java.lang.Long.valueOf(query.pageSize))
+          setTraceSpanAttribute(childContext, AttributeKey.longKey("page"), java.lang.Long.valueOf(query.page))
+          setTraceSpanAttribute(childContext, AttributeKey.stringKey("filterTerms"), query.filterTerms.getOrElse(""))
+          setTraceSpanAttribute(childContext, AttributeKey.stringKey("sortField"), query.sortField)
+          setTraceSpanAttribute(childContext, AttributeKey.stringKey("sortDirection"), query.sortDirection.toString)
+
+          // query for the fully-materialized metadata and for the streaming result set, return the two of these
+          // as a tuple
+          for {
+            metadata <- queryForMetadata(entityType, query, childContext)
+            entitySource = queryForResultSource(entityType, query, childContext)
+          } yield (metadata, entitySource)
+        }
+    }
+  }
+
+  /**
+    * generates the metadata (pagination, etc) or the incoming query.
+    * Called by queryEntitiesSource.
+    *
+    * @param entityType the type of entities to query for metadata
+    * @param query criteria for filtering and paginating the result set
+    * @param parentContext tracing context into which this method will add traces
+    * @return the query result metadata
+    */
+  private def queryForMetadata(entityType: String,
+                               query: EntityQuery,
+                               parentContext: RawlsRequestContext
+  ): Future[EntityQueryResultMetadata] =
+    dataSource.inTransaction { dataAccess =>
+      for {
+        (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
+                                                                                        entityType,
+                                                                                        query,
+                                                                                        parentContext
+        )
+      } yield {
+        val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+        if (filteredCount > 0 && query.page > pageCount) {
+          throw new DataEntityException(
+            code = StatusCodes.BadRequest,
+            message = s"requested page ${query.page} is greater than the number of pages $pageCount"
+          )
+        }
+
+        EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+      }
+    }
+
+  /**
+   * generates a Source[Entity, _] representing the individual Entity results for the incoming query.
+    * Called by queryEntitiesSource.
+   *
+   * @param entityType the type of entities to return in the result set
+   * @param query criteria for filtering and paginating the result set
+   * @param parentContext tracing context into which this method will add traces
+   * @return a streaming Source of the query results
+   */
+  private def queryForResultSource(entityType: String,
+                                   query: EntityQuery,
+                                   parentContext: RawlsRequestContext
+  ): Source[Entity, _] = {
+    val allAttrsStream =
+      dataSource.dataAccess.entityQuery
+        .loadEntityPageSource(workspaceContext, entityType, query, parentContext)
+        .transactionally
+        .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+        .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                 rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                 fetchSize = dataSource.dataAccess.fetchSize
+        )
+    val dbSource: Source[EntityAndAttributesResult, NotUsed] =
+      Source.fromPublisher(dataSource.database.stream(allAttrsStream))
+
+    EntityStreamingUtils.gatherEntities(dataSource, dbSource)
+  }
+
+  /* as of this writing, only used in tests. This queryEntities method materializes the entire result set of
+   *  entities and is therefore memory-hungry. Runtime code should not use this and should call queryEntitiesSource
+   *  instead. This method is still useful for testing and is called by multiple tests.
+   * */
+  @deprecated("use queryEntitiesSource instead.", "2024-01-09")
   override def queryEntities(entityType: String,
                              query: EntityQuery,
                              parentContext: RawlsRequestContext = requestArguments.ctx
   ): Future[EntityQueryResponse] =
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
-        setTraceSpanAttribute(childContext,
-                              AttributeKey.longKey("pageSize"),
-                              java.lang.Long.valueOf(query.pageSize)
-        )
-        setTraceSpanAttribute(childContext,
-                              AttributeKey.longKey("page"),
-                              java.lang.Long.valueOf(query.page)
-        )
-        setTraceSpanAttribute(childContext,
-                              AttributeKey.stringKey("filterTerms"),
-                              query.filterTerms.getOrElse("")
-        )
-        setTraceSpanAttribute(childContext,
-                              AttributeKey.stringKey("sortField"),
-                              query.sortField
-        )
-        setTraceSpanAttribute(childContext,
-                              AttributeKey.stringKey("sortDirection"),
-                              query.sortDirection.toString
-        )
-
-        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, childContext)
-      } map { case (unfilteredCount, filteredCount, entities) =>
-        createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
+    queryEntitiesSource(entityType, query, parentContext) flatMap { case (entityQueryResultMetadata, entitySource) =>
+      implicit val actorSystem: ActorSystem = ActorSystem()
+      entitySource.runWith(Sink.seq) map { entities =>
+        EntityQueryResponse(query, entityQueryResultMetadata, entities)
       }
     }
-
-  def createEntityQueryResponse(query: EntityQuery,
-                                unfilteredCount: Int,
-                                filteredCount: Int,
-                                page: Seq[Entity]
-  ): EntityQueryResponse = {
-    val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-    if (filteredCount > 0 && query.page > pageCount) {
-      throw new DataEntityException(code = StatusCodes.BadRequest,
-                                    message =
-                                      s"requested page ${query.page} is greater than the number of pages $pageCount"
-      )
-    } else {
-      EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
-    }
-  }
 
   def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
                               upsert: Boolean

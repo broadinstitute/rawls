@@ -399,7 +399,6 @@ multiCloudWorkspaces {
       "AKS_AUTOSCALING_ENABLED": "true"
       "AKS_AUTOSCALING_MIN": "1"
       "AKS_AUTOSCALING_MAX": "100"
-      "AKS_MACHINE_TYPE": "Standard_D4as_v5"
     }
   },
   workspaceManager {

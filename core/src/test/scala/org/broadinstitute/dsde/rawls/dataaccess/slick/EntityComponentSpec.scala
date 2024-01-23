@@ -255,15 +255,15 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       // check that the all_attribute_values field was filled in correctly by searching on the new attributes and making sure one filtered result is found
       assertResult(1) {
         runAndWait(
-          entityQuery.loadEntityPage(context,
-                                     "Sample",
-                                     model.EntityQuery(1,
-                                                       10,
-                                                       "name",
-                                                       SortDirections.Ascending,
-                                                       Option("sample1 2 tumor aliquot2 aliquot1 aliquot2 itsfoo")
-                                     ),
-                                     testContext
+          entityQuery.loadEntityPageCounts(context,
+                                           "Sample",
+                                           model.EntityQuery(1,
+                                                             10,
+                                                             "name",
+                                                             SortDirections.Ascending,
+                                                             Option("sample1 2 tumor aliquot2 aliquot1 aliquot2 itsfoo")
+                                           ),
+                                           testContext
           )
         )._2
       }
@@ -1684,7 +1684,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
                    "filteredCount tests did not set up fixtures correctly, within first test"
             )
             val unfilteredQuery = EntityQuery(1, 1, sortKey, sortDir, None)
-            val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, unfilteredQuery, testContext))
+            val pageResult =
+              runAndWait(entityQuery.loadEntityPageCounts(context, typeName, unfilteredQuery, testContext))
             pageResult._2 should be > 0
             pageResult._2 shouldBe pageResult._1
           }
@@ -1712,55 +1713,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             withWorkspaceContext(emptyWorkspace.workspace) { context =>
               caseSensitivityFixtures(context)
               val filterQuery = EntityQuery(1, 1, sortKey, sortDir, Some(filterTerm))
-              val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery, testContext))
+              val pageResult = runAndWait(entityQuery.loadEntityPageCounts(context, typeName, filterQuery, testContext))
               pageResult._2 shouldBe expectedCount
             }
           }
         }
       }
     }
-  }
-
-  behavior of "validateEntityIdOrdering"
-
-  it should "return ok when everything is ordered correctly" in {
-    val dummyUuid = UUID.randomUUID()
-    val entityAttributeRecords: Seq[EntityAndAttributesResult] = Seq(
-      EntityAndAttributesResult(EntityRecord(2, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(2, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(3, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(3, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(1, "name", "type", dummyUuid, 1, deleted = false, None), None, None)
-    )
-
-    val isProperlyOrdered: Option[EntityRecord] =
-      entityQuery.validateEntityIdOrdering(-1,
-                                           entityAttributeRecords.head,
-                                           Set.empty[Long],
-                                           entityAttributeRecords.tail
-      )
-
-    isProperlyOrdered shouldBe None
-  }
-
-  it should "return the offending EntityRecord when not ordered correctly" in {
-    val dummyUuid = UUID.randomUUID()
-    val entityAttributeRecords: Seq[EntityAndAttributesResult] = Seq(
-      EntityAndAttributesResult(EntityRecord(2, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(1, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(3, "name", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(1, "offender", "type", dummyUuid, 1, deleted = false, None), None, None),
-      EntityAndAttributesResult(EntityRecord(1, "name", "type", dummyUuid, 1, deleted = false, None), None, None)
-    )
-
-    val isProperlyOrdered: Option[EntityRecord] =
-      entityQuery.validateEntityIdOrdering(-1,
-                                           entityAttributeRecords.head,
-                                           Set.empty[Long],
-                                           entityAttributeRecords.tail
-      )
-
-    isProperlyOrdered shouldBe Some(EntityRecord(1, "offender", "type", dummyUuid, 1, deleted = false, None))
   }
 
 }
