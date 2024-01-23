@@ -8,11 +8,8 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
-  AttributeUpdateOperation,
-  AttributeUpdateOperationFormat,
-  EntityUpdateDefinition
-}
+import org.broadinstitute.dsde.rawls.metrics.TracingDirectives
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.And
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._

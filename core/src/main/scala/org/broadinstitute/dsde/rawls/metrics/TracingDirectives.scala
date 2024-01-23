@@ -1,20 +1,13 @@
-package org.broadinstitute.dsde.rawls.webservice
+package org.broadinstitute.dsde.rawls.metrics
 
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import akka.http.scaladsl.server.{Directive, Directive1, ExceptionHandler}
 import akka.http.scaladsl.server.Directives.{extractRequest, handleExceptions, mapResponse, provide}
+import akka.http.scaladsl.server.{Directive1, ExceptionHandler}
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
-import io.opentelemetry.instrumentation.api.instrumenter.http.{
-  HttpServerAttributesExtractor,
-  HttpServerAttributesGetter,
-  HttpServerMetrics,
-  HttpServerRoute,
-  HttpSpanStatusExtractor
-}
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import io.opentelemetry.instrumentation.api.instrumenter.http._
 
 import java.util
 import scala.jdk.CollectionConverters._
