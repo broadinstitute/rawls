@@ -7,7 +7,13 @@ import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
-import io.opentelemetry.instrumentation.api.instrumenter.http.{HttpServerAttributesExtractor, HttpServerAttributesGetter, HttpServerMetrics, HttpServerRoute, HttpSpanStatusExtractor}
+import io.opentelemetry.instrumentation.api.instrumenter.http.{
+  HttpServerAttributesExtractor,
+  HttpServerAttributesGetter,
+  HttpServerMetrics,
+  HttpServerRoute,
+  HttpSpanStatusExtractor
+}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
 import java.util
@@ -18,13 +24,16 @@ trait TracingDirectives {
   // lazy to make sure GlobalOpenTelemetry is initialized
   private lazy val instrumenter: Instrumenter[HttpRequest, HttpResponse] =
     Instrumenter
-      .builder[HttpRequest, HttpResponse](GlobalOpenTelemetry.get(), "SamRequest", req => req.uri.path.toString())
-      .addAttributesExtractor(HttpServerAttributesExtractor.create[HttpRequest, HttpResponse](AkkaHttpServerAttributesGetter))
+      .builder[HttpRequest, HttpResponse](GlobalOpenTelemetry.get(), "RawlsRequest", req => req.uri.path.toString())
+      .addAttributesExtractor(
+        HttpServerAttributesExtractor.create[HttpRequest, HttpResponse](AkkaHttpServerAttributesGetter)
+      )
       .setSpanStatusExtractor(HttpSpanStatusExtractor.create(AkkaHttpServerAttributesGetter))
       .addOperationMetrics(HttpServerMetrics.get)
       .addContextCustomizer(HttpServerRoute.builder(AkkaHttpServerAttributesGetter).build())
       .buildServerInstrumenter(new TextMapGetter[HttpRequest] {
-        override def get(carrier: HttpRequest, key: String): String = carrier.headers.find(_.name == key).map(_.value).orNull
+        override def get(carrier: HttpRequest, key: String): String =
+          carrier.headers.find(_.name == key).map(_.value).orNull
         override def keys(carrier: HttpRequest): java.lang.Iterable[String] = carrier.headers.map(_.name).asJava
       })
 
@@ -41,13 +50,19 @@ trait TracingDirectives {
       }
     }
 
-  private def recordSuccess(instrumenter: Instrumenter[HttpRequest, HttpResponse], context: Context, request: HttpRequest) =
+  private def recordSuccess(instrumenter: Instrumenter[HttpRequest, HttpResponse],
+                            context: Context,
+                            request: HttpRequest
+  ) =
     mapResponse { resp =>
       instrumenter.end(context, request, resp, null)
       resp
     }
 
-  private def recordException(instrumenter: Instrumenter[HttpRequest, HttpResponse], context: Context, request: HttpRequest) =
+  private def recordException(instrumenter: Instrumenter[HttpRequest, HttpResponse],
+                              context: Context,
+                              request: HttpRequest
+  ) =
     handleExceptions(ExceptionHandler { case NonFatal(ex) =>
       instrumenter.end(context, request, null, ex)
       throw ex
@@ -68,9 +83,11 @@ object AkkaHttpServerAttributesGetter extends HttpServerAttributesGetter[HttpReq
 
   override def getHttpRequestMethod(request: HttpRequest): String = request.method.value
 
-  override def getHttpRequestHeader(request: HttpRequest, name: String): util.List[String] = request.headers.filter(_.name == name).map(_.value).asJava
+  override def getHttpRequestHeader(request: HttpRequest, name: String): util.List[String] =
+    request.headers.filter(_.name == name).map(_.value).asJava
 
-  override def getHttpResponseStatusCode(request: HttpRequest, response: HttpResponse, error: Throwable): Integer = response.status.intValue()
+  override def getHttpResponseStatusCode(request: HttpRequest, response: HttpResponse, error: Throwable): Integer =
+    response.status.intValue()
 
   override def getHttpResponseHeader(request: HttpRequest, response: HttpResponse, name: String): util.List[String] =
     response.headers.filter(_.name == name).map(_.value).asJava

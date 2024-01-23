@@ -1,7 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import bio.terra.common.tracing.JakartaTracingFilter
-import bio.terra.workspace.api.{ControlledAzureResourceApi, JobsApi, LandingZonesApi, ResourceApi, UnauthenticatedApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{
+  ControlledAzureResourceApi,
+  JobsApi,
+  LandingZonesApi,
+  ResourceApi,
+  UnauthenticatedApi,
+  WorkspaceApi,
+  WorkspaceApplicationApi
+}
 import bio.terra.workspace.client.ApiClient
 import io.opencensus.trace.Tracing
 import io.opentelemetry.api.GlobalOpenTelemetry
@@ -33,14 +41,12 @@ trait WorkspaceManagerApiClientProvider {
 
 class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
   def getApiClient(ctx: RawlsRequestContext): ApiClient = {
-    val client: ApiClient = new ApiClient() {
-      override def performAdditionalClientConfiguration(clientConfig: ClientConfig): Unit = {
-        super.performAdditionalClientConfiguration(clientConfig)
-        ctx.otelContext.foreach { span =>
-          clientConfig.register(new WithOtelContextFilter(span))
-          clientConfig.register(new JakartaTracingFilter(GlobalOpenTelemetry.get()))
-        }
-      }
+    val client: ApiClient = new ApiClient()
+    ctx.otelContext.foreach { otelContext =>
+      // WithOtelContextFilter must run before JakartaTracingFilter so give it a higher priority
+      val priority = 1
+      client.getHttpClient.register(new WithOtelContextFilter(otelContext), priority)
+      client.getHttpClient.register(new JakartaTracingFilter(GlobalOpenTelemetry.get()), priority + 1)
     }
     client.setBasePath(baseWorkspaceManagerUrl)
     client.setAccessToken(ctx.userInfo.accessToken.token)
