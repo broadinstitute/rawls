@@ -4,11 +4,12 @@ import bio.terra.profile.model.SpendReport
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
 import bio.terra.profile.model.{SpendReportingForDateRange => SpendReportingForDateRangeBPM}
 import bio.terra.profile.model.{SpendReportingAggregation => SpendReportingAggregationBPM}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.must.Matchers.have
-import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, equal}
+import org.scalatest.matchers.must.Matchers.{be, have}
+import org.scalatest.matchers.should.Matchers.{an, convertToAnyShouldWrapper, equal}
 
 import scala.jdk.CollectionConverters._
 
@@ -220,6 +221,25 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     workspaceInfrastructureCategory.get.credits shouldBe TestData.defaultAzureCredits
     workspaceInfrastructureCategory.get.currency shouldBe TestData.defaultCurrency
     workspaceInfrastructureCategory.get.category.get shouldBe TerraSpendCategories.WorkspaceInfrastructure
+  }
+
+  behavior of "TerraSpendCategories mapping"
+
+  it should "convert correct string into specific category" in {
+    TerraSpendCategories.withName("compute") shouldBe TerraSpendCategories.Compute
+    TerraSpendCategories.withName("Compute") shouldBe TerraSpendCategories.Compute
+    TerraSpendCategories.withName("storage") shouldBe TerraSpendCategories.Storage
+    TerraSpendCategories.withName("Storage") shouldBe TerraSpendCategories.Storage
+    TerraSpendCategories.withName("other") shouldBe TerraSpendCategories.Other
+    TerraSpendCategories.withName("Other") shouldBe TerraSpendCategories.Other
+    TerraSpendCategories.withName("workspaceinfrastructure") shouldBe TerraSpendCategories.WorkspaceInfrastructure
+    TerraSpendCategories.withName("WorkspaceInfrastructure") shouldBe TerraSpendCategories.WorkspaceInfrastructure
+  }
+
+  it should "throw exception in case of invalid string representation of a category" in {
+    an[RawlsException] should be thrownBy TerraSpendCategories.withName("test")
+    an[RawlsException] should be thrownBy TerraSpendCategories.withName("ai")
+    an[RawlsException] should be thrownBy TerraSpendCategories.withName("unexpectedCategory")
   }
 
 }
