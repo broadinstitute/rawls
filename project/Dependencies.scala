@@ -122,16 +122,20 @@ object Dependencies {
   def excludeSpringData = ExclusionRule("org.springframework.data")
   def excludeSpringFramework = ExclusionRule("org.springframework")
   def excludeOpenCensus = ExclusionRule("io.opencensus")
+  def excludeOpenTelemetry = ExclusionRule("io.opentelemetry")
+  def excludeOpenTelemetryInstrumentation = ExclusionRule("io.opentelemetry.instrumentation")
   def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
   def excludeBroadWorkbench = ExclusionRule("org.broadinstitute.dsde.workbench")
   def excludeSlf4j = ExclusionRule("org.slf4j")
   // "Terra Common Lib" Exclusions:
-  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
+
+  def springExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeOpenTelemetry, excludeOpenTelemetryInstrumentation)
+  def tclExclusions(m: ModuleID): ModuleID = springExclusions(m.excludeAll(excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j))
 
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client-javax" % "0.254.998-SNAPSHOT")
-  val dataRepo = excludeJakarta("bio.terra" % "datarepo-jakarta-client" % "1.583.0-SNAPSHOT")
+  val dataRepo = springExclusions(excludeJakarta("bio.terra" % "datarepo-jakarta-client" % "1.583.0-SNAPSHOT"))
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.504-SNAPSHOT")
+  val billingProfileManager = springExclusions(excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.504-SNAPSHOT"))
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.95-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-c76687f-SNAP")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
