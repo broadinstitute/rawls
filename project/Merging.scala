@@ -18,6 +18,8 @@ object Merging {
     case x if x.endsWith("kotlin_module")                => MergeStrategy.first
     case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.concat
     case x if x.endsWith("arrow-git.properties")         => MergeStrategy.concat
+    case PathList("javax", "servlet", _@_*) => MergeStrategy.first // This should be resolved in dependencies
+    case PathList("mozilla", _@_*) => MergeStrategy.first // This should be resolved in dependencies
     case x                                               => oldStrategy(x)
   }
 }
