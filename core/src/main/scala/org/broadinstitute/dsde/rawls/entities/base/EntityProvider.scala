@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -11,6 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
+  EntityQueryResultMetadata,
   EntityTypeMetadata,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
@@ -64,6 +66,11 @@ trait EntityProvider {
   def expressionValidator: ExpressionValidator
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
+
+  def queryEntitiesSource(entityType: String,
+                          query: EntityQuery,
+                          parentContext: RawlsRequestContext
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
 
   def queryEntities(entityType: String,
                     query: EntityQuery,

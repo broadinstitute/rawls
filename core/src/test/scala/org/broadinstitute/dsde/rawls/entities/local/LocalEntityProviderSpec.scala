@@ -30,6 +30,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Millis, Span}
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
@@ -47,6 +48,8 @@ class LocalEntityProviderSpec
     with Eventually
     with MockitoTestUtils {
   import driver.api._
+
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(3000, Millis)))
 
   val testConf = ConfigFactory.load()
 
