@@ -184,8 +184,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
               )
             )
         }
-      billingProfileId <- billingRepository.getBillingProfileId(projectName)
-      projectLifecycle = billingProfileId match {
+      azureManagedAppCoordinates <- billingRepository.getAzureManagedAppCoordinates(projectName)
+      projectLifecycle = azureManagedAppCoordinates match {
         case None    => googleBillingProjectLifecycle
         case Some(_) => bpmBillingProjectLifecycle
       }

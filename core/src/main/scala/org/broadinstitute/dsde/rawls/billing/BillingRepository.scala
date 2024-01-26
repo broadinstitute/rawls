@@ -4,10 +4,10 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
   ErrorReport,
   RawlsBillingProject,
-  RawlsBillingProjectName,
-  WorkspaceVersions
+  RawlsBillingProjectName
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
@@ -49,6 +49,17 @@ class BillingRepository(dataSource: SlickDataSource) {
           throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
         )
         .billingProfileId
+    }
+
+  def getAzureManagedAppCoordinates(
+    projectName: RawlsBillingProjectName
+  )(implicit executionContext: ExecutionContext): Future[Option[AzureManagedAppCoordinates]] =
+    getBillingProject(projectName) map { billingProjectOpt =>
+      billingProjectOpt
+        .getOrElse(
+          throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
+        )
+        .azureManagedAppCoordinates
     }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[Boolean] =

@@ -210,33 +210,6 @@ class AzureBillingProjectLifecycle(
       }
   }
 
-  /**
-    * Delete the billing profile if no other billing projects reference it. If an exception
-    * is failed during deletion, allow it to pass up so caller can choose to disallow deletion
-    * of parent billing project.
-    */
-  private def cleanupBillingProfile(profileModelId: UUID,
-                                    projectName: RawlsBillingProjectName,
-                                    ctx: RawlsRequestContext
-  ): Future[Unit] = {
-    val numOtherProjectsWithProfile = for {
-      allProjectsWithProfile <- billingRepository
-        .getBillingProjectsWithProfile(Some(profileModelId))
-      filtered = allProjectsWithProfile.filterNot(_.projectName == projectName)
-    } yield filtered.length
-    numOtherProjectsWithProfile map {
-      case 0 =>
-        logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
-        )
-        billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
-      case num =>
-        logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
-        )
-    }
-  }
-
   override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Option[UUID]] =
@@ -253,15 +226,5 @@ class AzureBillingProjectLifecycle(
 
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[Unit] = for {
-    billingProfileId <- billingRepository.getBillingProfileId(projectName)
-    _ <- billingProfileId match {
-      case Some(id) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
-      case None =>
-        logger.warn(
-          s"Deleting BPM-backed billing project $projectName, but no associated billing profile record to delete"
-        )
-        Future.successful()
-    }
-  } yield unregisterBillingProject(projectName, ctx)
+  ): Future[Unit] = deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = true, ctx)
 }
