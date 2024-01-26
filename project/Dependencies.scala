@@ -62,6 +62,7 @@ object Dependencies {
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.16.1"
+  val jerseyJackson: ModuleID =   "org.glassfish.jersey.media"    % "jersey-media-json-jackson" % "3.1.2"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.6"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
@@ -81,7 +82,6 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.2.0"
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
-  val jaxrs: ModuleID =  "org.apache.cxf" % "cxf-bundle-jaxrs" % "2.7.18"
 
   val workbenchLibsHash = "8ccaa6d"
 
@@ -129,11 +129,11 @@ object Dependencies {
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client-javax" % "0.254.998-SNAPSHOT")
-  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
+  val dataRepo = excludeJakarta("bio.terra" % "datarepo-jakarta-client" % "1.583.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client-javax" % "0.1.502-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.95-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-802eb68")
+  val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-c76687f-SNAP")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
@@ -150,7 +150,9 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     "commons-codec"                 % "commons-codec"         % "1.15",
-    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36" // scala-steward:off (must match TDR)
+    "org.glassfish.jersey.core"     % "jersey-client"         % "3.1.2", // scala-steward:off (must match TDR)
+    "org.glassfish.jersey.inject"   % "jersey-hk2"            % "3.1.2" // scala-steward:off (must match TDR)
+
   )
 
   val openCensusDependencies = Seq(
@@ -255,6 +257,7 @@ object Dependencies {
     apacheCommonsIO,
     workspaceManager,
     dataRepo,
+    jerseyJackson,
     antlrParser,
     resourceBufferService,
     billingProfileManager,
@@ -266,7 +269,6 @@ object Dependencies {
     workbenchOpenTelemetryTests,
     terraCommonLib,
     sam,
-    jaxrs,
     leonardo
   )
 
