@@ -82,5 +82,5 @@ class GoogleBillingProjectLifecycle(
     executionContext: ExecutionContext
   ): Future[Unit] =
     // Should change this to expecting a billing profile once we have migrated all billing projects (WOR-866)
-    deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = true, ctx)
+    deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = false, ctx)
 }
