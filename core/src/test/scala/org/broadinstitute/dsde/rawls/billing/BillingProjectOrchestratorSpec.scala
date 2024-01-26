@@ -336,8 +336,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     billingProjectLifecycle
   }
 
-  def happyBillingRepository(azureManagedAppCoordinates: Option[AzureManagedAppCoordinates]
-  ): BillingRepository = {
+  def happyBillingRepository(azureManagedAppCoordinates: Option[AzureManagedAppCoordinates]): BillingRepository = {
     val billingRepository = mock[BillingRepository]
     when(billingRepository.failUnlessHasNoWorkspaces(ArgumentMatchers.any())(ArgumentMatchers.any()))
       .thenReturn(Future.successful())
