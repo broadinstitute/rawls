@@ -81,6 +81,6 @@ class GoogleBillingProjectLifecycle(
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit] =
-    unregisterBillingProject(projectName, ctx)
-
+    // Should change this to expecting a billing profile once we have migrated all billing projects (WOR-866)
+    deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = false, ctx)
 }

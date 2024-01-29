@@ -986,6 +986,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
+    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 
   it should "not delete the billing profile if other projects reference it" in {
@@ -1029,6 +1030,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm, Mockito.never).deleteBillingProfile(billingProfileId, testContext)
+    // Billing project is still deleted
+    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 
   it should "succeed if the billing profile id does not exist" in {
@@ -1091,5 +1094,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
     }
     verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
+    verify(repo, Mockito.never).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 }

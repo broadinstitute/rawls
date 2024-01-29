@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport,
@@ -50,6 +51,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     Map("fake_parameter" -> "fake_value"),
     landingZoneAllowAttach = false
   )
+  val azureManagedAppCoordinates: AzureManagedAppCoordinates =
+    AzureManagedAppCoordinates(UUID.randomUUID, UUID.randomUUID, "fake")
 
   val userInfo: UserInfo =
     UserInfo(RawlsUserEmail("fake@example.com"), OAuth2BearerToken("fake_token"), 0, RawlsUserSubjectId("sub"), None)
@@ -333,12 +336,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     billingProjectLifecycle
   }
 
-  def happyBillingRepository(profileId: Option[String]): BillingRepository = {
+  def happyBillingRepository(azureManagedAppCoordinates: Option[AzureManagedAppCoordinates]): BillingRepository = {
     val billingRepository = mock[BillingRepository]
     when(billingRepository.failUnlessHasNoWorkspaces(ArgumentMatchers.any())(ArgumentMatchers.any()))
       .thenReturn(Future.successful())
     when(billingRepository.getBillingProfileId(ArgumentMatchers.any())(ArgumentMatchers.any()))
-      .thenReturn(Future.successful(profileId))
+      .thenReturn(Future.successful(Some(UUID.randomUUID().toString)))
+    when(billingRepository.getAzureManagedAppCoordinates(ArgumentMatchers.any())(ArgumentMatchers.any()))
+      .thenReturn(Future.successful(azureManagedAppCoordinates))
     when(billingRepository.updateCreationStatus(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any()))
       .thenReturn(Future.successful(1))
     when(billingRepository.getCreationStatus(ArgumentMatchers.any())(ArgumentMatchers.any()))
@@ -399,7 +404,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         )
       )
     // Mock Google project
-    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
+    when(billingRepository.getAzureManagedAppCoordinates(billingProjectName)(executionContext))
       .thenReturn(Future.successful(None))
 
     val bpo = new BillingProjectOrchestrator(
@@ -429,6 +434,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful())
     when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
       .thenReturn(Future.successful(Some("fake-id")))
+    when(billingRepository.getAzureManagedAppCoordinates(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some(azureManagedAppCoordinates)))
     when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
       .thenReturn(Future.successful(CreationStatuses.Ready))
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
@@ -455,7 +462,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     verify(billingRepository, never()).deleteBillingProject(billingProjectName)
   }
 
-  it should "call initiateDelete and finializeDelete for the google lifecycle for a google project" in {
+  it should "call initiateDelete and finalizeDelete for the google lifecycle for a google project" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
@@ -477,7 +484,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
   }
 
-  it should "call initiateDelete and finializeDelete when the BPM lifecyle returns a jobId of None" in {
+  it should "call initiateDelete and finalizeDelete when the BPM lifecycle returns a jobId of None" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
@@ -486,7 +493,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       testContext,
       alwaysGiveAccessSamDao,
       mock[NotificationDAO],
-      happyBillingRepository(Some(UUID.randomUUID().toString)),
+      happyBillingRepository(Some(azureManagedAppCoordinates)),
       mock[BillingProjectLifecycle], // google
       billingProjectLifecycle, // bpm
       mock[MultiCloudWorkspaceConfig],
@@ -511,7 +518,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       testContext,
       alwaysGiveAccessSamDao,
       mock[NotificationDAO],
-      happyBillingRepository(Some("inconsequential_id")),
+      happyBillingRepository(Some(azureManagedAppCoordinates)),
       mock[BillingProjectLifecycle], // google
       billingProjectLifecycle, // bpm
       mock[MultiCloudWorkspaceConfig],
@@ -538,7 +545,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       testContext,
       alwaysGiveAccessSamDao,
       mock[NotificationDAO],
-      happyBillingRepository(Some("inconsequential_id")),
+      happyBillingRepository(Some(azureManagedAppCoordinates)),
       mock[BillingProjectLifecycle], // google
       initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
       mock[MultiCloudWorkspaceConfig],
@@ -557,7 +564,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       testContext,
       alwaysGiveAccessSamDao,
       mock[NotificationDAO],
-      happyBillingRepository(Some("inconsequential_id")),
+      happyBillingRepository(Some(azureManagedAppCoordinates)),
       mock[BillingProjectLifecycle], // google
       initiateDeleteLifecycle(Future.failed(new Exception)), // bpm
       mock[MultiCloudWorkspaceConfig],
@@ -577,6 +584,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful())
     when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
       .thenReturn(Future.successful(Some("inconsequential_id")))
+    when(billingRepository.getAzureManagedAppCoordinates(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some(azureManagedAppCoordinates)))
     when(billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None))
       .thenReturn(Future.successful(1))
     when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
@@ -605,6 +614,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful())
     when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
       .thenReturn(Future.successful(Some("inconsequential_id")))
+    when(billingRepository.getAzureManagedAppCoordinates(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some(azureManagedAppCoordinates)))
     when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
       .thenReturn(Future.successful(CreationStatuses.Deleting))
 
