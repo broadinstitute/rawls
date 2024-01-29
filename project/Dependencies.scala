@@ -127,7 +127,7 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client-javax" % "0.254.998-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client-javax" % "0.254.1018-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client-javax" % "0.1.502-SNAPSHOT")
