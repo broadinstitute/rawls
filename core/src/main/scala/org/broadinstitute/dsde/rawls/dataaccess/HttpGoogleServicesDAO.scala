@@ -18,7 +18,12 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
+import com.google.api.services.cloudbilling.model.{
+  BillingAccount,
+  ListBillingAccountsResponse,
+  ProjectBillingInfo,
+  TestIamPermissionsRequest
+}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -37,6 +42,7 @@ import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
 import com.google.cloud.storage.{StorageClass, StorageException}
+import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
@@ -46,7 +52,11 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceFutureWithParent, traceNakedWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{
+  setTraceSpanAttribute,
+  traceFutureWithParent,
+  traceNakedWithParent
+}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
@@ -784,7 +794,9 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     updateBillingInfo(googleProjectId, newProjectBillingInfo, tracingContext)
   }
 
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] = {
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId,
+                                             tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo] = {
     val newProjectBillingInfo = new ProjectBillingInfo().setBillingEnabled(false)
     updateBillingInfo(googleProjectId, newProjectBillingInfo, tracingContext)
   }
@@ -799,9 +811,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
     traceFutureWithParent("cloudBillingProjectsApi.updateBillingInfo", tracingContext) { childContext =>
       val updater = cloudBillingProjectsApi.updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo)
+      setTraceSpanAttribute(childContext, AttributeKey.stringKey("googleProjectId"), googleProjectId.value)
+      setTraceSpanAttribute(childContext,
+                            AttributeKey.stringKey("billingAccount"),
+                            Option(projectBillingInfo.getBillingAccountName).getOrElse("")
+      )
       retryWithRecoverWhen500orGoogleError { () =>
         blocking {
-          traceNakedWithParent("executeGoogleRequest", childContext) { _ =>
+          traceNakedWithParent("executeGoogleRequest", childContext) { ctx =>
             executeGoogleRequest(updater)
           }
         }

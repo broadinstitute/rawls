@@ -13,8 +13,9 @@ import bio.terra.workspace.api.{
 import bio.terra.workspace.client.ApiClient
 import io.opencensus.trace.Tracing
 import io.opentelemetry.api.GlobalOpenTelemetry
+import jakarta.ws.rs.client.Client
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
-import org.broadinstitute.dsde.rawls.util.WithOtelContextFilter
+import org.broadinstitute.dsde.rawls.util.{TracingUtils, WithOtelContextFilter}
 import org.glassfish.jersey.client.ClientConfig
 
 /**
@@ -42,15 +43,9 @@ trait WorkspaceManagerApiClientProvider {
 class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
   def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
-    ctx.otelContext.foreach { otelContext =>
-      // WithOtelContextFilter must run before JakartaTracingFilter so give it a higher priority
-      val priority = 1
-      client.getHttpClient.register(new WithOtelContextFilter(otelContext), priority)
-      client.getHttpClient.register(new JakartaTracingFilter(GlobalOpenTelemetry.get()), priority + 1)
-    }
+    TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
     client.setBasePath(baseWorkspaceManagerUrl)
     client.setAccessToken(ctx.userInfo.accessToken.token)
-
     client
   }
 

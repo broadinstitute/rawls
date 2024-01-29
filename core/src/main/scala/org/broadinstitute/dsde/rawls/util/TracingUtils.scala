@@ -1,11 +1,13 @@
 package org.broadinstitute.dsde.rawls.util
 
+import bio.terra.common.tracing.JakartaTracingFilter
 import cats.effect.IO
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.common.AttributeKey
 import io.opentelemetry.api.trace.Span
 import io.opentelemetry.context.Context
 import io.opentelemetry.instrumentation.api.instrumenter.{Instrumenter, SpanKindExtractor}
+import jakarta.ws.rs.client.Client
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsTracingContext}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
@@ -21,7 +23,7 @@ object TracingUtils {
 
   def traceDBIOWithParent[T, E <: Effect](name: String, parentContext: RawlsRequestContext)(
     f: RawlsRequestContext => DBIOAction[T, NoStream, E]
-  )(implicit executor: ExecutionContext): DBIOAction[T, NoStream, E with Effect] = {
+  )(implicit executor: ExecutionContext): DBIOAction[T, NoStream, E with Effect] =
     parentContext.otelContext match {
       case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
         for {
@@ -36,7 +38,6 @@ object TracingUtils {
       case _ =>
         f(parentContext)
     }
-  }
 
   def traceFutureWithParent[T](name: String, parentContext: RawlsRequestContext)(
     f: RawlsRequestContext => Future[T]
@@ -45,10 +46,9 @@ object TracingUtils {
       case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
         for {
           childContext <- Future(instrumenter.start(otelContext, name))
-          result <- f(parentContext.copy(otelContext = Option(childContext))).recoverWith {
-            case e: Throwable =>
-              instrumenter.end(childContext, name, name, e)
-              Future.failed(e)
+          result <- f(parentContext.copy(otelContext = Option(childContext))).recoverWith { case e: Throwable =>
+            instrumenter.end(childContext, name, name, e)
+            Future.failed(e)
           }
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
@@ -59,14 +59,14 @@ object TracingUtils {
 
   def traceDBIOWithParent[T, E <: Effect](name: String, parentContext: RawlsTracingContext)(
     f: RawlsTracingContext => DBIOAction[T, NoStream, E]
-  )(implicit executor: ExecutionContext): DBIOAction[T, NoStream, E with Effect] = {
+  )(implicit executor: ExecutionContext): DBIOAction[T, NoStream, E with Effect] =
     parentContext.otelContext match {
       case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
         for {
           childContext <- DBIO.successful(instrumenter.start(otelContext, name))
           result <- f(parentContext.copy(otelContext = Option(childContext))).cleanUp { maybeThrowable =>
-              instrumenter.end(childContext, name, name, maybeThrowable.orNull)
-              DBIO.successful(())
+            instrumenter.end(childContext, name, name, maybeThrowable.orNull)
+            DBIO.successful(())
           }
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
@@ -74,19 +74,17 @@ object TracingUtils {
       case _ =>
         f(parentContext)
     }
-  }
 
   def traceFutureWithParent[T](name: String, parentContext: RawlsTracingContext)(
     f: RawlsTracingContext => Future[T]
-  )(implicit ec: ExecutionContext): Future[T] = {
+  )(implicit ec: ExecutionContext): Future[T] =
     parentContext.otelContext match {
       case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
         for {
           childContext <- Future(instrumenter.start(otelContext, name))
-          result <- f(parentContext.copy(otelContext = Option(childContext))).recoverWith {
-            case e: Throwable =>
-              instrumenter.end(childContext, name, name, e)
-              Future.failed(e)
+          result <- f(parentContext.copy(otelContext = Option(childContext))).recoverWith { case e: Throwable =>
+            instrumenter.end(childContext, name, name, e)
+            Future.failed(e)
           }
           _ = instrumenter.end(childContext, name, name, null)
         } yield result
@@ -94,15 +92,13 @@ object TracingUtils {
       case _ =>
         f(parentContext)
     }
-  }
 
-  def traceFuture[T](name: String)(f: RawlsTracingContext => Future[T])(implicit ec: ExecutionContext): Future[T] = {
+  def traceFuture[T](name: String)(f: RawlsTracingContext => Future[T])(implicit ec: ExecutionContext): Future[T] =
     traceFutureWithParent(name, RawlsTracingContext(otelContext = Option(Context.root())))(f)
-  }
 
   def traceNakedWithParent[T](name: String, parentContext: RawlsTracingContext)(
     f: RawlsTracingContext => T
-  ): T = {
+  ): T =
     parentContext.otelContext match {
       case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
         val childContext = instrumenter.start(otelContext, name)
@@ -112,10 +108,8 @@ object TracingUtils {
       case _ =>
         f(parentContext)
     }
-  }
 
-  def traceIOWithContext[T](name: String, tracingContext: RawlsTracingContext
-  )(f: RawlsTracingContext => IO[T]): IO[T] =
+  def traceIOWithContext[T](name: String, tracingContext: RawlsTracingContext)(f: RawlsTracingContext => IO[T]): IO[T] =
     tracingContext.otelContext match {
       case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
         for {
@@ -131,12 +125,18 @@ object TracingUtils {
   def traceIO[T](name: String)(f: RawlsTracingContext => IO[T]): IO[T] =
     traceIOWithContext(name, RawlsTracingContext(Option(Context.root())))(f)
 
-  def setTraceSpanAttribute[T](parentContext: RawlsTracingContext, key: AttributeKey[T], value: T): Unit = {
+  def setTraceSpanAttribute[T](parentContext: RawlsTracingContext, key: AttributeKey[T], value: T): Unit =
     parentContext.otelContext.map(Span.fromContext).foreach(_.setAttribute(key, value))
-  }
 
-  def setTraceSpanAttribute[T](parentContext: RawlsRequestContext, key: AttributeKey[T], value: T): Unit = {
+  def setTraceSpanAttribute[T](parentContext: RawlsRequestContext, key: AttributeKey[T], value: T): Unit =
     setTraceSpanAttribute(parentContext.toTracingContext, key, value)
-  }
+
+  def enableCrossServiceTracing(httpClient: Client, ctx: RawlsRequestContext): Unit =
+    ctx.otelContext.foreach { otelContext =>
+      // WithOtelContextFilter must run before JakartaTracingFilter so give it a higher priority
+      val priority = 1
+      httpClient.register(new WithOtelContextFilter(otelContext), priority)
+      httpClient.register(new JakartaTracingFilter(GlobalOpenTelemetry.get()), priority + 1)
+    }
 
 }
