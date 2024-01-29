@@ -151,7 +151,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.copy(name = "DNE").path}/entities", httpJson(testData.sample2)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -191,14 +191,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
       }
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
@@ -226,14 +226,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
 
     Post("/workspaces", httpJson(workspaceSrcRequest)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
 
         Post(s"${workspaceSrcRequest.path}/entities", httpJson(z1)) ~>
-          sealRoute(services.entityRoutes) ~>
+          sealRoute(services.entityRoutes()) ~>
           check {
             assertResult(StatusCodes.Created) {
               status
@@ -246,19 +246,19 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             val sourceWorkspace = WorkspaceName(workspaceSrcRequest.namespace, workspaceSrcRequest.name)
             val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
             Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
-              sealRoute(services.entityRoutes) ~>
+              sealRoute(services.entityRoutes()) ~>
               check {
                 assertResult(StatusCodes.Created) {
                   status
                 }
               }
             Get(workspaceSrcRequest.path) ~>
-              sealRoute(services.workspaceRoutes) ~>
+              sealRoute(services.workspaceRoutes()) ~>
               check {
                 assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
               }
             Get(testData.wsName.path) ~>
-              sealRoute(services.workspaceRoutes) ~>
+              sealRoute(services.workspaceRoutes()) ~>
               check {
                 assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
               }
@@ -278,7 +278,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("baz")))
     )
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -295,7 +295,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
@@ -304,7 +304,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "allow an entity of the max content size to be consumed by batchUpsert" in withTestDataApiServices {
     services =>
       Post(s"${testData.workspace.path}/entities/batchUpsert", entityOfSize(services.batchUpsertMaxBytes)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           // under the hood this will throw a 500. that's expected because the entity name is larger than the DB allows.
           // all we care about for this test is that we do not hit a Payload Too Large error
@@ -315,7 +315,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "not allow an entity larger than the max content size to be consumed by batchUpsert" in withTestDataApiServices {
     services =>
       Post(s"${testData.workspace.path}/entities/batchUpsert", entityOfSize(services.batchUpsertMaxBytes + 1)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.PayloadTooLarge) {
             status
@@ -330,7 +330,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("bar")))
     )
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -347,7 +347,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
@@ -357,7 +357,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -385,7 +385,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("sample.new", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -413,7 +413,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -425,7 +425,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("   ", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -437,7 +437,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("*!$!*", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -447,7 +447,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 409 conflict on create entity when entity exists" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities", httpJson(testData.sample2)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -462,7 +462,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           Entity("sampleNew", "sample", Map(AttributeName(namespace, "attribute") -> AttributeString("foo")))
 
         Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-          sealRoute(services.entityRoutes) ~>
+          sealRoute(services.entityRoutes()) ~>
           check {
             assertResult(StatusCodes.Created) {
               status
@@ -477,7 +477,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           Entity("sampleNew", "sample", Map(AttributeName(namespace, "attribute") -> AttributeString("foo")))
 
         Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-          sealRoute(services.entityRoutes) ~>
+          sealRoute(services.entityRoutes()) ~>
           check {
             assertResult(StatusCodes.Forbidden) {
               status
@@ -507,7 +507,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e = Entity("foo", "bar", Map.empty)
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -517,7 +517,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -544,7 +544,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e2 = Entity("e2", "Generic", Map(AttributeName.withDefaultNS("link") -> e1.toReference))
 
     Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -552,7 +552,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -560,7 +560,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1, e2))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -592,7 +592,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val e3 = Entity("e3", "Generic", Map(AttributeName.withDefaultNS("link") -> e2.toReference))
 
       Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -600,7 +600,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -608,7 +608,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"${testData.workspace.path}/entities", httpJson(e3)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -622,7 +622,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val new_e1 = e1.copy(attributes = Map(AttributeName.withDefaultNS("link") -> e3.toReference))
 
       Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -633,7 +633,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1, e2, e3))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -666,7 +666,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e2 = Entity("e2", "Generic", Map(AttributeName.withDefaultNS("link") -> e1.toReference))
 
     Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -674,7 +674,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -682,7 +682,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -717,7 +717,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val e3 = Entity("e3", "Generic", Map(AttributeName.withDefaultNS("link") -> e2.toReference))
 
       Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -725,7 +725,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -733,7 +733,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"${testData.workspace.path}/entities", httpJson(e3)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -747,7 +747,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val new_e1 = e1.copy(attributes = Map(AttributeName.withDefaultNS("link") -> e3.toReference))
 
       Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -758,7 +758,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Conflict) {
             status
@@ -792,7 +792,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val request = EntityDeleteRequest(testData.sample2.copy(name = "DNE1"), testData.sample2.copy(name = "DNE2"))
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -815,7 +815,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val request = EntityDeleteRequest(testData.sample2, testData.sample2.copy(name = "DNE"))
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -850,7 +850,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
 
       Delete(s"${testData.workspace.path}/entityTypes/typeToDelete") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -891,7 +891,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
 
     Delete(s"${testData.workspace.path}/entityTypes/typeToDelete") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -928,7 +928,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val sample = Entity("ABCD", "Sample", attrs1)
 
     Post(s"${testData.workspace.path}/entities", httpJson(sample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -945,7 +945,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val oldId = dbId(sample)
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(sample))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -955,7 +955,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val sampleNewAttrs = sample.copy(attributes = attrs2)
 
     Post(s"${testData.workspace.path}/entities", httpJson(sampleNewAttrs)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -973,7 +973,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(oldId != newId)
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(sampleNewAttrs))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -983,7 +983,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val sampleAttrs3 = sample.copy(attributes = attrs3)
 
     Post(s"${testData.workspace.path}/entities", httpJson(sampleAttrs3)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1011,7 +1011,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a")))
         )
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -1024,7 +1024,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when batch upserting nothing" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq.empty[EntityUpdateDefinition])) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1039,7 +1039,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))
     )
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1059,7 +1059,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val e = Entity("foo", "bar", Map.empty)
 
       Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -1069,7 +1069,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val oldId = dbId(e)
 
       Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -1087,7 +1087,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val updatedEntity =
         e.copy(attributes = Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz")))
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -1115,7 +1115,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("baz")))
       )
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -1156,7 +1156,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val update2 = EntityUpdateDefinition(newEntity.name, newEntity.entityType, Seq.empty)
     val blep = httpJson(Seq(update1, update2))
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1190,7 +1190,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeEntityReference("bar", "bing")))
       )
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -1216,7 +1216,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName(invalidAttrNamespace, "newAttribute2"), AttributeString("blee")))
       )
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
             status
@@ -1239,7 +1239,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       )
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1255,7 +1255,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a")))
         )
       Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -1273,7 +1273,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))
     )
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -1288,7 +1288,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e = Entity("foo", "bar", Map.empty)
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1296,7 +1296,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1312,7 +1312,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("baz")))
     )
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -1331,7 +1331,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("bar")))
       )
       Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -1352,7 +1352,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when batch updating nothing" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq.empty[EntityUpdateDefinition])) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1375,7 +1375,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName(invalidAttrNamespace, "newAttribute2"), AttributeString("blee")))
       )
       Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
             status
@@ -1399,7 +1399,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       )
       Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1457,7 +1457,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   )
   it should "return 200 on list entity types" in withConstantTestDataApiServices { services =>
     Get(s"${constantData.workspace.path}/entities") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1471,7 +1471,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("foo", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
 
     Post(s"${constantData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1479,7 +1479,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(newSample))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1487,7 +1487,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Get(s"${constantData.workspace.path}/entities") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1510,7 +1510,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     )
 
     Get(s"${constantData.workspace.path}/entities/Sample") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1538,7 +1538,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newSample = Entity("foo", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
 
     Post(s"${constantData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1546,7 +1546,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Get(s"${constantData.workspace.path}/entities/Sample") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1559,7 +1559,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(newSample))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1567,7 +1567,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Get(s"${constantData.workspace.path}/entities/Sample") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1582,7 +1582,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 on get non-existing entity" in withTestDataApiServices { services =>
     Get(testData.sample2.copy(name = "DNE").path(testData.workspace)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1594,7 +1594,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e = Entity("foo", "bar", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1602,7 +1602,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Get(e.path(testData.workspace)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1616,7 +1616,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val oldName = dbName(id)
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1627,7 +1627,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(oldName != newName)
 
     Get(e.path(testData.workspace)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1637,7 +1637,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newEnt = e.copy(name = newName)
 
     Get(newEnt.path(testData.workspace)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1690,7 +1690,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Patch(testData.sample2.path(testData.workspace),
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("bar")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -1710,7 +1710,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1722,7 +1722,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e = Entity("foo", "bar", Map.empty)
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1730,7 +1730,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1746,7 +1746,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("bang")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1761,7 +1761,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Patch(testData.sample2.path(testData.workspace),
           httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -1779,7 +1779,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Patch(testData.sample2.path(testData.workspace),
           httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden, responseAs[String]) {
           status
@@ -1794,7 +1794,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(RemoveListMember(AttributeName.withDefaultNS("foo"), AttributeString("adsf")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -1808,7 +1808,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(RemoveListMember(AttributeName.withDefaultNS("grip"), AttributeString("adsf")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -1822,7 +1822,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq(AddListMember(AttributeName.withDefaultNS("somefoo"), AttributeString("adsf")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -1838,7 +1838,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           AddListMember(AttributeName.withDefaultNS("somefoo"), AttributeString("adsf")): AttributeUpdateOperation
         )
       ) ~>
-        sealRoute(services.entityRoutes)(rejectionHandler = RawlsApiService.rejectionHandler) ~>
+        sealRoute(services.entityRoutes())(rejectionHandler = RawlsApiService.rejectionHandler) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -1849,7 +1849,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 409 on entity rename when rename already exists" in withTestDataApiServices { services =>
     Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("sample1"))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -1952,7 +1952,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.sample2.copy(name = "foox").path(testData.workspace)}/rename",
          httpJson(EntityName("s2_changed"))
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -1967,7 +1967,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val e = Entity("foo", "bar", Map.empty)
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1975,7 +1975,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -1986,7 +1986,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post(s"${e.path(testData.workspace)}/rename", httpJson(EntityName("baz"))) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -2051,7 +2051,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return a 204 when deleting multiple attributes of default namespace" in withDeleteAttributeNameTestDataApiServices {
     services =>
       Delete(s"${testData.workspace.path}/entities/type1?attributeNames=hello,hi") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -2074,7 +2074,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return a 204 when deleting attributes with a specified default namespace" in withDeleteAttributeNameTestDataApiServices {
     services =>
       Delete(s"${testData.workspace.path}/entities/type1?attributeNames=default:hello") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -2089,7 +2089,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return a 204 when deleting attributes with a non-default namespace" in withDeleteAttributeNameTestDataApiServices {
     services =>
       Delete(s"${testData.workspace.path}/entities/type1?attributeNames=othernamespace:yo") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -2108,7 +2108,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 400 when deleting entity attribute that does not exist" in withDeleteAttributeNameTestDataApiServices {
     services =>
       Delete(s"${testData.workspace.path}/entities/type1?attributeNames=fakeattribute") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2119,7 +2119,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 400 when deleting entity attributes with no query params" in withDeleteAttributeNameTestDataApiServices {
     services =>
       Delete(s"${testData.workspace.path}/entities/type1") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2131,7 +2131,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("this.samples.type")) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2146,7 +2146,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
          httpJsonStr("""{"example":"foo", "array": [1, 2, 3]}""")
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2168,7 +2168,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
            httpJsonStr("""{"example":"foo", "array": this.samples.type}""")
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2193,7 +2193,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
         httpJsonStr("""{"array": this.samples.type, "details": {"values": this.samples.type}}""")
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2209,7 +2209,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 on successfully parsing a raw array" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""[1, 2, 3, 4, 5]""")) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2224,7 +2224,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
          httpJsonStr("""[1, 2, 3, "foo", "bar", true]""")
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2242,7 +2242,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
            httpJsonStr("""[1, 2, 3, this.samples.type, ["foo", "bar", this.samples.type]]""")
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2267,7 +2267,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 on failing to parse an expression" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("nonexistent.anything")) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -2280,7 +2280,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
            httpJsonStr("""[1, 2, "foo", invalid.ref]""")
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2293,7 +2293,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
            httpJsonStr("""{"example": [1, 2], "foo": invalid.ref}""")
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2305,7 +2305,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate",
          httpJsonStr("""{"example": [1, 2], "foo": nonexistent.anything}""")
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -2333,7 +2333,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices {
     services =>
       Post("/workspaces", httpJson(workspace2Request)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2344,7 +2344,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
 
           Post(s"${workspace2Request.path}/entities", httpJson(z1)) ~>
-            sealRoute(services.entityRoutes) ~>
+            sealRoute(services.entityRoutes()) ~>
             check {
               assertResult(StatusCodes.Created) {
                 status
@@ -2357,7 +2357,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
               val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
               val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
               Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
-                sealRoute(services.entityRoutes) ~>
+                sealRoute(services.entityRoutes()) ~>
                 check {
                   assertResult(StatusCodes.Created) {
                     status
@@ -2374,7 +2374,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("sample1"))
     Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -2398,7 +2398,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
 
     Post("/workspaces", httpJson(newWorkspaceCreate)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -2406,7 +2406,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post("/workspaces/entities/copy", httpJson(copyAliquot1)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -2420,7 +2420,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     Post("/workspaces/entities/copy", httpJson(copySample3)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -2536,7 +2536,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
       Post("/workspaces/entities/copy?linkExistingEntities=true", httpJson(entityCopyDefinition2)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2559,7 +2559,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                Option(authDomain)
       )
       Post("/workspaces", x) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -2567,7 +2567,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
 //    Post(s"${testData.workspaceWithRealm.path}/entities", httpJson(z1)) ~>
-//      sealRoute(services.entityRoutes) ~>
+//      sealRoute(services.entityRoutes()) ~>
 //      check {
 //        assertResult(StatusCodes.Created) {
 //          status
@@ -2584,7 +2584,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                     Option(Set(testData.realm2))
       )
       Post(s"/workspaces", httpJson(wrongRealmCloneRequest)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2597,7 +2597,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                    Seq("z1")
       )
       Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.UnprocessableEntity) {
             status
@@ -2611,7 +2611,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                 Option(Set.empty)
       )
       Post("/workspaces", x2) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -2624,7 +2624,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                 Seq("z1")
       )
       Post("/workspaces/entities/copy", httpJson(noRealmCopyDef)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.UnprocessableEntity) {
             status
@@ -2645,7 +2645,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                Option(authDomain)
       )
       Post("/workspaces", x) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -2658,7 +2658,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                               Option(authDomain)
       )
       Post(s"/workspaces/${srcWorkspaceName.namespace}/source_ws/clone", httpJson(destCloneRequest)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2669,7 +2669,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
       Post(s"/workspaces/${srcWorkspaceName.namespace}/${srcWorkspaceName.name}/entities", httpJson(z1)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2680,7 +2680,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       val copyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceName, "Sample", Seq("z1"))
       Post("/workspaces/entities/copy", httpJson(copyDef)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2700,7 +2700,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                Option(singleAuthDomain)
       )
       Post("/workspaces", x) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -2713,7 +2713,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                Option(doubleAuthDomain)
       )
       Post("/workspaces", y) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -2726,7 +2726,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                    Seq("z1")
       )
       Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.UnprocessableEntity) {
             status
@@ -2742,7 +2742,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                            Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"))
     )
     Post(s"${testData.workspace.path}/entities", httpJson(dotSample)) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -2828,7 +2828,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   "entityQuery API" should "return 400 bad request on entity query when page is not a number" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=asdf") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2839,7 +2839,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 400 bad request on entity query when page size is not a number" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=asdfasdf") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2850,7 +2850,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 400 bad request on entity query when page is <= 0" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=-1") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2861,7 +2861,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 400 bad request on entity query when page size is <= 0" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=-1") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2872,7 +2872,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 400 bad request on entity query when page > page count" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=10000000") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2885,7 +2885,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortDirection=asdfasdfasdf"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -2895,7 +2895,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 OK on entity query for unknown sort field" in withPaginationTestDataApiServices { services =>
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2919,7 +2919,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 404 not found on entity query for workspace that does not exist" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.copy(name = "DNE").path}/entityQuery/${paginationTestData.entityType}") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -2930,7 +2930,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 200 OK on entity query when no query params are given" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2954,7 +2954,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 200 OK on entity query when there are no entities of given type" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/blarf") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3019,7 +3019,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 200 OK on entity query when all results are filtered" in withPaginationTestDataApiServices {
     services =>
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=qqq") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3053,7 +3053,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
 
       Get(s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3083,7 +3083,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar&filterOperator=AND"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3113,7 +3113,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar&filterOperator=OR"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3128,7 +3128,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val page = 5
     val offset = (page - 1) * defaultQuery.pageSize
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=$page") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -3153,7 +3153,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val pageSize = 23
     val offset = (defaultQuery.page - 1) * pageSize
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -3214,7 +3214,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=random&sordDirection=asc"
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -3265,7 +3265,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=mixed&pageSize=${paginationTestData.numEntities}"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3288,7 +3288,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=mixedNumeric&pageSize=${paginationTestData.numEntities}"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3310,7 +3310,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=sparse&pageSize=${paginationTestData.numEntities}"
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -3364,7 +3364,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=random&sortDirection=desc"
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -3402,7 +3402,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&filterTerms=$vocab1Term%20$vocab2Term"
     ) ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -3430,7 +3430,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&columnFilter=bar%3Dbaz"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -3447,7 +3447,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=${paginationTestData.entityType}_id%3D$entityNameFilter"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3481,7 +3481,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=${paginationTestData.entityType}_id%3D$entityNameFilter"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3522,7 +3522,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3577,7 +3577,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3634,7 +3634,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3690,7 +3690,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&sortField=random&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3749,7 +3749,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=$page&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -3796,7 +3796,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=incorrectFilter"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -3808,7 +3808,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=not:delimited:correctly%3D99"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -3895,7 +3895,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     services =>
       // query for all entities
       Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -3909,7 +3909,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     services =>
       // query for first page of results
       Get(s"$fieldSelectionApiPath?pageSize=10") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -3922,7 +3922,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     services =>
       // query for second page of results
       Get(s"$fieldSelectionApiPath?pageSize=10&page=2") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -3936,7 +3936,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       // query for the second page of results, with a page size that extends us into the third
       // group of entities from fieldSelectionTestData
       Get(s"$fieldSelectionApiPath?pageSize=15&page=2") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -3949,7 +3949,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     it should s"return [${fieldsUnderTest.mkString(", ")}] if requested in fields" ignore withFieldSelectionTestDataApiServices {
       services =>
         Get(s"$fieldSelectionApiPath?pageSize=25&page=1&fields=${fieldsUnderTest.mkString(",")}") ~>
-          sealRoute(services.entityRoutes) ~>
+          sealRoute(services.entityRoutes()) ~>
           check {
             status shouldBe StatusCodes.OK
             val resp = responseAs[EntityQueryResponse]
@@ -4002,7 +4002,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Get(
           s"$fieldSelectionApiPath?pageSize=${testCase.pageSize}&page=${testCase.page}&fields=${fieldsUnderTest.mkString(",")}"
         ) ~>
-          sealRoute(services.entityRoutes) ~>
+          sealRoute(services.entityRoutes()) ~>
           check {
             status shouldBe StatusCodes.OK
             val resp = responseAs[EntityQueryResponse]
@@ -4015,7 +4015,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     services =>
       // get the first page of results, but request a field from the second page
       Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=violet") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -4027,7 +4027,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     services =>
       // request a totally nonexistent field
       Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=nonexistent") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -4042,7 +4042,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(
         s"$fieldSelectionApiPath?pageSize=30&page=1&filterTerms=gray&sortField=red&sortDirection=desc&fields=yellow,green,apricot"
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -4055,7 +4055,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     services =>
       // query for all entities
       Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}&fields=") ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
@@ -4067,7 +4067,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   "Entity type metadata API" should "pass true by default to useCache argument" in withMockedEntityService { services =>
     Get(s"${constantData.workspace.path}/entities") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -4084,7 +4084,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "respect useCache parameter if set to false" in withMockedEntityService { services =>
     Get(s"${constantData.workspace.path}/entities?useCache=false") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -4101,7 +4101,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "default to true if useCache set to some value other than 'false'" in withMockedEntityService { services =>
     Get(s"${constantData.workspace.path}/entities?useCache=mysterious") ~>
-      sealRoute(services.entityRoutes) ~>
+      sealRoute(services.entityRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status

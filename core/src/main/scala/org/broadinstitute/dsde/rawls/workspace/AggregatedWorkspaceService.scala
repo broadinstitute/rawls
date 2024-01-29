@@ -4,20 +4,10 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{WorkspaceDescription, WorkspaceStageModel}
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.scala.Tracing.startSpanWithParent
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{
-  errorReportSource,
-  AzureManagedAppCoordinates,
-  ErrorReport,
-  GoogleProjectId,
-  RawlsRequestContext,
-  Workspace,
-  WorkspacePolicy,
-  WorkspaceState,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, GoogleProjectId, RawlsRequestContext, Workspace, WorkspacePolicy, WorkspaceState, WorkspaceType, errorReportSource}
+import org.broadinstitute.dsde.rawls.util.TracingUtils
 
 import java.util.UUID
 import scala.jdk.CollectionConverters._
@@ -44,8 +34,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     *
     */
   def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] = {
-    val span = startSpanWithParent("listWorkspacesFromWorkspaceManager", ctx.tracingSpan.orNull)
-    try {
+    TracingUtils.traceNakedWithParent("listWorkspacesFromWorkspaceManager", ctx.toTracingContext) { _ =>
       val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx).groupBy(_.getId)
       workspaces.map(workspace =>
         workspace.workspaceType match {
@@ -74,8 +63,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
               }
         }
       )
-    } finally
-      span.end()
+    }
   }
 
   /**
@@ -92,19 +80,19 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
    * @throws InvalidCloudContextException        when an aggregated workspace does not have info for exactly one cloud context
    */
   def fetchAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace = {
-    val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", ctx.tracingSpan.orNull)
-    try {
-      val wsmInfo = workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)
-      aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo)
-    } catch {
-      case e: ApiException =>
-        if (e.getCode == StatusCodes.NotFound.intValue) {
-          throw new AggregateWorkspaceNotFoundException(errorReport = ErrorReport(StatusCodes.NotFound, e))
-        } else {
-          throw new WorkspaceAggregationException(errorReport = ErrorReport(e.getCode, e))
-        }
-    } finally
-      span.end()
+    TracingUtils.traceNakedWithParent("getWorkspaceFromWorkspaceManager", ctx.toTracingContext) { _ =>
+      try {
+        val wsmInfo = workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)
+        aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo)
+      } catch {
+        case e: ApiException =>
+          if (e.getCode == StatusCodes.NotFound.intValue) {
+            throw new AggregateWorkspaceNotFoundException(errorReport = ErrorReport(StatusCodes.NotFound, e))
+          } else {
+            throw new WorkspaceAggregationException(errorReport = ErrorReport(e.getCode, e))
+          }
+      }
+    }
   }
 
   /**

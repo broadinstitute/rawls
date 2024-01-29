@@ -60,7 +60,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   "SubmissionApi" should "use defaults for metadata params when no querystring" in withTestDataApiServices { services =>
     Get(s"$basePath") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         // use MetadataParams' defaults
@@ -74,7 +74,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass expandSubWorkflows=true param" in withTestDataApiServices { services =>
     Get(s"$basePath?expandSubWorkflows=true") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         val expectedParams = MetadataParams(expandSubWorkflows = true)
@@ -87,7 +87,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass expandSubWorkflows=false param" in withTestDataApiServices { services =>
     Get(s"$basePath?expandSubWorkflows=false") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         // expandSubWorkflows=false duplicates the default but is included here in case the defaults change later
@@ -101,7 +101,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass single includeKey param" in withTestDataApiServices { services =>
     Get(s"$basePath?includeKey=foo") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         val expectedParams = MetadataParams(includeKeys = Set("foo"))
@@ -114,7 +114,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass multiple includeKey params" in withTestDataApiServices { services =>
     Get(s"$basePath?includeKey=foo&includeKey=bar") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         val expectedParams = MetadataParams(includeKeys = Set("foo", "bar"))
@@ -127,7 +127,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass single excludeKey param" in withTestDataApiServices { services =>
     Get(s"$basePath?excludeKey=baz") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         val expectedParams = MetadataParams(excludeKeys = Set("baz"))
@@ -140,7 +140,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass multiple excludeKey params" in withTestDataApiServices { services =>
     Get(s"$basePath?excludeKey=baz&excludeKey=qux") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         val expectedParams = MetadataParams(excludeKeys = Set("baz", "qux"))
@@ -153,7 +153,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "pass all params when they are all specified" in withTestDataApiServices { services =>
     Get(s"$basePath?expandSubWorkflows=true&includeKey=foo&includeKey=bar&excludeKey=baz&excludeKey=qux") ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         val actualParams = responseAs[MetadataParams]
         val expectedParams =

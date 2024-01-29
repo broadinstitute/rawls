@@ -10,8 +10,8 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.scala.Tracing.startSpanWithParent
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -234,17 +234,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext = ctx): Future[Workspace] =
     for {
-      _ <- traceWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
+      _ <- traceFutureWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
         withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
       )
       _ <- failIfBucketRegionInvalid(workspaceRequest.bucketLocation)
-      billingProject <- traceWithParent("getBillingProjectContext", parentContext)(s =>
+      billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
       // policies are not supported on GCP workspaces
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
-      workspace <- traceWithParent("createNewWorkspaceContext", parentContext)(s =>
+      workspace <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess =>
             for {
@@ -259,7 +259,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           TransactionIsolation.ReadCommitted
         )
       ) // read committed to avoid deadlocks on workspace attr scratch table
-      _ <- traceWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
+      _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
       )
     } yield workspace
@@ -301,30 +301,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                    params: WorkspaceFieldSpecs,
                    parentContext: RawlsRequestContext = ctx
   ): Future[JsObject] = {
-    val span = startSpanWithParent("optionsProcessing", parentContext.tracingSpan.orNull)
-
-    // validate the inbound parameters
-    val options = Try(validateParams(params, WorkspaceFieldNames.workspaceResponseFieldNames)) match {
-      case Success(opts) => opts
-      case Failure(ex)   => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
-    }
+    val (options, attrSpecs) = processOptions(params, fieldNames = WorkspaceFieldNames.workspaceResponseFieldNames)
 
     // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
 
-    // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
-    val attrSpecs = WorkspaceAttributeSpecs(
-      options.contains("workspace.attributes"),
-      options
-        .filter(_.startsWith("workspace.attributes."))
-        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", "")))
-        .toList
-    )
-    span.setStatus(Status.OK)
-    span.end()
-
     val wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
-    traceWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
+    traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
@@ -332,7 +315,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
-            def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
+            def accessLevelFuture(): Future[WorkspaceAccessLevel] =
               if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
                 getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)
               } else {
@@ -355,7 +338,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     case None =>
                       noFuture
                     case _ =>
-                      traceWithParent("getBucketDetails", s1)(_ =>
+                      traceFutureWithParent("getBucketDetails", s1)(_ =>
                         gcsDAO
                           .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
                           .map(Option(_))
@@ -365,7 +348,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   noFuture
                 }
               def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
-                traceWithParent("getUserComputePermissions", s1)(_ =>
+                traceFutureWithParent("getUserComputePermissions", s1)(_ =>
                   getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
                                             accessLevel,
                                             wsmContext.getCloudPlatform
@@ -377,7 +360,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               }
               def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
                 // convoluted but accessLevel for both params because user could at most share with their own access level
-                traceWithParent("getUserSharePermissions", s1)(_ =>
+                traceFutureWithParent("getUserSharePermissions", s1)(_ =>
                   getUserSharePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, accessLevel)
                     .map(Option(_))
                 )
@@ -385,15 +368,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 noFuture
               }
               def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
-                traceWithParent("getUserCatalogPermissions", s1)(_ =>
+                traceFutureWithParent("getUserCatalogPermissions", s1)(_ =>
                   getUserCatalogPermissions(workspaceContext.workspaceIdAsUUID.toString).map(Option(_))
                 )
               } else {
                 noFuture
               }
 
-              def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
-                traceWithParent("getWorkspaceOwners", s1)(_ =>
+              def ownersFuture(): Future[Option[Set[LookupExpression]]] = if (options.contains("owners")) {
+                traceFutureWithParent("getWorkspaceOwners", s1)(_ =>
                   getWorkspaceOwners(workspaceContext.workspaceIdAsUUID.toString).map(_.map(_.value)).map(Option(_))
                 )
               } else {
@@ -402,7 +385,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
               def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] =
                 if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
-                  traceWithParent("loadResourceAuthDomain", s1)(_ =>
+                  traceFutureWithParent("loadResourceAuthDomain", s1)(_ =>
                     loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx.userInfo)
                       .map(Option(_))
                   )
@@ -410,7 +393,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   noFuture
                 }
 
-              def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] =
+              def workspaceSubmissionStatsFuture(): ReadAction[Option[WorkspaceSubmissionStats]] =
                 if (options.contains("workspaceSubmissionStats")) {
                   getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
                 } else {
@@ -458,6 +441,29 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     )
   }
+
+  private def processOptions(params: WorkspaceFieldSpecs,
+                             stringAttributeMaxLength: Int = -1,
+                             fieldNames: Set[LookupExpression]
+  ): (Set[LookupExpression], WorkspaceAttributeSpecs) =
+    traceNakedWithParent("processOptions", ctx.toTracingContext) { _ =>
+      // validate the inbound parameters
+      val options = Try(validateParams(params, fieldNames)) match {
+        case Success(opts) => opts
+        case Failure(ex)   => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
+      }
+
+      // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
+      val attrSpecs = WorkspaceAttributeSpecs(
+        options.contains("workspace.attributes"),
+        options
+          .filter(_.startsWith("workspace.attributes."))
+          .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", "")))
+          .toList,
+        stringAttributeMaxLength
+      )
+      (options, attrSpecs)
+    }
 
   def getWorkspaceById(workspaceId: String,
                        params: WorkspaceFieldSpecs,
@@ -558,12 +564,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
   def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] =
-    traceWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
+    traceFutureWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
-        traceWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap { maybeMcWorkspace =>
-          traceWithParent("deleteWorkspaceInternal", ctx)(s1 =>
-            deleteWorkspaceInternal(workspace, maybeMcWorkspace, s1)
-          )
+        traceFutureWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap {
+          maybeMcWorkspace =>
+            traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 =>
+              deleteWorkspaceInternal(workspace, maybeMcWorkspace, s1)
+            )
         }
       }
     )
@@ -654,7 +661,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
       )
 
-      _ <- traceWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
+      _ <- traceFutureWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
         requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
             s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceContext.toWorkspaceName}`",
@@ -664,7 +671,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
-      workflowsToAbort <- traceWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentContext)(_ =>
+      workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentContext)(_ =>
         gatherWorkflowsToAbortAndSetStatusToAborted(workspaceContext.toWorkspaceName, workspaceContext) recoverWith {
           case t: Throwable =>
             logger.warn(
@@ -679,7 +686,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
       // This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
       // ExecutionContext run the futures whenever
-      aborts = traceWithParent("abortRunningWorkflows", parentContext)(_ =>
+      aborts = traceFutureWithParent("abortRunningWorkflows", parentContext)(_ =>
         Future.traverse(workflowsToAbort)(wf => executionServiceCluster.abort(wf, ctx.userInfo)) recoverWith {
           case t: Throwable =>
             logger.warn(
@@ -690,12 +697,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
-      _ <- traceWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
+      _ <- traceFutureWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
       )
 
       // Delete Google Project
-      _ <- traceWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
+      _ <- traceFutureWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         if (!isAzureMcWorkspace(maybeMcWorkspace)) {
           maybeDeleteGoogleProject(workspaceContext.googleProjectId,
                                    workspaceContext.workspaceVersion,
@@ -710,12 +717,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         } else Future.successful()
       )
 
-      _ <- traceWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
+      _ <- traceFutureWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
         maybeDeleteWsmWorkspace(workspaceContext)
       }
 
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
-      _ <- traceWithParent("deleteWorkspaceTransaction", parentContext)(_ =>
+      _ <- traceFutureWithParent("deleteWorkspaceTransaction", parentContext)(_ =>
         deleteWorkspaceTransaction(workspaceContext) recoverWith { case t: Throwable =>
           logger.error(
             s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceContext.toWorkspaceName}`",
@@ -726,7 +733,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
 
       // Delete workflowCollection resource in sam outside of DB transaction
-      _ <- traceWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
+      _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
         workspaceContext.workflowCollectionName
           .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
           .getOrElse(Future.successful(())) recoverWith {
@@ -744,7 +751,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
-      _ <- traceWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
+      _ <- traceFutureWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
         if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
           samDAO.deleteResource(SamResourceTypeNames.workspace,
                                 workspaceContext.workspaceIdAsUUID.toString,
@@ -927,38 +934,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     } yield result
 
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
-
-    val s = ctx.tracingSpan.map(startSpanWithParent("optionHandling", _))
-
-    // validate the inbound parameters
-    val options = Try(validateParams(params, WorkspaceFieldNames.workspaceListResponseFieldNames)) match {
-      case Success(opts) => opts
-      case Failure(ex) =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
-    }
-
-    // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
-    val attributeSpecs = WorkspaceAttributeSpecs(
-      options.contains("workspace.attributes"),
-      options
-        .filter(_.startsWith("workspace.attributes."))
-        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", "")))
-        .toList,
-      stringAttributeMaxLength
-    )
+    val (options, attributeSpecs) =
+      processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
 
     // Can this be shared with get-workspace somehow?
     val optionsExist = options.nonEmpty
     val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
     val attributesEnabled = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
-
-    s.foreach { span =>
-      span.setStatus(Status.OK)
-      span.putAttribute("submissionStatsEnabled",
-                        OpenCensusAttributeValue.booleanAttributeValue(submissionStatsEnabled)
-      )
-      span.end()
-    }
 
     for {
       workspaceResources <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
@@ -1168,11 +1150,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         // read committed to avoid deadlocks on workspace attr scratch table
         TransactionIsolation.ReadCommitted
       )
-      _ <- traceWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
+      _ <- traceFutureWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource)
           .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
       )
-      _ <- traceWithParent("FastPassService.setupFastPassClonedWorkspaceChild", parentContext)(childContext =>
+      _ <- traceFutureWithParent("FastPassService.setupFastPassClonedWorkspaceChild", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource)
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
@@ -2101,7 +2083,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         case Success(costs) => costs
       }
 
-      traceWithParent("costlessSubmissionsFuture", parentContext) { span =>
+      traceFutureWithParent("costlessSubmissionsFuture", parentContext) { span =>
         costlessSubmissionsFuture map { costlessSubmissions =>
           val costedSubmissions = costlessSubmissions map { costlessSubmission =>
             // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
@@ -2452,7 +2434,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       }
 
-    traceWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
+    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
         val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
@@ -3015,7 +2997,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                    parentContext: RawlsRequestContext
   ) =
     for {
-      _ <- traceWithParent("createResourceFull", parentContext)(_ =>
+      _ <- traceFutureWithParent("createResourceFull", parentContext)(_ =>
         samDAO.createResourceFull(
           SamResourceTypeNames.workflowCollection,
           workspaceId,
@@ -3054,7 +3036,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                           parentContext: RawlsRequestContext = ctx
   ): Future[(GoogleProjectId, GoogleProjectNumber)] =
     for {
-      googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", parentContext) { _ =>
+      googleProjectId <- traceFutureWithParent("getGoogleProjectFromBuffer", parentContext) { _ =>
         resourceBufferService.getGoogleProjectFromBuffer(
           if (billingProject.servicePerimeter.isDefined)
             ProjectPoolType.ExfiltrationControlled
@@ -3064,7 +3046,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       }
 
-      _ <- traceWithParent("maybeMoveGoogleProjectToFolder", parentContext) { _ =>
+      _ <- traceFutureWithParent("maybeMoveGoogleProjectToFolder", parentContext) { _ =>
         billingProject.servicePerimeter.traverse_ {
           logger.info(s"Moving google project ${googleProjectId} to service perimeter folder.")
           userServiceConstructor(ctx).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
@@ -3072,7 +3054,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
 
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
-      _ <- traceWithParent("remove RBS SA from owner policy", parentContext) { _ =>
+      _ <- traceFutureWithParent("remove RBS SA from owner policy", parentContext) { _ =>
         gcsDAO.removePolicyBindings(googleProjectId,
                                     Map(
                                       "roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)
@@ -3087,16 +3069,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                workspaceId: String,
                                parentContext: RawlsRequestContext = ctx
   ): Future[ProjectBillingInfo] =
-    traceWithParent("updateGoogleProjectBillingAccount", parentContext) { childContext =>
+    traceFutureWithParent("updateGoogleProjectBillingAccount", parentContext) { childContext =>
       logger.info(
         s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account."
       )
-      childContext.tracingSpan.foreach { s =>
-        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
-        s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
-        s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
-      }
-      gcsDAO.setBillingAccountName(googleProjectId, billingAccount, childContext.tracingSpan.orNull)
+      setTraceSpanAttribute(childContext, AttributeKey.stringKey("workspaceId"), workspaceId)
+      setTraceSpanAttribute(childContext, AttributeKey.stringKey("googleProjectId"), googleProjectId.value)
+      setTraceSpanAttribute(childContext, AttributeKey.stringKey("billingAccount"), billingAccount.value)
+      gcsDAO.setBillingAccountName(googleProjectId, billingAccount, childContext.toTracingContext)
     }
 
   def setupGoogleProjectIam(googleProjectId: GoogleProjectId,
@@ -3104,7 +3084,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                             billingProjectOwnerPolicyEmail: WorkbenchEmail,
                             parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =
-    traceWithParent("updateGoogleProjectIam", parentContext) { _ =>
+    traceFutureWithParent("updateGoogleProjectIam", parentContext) { _ =>
       logger.info(s"Updating google project IAM ${googleProjectId}.")
 
       // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
@@ -3150,7 +3130,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                             workspaceName: WorkspaceName,
                             parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =
-    traceWithParent("renameAndLabelProject", parentContext) { _ =>
+    traceFutureWithParent("renameAndLabelProject", parentContext) { _ =>
       for {
         googleProject <- gcsDAO.getGoogleProject(googleProjectId)
 
@@ -3182,7 +3162,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     */
   private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject,
                                                    dataAccess: DataAccess,
-                                                   span: Span = null
+                                                   requestContext: RawlsRequestContext = ctx
   ): ReadAction[Unit] =
     billingProject.servicePerimeter.traverse_ { servicePerimeterName =>
       servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
@@ -3191,7 +3171,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
                                                 parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =
-    traceWithParent("updateAndGetBillingAccountAccess", parentContext) { s =>
+    traceFutureWithParent("updateAndGetBillingAccountAccess", parentContext) { s =>
       updateAndGetBillingAccountAccess(billingProject, s).map { hasAccess =>
         if (!hasAccess)
           throw RawlsExceptionWithErrorReport(
@@ -3226,7 +3206,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           )
         )
 
-      hasAccess <- traceWithParent("checkBillingAccountIAM", parentContext)(_ =>
+      hasAccess <- traceFutureWithParent("checkBillingAccountIAM", parentContext)(_ =>
         gcsDAO.testTerraBillingAccountAccess(billingAccountName)
       )
 
@@ -3280,7 +3260,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     )
 
     DBIO.from(
-      traceWithParent("createResourceFull (workspace)", parentContext)(_ =>
+      traceFutureWithParent("createResourceFull (workspace)", parentContext)(_ =>
         samDAO.createResourceFull(
           SamResourceTypeNames.workspace,
           workspaceId,
@@ -3298,7 +3278,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                            workspaceRequest: WorkspaceRequest,
                            parentContext: RawlsRequestContext
   ) =
-    traceWithParent("traversePolicies", parentContext)(s1 =>
+    traceFutureWithParent("traversePolicies", parentContext)(s1 =>
       Future.traverse(policyEmailsByName.keys) { policyName =>
         if (
           policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
@@ -3316,7 +3296,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         ) {
           // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
           // granted bucket access (and thus need a google group)
-          traceWithParent(s"syncPolicy-${policyName}", s1)(_ =>
+          traceFutureWithParent(s"syncPolicy-${policyName}", s1)(_ =>
             samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName)
           )
         } else {
@@ -3417,9 +3397,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
       workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
       // add the workspace id to the span so we can find and correlate it later with other services
-      _ = parentContext.tracingSpan.foreach(
-        _.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
-      )
+      _ = setTraceSpanAttribute(parentContext, AttributeKey.stringKey("workspaceId"), workspaceId)
 
       billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentContext)(context =>
         DBIO.from(
@@ -3476,7 +3454,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
 
       _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(context =>
-        maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context.tracingSpan.orNull)
+        maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context)
       )
 
       // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
@@ -3529,7 +3507,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             policyEmails,
             GcsBucketName(bucketName),
             getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList),
-            childContext.tracingSpan.orNull,
+            childContext,
             workspaceBucketLocation
           )
         )

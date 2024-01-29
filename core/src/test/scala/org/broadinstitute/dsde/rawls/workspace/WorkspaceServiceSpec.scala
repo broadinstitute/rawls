@@ -2201,7 +2201,7 @@ class WorkspaceServiceSpec
       verify(services.gcsDAO).setBillingAccountName(
         any[GoogleProjectId],
         ArgumentMatchers.eq(billingProject.billingAccount.get),
-        any[OpenCensusSpan]
+        any[RawlsTracingContext]
       )
   }
 
@@ -2212,7 +2212,7 @@ class WorkspaceServiceSpec
         .setBillingAccountName(
           ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
           ArgumentMatchers.eq(RawlsBillingAccountName("fakeBillingAcct")),
-          any[OpenCensusSpan]
+          any[RawlsTracingContext]
         )
 
       val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
@@ -2600,7 +2600,7 @@ class WorkspaceServiceSpec
       verify(services.gcsDAO, times(1)).setBillingAccountName(
         any[GoogleProjectId],
         ArgumentMatchers.eq(destBillingProject.billingAccount.get),
-        any[OpenCensusSpan]
+        any[RawlsTracingContext]
       )
   }
 
@@ -2616,7 +2616,7 @@ class WorkspaceServiceSpec
         .setBillingAccountName(
           ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
           ArgumentMatchers.eq(RawlsBillingAccountName("fakeBillingAcct")),
-          any[OpenCensusSpan]
+          any[RawlsTracingContext]
         )
 
       intercept[Exception] {

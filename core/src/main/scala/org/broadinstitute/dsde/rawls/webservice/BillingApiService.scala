@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -23,9 +23,9 @@ trait BillingApiService extends UserInfoDirectives {
 
   val userServiceConstructor: RawlsRequestContext => UserService
 
-  val billingRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  def billingRoutes(otelContext: Context = Context.root()): server.Route = {
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / Segment) { projectId =>
         path("members") {
           get {

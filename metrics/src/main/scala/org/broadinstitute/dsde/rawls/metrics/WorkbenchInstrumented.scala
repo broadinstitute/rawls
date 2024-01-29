@@ -121,6 +121,10 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
       .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
   }
 
+  protected def httpRequestRoute(httpRequest: HttpRequest): String = {
+    "/" + UriExpansion.makeName(httpRequest.uri).replace('.', '/')
+  }
+
   implicit protected def httpRequestCounter(implicit
     builder: ExpandedMetricBuilder
   ): (HttpRequest, HttpResponse) => Counter =
