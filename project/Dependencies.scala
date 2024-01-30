@@ -81,6 +81,9 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.1.0"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.4.1"
+  val microsoftGraph: ModuleID = "com.microsoft.graph" % "microsoft-graph" % "5.10.0"
+
   val workbenchLibsHash = "8ccaa6d"
 
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
@@ -190,6 +193,11 @@ object Dependencies {
     googleGuava
   )
 
+  val azureDependencies = Seq(
+    azureIdentity,
+    microsoftGraph
+  )
+
   val google2Dependencies = Seq(
     workbenchGoogle2,
     workbenchGoogle2Tests,
@@ -221,7 +229,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openCensusDependencies ++ azureDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,
