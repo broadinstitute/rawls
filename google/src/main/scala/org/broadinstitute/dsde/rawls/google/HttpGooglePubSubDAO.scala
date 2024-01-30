@@ -9,6 +9,7 @@ import com.google.api.client.http.HttpResponseException
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
+import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
@@ -20,16 +21,17 @@ import scala.jdk.CollectionConverters._
  * Created by mbemis on 5/6/16.
  */
 
-class HttpGooglePubSubDAO(clientEmail: String,
-                          pemFile: String,
-                          appName: String,
+class HttpGooglePubSubDAO(config: Config,
                           serviceProject: String,
                           override val workbenchMetricBaseName: String
 )(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
     extends FutureSupport
     with GoogleUtilities
-    with GooglePubSubDAO {
-
+    with GooglePubSubDAO
+    {
+      val clientEmail = config.getString("serviceClientEmail")
+      val appName = config.getString("appName")
+      val pemFile = config.getString("pathToPem")
   val pubSubScopes = Seq(PubsubScopes.PUBSUB)
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport

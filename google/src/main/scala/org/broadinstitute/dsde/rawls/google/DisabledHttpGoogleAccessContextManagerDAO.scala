@@ -15,10 +15,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import com.typesafe.config.Config
 
-class HttpGoogleAccessContextManagerDAO(storageConfig: Config,
-                                        override val workbenchMetricBaseName: String
-)(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
-    extends FutureSupport
+class DisabledHttpGoogleAccessContextManagerDAO(storageConfig: Config,
+                                                override val workbenchMetricBaseName: String
+                                               )(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
+  extends FutureSupport
     with GoogleUtilities
     with AccessContextManagerDAO
 {
@@ -46,7 +46,7 @@ class HttpGoogleAccessContextManagerDAO(storageConfig: Config,
 
   def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName,
                                           billingProjectNumbers: Set[String]
-  ): Future[Operation] = {
+                                         ): Future[Operation] = {
     implicit val service = GoogleInstrumentedService.AccessContextManager
 
     retryWhen500orGoogleError { () =>
@@ -75,3 +75,4 @@ class HttpGoogleAccessContextManagerDAO(storageConfig: Config,
     retryWhen500orGoogleError(() => executeGoogleRequest(accessContextManager.operations().get(operationId)))
   }
 }
+

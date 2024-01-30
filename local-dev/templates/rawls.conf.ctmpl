@@ -14,7 +14,7 @@
 {{- $landingZonePostgres := (secret "secret/dsde/terra/azure/dev/workspacemanager/azure-postgres-credential" ).Data -}}
 
 backRawls = false
-
+cloudProvider = "gcp"
 gcs {
   deletedBucketCheckSeconds = "21600"
   adminRegisterBillingAccountId = "billingAccounts/{{ (secret "secret/dsde/firecloud/local/rawls/gcs/admin-billing-account-id").Data.id }}"

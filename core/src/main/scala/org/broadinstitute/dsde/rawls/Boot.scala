@@ -31,10 +31,7 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
-  HttpWorkspaceManagerClientProvider,
-  HttpWorkspaceManagerDAO
-}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
@@ -43,8 +40,9 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
+import org.broadinstitute.dsde.rawls.multiCloudFactory._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
@@ -58,21 +56,10 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceRepository,
-  WorkspaceService
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.{
-  GoogleCredentialModes,
-  HttpGoogleBigQueryDAO,
-  HttpGoogleIamDAO,
-  HttpGoogleStorageDAO
-}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO, HttpGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
@@ -93,8 +80,8 @@ import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
   override def run(
-    args: List[String]
-  ): IO[ExitCode] =
+                    args: List[String]
+                  ): IO[ExitCode] =
     startup() *> ExitCode.Success.pure[IO]
 
   private def startup(): IO[Unit] = {
@@ -106,6 +93,8 @@ object Boot extends IOApp with LazyLogging {
     val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
     instantiateOpenTelemetry(conf)
     val gcsConfig = conf.getConfig("gcs")
+    val cloudProvider = MultiCloudCloudProviderFactory.setCloudProvider(conf)
+    val gcsConfig = MultiCloudStorageConfigFactory.createStorageConfiguration(conf, cloudProvider)
 
     // we need an ActorSystem to host our application in
     implicit val system: ActorSystem = ActorSystem("rawls")
@@ -149,8 +138,8 @@ object Boot extends IOApp with LazyLogging {
               // Capability for apiKey-less additional statsd target, intended for statsd-exporter sidecar
               val statsDConf = conf.toConfig
               startStatsDReporter(statsDConf.getString("host"),
-                                  statsDConf.getInt("port"),
-                                  statsDConf.getDuration("period")
+                statsDConf.getInt("port"),
+                statsDConf.getDuration("period")
               )
             case (other, _) =>
               logger.warn(s"Unknown metrics backend: $other")
@@ -162,61 +151,38 @@ object Boot extends IOApp with LazyLogging {
     }
 
     val jsonFactory = GsonFactory.getDefaultInstance
-    val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
+
+    val accessContextManagerDAO = MultiCloudAccessContextManagerFactory.createAccessContextManager(metricsPrefix, gcsConfig, cloudProvider)
+
     val clientEmail = gcsConfig.getString("serviceClientEmail")
 
     val serviceProject = gcsConfig.getString("serviceProject")
     val appName = gcsConfig.getString("appName")
-    val pathToPem = gcsConfig.getString("pathToPem")
 
-    val accessContextManagerDAO = new HttpGoogleAccessContextManagerDAO(
-      clientEmail,
-      pathToPem,
-      appName,
-      serviceProject,
-      workbenchMetricBaseName = metricsPrefix
-    )
-
-    initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
+    initAppDependencies[IO](conf, gcsConfig.getString("appName"), metricsPrefix).use { appDependencies =>
       implicit val openTelemetryMetrics: OpenTelemetryMetrics[IO] = appDependencies.openTelemetry
 
-      val gcsDAO = new HttpGoogleServicesDAO(
-        clientSecrets,
-        clientEmail,
-        gcsConfig.getString("subEmail"),
-        gcsConfig.getString("pathToPem"),
-        gcsConfig.getString("appsDomain"),
-        gcsConfig.getString("groupsPrefix"),
-        gcsConfig.getString("appName"),
-        serviceProject,
-        gcsConfig.getString("billingPemEmail"),
-        gcsConfig.getString("pathToBillingPem"),
-        gcsConfig.getString("billingEmail"),
-        gcsConfig.getString("billingGroupEmail"),
-        googleStorageService = appDependencies.googleStorageService,
-        workbenchMetricBaseName = metricsPrefix,
-        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
-        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
-        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-        accessContextManagerDAO = accessContextManagerDAO,
-        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
+      val gcsDAO = MultiCloudServicesDAOFactory.createHttpMultiCloudServicesDAO(
+        gcsConfig,
+        appDependencies,
+        metricsPrefix,
+        accessContextManagerDAO,
+        cloudProvider
       )
 
-      val pubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
-        appName,
-        serviceProject,
-        workbenchMetricBaseName = metricsPrefix
+      val pubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
+        workbenchMetricBaseName = metricsPrefix,
+        gcsConfig.getString("serviceProject"),
+        gcsConfig,
+        cloudProvider
       )
 
       // Import service uses a different project for its pubsub topic
-      val importServicePubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
-        appName,
+      val importServicePubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
+        workbenchMetricBaseName = metricsPrefix,
         conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject"),
-        workbenchMetricBaseName = metricsPrefix
+        gcsConfig,
+        cloudProvider
       )
 
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
@@ -227,20 +193,12 @@ object Boot extends IOApp with LazyLogging {
         try bqJsonFileSource.mkString
         finally bqJsonFileSource.close()
 
-      val bigQueryDAO = new HttpGoogleBigQueryDAO(
-        appName,
-        Json(bqJsonCreds),
-        metricsPrefix
-      )
+      val bigQueryDAO = MultiCloudBigQueryDAOFactory.createHttpMultiCloudBigQueryDAO(gcsConfig, Json(bqJsonCreds), metricsPrefix, cloudProvider)
 
-      val samConfig = conf.getConfig("sam")
-      val samDAO = new HttpSamDAO(
-        samConfig.getString("server"),
-        gcsDAO.getBucketServiceAccountCredential,
-        toScalaDuration(samConfig.getDuration("timeout"))
-      )
+      val samDAO = MultiCloudSamDAOFactory.createMultiCloudSamDAO(conf, gcsDAO, cloudProvider)
 
-      enableServiceAccount(gcsDAO, samDAO)
+      val enableServiceAccount = new MultiCloudEnableServiceAccountFactory
+      enableServiceAccount.createEnableServiceAccount(gcsDAO, samDAO, cloudProvider)
 
       system.registerOnTermination {
         slickDataSource.databaseConfig.db.shutdown
@@ -294,62 +252,28 @@ object Boot extends IOApp with LazyLogging {
         )
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
 
-      val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
-        appName,
-        serviceProject,
-        workbenchMetricBaseName = metricsPrefix
-      )
+      val notificationPubSubDAO = MultiCloudNotificationPubSubDAOFactory.createMultiCloudNotificationPubSubDAO(
+        workbenchMetricBaseName = metricsPrefix, gcsConfig, cloudProvider)
 
-      val notificationDAO = new PubSubNotificationDAO(
-        notificationPubSubDAO,
-        gcsConfig.getString("notifications.topicName")
-      )
+      val notificationDAO = MultiCloudNotificationDAOFactory.createMultiCloudNotificationDAO(gcsConfig, notificationPubSubDAO, cloudProvider)
 
-      val drsResolver = if (conf.hasPath("drs")) {
-        val drsResolverName = conf.getString("drs.resolver")
-        drsResolverName match {
-          case "martha" =>
-            val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
-            val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-            new MarthaResolver(marthaUrl)
-          case "drshub" =>
-            val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
-            val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
-            new DrsHubResolver(drsHubUrl)
-        }
-      } else {
-        val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-        val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-        new MarthaResolver(marthaUrl)
-      }
+      val drsResolver = MultiCloudDrsResolverFactory.createMultiCloudDrsResolver(conf, cloudProvider)
 
-      val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
-      val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+      val servicePerimeterService = MultiCloudServicePerimeterServiceFactory.createMultiCloudNotificationPubSubDAO(slickDataSource,
+        gcsDAO, conf, cloudProvider)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
         multiCloudWorkspaceConfig
       )
-
+      //Todo: need to fix genomics
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
-        GenomicsService.constructor(slickDataSource, gcsDAO)
-      val submissionCostService: SubmissionCostService =
-        SubmissionCostService.constructor(
-          gcsConfig.getString("billingExportTableName"),
-          gcsConfig.getString("billingExportDatePartitionColumn"),
-          gcsConfig.getString("serviceProject"),
-          gcsConfig.getInt("billingSearchWindowDays"),
-          bigQueryDAO
-        )
+        MultiCloudGenomicsServiceFactory.createMultiCloudGenomicsService(slickDataSource, gcsDAO, cloudProvider)
 
-      val methodRepoDAO = new HttpMethodRepoDAO(
-        MethodRepoConfig.apply[Agora.type](conf.getConfig("agora")),
-        MethodRepoConfig.apply[Dockstore.type](conf.getConfig("dockstore")),
-        metricsPrefix
-      )
+      val submissionCostService = MultiCloudSubmissionCostServiceFactory.createMultiCloudSubmissionCostService(bigQueryDAO, gcsConfig,cloudProvider)
+
+      val methodRepoDAO = MultiCloudMethodRepoDAOFactory.createMultiCloudMethodRepoDAO(metricsPrefix, conf, cloudProvider)
 
       val workspaceManagerDAO =
         new HttpWorkspaceManagerDAO(new HttpWorkspaceManagerClientProvider(conf.getString("workspaceManager.baseUrl")))
@@ -449,6 +373,7 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO =
         new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
@@ -816,4 +741,4 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        httpGoogleStorageDAO: HttpGoogleStorageDAO,
                                        oidcConfiguration: OpenIDConnectConfiguration,
                                        openTelemetry: OpenTelemetryMetrics[F]
-)
+                                      )
