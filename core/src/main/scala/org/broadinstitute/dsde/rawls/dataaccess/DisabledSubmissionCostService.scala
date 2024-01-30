@@ -32,7 +32,7 @@ class DisabledSubmissionCostService(defaultTableName: String,
                            )(implicit val executionContext: ExecutionContext)
   extends LazyLogging {
 
-  val stringParamType = new QueryParameterType().setType("STRING")
+  val stringParamType: QueryParameterType = new QueryParameterType().setType("STRING")
 
   def getSubmissionCosts(submissionId: String,
                          workflowIds: Seq[String],

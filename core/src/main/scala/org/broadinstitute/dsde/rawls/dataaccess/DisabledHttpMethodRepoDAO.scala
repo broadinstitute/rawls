@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{Http, HttpExt}
 import akka.http.scaladsl.model.Uri
 import akka.http.scaladsl.server.PathMatchers.Segment
 import akka.http.scaladsl.server.directives.PathDirectives._
@@ -26,8 +26,8 @@ class DisabledHttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type],
     with RawlsInstrumented
     with ServiceDAOWithStatus {
 
-  override val http = Http(system)
-  override val httpClientUtils = HttpClientUtilsGzipInstrumented()
+  override val http: HttpExt = Http(system)
+  override val httpClientUtils: HttpClientUtilsGzipInstrumented = HttpClientUtilsGzipInstrumented()
 
   private val agoraServiceURL = agoraConfig.serviceUrl
   private val dockstoreServiceURL = dockstoreConfig.serviceUrl

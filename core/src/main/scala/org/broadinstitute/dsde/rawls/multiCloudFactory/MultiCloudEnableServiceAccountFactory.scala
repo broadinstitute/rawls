@@ -5,10 +5,9 @@ import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, UserInfo}
 import com.typesafe.scalalogging.LazyLogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.language.{higherKinds, postfixOps}
 
 class MultiCloudEnableServiceAccountFactory extends LazyLogging{
-  def createEnableServiceAccount(gcsDAO: GoogleServicesDAO, samDAO: SamDAO, cloudProvider: String)    = {
+  def createEnableServiceAccount(gcsDAO: GoogleServicesDAO, samDAO: SamDAO, cloudProvider: String): Unit = {
     cloudProvider match {
       case "gcp" =>
         enableServiceAccount(gcsDAO, samDAO)

@@ -1,16 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{Http, HttpExt}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import cats.effect.{IO, Temporal}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -31,8 +32,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig.EnhancedScalaConfig
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.AppDependencies
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
 
@@ -50,51 +53,51 @@ class DisabledHttpGoogleServicesDAO(config:Config,
                              override implicit val timer: Temporal[IO]
                            ) extends HttpGoogleServicesDAO(config, 200,
 appDependencies, workbenchMetricBaseName, accessContextManagerDAO) {
-  override val http = Http(system)
+  override val http: HttpExt = Http(system)
 
-  override val clientEmail = config.getString("serviceClientEmail")
-  override val subEmail = config.getString("subEmail")
-  override val pemFile = config.getString("pathToPem")
-  override val appsDomain = config.getString("appsDomain")
-  override val groupsPrefix = config.getString("groupsPrefix")
-  override val appName = config.getString("appName")
-  override val serviceProject = config.getString("serviceProject")
-  override val billingPemEmail = config.getString("billingPemEmail")
-  override val billingPemFile = config.getString("pathToBillingPem")
-  override val billingEmail = config.getString("billingEmail")
-  override val billingGroupEmail = config.getString("billingGroupEmail")
-  override val googleStorageService = appDependencies.googleStorageService
-  override val proxyNamePrefix = config.getStringOr("proxyNamePrefix", "")
-  override val terraBucketReaderRole = config.getString("terraBucketReaderRole")
-  override val terraBucketWriterRole = config.getString("terraBucketWriterRole")
-  override val resourceBufferJsonFile = config.getString("pathToResourceBufferJson")
-  override val jsonFactory = GsonFactory.getDefaultInstance
-  override val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(config.getString("secrets")))
+  override val clientEmail: String = config.getString("serviceClientEmail")
+  override val subEmail: String = config.getString("subEmail")
+  override val pemFile: String = config.getString("pathToPem")
+  override val appsDomain: String = config.getString("appsDomain")
+  override val groupsPrefix: String = config.getString("groupsPrefix")
+  override val appName: String = config.getString("appName")
+  override val serviceProject: String = config.getString("serviceProject")
+  override val billingPemEmail: String = config.getString("billingPemEmail")
+  override val billingPemFile: String = config.getString("pathToBillingPem")
+  override val billingEmail: String = config.getString("billingEmail")
+  override val billingGroupEmail: String = config.getString("billingGroupEmail")
+  override val googleStorageService: GoogleStorageService[IO] = appDependencies.googleStorageService
+  override val proxyNamePrefix: String = config.getStringOr("proxyNamePrefix", "")
+  override val terraBucketReaderRole: String = config.getString("terraBucketReaderRole")
+  override val terraBucketWriterRole: String = config.getString("terraBucketWriterRole")
+  override val resourceBufferJsonFile: String = config.getString("pathToResourceBufferJson")
+  override val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance
+  override val clientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(config.getString("secrets")))
 
-  override val httpClientUtils = HttpClientUtilsStandard()
-  override implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
+  override val httpClientUtils: HttpClientUtilsStandard = HttpClientUtilsStandard()
+  override implicit val log4CatsLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   override val groupMemberRole =
     "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
-  override val cloudBillingInfoReadTimeout = 40 * 1000 // socket read timeout when updating billing info
+  override val cloudBillingInfoReadTimeout: Int = 40 * 1000 // socket read timeout when updating billing info
 
   // modify these if we need more granular access in the future
-  override val workbenchLoginScopes =
+  override val workbenchLoginScopes: Seq[String] =
     Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
-  override val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
-  override val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
-  override val genomicsScopes = Seq(
+  override val storageScopes: Seq[String] = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
+  override val directoryScopes: Seq[String] = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
+  override val genomicsScopes: Seq[String] = Seq(
     GenomicsScopes.GENOMICS
   ) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
-  override val lifesciencesScopes = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
-  override val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
+  override val lifesciencesScopes: Seq[String] = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
+  override val billingScopes: Seq[String] = Seq("https://www.googleapis.com/auth/cloud-billing")
 
-  override val httpTransport = GoogleNetHttpTransport.newTrustedTransport
+  override val httpTransport: NetHttpTransport = GoogleNetHttpTransport.newTrustedTransport
   override val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
   override val SingleRegionLocationType: String = "region"
 
-  override val REQUESTER_PAYS_ERROR_SUBSTRINGS = Seq("requester pays", "UserProjectMissing")
+  override val REQUESTER_PAYS_ERROR_SUBSTRINGS: Seq[String] = Seq("requester pays", "UserProjectMissing")
 
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],

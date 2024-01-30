@@ -18,7 +18,7 @@ class DisabledGoogleBigQueryDAO(
   extends AbstractHttpGoogleDAO(appName, googleCredentialMode, workbenchMetricBaseName)
     with GoogleBigQueryDAO {
 
-  override val scopes = Seq(BigqueryScopes.BIGQUERY)
+  override val scopes: Seq[String] = Seq(BigqueryScopes.BIGQUERY)
 
   implicit override val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.BigQuery
 
