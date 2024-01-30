@@ -57,10 +57,13 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
     ))
 
   private val redactWorkspaceNames =
-    (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(0,
+    (Slash ~ "api").? / "workspaces" / (!("entities" | "id") ~ Segment) / (Segment ~ SegmentIgnore.repeat(0,
                                                                                                  Int.MaxValue,
                                                                                                  separator = Slash
     ))
+
+  private val redactWorkspaceId =
+    (Slash ~ "api").? / "workspaces" / "id" / Segment
 
   private val redactAdminBilling =
     (Slash ~ "admin").? / "billing" / Segment / SegmentIgnore / Segment
@@ -85,6 +88,7 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
       redactEntityIds,
       redactMethodConfigs,
       redactWorkspaceNames,
+      redactWorkspaceId,
       redactAdminBilling,
       redactNotifications,
       redactPapiIds
