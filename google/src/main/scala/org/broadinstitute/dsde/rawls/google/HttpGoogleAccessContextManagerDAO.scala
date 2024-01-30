@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.accesscontextmanager.v1.model.{Operation, ServicePerimeter, ServicePerimeterConfig}
 import com.google.api.services.accesscontextmanager.v1.{AccessContextManager, AccessContextManagerScopes}
@@ -23,14 +24,14 @@ class HttpGoogleAccessContextManagerDAO(storageConfig: Config,
     with AccessContextManagerDAO
 {
 
-  val httpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory = GsonFactory.getDefaultInstance
-  val accessContextScopes = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
+  val httpTransport: NetHttpTransport = GoogleNetHttpTransport.newTrustedTransport
+  val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance
+  val accessContextScopes: Seq[String] = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
 
-  val clientEmail = storageConfig.getString("serviceClientEmail")
-  val serviceProject = storageConfig.getString("serviceProject")
-  val appName = storageConfig.getString("appName")
-  val pemFile = storageConfig.getString("pathToPem")
+  val clientEmail: String = storageConfig.getString("serviceClientEmail")
+  val serviceProject: String = storageConfig.getString("serviceProject")
+  val appName: String = storageConfig.getString("appName")
+  val pemFile: String = storageConfig.getString("pathToPem")
 
   def getAccessContextManagerCredential: Credential =
     new GoogleCredential.Builder()

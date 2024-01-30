@@ -33,7 +33,7 @@ class DisabledHttpGooglePubSubDAO(appName: String,
           )(implicit system: ActorSystem, executionContext: ExecutionContext) =
     this(appName, Pem(WorkbenchEmail(clientEmail), new File(pemFile)), workbenchMetricBaseName, serviceProject)
 
-  override val scopes = Seq(PubsubScopes.PUBSUB)
+  override val scopes: Seq[String] = Seq(PubsubScopes.PUBSUB)
 
   implicit override val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.PubSub
 
