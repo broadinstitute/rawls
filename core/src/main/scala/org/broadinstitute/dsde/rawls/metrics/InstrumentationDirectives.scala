@@ -6,8 +6,10 @@ import akka.http.scaladsl.server.PathMatchers.Segment
 import akka.http.scaladsl.server.directives.BasicDirectives.{extractRequest, mapResponse}
 import akka.http.scaladsl.server.directives.PathDirectives._
 import akka.http.scaladsl.server.{Directive0, Directive1, PathMatcher, PathMatcher0}
+import io.opentelemetry.api.trace.Span
 import io.opentelemetry.context.Context
 import io.opentelemetry.instrumentation.api.instrumenter.http.{HttpServerRoute, HttpServerRouteSource}
+import org.broadinstitute.dsde.rawls.util.TracingUtils
 
 import java.util.concurrent.TimeUnit
 
@@ -112,7 +114,12 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
         globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
         httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
         httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
-        HttpServerRoute.update(otelContext, HttpServerRouteSource.CONTROLLER, httpRequestRoute(request))
+        SwaggerRouteMatcher.matchRoute(request.uri.path.toString).foreach { matchedRoute =>
+          matchedRoute.parameters.foreach { case (name, value) =>
+            Span.fromContext(otelContext).setAttribute(s"param.$name", value)
+          }
+          HttpServerRoute.update(otelContext, HttpServerRouteSource.CONTROLLER, matchedRoute.path)
+        }
         response
       } & provide(otelContext)
     }

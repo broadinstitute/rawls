@@ -152,6 +152,8 @@ object Dependencies {
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.20"
+
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
   // in Rawls by being listed here.
@@ -277,7 +279,8 @@ object Dependencies {
     terraCommonLib,
     sam,
     leonardo,
-    jakartaWsRs
+    jakartaWsRs,
+    openApiParser
   )
 
   val pact4sV = "0.7.0"
