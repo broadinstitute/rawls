@@ -60,8 +60,9 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
 
   private val redactWorkspaceNames =
     (Slash ~ "api").? / "workspaces" / (!("entities" | "id") ~ Segment) / (Segment ~ SegmentIgnore.repeat(0,
-                                                                                                 Int.MaxValue,
-                                                                                                 separator = Slash
+                                                                                                          Int.MaxValue,
+                                                                                                          separator =
+                                                                                                            Slash
     ))
 
   private val redactWorkspaceId =
@@ -115,10 +116,10 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
         httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
         httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
         SwaggerRouteMatcher.matchRoute(request.uri.path.toString).foreach { matchedRoute =>
-          matchedRoute.parameters.foreach { case (name, value) =>
+          matchedRoute.parametersByName.foreach { case (name, value) =>
             Span.fromContext(otelContext).setAttribute(s"param.$name", value)
           }
-          HttpServerRoute.update(otelContext, HttpServerRouteSource.CONTROLLER, matchedRoute.path)
+          HttpServerRoute.update(otelContext, HttpServerRouteSource.CONTROLLER, matchedRoute.route)
         }
         response
       } & provide(otelContext)
