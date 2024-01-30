@@ -40,7 +40,9 @@ class SwaggerRouteMatcherSpec extends AnyFlatSpec with Matchers {
     val name = "this is a name"
     val submissionId = UUID.randomUUID().toString
     val workflowId = UUID.randomUUID().toString
-    val matchedRoute = SwaggerRouteMatcher.matchRoute(s"/api/workspaces/$namespace/$name/submissions/$submissionId/workflows/$workflowId/cost")
+    val matchedRoute = SwaggerRouteMatcher.matchRoute(
+      s"/api/workspaces/$namespace/$name/submissions/$submissionId/workflows/$workflowId/cost"
+    )
     matchedRoute shouldBe defined
     matchedRoute.get.route shouldBe "/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/cost"
     matchedRoute.get.parametersByName("workspaceNamespace") shouldBe namespace
