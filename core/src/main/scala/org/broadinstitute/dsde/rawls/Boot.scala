@@ -137,8 +137,8 @@ object Boot extends IOApp with LazyLogging {
               // Capability for apiKey-less additional statsd target, intended for statsd-exporter sidecar
               val statsDConf = conf.toConfig
               startStatsDReporter(statsDConf.getString("host"),
-                statsDConf.getInt("port"),
-                statsDConf.getDuration("period")
+                                  statsDConf.getInt("port"),
+                                  statsDConf.getDuration("period")
               )
             case (other, _) =>
               logger.warn(s"Unknown metrics backend: $other")
@@ -740,4 +740,4 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        httpGoogleStorageDAO: HttpGoogleStorageDAO,
                                        oidcConfiguration: OpenIDConnectConfiguration,
                                        openTelemetry: OpenTelemetryMetrics[F]
-                                      )
+)
