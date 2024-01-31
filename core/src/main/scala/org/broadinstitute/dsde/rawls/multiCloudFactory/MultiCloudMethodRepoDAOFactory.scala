@@ -21,11 +21,7 @@ object MultiCloudMethodRepoDAOFactory {
           metricsPrefix
         )
       case "azure" =>
-        new DisabledHttpMethodRepoDAO(
-          MethodRepoConfig.apply[Agora.type](config.getConfig("agora")),
-          MethodRepoConfig.apply[Dockstore.type](config.getConfig("dockstore")),
-          metricsPrefix
-        )
+        new DisabledHttpMethodRepoDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
   }

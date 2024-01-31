@@ -30,23 +30,7 @@ object MultiCloudDrsResolverFactory {
           new MarthaResolver(marthaUrl)
         }
       case "azure" =>
-        if (config.hasPath("drs")) {
-          val drsResolverName = config.getString("drs.resolver")
-          drsResolverName match {
-            case "martha" =>
-              val marthaBaseUrl: String = config.getString("drs.martha.baseUrl")
-              val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-              new DisabledMarthaResolver(marthaUrl)
-            case "drshub" =>
-              val drsHubBaseUrl: String = config.getString("drs.drshub.baseUrl")
-              val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
-              new DisabledDrsHubResolver(drsHubUrl)
-          }
-        } else {
-          val marthaBaseUrl: String = config.getString("martha.baseUrl")
-          val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-          new DisabledMarthaResolver(marthaUrl)
-        }
+          new DisabledMarthaResolver
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
   }

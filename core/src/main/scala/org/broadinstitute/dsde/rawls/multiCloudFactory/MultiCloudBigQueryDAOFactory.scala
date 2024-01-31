@@ -13,7 +13,7 @@ object MultiCloudBigQueryDAOFactory {
                                       googleCredentialMode: GoogleCredentialMode,
                                       metricsPrefix: String,
                                       cloudProvider: String
-                                     )(implicit system: ActorSystem, executionContext: ExecutionContext): AbstractHttpGoogleDAO with GoogleBigQueryDAO = {
+                                     )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleBigQueryDAO = {
 
     cloudProvider match {
       case "gcp" =>
@@ -23,12 +23,7 @@ object MultiCloudBigQueryDAOFactory {
           workbenchMetricBaseName = metricsPrefix
         )
       case "azure" =>
-        new DisabledGoogleBigQueryDAO(
-          config.getString("appName"),
-          googleCredentialMode,
-          workbenchMetricBaseName = metricsPrefix
-        )
-
+        new DisabledGoogleBigQueryDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
   }

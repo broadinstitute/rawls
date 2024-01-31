@@ -18,9 +18,7 @@ class MultiCloudEnableServiceAccountFactory extends LazyLogging{
   private def enableServiceAccount(httpGoogleServicesDAO: GoogleServicesDAO, samDAO: SamDAO): Unit = {
     val credential = httpGoogleServicesDAO.getBucketServiceAccountCredential
     val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
-
     val registerServiceAccountFuture = samDAO.registerUser(RawlsRequestContext(serviceAccountUserInfo))
-
     registerServiceAccountFuture.failed.foreach {
       // this is logged as a warning because almost always the service account is already enabled
       // so this is a problem only the first time rawls is started with a new service account
