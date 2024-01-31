@@ -31,7 +31,6 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = checker(workspace, ctx).transformWith {
     case Failure(t: ApiException) =>
-      logger.info("PollOperation (success): Got ApiException when polling Leonardo resources", t)
       if (t.getCode == StatusCodes.Forbidden.intValue) {
         // leo gives back a 403 when the workspace is gone
         logger.warn(s"403 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
@@ -42,20 +41,9 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
       } else {
         Future.failed(t)
       }
-    case Failure(t) =>
-      logger.info("PollOperation (failure): Got exception when polling Leonardo resources", t)
-      Future.failed(t)
-    case Success(resources) if resources.nonEmpty =>
-      logger.info(
-        s"PollOperation (failure): Found non-empty resources when polling Leonardo resources [workspaceId=${workspace.workspaceId}]",
-        resources
-      )
-      Future.successful(false) // It's OK if they are nonEmpty as long as the status of all is ERROR.
-    case Success(_) =>
-      logger.info(
-        s"PollOperation (success): Found empty resources when polling Leonardo resources [workspaceId=${workspace.workspaceId}]"
-      )
-      Future.successful(true)
+    case Failure(t)                               => Future.failed(t)
+    case Success(resources) if resources.nonEmpty => Future.successful(false)
+    case Success(_)                               => Future.successful(true)
   }
 
   def pollRuntimeDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
@@ -80,9 +68,11 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
         blocking {
           val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
           val nonErroredApps = allApps.filter(_.getStatus != AppStatus.ERROR)
-          logger.info(
-            s"Filtering out ${allApps.size - nonErroredApps.size} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
-          )
+          if (nonErroredApps.nonEmpty) {
+            logger.info(
+              s"Filtering out ${allApps.size - nonErroredApps.size} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
+            )
+          }
           nonErroredApps
         }
       }
