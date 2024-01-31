@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.http.scaladsl.server.Directives.{extractRequest, handleExceptions, mapResponse, provide}
 import akka.http.scaladsl.server.{Directive1, ExceptionHandler}
 import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.api.trace.Span
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
@@ -35,12 +36,21 @@ trait TracingDirectives {
       val context = Context.current();
       if (instrumenter.shouldStart(context, req)) {
         val newContext = instrumenter.start(context, req)
+        updateHttpRoute(req, newContext)
         recordSuccess(instrumenter, newContext, req) &
           recordException(instrumenter, newContext, req) &
           provide(newContext)
       } else {
         provide(Context.current())
       }
+    }
+
+  private def updateHttpRoute(req: HttpRequest, newContext: Context): Unit =
+    SwaggerRouteMatcher.matchRoute(req.uri.path.toString).foreach { matchedRoute =>
+      matchedRoute.parametersByName.foreach { case (name, value) =>
+        Span.fromContext(newContext).setAttribute(s"param.$name", value)
+      }
+      HttpServerRoute.update(newContext, HttpServerRouteSource.CONTROLLER, matchedRoute.route)
     }
 
   private def recordSuccess(instrumenter: Instrumenter[HttpRequest, HttpResponse],
