@@ -194,7 +194,12 @@ object Boot extends IOApp with LazyLogging {
 
       val bigQueryDAO = MultiCloudBigQueryDAOFactory.createHttpMultiCloudBigQueryDAO(gcsConfig, Json(bqJsonCreds), metricsPrefix, cloudProvider)
 
-      val samDAO = MultiCloudSamDAOFactory.createMultiCloudSamDAO(conf, gcsDAO, cloudProvider)
+      val samConfig = conf.getConfig("sam")
+      val samDAO = new HttpSamDAO(
+        samConfig.getString("server"),
+        gcsDAO.getBucketServiceAccountCredential,
+        toScalaDuration(samConfig.getDuration("timeout"))
+      )
 
       val enableServiceAccount = new MultiCloudEnableServiceAccountFactory
       enableServiceAccount.createEnableServiceAccount(gcsDAO, samDAO, cloudProvider)
