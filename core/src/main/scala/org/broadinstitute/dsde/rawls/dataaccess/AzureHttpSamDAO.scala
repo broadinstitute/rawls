@@ -5,6 +5,7 @@ import akka.http.scaladsl.model._
 import bio.terra.common.tracing.OkHttpClientTracingInterceptor
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{Span, Tracing}
+import io.opentelemetry.api.GlobalOpenTelemetry
 import okhttp3.{Interceptor, Protocol, Response}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -38,10 +39,10 @@ class AzureHttpSamDAO(baseSamServiceURL: String, timeout: FiniteDuration)(implic
 
     val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
       .readTimeout(timeout.toJava)
-    ctx.tracingSpan.foreach(span =>
+    ctx.otelContext.foreach(otelContext =>
       okHttpClientWithTracingBuilder
-        .addInterceptor(new DisabledSpanSettingInterceptor(span))
-        .addInterceptor(new OkHttpClientTracingInterceptor(Tracing.getTracer))
+        .addInterceptor(new OtelContextSettingInterceptor(otelContext))
+        .addInterceptor(new OkHttpClientTracingInterceptor(GlobalOpenTelemetry.get()))
     )
 
     val samApiClient = new ApiClient(okHttpClientWithTracingBuilder.protocols(Seq(Protocol.HTTP_1_1).asJava).build())

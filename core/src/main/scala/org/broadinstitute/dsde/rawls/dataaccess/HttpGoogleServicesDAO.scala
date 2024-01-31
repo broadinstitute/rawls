@@ -39,8 +39,6 @@ import com.google.cloud.storage.Storage.BucketSourceOption
 import com.google.cloud.storage.{StorageClass, StorageException}
 import io.opentelemetry.api.common.AttributeKey
 import com.typesafe.config.Config
-import io.opencensus.scala.Tracing._
-import io.opencensus.trace.{AttributeValue, Span}
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
@@ -129,7 +127,6 @@ class HttpGoogleServicesDAO(config:Config,
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory = GsonFactory.getDefaultInstance
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
   val SingleRegionLocationType: String = "region"

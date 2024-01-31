@@ -106,15 +106,15 @@ appDependencies, workbenchMetricBaseName, accessContextManagerDAO) {
                               ): Future[Unit] =
     throw new NotImplementedError("updateBucketIam method is not implemented for Azure.")
 
-  override def setupWorkspace(userInfo: UserInfo,
-                              googleProject: GoogleProjectId,
-                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                              bucketName: GcsBucketName,
-                              labels: Map[String, String],
-                              parentSpan: Span = null,
-                              bucketLocation: Option[String]
-                             ): Future[GoogleWorkspaceInfo] =
-    throw new NotImplementedError("setupWorkspace method is not implemented for Azure.")
+  //override def setupWorkspace(userInfo: UserInfo,
+  //                            googleProject: GoogleProjectId,
+  //                            policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+  //                            bucketName: GcsBucketName,
+  //                            labels: Map[String, String],
+  //                            parentSpan: Span = null,
+  //                            bucketLocation: Option[String]
+  //                           ): Future[GoogleWorkspaceInfo] =
+  //  throw new NotImplementedError("setupWorkspace method is not implemented for Azure.")
 
   override def grantReadAccess(bucketName: String, authBucketReaders: Set[WorkbenchEmail]): Future[String] =
     throw new NotImplementedError("grantReadAccess method is not implemented for Azure.")
@@ -246,14 +246,14 @@ appDependencies, workbenchMetricBaseName, accessContextManagerDAO) {
                                                         ): Future[Seq[RawlsBillingAccount]] =
     throw new NotImplementedError("listBillingAccountsUsingServiceCredential method is not implemented for Azure.")
 
-  override def setBillingAccountName(googleProjectId: GoogleProjectId,
-                                     billingAccountName: RawlsBillingAccountName,
-                                     span: Span = null
-                                    ): Future[ProjectBillingInfo] =
-    throw new NotImplementedError("setBillingAccountName method is not implemented for Azure.")
+  //override def setBillingAccountName(googleProjectId: GoogleProjectId,
+  //                                   billingAccountName: RawlsBillingAccountName,
+  //                                   span: Span = null
+  //                                  ): Future[ProjectBillingInfo] =
+  //  throw new NotImplementedError("setBillingAccountName method is not implemented for Azure.")
 
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] =
-    throw new NotImplementedError("disableBillingOnGoogleProject method is not implemented for Azure.")
+ // override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] =
+ //   throw new NotImplementedError("disableBillingOnGoogleProject method is not implemented for Azure.")
 
   private def updateBillingInfo(googleProjectId: GoogleProjectId,
                                 projectBillingInfo: ProjectBillingInfo,
