@@ -43,7 +43,6 @@ import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemb
 import org.broadinstitute.dsde.workbench.model.google.iam._
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -139,7 +138,6 @@ class FastPassServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
@@ -1071,7 +1069,7 @@ class FastPassServiceSpec
                                                                services.googleIamDAO,
                                                                services.googleStorageDAO,
                                                                None
-        )(executionContext, services.openTelemetry)
+        )(executionContext)
       },
       Duration.Inf
     )
@@ -1213,7 +1211,7 @@ class FastPassServiceSpec
                                                              services.googleIamDAO,
                                                              services.googleStorageDAO,
                                                              None
-      )(executionContext, services.openTelemetry)
+      )(executionContext)
     val project2Removal =
       FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants2,
                                                              testData.workspaceNoAttrs.googleProjectId,
@@ -1221,7 +1219,7 @@ class FastPassServiceSpec
                                                              services.googleIamDAO,
                                                              services.googleStorageDAO,
                                                              None
-      )(executionContext, services.openTelemetry)
+      )(executionContext)
 
     runAndWait(DBIO.seq(project1Removal, project2Removal))
 
@@ -1412,7 +1410,6 @@ class FastPassServiceSpec
       )
     )
     val config = FastPassConfig(true, JavaDuration.ZERO, JavaDuration.ZERO)
-    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
     val iamDAO = spy(new MockGoogleIamDAO)
     val storageDAO = spy(new MockGoogleStorageDAO)
     val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))
@@ -1450,7 +1447,6 @@ class FastPassServiceSpec
       )
     )
     val config = FastPassConfig(true, JavaDuration.ZERO, JavaDuration.ZERO)
-    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
     val iamDAO = spy(new MockGoogleIamDAO)
     val storageDAO = spy(new MockGoogleStorageDAO)
     val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))

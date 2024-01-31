@@ -5,9 +5,8 @@ import akka.http.scaladsl.server.Directives.provide
 import akka.http.scaladsl.server.PathMatchers.Segment
 import akka.http.scaladsl.server.directives.BasicDirectives.{extractRequest, mapResponse}
 import akka.http.scaladsl.server.directives.PathDirectives._
-import akka.http.scaladsl.server.{Directive0, Directive1, PathMatcher, PathMatcher0}
+import akka.http.scaladsl.server.{Directive1, PathMatcher, PathMatcher0}
 import io.opentelemetry.context.Context
-import io.opentelemetry.instrumentation.api.instrumenter.http.{HttpServerRoute, HttpServerRouteSource}
 
 import java.util.concurrent.TimeUnit
 
@@ -57,10 +56,14 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
     ))
 
   private val redactWorkspaceNames =
-    (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(0,
-                                                                                                 Int.MaxValue,
-                                                                                                 separator = Slash
+    (Slash ~ "api").? / "workspaces" / (!("entities" | "id") ~ Segment) / (Segment ~ SegmentIgnore.repeat(0,
+                                                                                                          Int.MaxValue,
+                                                                                                          separator =
+                                                                                                            Slash
     ))
+
+  private val redactWorkspaceId =
+    (Slash ~ "api").? / "workspaces" / "id" / Segment
 
   private val redactAdminBilling =
     (Slash ~ "admin").? / "billing" / Segment / SegmentIgnore / Segment
@@ -85,6 +88,7 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
       redactEntityIds,
       redactMethodConfigs,
       redactWorkspaceNames,
+      redactWorkspaceId,
       redactAdminBilling,
       redactNotifications,
       redactPapiIds
@@ -108,7 +112,6 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
         globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
         httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
         httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
-        HttpServerRoute.update(otelContext, HttpServerRouteSource.CONTROLLER, httpRequestRoute(request))
         response
       } & provide(otelContext)
     }

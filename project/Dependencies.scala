@@ -103,8 +103,6 @@ object Dependencies {
   val workbenchNotifications: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-notifications" % workbenchNotificationsV excludeAll(excludeWorkbenchGoogle)
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
-  val workbenchOpenTelemetry: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV
-  val workbenchOpenTelemetryTests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV classifier "tests"
 
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.9" % "test"
 
@@ -145,6 +143,8 @@ object Dependencies {
   val otelInstrumentationApi: ModuleID = "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api" % openTelemetryVersion
   val otelInstrumentationApiSemconv: ModuleID =
     "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api-semconv" % (openTelemetryVersion + "-alpha")
+  val otelInstrumentationResources: ModuleID =
+    "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryVersion + "-alpha")
   val otelPrometheusExporter: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-prometheus" % (openTelemetryVersion + "-alpha")
 
   // Google cloud open telemetry exporters
@@ -153,6 +153,8 @@ object Dependencies {
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.20"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
@@ -171,7 +173,8 @@ object Dependencies {
     otelInstrumentationApi,
     otelInstrumentationApiSemconv,
     otelPrometheusExporter,
-    googleTraceExporter
+    googleTraceExporter,
+    otelInstrumentationResources
   )
 
   val metricsDependencies = Seq(
@@ -276,12 +279,11 @@ object Dependencies {
     betterMonadicFor,
     workbenchOauth2,
     workbenchOauth2Tests,
-    workbenchOpenTelemetry,
-    workbenchOpenTelemetryTests,
     terraCommonLib,
     sam,
     leonardo,
-    jakartaWsRs
+    jakartaWsRs,
+    openApiParser
   )
 
   val pact4sV = "0.7.0"
