@@ -68,9 +68,10 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
         blocking {
           val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
           val nonErroredApps = allApps.filter(_.getStatus != AppStatus.ERROR)
-          if (nonErroredApps.nonEmpty) {
+          val erroredAppCount = allApps.size - nonErroredApps.size
+          if (erroredAppCount > 0) {
             logger.info(
-              s"Filtering out ${allApps.size - nonErroredApps.size} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
+              s"Filtering out ${erroredAppCount} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
             )
           }
           nonErroredApps
@@ -86,9 +87,12 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
         blocking {
           val allRuntimes = leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
           val nonErroredRuntimes = allRuntimes.filter(_.getStatus != ClusterStatus.ERROR)
-          logger.info(
-            s"Filtering out ${allRuntimes.size - nonErroredRuntimes.size} errored runtimes for [workspaceId=${workspace.workspaceIdAsUUID}]"
-          )
+          val erroredRuntimeCount = allRuntimes.size - nonErroredRuntimes.size
+          if (erroredRuntimeCount > 0) {
+            logger.info(
+              s"Filtering out ${erroredRuntimeCount} errored runtimes for [workspaceId=${workspace.workspaceIdAsUUID}]"
+            )
+          }
           nonErroredRuntimes
         }
       }
