@@ -8,7 +8,12 @@ import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  AppStatus,
+  ClusterStatus,
+  ListAppResponse,
+  ListRuntimeResponse
+}
 
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
@@ -26,6 +31,7 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = checker(workspace, ctx).transformWith {
     case Failure(t: ApiException) =>
+      logger.info("PollOperation (success): Got ApiException when polling Leonardo resources", t)
       if (t.getCode == StatusCodes.Forbidden.intValue) {
         // leo gives back a 403 when the workspace is gone
         logger.warn(s"403 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
@@ -36,43 +42,64 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
       } else {
         Future.failed(t)
       }
-    case Failure(t)                               => Future.failed(t)
-    case Success(resources) if resources.nonEmpty => Future.successful(false)
-    case Success(_)                               => Future.successful(true)
+    case Failure(t) =>
+      logger.info("PollOperation (failure): Got exception when polling Leonardo resources", t)
+      Future.failed(t)
+    case Success(resources) if resources.nonEmpty =>
+      logger.info(
+        s"PollOperation (failure): Found non-empty resources when polling Leonardo resources [workspaceId=${workspace.workspaceId}]",
+        resources
+      )
+      Future.successful(false) // It's OK if they are nonEmpty as long as the status of all is ERROR.
+    case Success(_) =>
+      logger.info(
+        s"PollOperation (success): Found empty resources when polling Leonardo resources [workspaceId=${workspace.workspaceId}]"
+      )
+      Future.successful(true)
   }
 
   def pollRuntimeDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     logger.info(s"Polling runtime deletion [workspaceId=${workspace.workspaceId}]")
-    pollOperation[ListRuntimeResponse](workspace, ctx, listAzureRuntimes)
+    pollOperation[ListRuntimeResponse](workspace, ctx, listNonErroredAzureRuntimes)
   }
 
   def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     logger.info(s"Polling app deletion [workspaceId=${workspace.workspaceId}]")
-    pollOperation[ListAppResponse](workspace, ctx, listApps)
+    pollOperation[ListAppResponse](workspace, ctx, listNonErroredApps)
   }
 
-  def listApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+  def listNonErroredApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListAppResponse]] =
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val nonErroredApps = allApps.filter(_.getStatus != AppStatus.ERROR)
+          logger.info(
+            s"Filtering out ${allApps.size - nonErroredApps.size} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
+          )
+          nonErroredApps
         }
       }
     }
 
-  def listAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+  def listNonErroredAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListRuntimeResponse]] =
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val allRuntimes = leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val nonErroredRuntimes = allRuntimes.filter(_.getStatus != ClusterStatus.ERROR)
+          logger.info(
+            s"Filtering out ${allRuntimes.size - nonErroredRuntimes.size} errored runtimes for [workspaceId=${workspace.workspaceIdAsUUID}]"
+          )
+          nonErroredRuntimes
         }
       }
     }
