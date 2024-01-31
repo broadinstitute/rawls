@@ -106,7 +106,6 @@ appDependencies, workbenchMetricBaseName, accessContextManagerDAO) {
                               ): Future[Unit] =
     throw new NotImplementedError("updateBucketIam method is not implemented for Azure.")
 
-
   //override def setupWorkspace(userInfo: UserInfo,
   //                            googleProject: GoogleProjectId,
   //                            policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
