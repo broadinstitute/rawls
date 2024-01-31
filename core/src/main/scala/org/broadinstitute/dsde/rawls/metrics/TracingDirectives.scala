@@ -8,7 +8,7 @@ import io.opentelemetry.api.trace.Span
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
-import io.opentelemetry.instrumentation.api.instrumenter.http._
+import io.opentelemetry.instrumentation.api.instrumenter.http.{HttpSpanNameExtractor, _}
 
 import java.util
 import scala.jdk.CollectionConverters._
@@ -18,7 +18,10 @@ trait TracingDirectives {
   // lazy to make sure GlobalOpenTelemetry is initialized
   private lazy val instrumenter: Instrumenter[HttpRequest, HttpResponse] =
     Instrumenter
-      .builder[HttpRequest, HttpResponse](GlobalOpenTelemetry.get(), "RawlsRequest", req => req.uri.path.toString())
+      .builder[HttpRequest, HttpResponse](GlobalOpenTelemetry.get(),
+                                          "RawlsRequest",
+                                          HttpSpanNameExtractor.builder(AkkaHttpServerAttributesGetter).build()
+      )
       .addAttributesExtractor(
         HttpServerAttributesExtractor.create[HttpRequest, HttpResponse](AkkaHttpServerAttributesGetter)
       )
@@ -36,21 +39,12 @@ trait TracingDirectives {
       val context = Context.current();
       if (instrumenter.shouldStart(context, req)) {
         val newContext = instrumenter.start(context, req)
-        updateHttpRoute(req, newContext)
         recordSuccess(instrumenter, newContext, req) &
           recordException(instrumenter, newContext, req) &
           provide(newContext)
       } else {
         provide(Context.current())
       }
-    }
-
-  private def updateHttpRoute(req: HttpRequest, newContext: Context): Unit =
-    SwaggerRouteMatcher.matchRoute(req.uri.path.toString).foreach { matchedRoute =>
-      matchedRoute.parametersByName.foreach { case (name, value) =>
-        Span.fromContext(newContext).setAttribute(s"param.$name", value)
-      }
-      HttpServerRoute.update(newContext, HttpServerRouteSource.CONTROLLER, matchedRoute.route)
     }
 
   private def recordSuccess(instrumenter: Instrumenter[HttpRequest, HttpResponse],
@@ -82,7 +76,8 @@ object AkkaHttpServerAttributesGetter extends HttpServerAttributesGetter[HttpReq
 
   /** Defaults to the path of the request. Overridden by the `addTelemetry` directive.
    */
-  override def getHttpRoute(request: HttpRequest): String = getUrlPath(request)
+  override def getHttpRoute(request: HttpRequest): String =
+    SwaggerRouteMatcher.matchRoute(getUrlPath(request)).map(_.route).getOrElse(getUrlPath(request))
 
   override def getHttpRequestMethod(request: HttpRequest): String = request.method.value
 

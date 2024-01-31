@@ -143,6 +143,8 @@ object Dependencies {
   val otelInstrumentationApi: ModuleID = "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api" % openTelemetryVersion
   val otelInstrumentationApiSemconv: ModuleID =
     "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api-semconv" % (openTelemetryVersion + "-alpha")
+  val otelInstrumentationResources: ModuleID =
+    "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryVersion + "-alpha")
   val otelPrometheusExporter: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-prometheus" % (openTelemetryVersion + "-alpha")
 
   // Google cloud open telemetry exporters
@@ -171,7 +173,8 @@ object Dependencies {
     otelInstrumentationApi,
     otelInstrumentationApiSemconv,
     otelPrometheusExporter,
-    googleTraceExporter
+    googleTraceExporter,
+    otelInstrumentationResources
   )
 
   val metricsDependencies = Seq(
