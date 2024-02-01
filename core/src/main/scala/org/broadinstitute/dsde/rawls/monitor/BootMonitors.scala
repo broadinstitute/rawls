@@ -64,7 +64,7 @@ object BootMonitors extends LazyLogging {
   def bootMonitors(system: ActorSystem,
                    conf: Config,
                    slickDataSource: SlickDataSource,
-                   gcsDAO: HttpGoogleServicesDAO,
+                   gcsDAO: GoogleServicesDAO,
                    googleIamDAO: GoogleIamDAO,
                    googleStorageDAO: GoogleStorageDAO,
                    samDAO: SamDAO,
@@ -490,7 +490,7 @@ object BootMonitors extends LazyLogging {
 
   private def startMultiregonalBucketMigrationActor(system: ActorSystem,
                                                     config: Config,
-                                                    gcsDAO: HttpGoogleServicesDAO,
+                                                    gcsDAO: GoogleServicesDAO,
                                                     googleIamDAO: GoogleIamDAO,
                                                     dataSource: SlickDataSource,
                                                     workspaceService: RawlsRequestContext => WorkspaceService,

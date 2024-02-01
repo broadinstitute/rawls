@@ -30,6 +30,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   val billingEmail: String
   val billingGroupEmail: String
+  def adminGroupName: String
+  def curatorGroupName: String
 
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],

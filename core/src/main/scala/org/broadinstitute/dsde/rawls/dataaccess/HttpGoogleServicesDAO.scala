@@ -38,11 +38,10 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
 import com.google.cloud.storage.{StorageClass, StorageException}
 import io.opentelemetry.api.common.AttributeKey
-import com.typesafe.config.Config
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
-import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities, HttpGoogleAccessContextManagerDAO}
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -53,9 +52,8 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   traceFutureWithParent,
   traceNakedWithParent
 }
-import org.broadinstitute.dsde.rawls.util.ScalaConfig.EnhancedScalaConfig
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
-import org.broadinstitute.dsde.rawls.{AppDependencies, RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{ RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
@@ -73,41 +71,35 @@ import scala.concurrent._
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
-class HttpGoogleServicesDAO(config:Config,
+class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
+                            clientEmail: String,
+                            subEmail: String,
+                            pemFile: String,
+                            appsDomain: String,
+                            groupsPrefix: String,
+                            appName: String,
+                            serviceProject: String,
+                            billingPemEmail: String,
+                            billingPemFile: String,
+                            val billingEmail: String,
+                            val billingGroupEmail: String,
                             maxPageSize: Int = 200,
-                            appDependencies: AppDependencies[IO],
+                            googleStorageService: GoogleStorageService[IO],
                             override val workbenchMetricBaseName: String,
-                            override val accessContextManagerDAO: AccessContextManagerDAO
-)(implicit
-  val system: ActorSystem,
-  val materializer: Materializer,
-  implicit val executionContext: ExecutionContext,
-  implicit val timer: Temporal[IO]
-) extends GoogleServicesDAO(config.getString("groupsPrefix"))
-    with FutureSupport
-    with GoogleUtilities
-    {
+                            proxyNamePrefix: String,
+                            terraBucketReaderRole: String,
+                            terraBucketWriterRole: String,
+                            override val accessContextManagerDAO: AccessContextManagerDAO,
+                            resourceBufferJsonFile: String
+                           )(implicit
+                             val system: ActorSystem,
+                             val materializer: Materializer,
+                             implicit val executionContext: ExecutionContext,
+                             implicit val timer: Temporal[IO]
+                           ) extends GoogleServicesDAO(groupsPrefix)
+  with FutureSupport
+  with GoogleUtilities {
   val http = Http(system)
-
-  val clientEmail = config.getString("serviceClientEmail")
-  val subEmail = config.getString("subEmail")
-  val pemFile = config.getString("pathToPem")
-  val appsDomain = config.getString("appsDomain")
-  val groupsPrefix = config.getString("groupsPrefix")
-  val appName = config.getString("appName")
-  val serviceProject = config.getString("serviceProject")
-  val billingPemEmail = config.getString("billingPemEmail")
-  val billingPemFile = config.getString("pathToBillingPem")
-  val billingEmail = config.getString("billingEmail")
-  val billingGroupEmail = config.getString("billingGroupEmail")
-  val googleStorageService = appDependencies.googleStorageService
-  val proxyNamePrefix = config.getStringOr("proxyNamePrefix", "")
-  val terraBucketReaderRole = config.getString("terraBucketReaderRole")
-  val terraBucketWriterRole = config.getString("terraBucketWriterRole")
-  val resourceBufferJsonFile = config.getString("pathToResourceBufferJson")
-      val jsonFactory = GsonFactory.getDefaultInstance
-  val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(config.getString("secrets")))
-
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
@@ -127,12 +119,12 @@ class HttpGoogleServicesDAO(config:Config,
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
+  val jsonFactory = GsonFactory.getDefaultInstance
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
   val SingleRegionLocationType: String = "region"
 
   val REQUESTER_PAYS_ERROR_SUBSTRINGS = Seq("requester pays", "UserProjectMissing")
-
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
