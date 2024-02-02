@@ -375,9 +375,9 @@ object Boot extends IOApp with LazyLogging {
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO =
-        new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+        MultiCloudResourceBufferDAOFactory.createResourceBuffer(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential, cloudProvider)
 
-      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+      val resourceBufferService = MultiCloudResourceBufferServiceFactory.createResourceBufferService(resourceBufferDAO, resourceBufferConfig, cloudProvider)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
       val leonardoConfig = LeonardoConfig(conf.getConfig("leonardo"))

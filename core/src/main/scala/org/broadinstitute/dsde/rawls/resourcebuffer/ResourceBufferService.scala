@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.resourcebuffer
 
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
+import org.broadinstitute.dsde.rawls.dataaccess.ResourceBuffer
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId, ProjectPoolType}
@@ -13,7 +14,8 @@ object ResourceBufferService {
   ): ResourceBufferService =
     new ResourceBufferService(resourceBufferDAO, config)
 }
-class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig) {
+class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig)
+  extends ResourceBuffer{
 
   def getGoogleProjectFromBuffer(projectPoolType: ProjectPoolType = ProjectPoolType.Regular,
                                  handoutRequestId: String
