@@ -355,8 +355,9 @@ object Boot extends IOApp with LazyLogging {
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
 
       val bondApiDAO: BondApiDAO = MultiCloudBondApiDAOFactory.createMultiCloudBondApiDAO(conf, cloudProvider)
-      val requesterPaysSetupService: RequesterPaysSetupService =
-        new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
+
+      val requesterPaysSetupService: RequesterPaysSetup =
+        MultiCloudRequesterPaysSetupServiceFactory.createAccessContextManager(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole, cloudProvider)
 
       val entityQueryTimeout = conf.getDuration("entities.queryTimeout")
 

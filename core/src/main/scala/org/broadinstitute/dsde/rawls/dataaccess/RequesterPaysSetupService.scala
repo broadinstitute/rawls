@@ -11,7 +11,8 @@ class RequesterPaysSetupService(dataSource: SlickDataSource,
                                 val googleServicesDAO: GoogleServicesDAO,
                                 val bondApiDAO: BondApiDAO,
                                 val requesterPaysRole: String
-)(implicit executionContext: ExecutionContext) {
+)(implicit executionContext: ExecutionContext)
+  extends RequesterPaysSetup {
 
   def getBondProviderServiceAccountEmails(userInfo: UserInfo): Future[List[BondServiceAccountEmail]] =
     for {
