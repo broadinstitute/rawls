@@ -10,7 +10,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -78,7 +78,7 @@ object WorkspaceService {
                   samDAO: SamDAO,
                   notificationDAO: NotificationDAO,
                   userServiceConstructor: RawlsRequestContext => UserService,
-                  genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
+                  genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest,
                   maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int,
                   workbenchMetricBaseName: String,
@@ -190,7 +190,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val samDAO: SamDAO,
                        notificationDAO: NotificationDAO,
                        userServiceConstructor: RawlsRequestContext => UserService,
-                       genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
+                       genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest,
                        maxActiveWorkflowsTotal: Int,
                        maxActiveWorkflowsPerUser: Int,
                        override val workbenchMetricBaseName: String,

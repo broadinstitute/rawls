@@ -24,7 +24,8 @@ class GenomicsService(protected val ctx: RawlsRequestContext,
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
-    with UserWiths {
+    with UserWiths
+    with GenomicsServiceRequest{
 
   def getOperation(jobId: String): Future[Option[JsObject]] =
     gcsDAO.getGenomicsOperation(jobId)

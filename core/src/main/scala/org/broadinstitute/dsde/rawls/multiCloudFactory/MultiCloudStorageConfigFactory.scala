@@ -4,9 +4,9 @@ import com.typesafe.config.Config
 object MultiCloudStorageConfigFactory {
   def createStorageConfiguration(config:Config, cloudProvider: String): Config = {
     cloudProvider match {
-      //azure config has not been created yet
+      //azure config has not been created yet - needs to be updated
       case "azure" =>
-        config.getConfig("azureStorage")
+        config.getConfig("gcs")
       case "gcp" =>
         config.getConfig("gcs")
     }

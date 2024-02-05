@@ -21,7 +21,7 @@ import io.opentelemetry.exporter.prometheus.PrometheusHttpServer
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
-import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
+import io.opentelemetry.sdk.{OpenTelemetrySdk, resources}
 import io.opentelemetry.sdk.trace.samplers.Sampler
 import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
@@ -41,7 +41,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResol
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.multiCloudFactory._
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
@@ -272,7 +272,7 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
       //Todo: need to fix genomics
-      val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
+      val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest =
         MultiCloudGenomicsServiceFactory.createMultiCloudGenomicsService(slickDataSource, gcsDAO, cloudProvider)
 
       val submissionCostService = MultiCloudSubmissionCostServiceFactory.createMultiCloudSubmissionCostService(bigQueryDAO, gcsConfig,cloudProvider)

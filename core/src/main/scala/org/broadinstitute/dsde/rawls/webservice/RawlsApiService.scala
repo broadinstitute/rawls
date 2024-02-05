@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceRequest
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
@@ -111,7 +111,7 @@ trait RawlsApiService
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val userServiceConstructor: RawlsRequestContext => UserService
-  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService
+  val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator
@@ -212,7 +212,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
                           val entityServiceConstructor: RawlsRequestContext => EntityService,
                           val userServiceConstructor: RawlsRequestContext => UserService,
-                          val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
+                          val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest,
                           val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
                           val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
                           val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
