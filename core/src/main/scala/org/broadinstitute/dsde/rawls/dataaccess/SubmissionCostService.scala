@@ -33,7 +33,8 @@ class SubmissionCostService(defaultTableName: String,
                             billingSearchWindowDays: Int,
                             bigQueryDAO: GoogleBigQueryDAO
 )(implicit val executionContext: ExecutionContext)
-    extends LazyLogging {
+    extends LazyLogging
+    with SubmissionCost {
 
   val stringParamType = new QueryParameterType().setType("STRING")
 

@@ -271,7 +271,7 @@ object Boot extends IOApp with LazyLogging {
         new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
         multiCloudWorkspaceConfig
       )
-      //Todo: need to fix genomics
+
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest =
         MultiCloudGenomicsServiceFactory.createMultiCloudGenomicsService(slickDataSource, gcsDAO, cloudProvider)
 
