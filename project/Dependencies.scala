@@ -133,7 +133,7 @@ object Dependencies {
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
 
   // OpenTelemetry
-  val openTelemetryVersion = "1.31.0"
+  val openTelemetryVersion = "1.32.1"
   val otelApi: ModuleID = "io.opentelemetry" % "opentelemetry-api" % openTelemetryVersion
   val otelSdk: ModuleID = "io.opentelemetry" % "opentelemetry-sdk" % openTelemetryVersion
   val otelSdkMetrics: ModuleID = "io.opentelemetry" % "opentelemetry-sdk-metrics" % openTelemetryVersion
