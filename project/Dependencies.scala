@@ -148,7 +148,7 @@ object Dependencies {
   val otelPrometheusExporter: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-prometheus" % (openTelemetryVersion + "-alpha")
 
   // Google cloud open telemetry exporters
-  var gcpOpenTelemetryExporterVersion = "0.25.2"
+  var gcpOpenTelemetryExporterVersion = "0.27.0"
   var googleTraceExporter: ModuleID = "com.google.cloud.opentelemetry" % "exporter-trace" % gcpOpenTelemetryExporterVersion
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
