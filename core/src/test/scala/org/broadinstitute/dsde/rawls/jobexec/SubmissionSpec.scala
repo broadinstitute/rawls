@@ -39,7 +39,6 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -421,7 +420,6 @@ class SubmissionSpec(_system: ActorSystem)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster =
         MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
-      implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
       val config =
         SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false)

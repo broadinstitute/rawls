@@ -7,7 +7,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
@@ -31,9 +31,9 @@ trait AdminApiService extends UserInfoDirectives {
   val userServiceConstructor: RawlsRequestContext => UserService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
-  val adminRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  def adminRoutes(otelContext: Context = Context.root()): server.Route = {
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("admin" / "billing" / Segment) { projectId =>
         delete {
           entity(as[Map[String, String]]) { ownerInfo =>

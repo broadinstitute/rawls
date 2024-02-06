@@ -42,7 +42,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceState,
   WorkspaceType
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.{DateTime, DateTimeZone}
@@ -50,7 +50,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.jdk.CollectionConverters.{ListHasAsScala, _}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -222,15 +222,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                        parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] =
     for {
-      billingProject <- traceWithParent("getBillingProjectContext", parentContext) { s =>
+      billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext) { s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       }
 
-      _ <- traceWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
+      _ <- traceFutureWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
         requireCreateWorkspaceAction(billingProject.projectName, childContext)
       }
 
-      billingProfileOpt <- traceWithParent("getBillingProfile", parentContext) { s =>
+      billingProfileOpt <- traceFutureWithParent("getBillingProfile", parentContext) { s =>
         getBillingProfile(billingProject, s)
       }
 
@@ -242,7 +242,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           Option(profileModel.getCloudPlatform)
             .filter(_ == CloudPlatform.AZURE)
             .traverse { _ =>
-              traceWithParent("createMultiCloudWorkspace", parentContext) { s =>
+              traceFutureWithParent("createMultiCloudWorkspace", parentContext) { s =>
                 createMultiCloudWorkspace(
                   workspaceRequest,
                   profileModel,
@@ -259,7 +259,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       workspace <- workspaceOpt.flatten
         .map(Future.successful)
         .getOrElse(
-          traceWithParent("createWorkspace", parentContext) { s =>
+          traceFutureWithParent("createWorkspace", parentContext) { s =>
             workspaceService.createWorkspace(workspaceRequest, s)
           }
         )
@@ -289,7 +289,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           )
 
         // fail if the billing project lists a billing profile that doesn't exist
-        profileModel <- traceWithParent("getBillingProfile", parentContext) { s =>
+        profileModel <- traceFutureWithParent("getBillingProfile", parentContext) { s =>
           Future(blocking {
             billingProfileManagerDAO
               .getBillingProfile(profileId, s)
@@ -318,14 +318,14 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       clone <- (sourceWs.workspaceType, billingProfileOpt) match {
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
-          traceWithParent("cloneAzureWorkspace", ctx) { s =>
+          traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
             cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
           }
 
         case (RawlsWorkspace, profileOpt)
             if profileOpt.isEmpty ||
               profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
-          traceWithParent("cloneRawlsWorkspace", ctx) { s =>
+          traceFutureWithParent("cloneRawlsWorkspace", ctx) { s =>
             wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
           }
 
@@ -360,7 +360,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       newWorkspace <- createNewWorkspaceRecord(workspaceId, request, parentContext)
 
       containerCloneResult <- (for {
-        cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
+        cloneResult <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
           Future(blocking {
             workspaceManagerDAO.cloneWorkspace(
               sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
@@ -376,7 +376,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         _ = logger.info(
           s"Polling on workspace clone in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]"
         )
-        _ <- traceWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
+        _ <- traceFutureWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
           pollWMOperation(workspaceId,
                           jobControlId,
                           context,
@@ -390,7 +390,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
         )
-        containerCloneResult <- traceWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
+        containerCloneResult <- traceFutureWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
           context =>
             cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID,
                                            workspaceId,
@@ -494,7 +494,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   ): Future[Workspace] = {
     assertBillingProfileCreationDate(profile)
 
-    traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
+    traceFutureWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
       createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
         createdMultiCloudWorkspaceCounter.inc()
       }
@@ -524,11 +524,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     getWorkspaceFromWsm(workspaceId, ctx).getOrElse(return Future.successful())
     for {
       // kick off the deletion job w/WSM
-      deletionJobResult <- traceWithParent("deleteWorkspaceInWSM", ctx)(_ =>
+      deletionJobResult <- traceFutureWithParent("deleteWorkspaceInWSM", ctx)(_ =>
         Future(workspaceManagerDAO.deleteWorkspaceV2(workspaceId, UUID.randomUUID().toString, ctx))
       )
       deletionJobId = deletionJobResult.getJobReport.getId
-      _ <- traceWithParent("pollWorkspaceDeletionInWSM", ctx) { _ =>
+      _ <- traceFutureWithParent("pollWorkspaceDeletionInWSM", ctx) { _ =>
         pollWMOperation(workspaceId,
                         deletionJobId,
                         ctx,
@@ -596,12 +596,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
 
       _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
-      savedWorkspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
+      savedWorkspace <- traceFutureWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
         createNewWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
       )
 
       _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
+      _ <- traceFutureWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
         Future(
           workspaceManagerDAO.createWorkspaceWithSpendProfile(
             workspaceId,
@@ -615,14 +615,14 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       }
       _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
-      cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
+      cloudContextCreateResult <- traceFutureWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
         )
       )
       jobControlId = cloudContextCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
-      _ <- traceWithParent("pollGetCloudContextCreationStatusInWSM", parentContext)(_ =>
+      _ <- traceFutureWithParent("pollGetCloudContextCreationStatusInWSM", parentContext)(_ =>
         pollWMOperation(workspaceId,
                         cloudContextCreateResult.getJobReport.getId,
                         ctx,
@@ -633,7 +633,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
+      containerResult <- traceFutureWithParent("createStorageContainer", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createAzureStorageContainer(
             workspaceId,
@@ -814,7 +814,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case _ =>
         // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
         logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
-        traceWithParent("createWDSInstance", parentContext)(_ =>
+        traceFutureWithParent("createWDSInstance", parentContext)(_ =>
           Future(
             leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
           )

@@ -7,7 +7,6 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
-import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -44,7 +43,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                      policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                      bucketName: GcsBucketName,
                      labels: Map[String, String],
-                     parentSpan: Span = null,
+                     requestContext: RawlsRequestContext,
                      bucketLocation: Option[String]
   ): Future[GoogleWorkspaceInfo]
 
@@ -154,18 +153,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def setBillingAccountName(googleProjectId: GoogleProjectId,
                             billingAccountName: RawlsBillingAccountName,
-                            span: Span = null
+                            tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo]
 
-  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
+  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo]
 
   def setBillingAccount(googleProjectId: GoogleProjectId,
                         billingAccountName: Option[RawlsBillingAccountName],
-                        span: Span = null
+                        tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo] =
     billingAccountName match {
-      case Some(accountName) => setBillingAccountName(googleProjectId, accountName, span)
-      case None              => disableBillingOnGoogleProject(googleProjectId)
+      case Some(accountName) => setBillingAccountName(googleProjectId, accountName, tracingContext)
+      case None              => disableBillingOnGoogleProject(googleProjectId, tracingContext)
     }
 
   def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit

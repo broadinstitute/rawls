@@ -4,7 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective._
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -23,9 +23,9 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
   val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
-  val workspaceRoutesV2: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  def workspaceRoutesV2(otelContext: Context = Context.root()): server.Route = {
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("workspaces" / "v2") {
         pathPrefix(Segment / Segment) { (namespace, name) =>
           val workspaceName = WorkspaceName(namespace, name)

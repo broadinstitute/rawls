@@ -8,7 +8,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.{EntityService, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
@@ -37,9 +37,9 @@ trait EntityApiService extends UserInfoDirectives {
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val batchUpsertMaxBytes: Long
 
-  val entityRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  def entityRoutes(otelContext: Context = Context.root()): server.Route = {
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       parameters("dataReference".?, "billingProject".?) { (dataReferenceString, billingProjectString) =>
         val dataReference = dataReferenceString.map(DataReferenceName)
         val billingProject = billingProjectString.map(GoogleProjectId)

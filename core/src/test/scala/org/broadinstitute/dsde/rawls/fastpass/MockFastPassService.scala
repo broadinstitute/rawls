@@ -20,7 +20,6 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{doAnswer, doReturn, spy}
 
@@ -43,8 +42,7 @@ object MockFastPassService {
             terraBucketReaderRole: String,
             terraBucketWriterRole: String
   )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
-    executionContext: ExecutionContext,
-    openTelemetry: OpenTelemetryMetrics[IO]
+    executionContext: ExecutionContext
   ): (FastPassService, GoogleServicesDAO, SamDAO) = {
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
 
