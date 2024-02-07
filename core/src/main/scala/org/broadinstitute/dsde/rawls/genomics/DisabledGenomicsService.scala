@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.genomics
 
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import spray.json.JsObject
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 object DisabledGenomicsService {
   def constructor()(ctx: RawlsRequestContext) =

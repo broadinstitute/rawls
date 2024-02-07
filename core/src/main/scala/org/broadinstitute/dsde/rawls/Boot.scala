@@ -39,7 +39,7 @@ import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
+import org.broadinstitute.dsde.rawls.fastpass.{FastPassService, FastPass}
 import org.broadinstitute.dsde.rawls.multiCloudFactory._
 import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -374,12 +374,10 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
-      val resourceBufferDAO: ResourceBufferDAO =
-        MultiCloudResourceBufferDAOFactory.createResourceBuffer(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential, cloudProvider)
+      val resourceBufferDAO: ResourceBufferDAO = MultiCloudResourceBufferDAOFactory.createResourceBuffer(conf, gcsDAO.getResourceBufferServiceAccountCredential, cloudProvider)
 
-      val resourceBufferService = MultiCloudResourceBufferServiceFactory.createResourceBufferService(resourceBufferDAO, resourceBufferConfig, cloudProvider)
-      val resourceBufferSaEmail = resourceBufferConfig.saEmail
+      val resourceBufferService = MultiCloudResourceBufferServiceFactory.createResourceBufferService(resourceBufferDAO, conf, cloudProvider)
+      val resourceBufferSaEmail = MultiCloudResourceBufferEmailManager.getMultiCloudResourceBufferEmail(conf, cloudProvider)
 
       val leonardoConfig = LeonardoConfig(conf.getConfig("leonardo"))
       val leonardoDAO: LeonardoDAO =
@@ -396,19 +394,15 @@ object Boot extends IOApp with LazyLogging {
           metricsPrefix
         )
 
-      val fastPassConfig = FastPassConfig.apply(conf)
-      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService =
-        FastPassService.constructor(
-          fastPassConfig,
-          appDependencies.httpGoogleIamDAO,
-          appDependencies.httpGoogleStorageDAO,
+      //val fastPassConfig = FastPassConfig.apply(conf)
+      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass =
+        MultiCloudFastPassServiceConstructorFactory.createCloudFastPassService(
+          conf,
+          appDependencies,
           gcsDAO,
           samDAO,
-          terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
-          terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
-          terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
-          terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
-          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
+          gcsConfig,
+          cloudProvider
         )
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(

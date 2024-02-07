@@ -6,7 +6,7 @@ object MultiCloudStorageConfigFactory {
     cloudProvider match {
       //azure config has not been created yet - needs to be updated
       case "azure" =>
-        config.getConfig("gcs")
+        config.getConfig("azure")
       case "gcp" =>
         config.getConfig("gcs")
     }
