@@ -75,16 +75,19 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     }
   }
 
-  it should "be testing against MySQL 8.0.35" in withEmptyTestDatabase {
+  // The docker version installed on DSP Jenkins does not like the "mysql" docker image, so we use "mysql/mysql-server"
+  //    instead, which only has a 8.0.32 tag. See /docker/run-mysql.sh.
+  //    TODO: Move to mysql:8.0.35 once we no longer depend on Jenkins.
+  it should "be testing against MySQL 8.0.32" in withEmptyTestDatabase {
     val versionLookup =
       runAndWait(sql"""select version();""".as[String])
     versionLookup should have size 1
     val actual = versionLookup.head
     info(s"actual version string: $actual")
     withClue(
-      "is the mysql against which these unit tests running 8.0.35?"
+      "is the mysql against which these unit tests running 8.0.32?"
     ) {
-      actual should startWith("8.0.35")
+      actual should startWith("8.0.32")
     }
   }
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# TODO davidan: is the following comment still true?
 # The docker version installed on DSP Jenkins does not like the "mysql" docker image, so we use "mysql/mysql-server"
-#     instead. Re-evaluate this sometime after Jenkins is no longer in use.
-MYSQL_IMAGE=mysql
-MYSQL_VERSION=8.0.35
+#     instead.
+#     TODO: Move to mysql:8.0.35 once we no longer depend on Jenkins.
+MYSQL_IMAGE=mysql/mysql-server
+MYSQL_VERSION=8.0.32
 start() {
 
 
