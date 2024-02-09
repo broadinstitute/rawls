@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# The CloudSQL console simply states "MySQL 5.7" so we may not match the minor version number
 # The docker version installed on DSP Jenkins does not like the "mysql" docker image, so we use "mysql/mysql-server"
-#     instead. Re-evaluate this sometime after Jenkins is no longer in use.
+#     instead.
+#     TODO: Move to mysql:8.0.35 once we no longer depend on Jenkins.
 MYSQL_IMAGE=mysql/mysql-server
-MYSQL_VERSION=5.7
+MYSQL_VERSION=8.0.32
 start() {
 
 
@@ -21,7 +21,8 @@ start() {
                   -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb \
                   -d -p 3310:3306 $MYSQL_IMAGE:$MYSQL_VERSION \
                   --character-set-server=utf8 \
-                  --binlog-format=ROW \
+                  --collation_server=utf8_general_ci \
+                  --sql_mode=STRICT_ALL_TABLES \
                   --log_bin_trust_function_creators=ON
 
     # validate mysql
