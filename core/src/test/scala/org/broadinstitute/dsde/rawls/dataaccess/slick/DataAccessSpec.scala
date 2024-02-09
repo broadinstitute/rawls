@@ -32,11 +32,14 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     }
   }
 
-  it should "use utf8 for MySQL's character_set_server" in withEmptyTestDatabase {
+  it should "use utf8mb3 (via the utf8 alias) for MySQL's character_set_server" in withEmptyTestDatabase {
     /* Our live-environment CloudSQL instances, including production, use character_set_server=utf8.
        This setting is critical for SQL queries that specify/override a collation, such as to make a
        case-sensitive query against a column that is case-insensitive by default, e.g. the column
        uses utf8_general_ci collation.
+
+       In MySQL 8, "utf8" is an alias for "utf8mb3". So, while we specify "utf8" because CloudSQL restricts our options,
+       MySQL reports that it is running with "utf8mb3". This test looks for a value of "utf8mb3".
 
        A failure of this test likely means that our test environment is not set up correctly; the mysql
        instance used by tests does not have the right setting. If the test-instance mysql is not set up
@@ -50,20 +53,41 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     withClue(
       "is the mysql against which these unit tests ran set up correctly with --character-set-server=utf8 or equivalent?"
     ) {
-      actual shouldBe "utf8"
+      actual shouldBe "utf8mb3"
     }
   }
 
-  it should "be testing against MySQL 5.7" in withEmptyTestDatabase {
+  it should "use utf8mb3_general_ci (via the utf8_general_ci alias) for MySQL's collation_server" in withEmptyTestDatabase {
+    /* See previous test for more details. utf8_general_ci is the collation associated with a character set of utf8.
+
+       Similar to how "utf8" is an alias for "utf8mb3", "utf8_general_ci" is an alias for "utf8mb3_general_ci". So, this
+       test looks for "utf8mb3_general_ci".
+     */
+    val collationLookup =
+      runAndWait(sql"""SHOW VARIABLES WHERE Variable_name = 'collation_server';""".as[(String, String)])
+    collationLookup should have size 1
+    val actual = collationLookup.head._2
+    info(s"actual collation set: $actual")
+    withClue(
+      "is the mysql against which these unit tests ran set up correctly with --collation_server=utf8_general_ci or equivalent?"
+    ) {
+      actual shouldBe "utf8mb3_general_ci"
+    }
+  }
+
+  // The docker version installed on DSP Jenkins does not like the "mysql" docker image, so we use "mysql/mysql-server"
+  //    instead, which only has a 8.0.32 tag. See /docker/run-mysql.sh.
+  //    TODO: Move to mysql:8.0.35 once we no longer depend on Jenkins.
+  it should "be testing against MySQL 8.0.32" in withEmptyTestDatabase {
     val versionLookup =
       runAndWait(sql"""select version();""".as[String])
     versionLookup should have size 1
     val actual = versionLookup.head
     info(s"actual version string: $actual")
     withClue(
-      "is the mysql against which these unit tests running 5.7?"
+      "is the mysql against which these unit tests running 8.0.32?"
     ) {
-      actual should startWith("5.7")
+      actual should startWith("8.0.32")
     }
   }
 
