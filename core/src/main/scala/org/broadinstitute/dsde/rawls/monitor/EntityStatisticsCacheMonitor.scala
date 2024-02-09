@@ -4,6 +4,7 @@ import akka.actor._
 import akka.pattern.pipe
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
@@ -112,7 +113,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
   final val isolationLevel: TransactionIsolation = TransactionIsolation.ReadCommitted
 
   def sweep(): Future[EntityStatisticsCacheMessage] =
-    trace("EntityStatisticsCacheMonitor.sweep") { rootContext =>
+    traceFuture("EntityStatisticsCacheMonitor.sweep") { rootContext =>
       dataSource.inTransaction(
         { dataAccess =>
           // calculate now - workspaceCooldown as the upper bound for workspace last_modified
@@ -125,9 +126,8 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
               // and failing to update the same workspace - until all we have left as candidates are un-updatable workspaces
               val (workspaceId, lastModified, cacheLastUpdated) =
                 candidates.toArray.apply(scala.util.Random.nextInt(candidates.size))
-              rootContext.tracingSpan.foreach(
-                _.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId.toString))
-              )
+
+              setTraceSpanAttribute(rootContext, AttributeKey.stringKey("workspaceId"), workspaceId.toString)
               logger.info(s"EntityStatisticsCacheMonitor starting update attempt for workspace $workspaceId.")
               traceDBIOWithParent("updateStatisticsCache", rootContext) { innerSpan =>
                 DBIO.from(updateStatisticsCache(workspaceId, lastModified, innerSpan).map { _ =>

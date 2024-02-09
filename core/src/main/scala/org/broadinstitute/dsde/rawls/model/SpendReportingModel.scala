@@ -153,10 +153,11 @@ object TerraSpendCategories {
   }
 
   def withName(name: String): TerraSpendCategory = name.toLowerCase match {
-    case "storage" => Storage
-    case "compute" => Compute
-    case "other"   => Other
-    case _         => throw new RawlsException(s"invalid TerraSpendCategory [${name}]")
+    case "storage"                 => Storage
+    case "compute"                 => Compute
+    case "other"                   => Other
+    case "workspaceinfrastructure" => WorkspaceInfrastructure
+    case _                         => throw new RawlsException(s"invalid TerraSpendCategory [${name}]")
   }
 
   def categorize(service: String): TerraSpendCategory = service.toLowerCase.replace(" ", "") match {
@@ -166,6 +167,7 @@ object TerraSpendCategories {
     case _                  => Other
   }
 
+  case object WorkspaceInfrastructure extends TerraSpendCategory
   case object Storage extends TerraSpendCategory
   case object Compute extends TerraSpendCategory
   case object Other extends TerraSpendCategory

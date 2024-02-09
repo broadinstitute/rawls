@@ -235,7 +235,7 @@ class BillingAccountChangeSynchronizerSpec
       val failingGcsDao = new MockGoogleServicesDAO("") {
         override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                            billingAccountName: RawlsBillingAccountName,
-                                           span: OpenCensusSpan = null
+                                           rawlsTracingContext: RawlsTracingContext
         ): Future[ProjectBillingInfo] = {
           timesCalled.merge(googleProjectId, 1, _ + _)
           Future.failed(new RawlsException(exceptionMessage))
@@ -321,7 +321,7 @@ class BillingAccountChangeSynchronizerSpec
         .getOrElse(fail("workspace not found"))
         .currentBillingAccountOnGoogleProject shouldBe originalBillingAccount
 
-      verify(mockGcsDAO, times(0)).setBillingAccountName(workspace.googleProjectId, originalBillingAccount.value)
+      verify(mockGcsDAO, times(0)).setBillingAccountName(ArgumentMatchers.eq(workspace.googleProjectId), ArgumentMatchers.eq(originalBillingAccount.value), any())
     }
 
   it should "continue to update other workspace google projects even if one fails to update" in
@@ -518,10 +518,10 @@ class BillingAccountChangeSynchronizerSpec
 
         override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                            billingAccountName: RawlsBillingAccountName,
-                                           span: OpenCensusSpan
+                                           tracingContext: RawlsTracingContext
         ): Future[ProjectBillingInfo] = {
           timesCalled.incrementAndGet()
-          super.setBillingAccountName(googleProjectId, billingAccountName, span)
+          super.setBillingAccountName(googleProjectId, billingAccountName, tracingContext)
         }
       }
 
@@ -558,7 +558,7 @@ class BillingAccountChangeSynchronizerSpec
 
         override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                            billingAccountName: RawlsBillingAccountName,
-                                           span: OpenCensusSpan
+                                           rawlsTracingContext: RawlsTracingContext
         ): Future[ProjectBillingInfo] =
           Future.failed(new RawlsException("You do not have access to this billing account or it does not exist."))
       }
@@ -598,7 +598,7 @@ class BillingAccountChangeSynchronizerSpec
       val gcsDAO = new MockGoogleServicesDAO("test") {
         override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                            billingAccountName: RawlsBillingAccountName,
-                                           span: OpenCensusSpan
+                                           rawlsTracingContext: RawlsTracingContext
         ): Future[ProjectBillingInfo] =
           Future.failed(new RawlsException(googleProjectId.value))
       }
@@ -647,7 +647,7 @@ class BillingAccountChangeSynchronizerSpec
       val gcsDAO = new MockGoogleServicesDAO("test") {
         override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                            billingAccountName: RawlsBillingAccountName,
-                                           span: OpenCensusSpan
+                                           rawlsTracingContext: RawlsTracingContext
         ): Future[ProjectBillingInfo] =
           Future.failed(new RawlsException(googleProjectId.value))
       }
@@ -739,7 +739,7 @@ class BillingAccountChangeSynchronizerSpec
       val failingGcsDao = spy(new MockGoogleServicesDAO("") {
         override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                            billingAccountName: RawlsBillingAccountName,
-                                           span: OpenCensusSpan = null
+                                           rawlsTracingContext: RawlsTracingContext
         ): Future[ProjectBillingInfo] =
           if (googleProjectId == billingProject.googleProjectId)
             Future.failed(new RawlsException(exceptionMessage))

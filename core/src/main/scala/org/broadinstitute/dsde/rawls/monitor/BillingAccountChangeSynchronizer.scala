@@ -5,15 +5,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import cats.data._
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, LiftIO}
-import cats.implicits.{
-  catsSyntaxApplicativeError,
-  catsSyntaxApplyOps,
-  catsSyntaxOptionId,
-  catsSyntaxSemigroup,
-  toFlatMapOps,
-  toFoldableOps,
-  toFunctorOps
-}
+import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApplyOps, catsSyntaxOptionId, catsSyntaxSemigroup, toFlatMapOps, toFoldableOps, toFunctorOps}
 import cats.mtl.Ask
 import cats.{Applicative, Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
@@ -23,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
+import org.broadinstitute.dsde.rawls.util.TracingUtils
 
 import java.time.Instant
 import scala.concurrent.duration._
@@ -72,12 +65,13 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
    * sync the billing projects and all workspaces again immediately. If we sync one at a time
    * we'll have a better chance of doing this once.
    */
-  def updateBillingAccounts: IO[Unit] =
+  def updateBillingAccounts: IO[Unit] = TracingUtils.traceIO("updateBillingAccounts") { tracingContext =>
     readABillingProjectChange.flatMap(_.traverse_ {
-      syncBillingAccountChange[Kleisli[IO, BillingAccountChange, *]]
+      syncBillingAccountChange[Kleisli[IO, BillingAccountChange, *]](tracingContext)
         .handleErrorWith(failChange[Kleisli[IO, BillingAccountChange, *]])
         .run
     })
+  }
 
   def readABillingProjectChange: IO[Option[BillingAccountChange]] =
     inTransaction {
@@ -86,7 +80,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         .result
     }.map(_.headOption)
 
-  private def syncBillingAccountChange[F[_]](implicit
+  private def syncBillingAccountChange[F[_]](tracingContext: RawlsTracingContext)(implicit
     R: Ask[F, BillingAccountChange],
     M: MonadThrow[F],
     L: LiftIO[F]
@@ -96,11 +90,11 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
 
       // v1 billing projects are backed by google projects and are used for v1 workspace billing
       updateBillingProjectOutcome <- M.ifM(isV1BillingProject(billingProject.projectName))(
-        updateBillingProjectGoogleProject(billingProject),
+        updateBillingProjectGoogleProject(billingProject, tracingContext),
         M.pure(Success.asInstanceOf[Outcome])
       )
 
-      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject)
+      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject, tracingContext)
       _ <- writeBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
     } yield ()
 
@@ -115,7 +109,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield projectOpt.getOrElse(throw new IllegalStateException(s"No such billing account $projectName"))
 
   private def updateBillingProjectGoogleProject[F[_]](
-    billingProject: RawlsBillingProject
+                                                       billingProject: RawlsBillingProject, tracingContext: RawlsTracingContext
   )(implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F]): F[Outcome] =
     for {
       // the billing probe can only access billing accounts that are defined
@@ -124,7 +118,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         case None              => M.pure(false)
       }
 
-      outcome <- setGoogleProjectBillingAccount(billingProject.googleProjectId).attempt
+      outcome <- setGoogleProjectBillingAccount(billingProject.googleProjectId, tracingContext).attempt
         .map(Outcome.fromEither)
 
       _ <- writeUpdateBillingProjectOutcome(billingProbeHasAccess, outcome)
@@ -185,7 +179,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield ()
 
   def updateWorkspacesBillingAccountInGoogle[F[_]](
-    billingProject: RawlsBillingProject
+    billingProject: RawlsBillingProject,
+    tracingContext: RawlsTracingContext
   )(implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F]): F[Outcome] =
     for {
       // v2 workspaces have their own google project so we'll need to attempt to set the billing account on each.
@@ -198,7 +193,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
 
       outcome <- workspaces.foldMapA { workspace =>
         for {
-          attempt <- setGoogleProjectBillingAccount(workspace.googleProjectId).attempt
+          attempt <- setGoogleProjectBillingAccount(workspace.googleProjectId, tracingContext).attempt
           updateWorkspaceOutcome = Outcome.fromEither(attempt)
           failureMessage <- updateWorkspaceOutcome match {
             case Success =>
@@ -221,7 +216,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield outcome
 
   private def setGoogleProjectBillingAccount[F[_]](
-    googleProjectId: GoogleProjectId
+                                                    googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext
   )(implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F]): F[Unit] =
     for {
       projectBillingInfo <- L.liftIO {
@@ -237,7 +232,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       newBillingAccount <- R.reader(_.newBillingAccount)
       _ <- M.whenA(newBillingAccount != currentBillingAccountOnGoogleProject) {
         L.liftIO {
-          gcsDAO.setBillingAccount(googleProjectId, newBillingAccount).io
+          gcsDAO.setBillingAccount(googleProjectId, newBillingAccount, tracingContext).io
         }
       }
     } yield ()
