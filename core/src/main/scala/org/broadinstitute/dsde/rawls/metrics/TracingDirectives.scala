@@ -8,7 +8,13 @@ import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
-import io.opentelemetry.instrumentation.api.semconv.http.{HttpServerAttributesExtractor, HttpServerAttributesGetter, HttpServerRoute, HttpSpanNameExtractor, HttpSpanStatusExtractor}
+import io.opentelemetry.instrumentation.api.semconv.http.{
+  HttpServerAttributesExtractor,
+  HttpServerAttributesGetter,
+  HttpServerRoute,
+  HttpSpanNameExtractor,
+  HttpSpanStatusExtractor
+}
 
 import java.util
 import scala.jdk.CollectionConverters._
