@@ -1974,7 +1974,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[GcsBucketName],
           any[Map[String, String]],
           any[RawlsRequestContext],
-          ArgumentMatchers.eq(newBucketLocation)
+          ArgumentMatchers.eq(newBucketLocation),
+          any[Map[SamResourceAction, WorkbenchEmail]]
         )
       )
         .thenReturn(Future.successful(mock[GoogleWorkspaceInfo]))
@@ -2005,7 +2006,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               any[GcsBucketName],
               any[Map[String, String]],
               any[RawlsRequestContext],
-              ArgumentMatchers.eq(newBucketLocation)
+              ArgumentMatchers.eq(newBucketLocation),
+              any[Map[SamResourceAction, WorkbenchEmail]]
             )
           }
 

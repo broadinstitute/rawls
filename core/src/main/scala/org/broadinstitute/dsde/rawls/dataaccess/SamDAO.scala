@@ -58,6 +58,13 @@ trait SamDAO {
                     cts: RawlsRequestContext
   ): Future[Boolean]
 
+  def getActionServiceAccount(googleProject: GoogleProjectId,
+                              resourceTypeName: SamResourceTypeName,
+                              resourceId: String,
+                              action: SamResourceAction,
+                              ctx: RawlsRequestContext
+  ): Future[WorkbenchEmail]
+
   def getPolicy(resourceTypeName: SamResourceTypeName,
                 resourceId: String,
                 policyName: SamResourcePolicyName,

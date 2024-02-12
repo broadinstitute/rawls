@@ -134,7 +134,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
-                               iamPolicyVersion: Int = 1
+                               iamPolicyVersion: Int = 1,
+                               actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[Unit] = {
     // default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
     // do not have separate permissions that deviate from the bucket-level permissions.
@@ -155,9 +156,19 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       Read -> customTerraBucketReaderRole
     )
 
+    val samActionToStorageRole = Map(SamWorkspaceActions.write -> customTerraBucketWriterRole,
+                                     SamWorkspaceActions.read -> customTerraBucketReaderRole
+    )
+
     val roleToIdentities = policyGroupsByAccessLevel
       .map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) }
       .+(Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+      .++(
+        actionServiceAccountsByAction
+          .map { case (action, serviceAccountEmail) =>
+            Identity.serviceAccount(serviceAccountEmail.value) -> samActionToStorageRole(action)
+          }
+      )
       .groupBy(_._2)
       .view
       .mapValues(_.keys)
@@ -196,7 +207,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                               bucketName: GcsBucketName,
                               labels: Map[String, String],
                               requestContext: RawlsRequestContext,
-                              bucketLocation: Option[String]
+                              bucketLocation: Option[String],
+                              actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[GoogleWorkspaceInfo] = {
     def insertInitialStorageLog: Future[Unit] = {
       implicit val service = GoogleInstrumentedService.Storage
@@ -249,7 +261,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
           }
       ) // ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceFutureWithParent("updateBucketIam", requestContext)(_ =>
-        updateBucketIam(bucketName, policyGroupsByAccessLevel)
+        updateBucketIam(bucketName,
+                        policyGroupsByAccessLevel,
+                        actionServiceAccountsByAction = actionServiceAccountsByAction
+        )
       )
       insertInitialStorageLogFuture = traceFutureWithParent("insertInitialStorageLog", requestContext)(_ =>
         insertInitialStorageLog
