@@ -62,7 +62,6 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
-import org.broadinstitute.dsde.workbench.openTelemetry.{FakeOpenTelemetryMetricsInterpreter, OpenTelemetryMetrics}
 import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
@@ -121,7 +120,7 @@ trait ApiServiceSpec
 
   def revokeCuratorRole(services: ApiServices, user: RawlsUser = testData.userOwner): Unit = {
     Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -129,7 +128,7 @@ trait ApiServiceSpec
       }
 
     Delete(s"/admin/user/role/curator/${user.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -137,7 +136,7 @@ trait ApiServiceSpec
       }
 
     Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -168,8 +167,6 @@ trait ApiServiceSpec
     def actorRefFactory = system
 
     implicit override val materializer: ActorMaterializer = ActorMaterializer()
-
-    implicit val openTelemetry: OpenTelemetryMetrics[IO] = FakeOpenTelemetryMetricsInterpreter
 
     override val workbenchMetricBaseName: String = "test"
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -405,10 +402,18 @@ trait ApiServiceSpec
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = instrumentRequest {
+    val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
       sealRoute(
-        adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-          submissionRoutes ~ userRoutes ~ workspaceRoutes
+        adminRoutes(otelContext) ~
+          billingRoutesV2(otelContext) ~
+          billingRoutes(otelContext) ~
+          entityRoutes(otelContext) ~
+          methodConfigRoutes(otelContext) ~
+          notificationsRoutes ~
+          statusRoute ~
+          submissionRoutes(otelContext) ~
+          userRoutes(otelContext) ~
+          workspaceRoutes(otelContext)
       )
     }
 

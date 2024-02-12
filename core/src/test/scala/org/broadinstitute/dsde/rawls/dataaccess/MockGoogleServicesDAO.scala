@@ -101,7 +101,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                               bucketName: GcsBucketName,
                               labels: Map[String, String],
-                              parentSpan: Span = null,
+                              requestContext: RawlsRequestContext,
                               bucketLocation: Option[String],
                               actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[GoogleWorkspaceInfo] = {
@@ -258,11 +258,11 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                      billingAccountName: RawlsBillingAccountName,
-                                     span: Span = null
+                                     tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo] =
     Future.successful(new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true))
 
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] =
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] =
     Future.successful(new ProjectBillingInfo().setBillingEnabled(false))
 
   override def getBillingInfoForGoogleProject(

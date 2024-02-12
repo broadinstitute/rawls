@@ -7,10 +7,11 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
+import bio.terra.workspace.model.{AzureContext, JobReport, JobResult, WorkspaceDescription, ErrorReport => _}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
@@ -32,7 +33,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
-import spray.json.{enrichAny, JsObject}
+import spray.json.{JsObject, enrichAny}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
@@ -47,7 +48,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(span: Option[Span]): Directive1[UserInfo] =
+    def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
       // just return the cookie text as the common name
       user match {
         case testData.userProjectOwner.userEmail.value =>
@@ -411,7 +412,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -461,7 +462,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -481,7 +482,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -500,7 +501,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -517,7 +518,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -538,7 +539,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -612,7 +613,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val expectedOwnerPolicyEmail = ""
 
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -664,7 +665,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful(true))
 
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden, responseAs[String]) {
             status
@@ -677,7 +678,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "get a workspace" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -720,7 +721,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "get a workspace by id" in withTestWorkspacesApiServices { services =>
     Get(s"/workspaces/id/${testWorkspaces.workspace.workspaceId}") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -765,7 +766,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
     Get(testData.workspace.copy(name = "DNE").path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -775,7 +776,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 getting a non-existent workspace by id" in withTestDataApiServices { services =>
     Get(s"/workspaces/id/${UUID.randomUUID()}") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -785,7 +786,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 getting a workspace by id with an invalid UUID" in withTestDataApiServices { services =>
     Get("/workspaces/id/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -795,7 +796,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "delete a workspace" in withTestDataApiServices { services =>
     Delete(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Accepted) {
           status
@@ -815,7 +816,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
     // delete the workspace
     Delete(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Accepted) {
           status
@@ -846,7 +847,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
     // delete the workspace
     Delete(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Accepted) {
           status
@@ -877,7 +878,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
     // delete the workspace
     Delete(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Accepted) {
           status
@@ -973,7 +974,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful())
 
       Delete(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Accepted, responseAs[String]) {
             status
@@ -1074,7 +1075,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful())
 
       Delete(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Accepted, responseAs[String]) {
             status
@@ -1172,7 +1173,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Delete(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Accepted, responseAs[String]) {
             status
@@ -1224,7 +1225,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           )
 
         Delete(azureWorkspace.path) ~>
-          sealRoute(services.workspaceRoutes) ~>
+          sealRoute(services.workspaceRoutes()) ~>
           check {
             assertResult(StatusCodes.Accepted) {
               status
@@ -1245,7 +1246,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1324,7 +1325,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         )
 
       Get("/workspaces") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -1370,14 +1371,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val cloneSrc = testData.workspace.copy(name = "test_nonexistent_1")
       val cloneDest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent_2", Map.empty)
       Post(s"${cloneSrc.path}/clone", httpJson(cloneDest)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
           }
         }
       Get(testData.sample2.path(cloneDest)) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -1389,7 +1390,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
         )
       ) ~>
-        sealRoute(services.entityRoutes) ~>
+        sealRoute(services.entityRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -1405,7 +1406,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                            copyFilesWithPrefix = Some("")
       )
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -1420,7 +1421,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
       )
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -1433,7 +1434,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path,
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1450,7 +1451,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val attr = AttributeString("foo")
 
     Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -1477,7 +1478,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       """.stripMargin
 
       Patch(testData.workspace.path, httpJson(testPayload)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -1496,7 +1497,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           val errorText = responseAs[ErrorReport].message
           assert(status == StatusCodes.BadRequest)
@@ -1519,7 +1520,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assert(status == StatusCodes.Created)
         }
@@ -1536,7 +1537,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               )
             )
       ) ~>
-        sealRoute(services.workspaceRoutes) ~> check {
+        sealRoute(services.workspaceRoutes()) ~> check {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
           }
@@ -1549,7 +1550,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "clone a workspace if the source exists" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -1606,7 +1607,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -1648,7 +1649,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
       )
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -1670,7 +1671,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         Map(newAttr)
       )
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -1712,7 +1713,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
       val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -1745,7 +1746,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "add attributes when cloning a workspace" in withTestDataApiServices { services =>
     val workspaceNoAttrs = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceNoAttrs)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -1785,7 +1786,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                          noWorkspaceOwner = Option(true)
     )
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -1825,7 +1826,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val expectedOwnerPolicyEmail = ""
 
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -1901,7 +1902,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden, responseAs[String]) {
             status
@@ -1916,7 +1917,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceCopy =
       WorkspaceRequest(namespace = testData.workspace.namespace, name = testData.workspaceNoGroups.name, Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -1950,7 +1951,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         .when(services.gcsDAO)
         .setBillingAccountName(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
                                any[RawlsBillingAccountName],
-                               any[Span]
+                               any[RawlsTracingContext]
         )
       when(services.gcsDAO.getGoogleProject(any[GoogleProjectId]))
         .thenReturn(Future.successful(new Project().setProjectNumber(null)))
@@ -1972,14 +1973,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
           any[GcsBucketName],
           any[Map[String, String]],
-          any[Span],
+          any[RawlsRequestContext],
           ArgumentMatchers.eq(newBucketLocation),
           any[Map[SamResourceAction, WorkbenchEmail]]
         )
       )
         .thenReturn(Future.successful(mock[GoogleWorkspaceInfo]))
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
@@ -2004,7 +2005,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
               any[GcsBucketName],
               any[Map[String, String]],
-              any[Span],
+              any[RawlsRequestContext],
               ArgumentMatchers.eq(newBucketLocation),
               any[Map[SamResourceAction, WorkbenchEmail]]
             )
@@ -2027,7 +2028,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                            bucketLocation = Option("US")
       )
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assert(status == StatusCodes.Created)
         }
@@ -2041,7 +2042,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                            bucketLocation = Option("EU")
       )
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           val errorText = responseAs[ErrorReport].message
           assert(status == StatusCodes.BadRequest)
@@ -2055,7 +2056,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
@@ -2064,7 +2065,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when requesting an ACL from a non-existent workspace" in withTestDataApiServices { services =>
     val nonExistent = WorkspaceName("xyzzy", "plugh")
     Get(s"${nonExistent.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -2072,7 +2073,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
     Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
@@ -2081,12 +2082,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices {
     services =>
       Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
         }
       Get(testData.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
         }
@@ -2095,7 +2096,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
     val nonExistent = WorkspaceName("xyzzy", "plugh")
     Patch(s"${nonExistent.path}/acl", httpJsonEmpty) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -2103,7 +2104,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "get bucket options" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/bucketOptions") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertResult(WorkspaceBucketOptions(false)) {
@@ -2120,7 +2121,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userProjectOwner.userEmail.value
   ) { services =>
     Get(testWorkspaces.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2132,7 +2133,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userOwner.userEmail.value
   ) { services =>
     Get(testWorkspaces.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2144,7 +2145,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userWriter.userEmail.value
   ) { services =>
     Get(testWorkspaces.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2156,7 +2157,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userReader.userEmail.value
   ) { services =>
     Get(testWorkspaces.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2167,7 +2168,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "not allow a no-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("no-access") {
     services =>
       Get(testWorkspaces.workspace.path) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -2178,7 +2179,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "not allow a no-access user to get a workspace by id" in withTestWorkspacesApiServicesAndUser("no-access") {
     services =>
       Get(s"/workspaces/id/${testWorkspaces.workspace.workspaceId}") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -2194,7 +2195,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path,
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2207,7 +2208,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   ) { services =>
     var mutableWorkspace: Workspace = testData.workspace.copy()
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2218,14 +2219,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path,
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
       }
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         val updatedWorkspace: Workspace = responseAs[WorkspaceResponse].workspace.toWorkspace
         assertWorkspaceModifiedDate(status, updatedWorkspace)
@@ -2241,7 +2242,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path,
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2255,7 +2256,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path,
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2269,7 +2270,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path,
           httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -2282,7 +2283,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Patch(testData.workspace.path,
             httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))
       ) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -2303,7 +2304,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         )
       )
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest)(status)
       }
@@ -2318,7 +2319,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None, Option(true)))
           )
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -2333,7 +2334,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         s"${testData.workspace.path}/acl",
         httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None, None)))
       ) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
         }
@@ -2345,7 +2346,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None, Option(false)))
         )
       ) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
         }
@@ -2357,7 +2358,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None, Option(true)))
         )
       ) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
         }
@@ -2369,7 +2370,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Owner, None, Option(false)))
         )
       ) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
         }
@@ -2379,7 +2380,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Get(s"${testData.workspace.path}/checkIamActionWithLock/read") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -2391,7 +2392,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Get(s"${testData.workspace.path}/checkIamActionWithLock/write") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -2403,7 +2404,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Get(s"${testData.workspaceLocked.path}/checkIamActionWithLock/read") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -2415,7 +2416,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "writer-access"
   ) { services =>
     Get(s"${testData.workspace.path}/checkIamActionWithLock/write") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -2427,7 +2428,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "writer-access"
   ) { services =>
     Get(s"${testData.workspaceLocked.path}/checkIamActionWithLock/write") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -2442,12 +2443,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userOwner.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
@@ -2457,24 +2458,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userOwner.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
 
     Put(s"${testData.workspace.path}/unlock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
 
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
@@ -2485,7 +2486,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userWriter.userEmail.value
   ) { services =>
     Patch(testData.workspace.path, httpJsonEmpty) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden)(status)
       }
@@ -2495,7 +2496,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userReader.userEmail.value
   ) { services =>
     Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
@@ -2505,7 +2506,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userOwner.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Conflict)(status)
       }
@@ -2515,7 +2516,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userOwner.userEmail.value
   ) { services =>
     Delete(s"${testData.workspace.path}") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden)(status)
       }
@@ -2525,17 +2526,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userOwner.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
     Put(s"${testData.workspace.path}/unlock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
     Put(s"${testData.workspace.path}/unlock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
@@ -2545,12 +2546,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userWriter.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden)(status)
       }
     Put(s"${testData.workspace.path}/unlock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden)(status)
       }
@@ -2560,12 +2561,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
     Put(s"${testData.workspace.path}/unlock") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -2598,7 +2599,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Forbidden, responseAs[String]) {
             status
@@ -2610,7 +2611,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userReader.userEmail.value
   ) { services =>
     Get(s"${testData.workspace.path}/checkBucketReadAccess") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String])(status)
       }
@@ -2620,7 +2621,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Get(s"${testData.workspace.path}/checkBucketReadAccess") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -2630,7 +2631,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Get(s"${testWorkspaces.workspace.copy(name = "DNE").path}/bucketUsage") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -2640,7 +2641,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -2652,7 +2653,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -2665,7 +2666,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       access
     ) { services =>
       Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2690,7 +2691,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -2710,7 +2711,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       Get(s"${clonedWorkspaceName.path}/fileTransfers") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2731,7 +2732,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return no pending workspace file transfers for a workspace that already exists" in withTestDataApiServices {
     services =>
       Get(s"${testData.workspace.path}/fileTransfers") ~>
-        sealRoute(services.workspaceRoutes) ~>
+        sealRoute(services.workspaceRoutes()) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -2746,7 +2747,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Get(s"${testWorkspaces.workspace.path}/fileTransfers") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -2805,11 +2806,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   ): Option[String] = {
 
     Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
-      sealRoute(services.methodConfigRoutes) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
       check {
         if (status == StatusCodes.NotFound) {
           Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
-            sealRoute(services.methodConfigRoutes) ~>
+            sealRoute(services.methodConfigRoutes()) ~>
             check {
               assertResult(StatusCodes.Created, responseAs[String]) {
                 status
@@ -2834,7 +2835,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       userComment = userComment
     )
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
-      sealRoute(services.submissionRoutes) ~>
+      sealRoute(services.submissionRoutes()) ~>
       check {
         assertResult(expectedStatus, responseAs[String]) {
           status
@@ -2850,13 +2851,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userWriter.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/enableRequesterPaysForLinkedServiceAccounts") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
 
     Put(s"${testData.workspace.path}/disableRequesterPaysForLinkedServiceAccounts") ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
@@ -2891,7 +2892,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           // user with read access to workspace should be able to get submission details and read the user comment
           Get(s"${wsName.path}/submissions/$submissionId") ~>
-            sealRoute(servicesForReader.submissionRoutes) ~>
+            sealRoute(servicesForReader.submissionRoutes()) ~>
             check {
               assertResult(StatusCodes.OK) {
                 status
@@ -2907,7 +2908,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               List("userComment" -> "user comment updated".toJson): _*
             )
           ) ~>
-            sealRoute(servicesForReader.submissionRoutes) ~>
+            sealRoute(servicesForReader.submissionRoutes()) ~>
             check {
               val response = responseAs[String]
               status should be(StatusCodes.Forbidden)
