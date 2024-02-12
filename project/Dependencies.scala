@@ -128,27 +128,17 @@ object Dependencies {
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.568.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
   val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.506-SNAPSHOT")
-  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.9-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f52413a-SNAP")
+  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.11-SNAPSHOT" classifier "plain"))
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
 
   // OpenTelemetry
-  val openTelemetryVersion = "1.31.0"
-  val otelApi: ModuleID = "io.opentelemetry" % "opentelemetry-api" % openTelemetryVersion
-  val otelSdk: ModuleID = "io.opentelemetry" % "opentelemetry-sdk" % openTelemetryVersion
-  val otelSdkMetrics: ModuleID = "io.opentelemetry" % "opentelemetry-sdk-metrics" % openTelemetryVersion
-  val otelExporterLogging: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-logging" % openTelemetryVersion
-  val otelSemconv: ModuleID = "io.opentelemetry.semconv" % "opentelemetry-semconv" % "1.21.0-alpha"
-  val otelAnnotation: ModuleID = "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-annotations" % openTelemetryVersion
-  val otelInstrumentationApi: ModuleID = "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api" % openTelemetryVersion
-  val otelInstrumentationApiSemconv: ModuleID =
-    "io.opentelemetry.instrumentation" % "opentelemetry-instrumentation-api-semconv" % (openTelemetryVersion + "-alpha")
+  val openTelemetryInstrumentationVersion = "2.0.0"
   val otelInstrumentationResources: ModuleID =
-    "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryVersion + "-alpha")
-  val otelPrometheusExporter: ModuleID = "io.opentelemetry" % "opentelemetry-exporter-prometheus" % (openTelemetryVersion + "-alpha")
+    "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryInstrumentationVersion + "-alpha")
 
   // Google cloud open telemetry exporters
-  var gcpOpenTelemetryExporterVersion = "0.25.2"
+  var gcpOpenTelemetryExporterVersion = "0.27.0"
   var googleTraceExporter: ModuleID = "com.google.cloud.opentelemetry" % "exporter-trace" % gcpOpenTelemetryExporterVersion
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
@@ -163,17 +153,7 @@ object Dependencies {
   val transitiveDependencyOverrides = Seq(
   )
 
-  val openTelemetryDependencies = Seq(
-    otelApi,
-    otelSdk,
-    otelSdkMetrics,
-    otelExporterLogging,
-    otelSemconv,
-    otelAnnotation,
-    otelInstrumentationApi,
-    otelInstrumentationApiSemconv,
-    otelPrometheusExporter,
-    googleTraceExporter,
+  val extraOpenTelemetryDependencies = Seq(
     otelInstrumentationResources
   )
 
@@ -240,7 +220,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openTelemetryDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ extraOpenTelemetryDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,
