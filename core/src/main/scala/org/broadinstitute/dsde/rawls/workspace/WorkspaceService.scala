@@ -3327,7 +3327,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                actions: Set[SamResourceAction],
                                                parentContext: RawlsRequestContext
   ): Future[Map[SamResourceAction, WorkbenchEmail]] =
-    traceWithParent("createActionServiceAccountsInSam", parentContext)(_ =>
+    traceFutureWithParent("createActionServiceAccountsInSam", parentContext)(_ =>
       Future
         .traverse(actions) { action =>
           samDAO
