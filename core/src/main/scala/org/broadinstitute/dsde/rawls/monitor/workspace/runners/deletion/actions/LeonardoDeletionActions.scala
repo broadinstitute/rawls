@@ -8,7 +8,12 @@ import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  AppStatus,
+  ClusterStatus,
+  ListAppResponse,
+  ListRuntimeResponse
+}
 
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
@@ -45,34 +50,50 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     logger.info(s"Polling runtime deletion [workspaceId=${workspace.workspaceId}]")
-    pollOperation[ListRuntimeResponse](workspace, ctx, listAzureRuntimes)
+    pollOperation[ListRuntimeResponse](workspace, ctx, listNonErroredAzureRuntimes)
   }
 
   def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     logger.info(s"Polling app deletion [workspaceId=${workspace.workspaceId}]")
-    pollOperation[ListAppResponse](workspace, ctx, listApps)
+    pollOperation[ListAppResponse](workspace, ctx, listNonErroredApps)
   }
 
-  def listApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+  def listNonErroredApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListAppResponse]] =
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val nonErroredApps = allApps.filter(_.getStatus != AppStatus.ERROR)
+          val erroredAppCount = allApps.size - nonErroredApps.size
+          if (erroredAppCount > 0) {
+            logger.info(
+              s"Filtering out ${erroredAppCount} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
+            )
+          }
+          nonErroredApps
         }
       }
     }
 
-  def listAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+  def listNonErroredAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListRuntimeResponse]] =
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val allRuntimes = leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val nonErroredRuntimes = allRuntimes.filter(_.getStatus != ClusterStatus.ERROR)
+          val erroredRuntimeCount = allRuntimes.size - nonErroredRuntimes.size
+          if (erroredRuntimeCount > 0) {
+            logger.info(
+              s"Filtering out ${erroredRuntimeCount} errored runtimes for [workspaceId=${workspace.workspaceIdAsUUID}]"
+            )
+          }
+          nonErroredRuntimes
         }
       }
     }

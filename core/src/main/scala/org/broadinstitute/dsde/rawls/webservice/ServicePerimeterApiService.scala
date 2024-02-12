@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -20,9 +20,9 @@ trait ServicePerimeterApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val userServiceConstructor: RawlsRequestContext => UserService
-  val servicePerimeterRoutes: server.Route = traceRequest { span =>
-    requireUserInfo(Option(span)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(span))
+  def servicePerimeterRoutes(otelContext: Context = Context.root()): server.Route = {
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
         put {
           complete {

@@ -61,7 +61,7 @@ class PetSASpec extends ApiServiceSpec {
     ) ~> addHeader("OIDC_CLAIM_expires_in", petSA.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email",
                                                                                               petSA.userEmail.value
     ) ~> addHeader("OIDC_CLAIM_user_id", petSA.userSubjectId.value) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -88,7 +88,7 @@ class PetSASpec extends ApiServiceSpec {
       "OIDC_CLAIM_user_id",
       testWorkspaces.userSAProjectOwnerUserInfo.userSubjectId.value
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -137,7 +137,7 @@ class PetSASpec extends ApiServiceSpec {
     ) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id",
                                                                            petSA.userSubjectId.value
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status

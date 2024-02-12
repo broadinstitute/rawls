@@ -46,7 +46,6 @@ import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSe
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import spray.json._
 
 import java.util.concurrent.TimeUnit
@@ -93,7 +92,7 @@ object BootMonitors extends LazyLogging {
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver
-  )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
+  ): Unit = {
     // Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -228,7 +227,7 @@ object BootMonitors extends LazyLogging {
                                    slickDataSource: SlickDataSource,
                                    googleIamDAO: GoogleIamDAO,
                                    googleStorageDAO: GoogleStorageDAO
-  )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
+  ): Unit = {
     val fastPassConfig = FastPassConfig.apply(conf)
 
     val fastPassMonitor = system.actorOf(

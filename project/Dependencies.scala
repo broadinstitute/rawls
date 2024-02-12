@@ -78,9 +78,10 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.15.1"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.1"
-  val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.2.0"
+  val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.3.0"
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
+  val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "3.0.0"
 
   val workbenchLibsHash = "8ccaa6d"
 
@@ -102,8 +103,6 @@ object Dependencies {
   val workbenchNotifications: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-notifications" % workbenchNotificationsV excludeAll(excludeWorkbenchGoogle)
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
-  val workbenchOpenTelemetry: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV
-  val workbenchOpenTelemetryTests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV classifier "tests"
 
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.9" % "test"
 
@@ -111,10 +110,8 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  // should we prefer jakarta over javax.xml?
-  def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
-  def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
-  def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
+  def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
+  def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
   def excludeSpringBoot = ExclusionRule("org.springframework.boot")
   def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
@@ -127,36 +124,37 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client-javax" % "0.254.998-SNAPSHOT")
-  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
-  val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client-javax" % "0.1.502-SNAPSHOT")
-  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.95-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-d606036")
+  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.998-SNAPSHOT")
+  val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.568.0-SNAPSHOT")
+  val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.506-SNAPSHOT")
+  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.11-SNAPSHOT" classifier "plain"))
+  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-70fda75")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-d0bf371"
 
-  val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
-  val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
-  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.31.1" excludeAll(excludeProtobufJavalite)
-  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.31.1"
+  // OpenTelemetry
+  val openTelemetryInstrumentationVersion = "2.0.0"
+  val otelInstrumentationResources: ModuleID =
+    "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryInstrumentationVersion + "-alpha")
+
+  // Google cloud open telemetry exporters
+  var gcpOpenTelemetryExporterVersion = "0.27.0"
+  var googleTraceExporter: ModuleID = "com.google.cloud.opentelemetry" % "exporter-trace" % gcpOpenTelemetryExporterVersion
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.20"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
   // in Rawls by being listed here.
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
-    "commons-codec"                 % "commons-codec"         % "1.15",
-    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36" // scala-steward:off (must match TDR)
   )
 
-  val openCensusDependencies = Seq(
-    opencensusScalaCode,
-    opencensusAkkaHttp,
-    opencensusStackDriverExporter,
-    opencensusLoggingExporter
+  val extraOpenTelemetryDependencies = Seq(
+    otelInstrumentationResources
   )
 
   val metricsDependencies = Seq(
@@ -222,7 +220,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ extraOpenTelemetryDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,
@@ -261,11 +259,11 @@ object Dependencies {
     betterMonadicFor,
     workbenchOauth2,
     workbenchOauth2Tests,
-    workbenchOpenTelemetry,
-    workbenchOpenTelemetryTests,
     terraCommonLib,
     sam,
-    leonardo
+    leonardo,
+    jakartaWsRs,
+    openApiParser
   )
 
   val pact4sV = "0.7.0"

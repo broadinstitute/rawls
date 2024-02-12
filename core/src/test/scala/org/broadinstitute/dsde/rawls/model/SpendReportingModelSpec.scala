@@ -4,11 +4,12 @@ import bio.terra.profile.model.SpendReport
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
 import bio.terra.profile.model.{SpendReportingForDateRange => SpendReportingForDateRangeBPM}
 import bio.terra.profile.model.{SpendReportingAggregation => SpendReportingAggregationBPM}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.must.Matchers.have
-import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, equal}
+import org.scalatest.matchers.must.Matchers.{be, have}
+import org.scalatest.matchers.should.Matchers.{an, convertToAnyShouldWrapper, equal}
 
 import scala.jdk.CollectionConverters._
 
@@ -106,7 +107,11 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     val to = DateTime.now().plusMonths(1)
     val computeCost: BigDecimal = 100.20
     val storageCost: BigDecimal = 54.32
-    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost, CategoryEnum.STORAGE -> storageCost)
+    val k8sInfrastructureCost: BigDecimal = 75.15
+    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost,
+                              CategoryEnum.STORAGE -> storageCost,
+                              CategoryEnum.WORKSPACEINFRASTRUCTURE -> k8sInfrastructureCost
+    )
     val someReport = TestData.someBPMNonEmptyReport(from, to, categoriesCosts)
 
     val result = SpendReportingResults(someReport)
@@ -115,26 +120,32 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     result.spendSummary shouldNot equal(null)
     result.spendSummary.cost shouldBe categoriesCosts.values.sum.toString()
     result.spendDetails shouldNot equal(null)
-    result.spendDetails(0) shouldNot equal(null)
-    result.spendDetails(0).spendData should have size categoriesCosts.size
+    result.spendDetails.head shouldNot equal(null)
+    result.spendDetails.head.spendData should have size categoriesCosts.size
 
-    val computeDetails = result
-      .spendDetails(0)
-      .spendData
+    val computeDetails = result.spendDetails.head.spendData
       .find(v => v.category.nonEmpty && v.category.get.equals(TerraSpendCategories.Compute))
     computeDetails.nonEmpty shouldBe true
     computeDetails.get.cost shouldBe computeCost.toString()
     computeDetails.get.credits shouldBe TestData.defaultAzureCredits
     computeDetails.get.currency shouldBe TestData.defaultCurrency
+    computeDetails.get.category.get shouldBe TerraSpendCategories.Compute
 
-    val storageDetails = result
-      .spendDetails(0)
-      .spendData
+    val storageDetails = result.spendDetails.head.spendData
       .find(v => v.category.nonEmpty && v.category.get.equals(TerraSpendCategories.Storage))
     storageDetails.nonEmpty shouldBe true
     storageDetails.get.cost shouldBe storageCost.toString()
     storageDetails.get.credits shouldBe TestData.defaultAzureCredits
     storageDetails.get.currency shouldBe TestData.defaultCurrency
+    storageDetails.get.category.get shouldBe TerraSpendCategories.Storage
+
+    val k8sDetails = result.spendDetails.head.spendData
+      .find(v => v.category.nonEmpty && v.category.get.equals(TerraSpendCategories.WorkspaceInfrastructure))
+    k8sDetails.nonEmpty shouldBe true
+    k8sDetails.get.cost shouldBe k8sInfrastructureCost.toString()
+    k8sDetails.get.credits shouldBe TestData.defaultAzureCredits
+    k8sDetails.get.currency shouldBe TestData.defaultCurrency
+    k8sDetails.get.category.get shouldBe TerraSpendCategories.WorkspaceInfrastructure
   }
 
   behavior of "SpendReportingForDateRange conversion"
@@ -172,7 +183,11 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
   it should "successfully convert BPM model for SpendReportingAggregation" in {
     val computeCost: BigDecimal = 1000.20
     val storageCost: BigDecimal = 900.32
-    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost, CategoryEnum.STORAGE -> storageCost)
+    val workspaceInfrastructureCost: BigDecimal = 2500.01
+    val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost,
+                              CategoryEnum.STORAGE -> storageCost,
+                              CategoryEnum.WORKSPACEINFRASTRUCTURE -> workspaceInfrastructureCost
+    )
 
     val spendReportingAggregationBPM = TestData.buildSpendReportingAggregation(categoriesCosts)
     val result = SpendReportingAggregation(spendReportingAggregationBPM)
@@ -187,6 +202,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     computeCategory.get.cost shouldBe computeCost.toString()
     computeCategory.get.credits shouldBe TestData.defaultAzureCredits
     computeCategory.get.currency shouldBe TestData.defaultCurrency
+    computeCategory.get.category.get shouldBe TerraSpendCategories.Compute
 
     val storageCategory =
       result.spendData.find(sd => sd.category.nonEmpty && sd.category.get.equals(TerraSpendCategories.Storage))
@@ -194,6 +210,36 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     storageCategory.get.cost shouldBe storageCost.toString()
     storageCategory.get.credits shouldBe TestData.defaultAzureCredits
     storageCategory.get.currency shouldBe TestData.defaultCurrency
+    storageCategory.get.category.get shouldBe TerraSpendCategories.Storage
+
+    val workspaceInfrastructureCategory =
+      result.spendData.find(sd =>
+        sd.category.nonEmpty && sd.category.get.equals(TerraSpendCategories.WorkspaceInfrastructure)
+      )
+    workspaceInfrastructureCategory.nonEmpty shouldBe true
+    workspaceInfrastructureCategory.get.cost shouldBe workspaceInfrastructureCost.toString()
+    workspaceInfrastructureCategory.get.credits shouldBe TestData.defaultAzureCredits
+    workspaceInfrastructureCategory.get.currency shouldBe TestData.defaultCurrency
+    workspaceInfrastructureCategory.get.category.get shouldBe TerraSpendCategories.WorkspaceInfrastructure
+  }
+
+  behavior of "TerraSpendCategories mapping"
+
+  it should "convert correct string into specific category" in {
+    TerraSpendCategories.withName("compute") shouldBe TerraSpendCategories.Compute
+    TerraSpendCategories.withName("Compute") shouldBe TerraSpendCategories.Compute
+    TerraSpendCategories.withName("storage") shouldBe TerraSpendCategories.Storage
+    TerraSpendCategories.withName("Storage") shouldBe TerraSpendCategories.Storage
+    TerraSpendCategories.withName("other") shouldBe TerraSpendCategories.Other
+    TerraSpendCategories.withName("Other") shouldBe TerraSpendCategories.Other
+    TerraSpendCategories.withName("workspaceinfrastructure") shouldBe TerraSpendCategories.WorkspaceInfrastructure
+    TerraSpendCategories.withName("WorkspaceInfrastructure") shouldBe TerraSpendCategories.WorkspaceInfrastructure
+  }
+
+  it should "throw exception in case of invalid string representation of a category" in {
+    an[RawlsException] should be thrownBy TerraSpendCategories.withName("test")
+    an[RawlsException] should be thrownBy TerraSpendCategories.withName("ai")
+    an[RawlsException] should be thrownBy TerraSpendCategories.withName("unexpectedCategory")
   }
 
 }

@@ -119,7 +119,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   "SnapshotV2ApiService" should "return 201 when creating a reference to a snapshot" in withTestDataApiServices {
     services =>
       Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -139,7 +139,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
           )
         )
       ) ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -150,7 +150,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when creating a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices {
     services =>
       Post("/workspaces/foo/bar/snapshots/v2", defaultNamedSnapshotJson) ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -160,7 +160,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when getting a reference to a snapshot" in withTestDataApiServices { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         val response = responseAs[DataRepoSnapshotResource]
         assertResult(StatusCodes.Created) {
@@ -168,7 +168,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         }
 
         Get(s"${v2BaseSnapshotsPath}/${response.getMetadata.getResourceId}") ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             assertResult(StatusCodes.OK) {
               status
@@ -180,7 +180,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 400 when getting a reference to a snapshot that is not a valid UUID" in withTestDataApiServices {
     services =>
       Get(s"${v2BaseSnapshotsPath}/not-a-valid-uuid") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -191,7 +191,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when getting a reference to a snapshot that doesn't exist" in withTestDataApiServices {
     services =>
       Get(s"${v2BaseSnapshotsPath}/${UUID.randomUUID().toString}") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -202,7 +202,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when getting a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices {
     services =>
       Get(s"/workspaces/foo/bar/snapshots/v2/${UUID.randomUUID().toString}") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -212,7 +212,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when getting a reference to a snapshot-by-name" in withTestDataApiServices { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         val response = responseAs[DataRepoSnapshotResource]
         assertResult(StatusCodes.Created) {
@@ -220,7 +220,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         }
 
         Get(s"${v2BaseSnapshotsPath}/name/${response.getMetadata.getName}") ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             assertResult(StatusCodes.OK) {
               status
@@ -232,7 +232,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when getting a reference to a snapshot-by-name that doesn't exist" in withTestDataApiServices {
     services =>
       Get(s"${v2BaseSnapshotsPath}/name/reference-intentionally-does-not-exist") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -243,7 +243,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when getting a reference to a snapshot-by-name in a workspace that doesn't exist" in withTestDataApiServices {
     services =>
       Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           val response = responseAs[DataRepoSnapshotResource]
           assertResult(StatusCodes.Created) {
@@ -251,7 +251,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
           }
 
           Get(s"/workspaces/foo/bar/snapshots/v2/name/${response.getMetadata.getName}") ~>
-            sealRoute(services.snapshotRoutes) ~>
+            sealRoute(services.snapshotRoutes()) ~>
             check {
               assertResult(StatusCodes.NotFound) {
                 status
@@ -264,7 +264,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     testData.userReader.userEmail.value
   ) { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -276,7 +276,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -288,7 +288,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Get(s"${v2BaseSnapshotsPath}/${UUID.randomUUID().toString}") ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -299,7 +299,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when a user lists all snapshots in a workspace" in withTestDataApiServices { services =>
     // First, create two data references
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         val response = responseAs[DataRepoSnapshotResource]
         assertResult(StatusCodes.Created) {
@@ -315,7 +315,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             )
           )
         ) ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             val response = responseAs[DataRepoSnapshotResource]
             assertResult(StatusCodes.Created) {
@@ -323,7 +323,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             }
             // Then, list them both
             Get(s"${v2BaseSnapshotsPath}?offset=0&limit=10") ~>
-              sealRoute(services.snapshotRoutes) ~>
+              sealRoute(services.snapshotRoutes()) ~>
               check {
                 val response = responseAs[SnapshotListResponse]
                 assertResult(StatusCodes.OK) {
@@ -346,7 +346,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     "no-access"
   ) { services =>
     Get(s"${v2BaseSnapshotsPath}?offset=0&limit=10") ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -358,7 +358,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     testData.userReader.userEmail.value
   ) { services =>
     Get("/workspaces/test/value/snapshots/v2?offset=0&limit=10") ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -371,7 +371,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       // We hijack the "workspaceTerminatedSubmissions" workspace in the shared testData to represent
       // a workspace that exists in Rawls but returns 404 from Workspace Manager.
       Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots/v2?offset=0&limit=10") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           val response = responseAs[SnapshotListResponse]
           assertResult(StatusCodes.OK) {
@@ -385,7 +385,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     // We hijack the "workspaceSubmittedSubmission" workspace in the shared testData to represent
     // a workspace that throws a 418 error.
     Get(s"${testData.workspaceSubmittedSubmission.path}/snapshots/v2?offset=0&limit=10") ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.ImATeapot) {
           response.status
@@ -395,14 +395,14 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when a user updates a snapshot" in withTestDataApiServices { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         val response = responseAs[DataRepoSnapshotResource]
         assertResult(StatusCodes.Created, "Unexpected snapshot creation status") {
           status
         }
         Patch(s"${v2BaseSnapshotsPath}/${response.getMetadata.getResourceId}", defaultSnapshotUpdateBodyJson) ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             assertResult(StatusCodes.NoContent, "Unexpected snapshot update response") {
               status
@@ -411,7 +411,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
         // verify that it was updated
         Get(s"${v2BaseSnapshotsPath}/${response.getMetadata.getResourceId}") ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             val response = responseAs[DataRepoSnapshotResource]
             assertResult(StatusCodes.OK, "Unexpected return code getting updated snapshot") {
@@ -426,7 +426,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 400 when a user tries to update a snapshot that is not a valid UUID" in withTestDataApiServices {
     services =>
       Patch(s"${v2BaseSnapshotsPath}/not-a-valid-uuid", defaultSnapshotUpdateBodyJson) ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -438,7 +438,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Patch(s"${v2BaseSnapshotsPath}/${UUID.randomUUID().toString}", defaultSnapshotUpdateBodyJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -462,7 +462,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       .getMetadata
       .getResourceId
     Patch(s"${v2BaseSnapshotsPath}/${id.toString}", defaultSnapshotUpdateBodyJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -473,7 +473,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when a user tries to update a snapshot that doesn't exist" in withTestDataApiServices {
     services =>
       Patch(s"${v2BaseSnapshotsPath}/${UUID.randomUUID().toString}", defaultSnapshotUpdateBodyJson) ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
@@ -483,14 +483,14 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when a user deletes a snapshot" in withTestDataApiServices { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         val response = responseAs[DataRepoSnapshotResource]
         assertResult(StatusCodes.Created) {
           status
         }
         Delete(s"${v2BaseSnapshotsPath}/${response.getMetadata.getResourceId}") ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             assertResult(StatusCodes.NoContent) {
               status
@@ -499,7 +499,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
         // verify that it was deleted
         Delete(s"${v2BaseSnapshotsPath}/${response.getMetadata.getResourceId}") ~>
-          sealRoute(services.snapshotRoutes) ~>
+          sealRoute(services.snapshotRoutes()) ~>
           check {
             assertResult(StatusCodes.NotFound) {
               status
@@ -511,7 +511,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 400 when a user tries to delete a snapshot that is not a valid UUID" in withTestDataApiServices {
     services =>
       Delete(s"${v2BaseSnapshotsPath}/not-a-valid-uuid") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -523,7 +523,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     "reader-access"
   ) { services =>
     Delete(s"${v2BaseSnapshotsPath}/${UUID.randomUUID().toString}") ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -547,7 +547,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       .getMetadata
       .getResourceId
     Delete(s"${v2BaseSnapshotsPath}/${id.toString}") ~>
-      sealRoute(services.snapshotRoutes) ~>
+      sealRoute(services.snapshotRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -558,7 +558,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when a user tries to delete a snapshot that doesn't exist" in withTestDataApiServices {
     services =>
       Delete(s"${v2BaseSnapshotsPath}/${UUID.randomUUID().toString}") ~>
-        sealRoute(services.snapshotRoutes) ~>
+        sealRoute(services.snapshotRoutes()) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status

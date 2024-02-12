@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor.DeleteExpiredGrants
 import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GoogleProjectId}
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
 
 import scala.concurrent.Future
@@ -18,9 +17,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 object FastPassMonitor {
   sealed trait FastPassMonitorMessage
   case object DeleteExpiredGrants extends FastPassMonitorMessage
-  def props(dataSource: SlickDataSource, googleIamDAO: GoogleIamDAO, googleStorageDao: GoogleStorageDAO)(implicit
-    openTelemetry: OpenTelemetryMetrics[IO]
-  ): Props = Props(
+  def props(dataSource: SlickDataSource, googleIamDAO: GoogleIamDAO, googleStorageDao: GoogleStorageDAO): Props = Props(
     new FastPassMonitor(dataSource, googleIamDAO, googleStorageDao)
   )
 }
@@ -28,17 +25,12 @@ object FastPassMonitor {
 class FastPassMonitor private (dataSource: SlickDataSource,
                                googleIamDAO: GoogleIamDAO,
                                googleStorageDao: GoogleStorageDAO
-)(implicit openTelemetry: OpenTelemetryMetrics[IO])
-    extends Actor
+) extends Actor
     with LazyLogging {
   import context.dispatcher
 
-  private val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassMonitor")
   override def receive: Receive = { case DeleteExpiredGrants =>
-    for {
-      _ <- openTelemetry.incrementCounter("fastpass-monitor-sweeper-start", tags = openTelemetryTags).unsafeToFuture()
-      _ <- deleteExpiredGrants()
-    } yield ()
+    deleteExpiredGrants()
   }
 
   /*
@@ -48,6 +40,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
    */
   private def deleteExpiredGrants(): Future[Unit] =
     for {
+      _ <- Future.successful(logger.info("Starting FastPass grant cleanup"))
       grantsGroupedByEmail <- findFastPassGrantsToRemove()
     } yield Future.sequence(grantsGroupedByEmail.map { tuple =>
       val (googleProjectId, groupedFastPassGrants) = tuple

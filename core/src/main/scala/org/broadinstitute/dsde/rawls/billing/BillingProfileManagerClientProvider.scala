@@ -1,11 +1,12 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import bio.terra.common.tracing.JerseyTracingFilter
+import bio.terra.common.tracing.JakartaTracingFilter
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi, UnauthenticatedApi}
 import bio.terra.profile.client.ApiClient
 import io.opencensus.trace.Tracing
+import io.opentelemetry.api.GlobalOpenTelemetry
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
-import org.broadinstitute.dsde.rawls.util.WithSpanFilter
+import org.broadinstitute.dsde.rawls.util.{TracingUtils, WithOtelContextFilter}
 import org.glassfish.jersey.client.ClientConfig
 
 /**
@@ -26,18 +27,10 @@ trait BillingProfileManagerClientProvider {
 
 class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extends BillingProfileManagerClientProvider {
   def getApiClient(ctx: RawlsRequestContext): ApiClient = {
-    val client: ApiClient = new ApiClient() {
-      override def performAdditionalClientConfiguration(clientConfig: ClientConfig): Unit = {
-        super.performAdditionalClientConfiguration(clientConfig)
-        ctx.tracingSpan.foreach { span =>
-          clientConfig.register(new WithSpanFilter(span))
-          clientConfig.register(new JerseyTracingFilter(Tracing.getTracer))
-        }
-      }
-    }
+    val client: ApiClient = new ApiClient()
+    TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
     client.setBasePath(basePath)
     client.setAccessToken(ctx.userInfo.accessToken.token)
-
     client
   }
 

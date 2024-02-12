@@ -49,7 +49,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   "UserApi" should "get a valid billing project status" in withTestDataApiServices { services =>
     val projectStatus = RawlsBillingProjectStatus(testData.billingProject.projectName, CreationStatuses.Ready)
     Get(s"/user/billing/${projectStatus.projectName.value}") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectStatusFormat
@@ -59,7 +59,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return the list of billing accounts the user has access to" in withTestDataApiServices { services =>
     Get("/user/billingAccounts") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
 
@@ -74,7 +74,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   it should "filter billing accounts when firecloudHasAccess is specified as false " in withTestDataApiServices {
     services =>
       Get("/user/billingAccounts?firecloudHasAccess=false") ~>
-        sealRoute(services.userRoutes) ~>
+        sealRoute(services.userRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
 
@@ -88,7 +88,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   it should "filter billing accounts when firecloudHasAccess is specified as true " in withTestDataApiServices {
     services =>
       Get("/user/billingAccounts?firecloudHasAccess=true") ~>
-        sealRoute(services.userRoutes) ~>
+        sealRoute(services.userRoutes()) ~>
         check {
           assertResult(StatusCodes.OK)(status)
 
@@ -101,7 +101,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "fail to get an invalid billing project status" in withTestDataApiServices { services =>
     Get("/user/billing/not-found-project-name") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -109,7 +109,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "list a user's billing projects ordered a-z" in withTestDataApiServices { services =>
     Get("/user/billing") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -133,7 +133,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(workspaceQuery.countByNamespace(testData.billingProject.projectName)) should be > 0
 
     Delete(s"/user/billing/${testData.billingProject.projectName.value}") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest)(status)
         val responseString = Unmarshal(response.entity).to[String].futureValue
@@ -146,7 +146,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(workspaceQuery.countByNamespace(testData.testProject1.projectName)) shouldEqual 0
 
     Delete(s"/user/billing/${testData.testProject1.projectName.value}") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
         runAndWait(rawlsBillingProjectQuery.load(testData.testProject1.projectName)) shouldBe empty
@@ -155,7 +155,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return OK for a user who is an admin" in withTestDataApiServices { services =>
     Get("/user/role/admin") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -166,7 +166,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   it should "return Not Found for a user who is not an admin" in withTestDataApiServices { services =>
     assertResult(())(Await.result(services.gcsDAO.removeAdmin(services.user.userEmail.value), Duration.Inf))
     Get("/user/role/admin") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -176,7 +176,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return OK for a user who is a curator" in withTestDataApiServices { services =>
     Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -186,12 +186,12 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return Not Found for a user who is not a curator" in withTestDataApiServices { services =>
     Delete(s"/admin/user/role/curator/owner-access") ~>
-      sealRoute(services.adminRoutes) ~>
+      sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
       }
     Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.userRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status

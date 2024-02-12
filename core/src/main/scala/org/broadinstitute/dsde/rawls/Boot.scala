@@ -9,9 +9,22 @@ import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
 import com.google.auth.oauth2.ServiceAccountCredentials
+import com.google.cloud.opentelemetry.trace.{TraceConfiguration, TraceExporter}
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
+import io.opentelemetry.api.OpenTelemetry
+import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator
+import io.opentelemetry.context.propagation.{ContextPropagators, TextMapPropagator}
+import io.opentelemetry.exporter.prometheus.PrometheusHttpServer
+import io.opentelemetry.instrumentation.resources.{ContainerResource, HostResource}
+import io.opentelemetry.sdk.metrics.SdkMeterProvider
+import io.opentelemetry.sdk.trace.SdkTracerProvider
+import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
+import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
+import io.opentelemetry.sdk.trace.samplers.Sampler
+import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
@@ -64,11 +77,10 @@ import org.broadinstitute.dsde.workbench.google.{
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
-import java.io.{ByteArrayInputStream, StringReader}
+import java.io.{ByteArrayInputStream, FileInputStream, StringReader}
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -97,6 +109,8 @@ object Boot extends IOApp with LazyLogging {
     // we need an ActorSystem to host our application in
     implicit val system: ActorSystem = ActorSystem("rawls")
     implicit val materializer: ActorMaterializer = ActorMaterializer()
+
+    instantiateOpenTelemetry(conf)
 
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
 
@@ -165,8 +179,6 @@ object Boot extends IOApp with LazyLogging {
     )
 
     initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
-      implicit val openTelemetryMetrics: OpenTelemetryMetrics[IO] = appDependencies.openTelemetry
-
       val gcsDAO = new HttpGoogleServicesDAO(
         clientSecrets,
         clientEmail,
@@ -734,7 +746,6 @@ object Boot extends IOApp with LazyLogging {
           extraAuthParams = Some("prompt=login")
         )
       )
-      openTelemetry <- OpenTelemetryMetrics.resource[F]("rawls", prometheusConfig.endpointPort)
     } yield AppDependencies[F](
       googleStorage,
       googleStorageTransferService,
@@ -743,9 +754,57 @@ object Boot extends IOApp with LazyLogging {
       bqServiceFactory,
       httpGoogleIamDAO,
       httpGoogleStorageDAO,
-      openIdConnect,
-      openTelemetry
+      openIdConnect
     )
+  }
+
+  private def instantiateOpenTelemetry(conf: Config)(implicit system: ActorSystem): OpenTelemetry = {
+    val maybeVersion = Option(getClass.getPackage.getImplementationVersion)
+    val resourceBuilder =
+      resources.Resource.getDefault.toBuilder
+        .put(ResourceAttributes.SERVICE_NAME, "rawls")
+    maybeVersion.foreach(version => resourceBuilder.put(ResourceAttributes.SERVICE_VERSION, version))
+    val resource = HostResource
+      .get()
+      .merge(ContainerResource.get())
+      .merge(resourceBuilder.build)
+
+    val maybeTracerProvider = conf.getBooleanOption("opencensus-scala.trace.exporters.stackdriver.enabled").flatMap {
+      case false => None
+      case true =>
+        val traceProviderBuilder = SdkTracerProvider.builder
+        val projectId = conf.getString("opencensus-scala.trace.exporters.stackdriver.project-id")
+        val googleTraceExporter =
+          TraceExporter.createWithConfiguration(TraceConfiguration.builder().setProjectId(projectId).build())
+        traceProviderBuilder.addSpanProcessor(BatchSpanProcessor.builder(googleTraceExporter).build())
+        val probabilitySampler =
+          Sampler.traceIdRatioBased(conf.getDouble("opencensus-scala.trace.sampling-probability"))
+        traceProviderBuilder
+          .setResource(resource)
+          .setSampler(Sampler.parentBased(probabilitySampler))
+          .build
+          .some
+    }
+
+    val prometheusConfig = PrometheusConfig.apply(conf)
+
+    val prometheusHttpServer = PrometheusHttpServer.builder().setPort(prometheusConfig.endpointPort).build()
+    system.registerOnTermination(prometheusHttpServer.shutdown())
+    val sdkMeterProvider =
+      SdkMeterProvider.builder
+        .registerMetricReader(prometheusHttpServer)
+        .setResource(resource)
+        .build
+
+    val otelBuilder = OpenTelemetrySdk.builder
+    maybeTracerProvider.foreach(otelBuilder.setTracerProvider)
+    otelBuilder.setMeterProvider(sdkMeterProvider)
+    otelBuilder.setPropagators(
+      ContextPropagators.create(
+        TextMapPropagator.composite(W3CTraceContextPropagator.getInstance, W3CBaggagePropagator.getInstance)
+      )
+    )
+    otelBuilder.buildAndRegisterGlobal
   }
 }
 
@@ -757,6 +816,5 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: HttpGoogleIamDAO,
                                        httpGoogleStorageDAO: HttpGoogleStorageDAO,
-                                       oidcConfiguration: OpenIDConnectConfiguration,
-                                       openTelemetry: OpenTelemetryMetrics[F]
+                                       oidcConfiguration: OpenIDConnectConfiguration
 )
