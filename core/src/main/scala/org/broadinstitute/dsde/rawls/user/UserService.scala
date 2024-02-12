@@ -851,12 +851,25 @@ class UserService(
     billingAccount: Option[RawlsBillingAccountName]
   ): Future[Option[RawlsBillingProjectResponse]] = for {
     project <- updateBillingAccountInDatabase(projectName, billingAccount)
+    _ = project.map(updateBillingAccountInBillingProfile(_, billingAccount)) //todo: should probably eat exceptions from BPM and return successfully to users
     projectRoles <- samDAO
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
   } yield project.flatMap { p =>
     if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
   }
+
+  private def updateBillingAccountInBillingProfile(project: RawlsBillingProject,
+                                                   billingAccount: Option[RawlsBillingAccountName]
+  ): Unit =
+    project.billingProfileId.map { billingProfileId =>
+      billingAccount match {
+        case Some(newBillingAccount) =>
+          billingProfileManagerDAO.updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
+        case None =>
+          billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
+      }
+    }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]

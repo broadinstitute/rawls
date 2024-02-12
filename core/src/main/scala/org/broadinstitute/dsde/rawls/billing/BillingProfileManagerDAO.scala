@@ -56,6 +56,13 @@ trait BillingProfileManagerDAO {
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
+  def updateBillingProfile(billingProfileId: UUID,
+                           rawlsBillingAccountName: RawlsBillingAccountName,
+                           ctx: RawlsRequestContext
+  ): ProfileModel
+
+  def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
+
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
                              memberEmail: String,
@@ -211,6 +218,24 @@ class BillingProfileManagerDAOImpl(
 
     Future.successful(callListProfiles())
   }
+
+  def updateBillingProfile(billingProfileId: UUID,
+                           rawlsBillingAccountName: RawlsBillingAccountName,
+                           ctx: RawlsRequestContext
+  ): ProfileModel = {
+    logger.info(s"updating profile $billingProfileId to billing account $rawlsBillingAccountName")
+    apiClientProvider
+      .getProfileApi(ctx)
+      .updateProfile(
+        new UpdateProfileRequest().billingAccountId(rawlsBillingAccountName.withoutPrefix()),
+        billingProfileId
+      )
+  }
+
+  override def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
+    apiClientProvider
+      .getProfileApi(ctx)
+      .removeBillingAccount(billingProfileId)
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
