@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.client.ApiException
 import bio.terra.profile.model.ProfileModel
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
@@ -851,7 +852,7 @@ class UserService(
     billingAccount: Option[RawlsBillingAccountName]
   ): Future[Option[RawlsBillingProjectResponse]] = for {
     project <- updateBillingAccountInDatabase(projectName, billingAccount)
-    _ = project.map(updateBillingAccountInBillingProfile(_, billingAccount)) //todo: should probably eat exceptions from BPM and return successfully to users
+    _ = project.map(updateBillingAccountInBillingProfile(_, billingAccount))
     projectRoles <- samDAO
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
@@ -862,13 +863,22 @@ class UserService(
   private def updateBillingAccountInBillingProfile(project: RawlsBillingProject,
                                                    billingAccount: Option[RawlsBillingAccountName]
   ): Unit =
-    project.billingProfileId.map { billingProfileId =>
-      billingAccount match {
-        case Some(newBillingAccount) =>
-          billingProfileManagerDAO.updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
-        case None =>
-          billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
+    try
+      project.billingProfileId.map { billingProfileId =>
+        billingAccount match {
+          case Some(newBillingAccount) =>
+            billingProfileManagerDAO.updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
+          case None =>
+            billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
+        }
       }
+    catch {
+      // Until BPM is the system of record for Terra billing information, Rawls will not throw an exception if BPM fails to update
+      case e: ApiException =>
+        logger.warn(
+          s"Failed to update billing account in BPM [billingProject=${project.projectName.value}, billingProfile=${project.billingProfileId}]",
+          e
+        )
     }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,

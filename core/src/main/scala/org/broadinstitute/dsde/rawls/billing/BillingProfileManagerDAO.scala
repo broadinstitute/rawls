@@ -222,15 +222,13 @@ class BillingProfileManagerDAOImpl(
   def updateBillingProfile(billingProfileId: UUID,
                            rawlsBillingAccountName: RawlsBillingAccountName,
                            ctx: RawlsRequestContext
-  ): ProfileModel = {
-    logger.info(s"updating profile $billingProfileId to billing account $rawlsBillingAccountName")
+  ): ProfileModel =
     apiClientProvider
       .getProfileApi(ctx)
       .updateProfile(
         new UpdateProfileRequest().billingAccountId(rawlsBillingAccountName.withoutPrefix()),
         billingProfileId
       )
-  }
 
   override def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
     apiClientProvider
