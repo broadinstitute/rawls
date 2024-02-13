@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCode
 import akka.stream.Materializer
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
@@ -9,7 +8,6 @@ import bio.terra.workspace.client.{ApiClient, ApiException}
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.http.HttpStatus
-import org.broadinstitute.dsde.rawls.billing.LandingZoneDeletionException
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceDescriptionField,
@@ -18,7 +16,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.rawls.model.{ErrorReport => RawlsErrorReport}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -323,6 +320,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =
     getLandingZonesApi(ctx).getCreateAzureLandingZoneResult(jobId)
+
+  override def getLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): AzureLandingZone =
+    getLandingZonesApi(ctx).getAzureLandingZone(landingZoneId)
 
   /**
     *

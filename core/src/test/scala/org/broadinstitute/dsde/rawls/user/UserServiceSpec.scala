@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{BpmApiPolicyInput, BpmApiPolicyInputs, CloudPlatform => BPMCloudPlatform, ProfileModel}
+import bio.terra.workspace.model.AzureLandingZone
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -58,7 +59,13 @@ class UserServiceSpec
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+  val defaultMockWsmDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
+
+  val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
+  val noRole = SamRolesAndActions(Set.empty, Set.empty)
+  val creatorRole =
+    SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(1.second)
 
@@ -87,7 +94,7 @@ class UserServiceSpec
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
                      bpmDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO,
-                     workspaceManagerDao: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+                     workspaceManagerDao: WorkspaceManagerDAO = defaultMockWsmDAO,
                      billingRepository: Option[BillingRepository] = None,
                      workspaceMonitorRecordDao: Option[WorkspaceManagerResourceMonitorRecordDao] = None
   ): UserService =
@@ -1222,13 +1229,16 @@ class UserServiceSpec
   it should "map the azure data for a bpm project" in {
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val landingZoneId = UUID.randomUUID()
+    val lzRegion = "dummy-region"
     val project = RawlsBillingProject(
       projectName,
       CreationStatuses.Ready,
       None,
       None,
       azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(billingProfile.getId.toString)
+      billingProfileId = Some(billingProfile.getId.toString),
+      landingZoneId = Some(landingZoneId.toString)
     )
     val repository = mock[BillingRepository]
     when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
@@ -1239,10 +1249,24 @@ class UserServiceSpec
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getBillingProfile(billingProfile.getId, testContext)).thenReturn(Some(billingProfile))
 
-    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getLandingZone(landingZoneId, testContext)).thenReturn(new AzureLandingZone().region(lzRegion))
+
+    val userService = getUserService(samDAO = samDAO,
+                                     bpmDAO = bpmDAO,
+                                     billingRepository = Some(repository),
+                                     workspaceManagerDao = wsmDAO
+    )
 
     val expected =
-      Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE, Option(false)))
+      Some(
+        RawlsBillingProjectResponse(Set(ProjectRoles.Owner),
+                                    project,
+                                    CloudPlatform.AZURE,
+                                    Option(false),
+                                    Option(lzRegion)
+        )
+      )
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
 
@@ -1279,21 +1303,21 @@ class UserServiceSpec
   it should "map azure data for a BPM project" in {
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val landingZoneId = UUID.randomUUID()
+    val lzRegion = "dummy-region"
     val project = RawlsBillingProject(
       projectName,
       CreationStatuses.Ready,
       None,
       None,
-      billingProfileId = Some(billingProfile.getId.toString)
+      billingProfileId = Some(billingProfile.getId.toString),
+      landingZoneId = Some(landingZoneId.toString)
     )
 
     val repository = mock[BillingRepository]
     when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
       .thenReturn(Future.successful(Seq(project)))
 
-    val noRole = SamRolesAndActions(Set.empty, Set.empty)
-    val creatorRole =
-      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -1301,14 +1325,71 @@ class UserServiceSpec
       .thenReturn(Future.successful(Seq(billingResource)))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(billingProfile)))
-    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getLandingZone(landingZoneId, testContext)).thenReturn(new AzureLandingZone().region(lzRegion))
+
+    val userService = getUserService(samDAO = samDAO,
+                                     bpmDAO = bpmDAO,
+                                     billingRepository = Some(repository),
+                                     workspaceManagerDao = wsmDAO
+    )
 
     val expected = Seq(
       RawlsBillingProjectResponse(
         Set(ProjectRoles.User),
         project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
         CloudPlatform.AZURE,
-        Option(false)
+        Option(false),
+        Option(lzRegion)
+      )
+    )
+
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
+  }
+
+  it should "map handle the landing zone being missing in BPM project" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val landingZoneId = UUID.randomUUID()
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      None,
+      None,
+      billingProfileId = Some(billingProfile.getId.toString),
+      landingZoneId = Some(landingZoneId.toString)
+    )
+
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
+      .thenReturn(Future.successful(Seq(project)))
+
+    val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
+      .thenReturn(Future.successful(Seq(billingResource)))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(billingProfile)))
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    // If fetching the landing zone fails (in any way), we log and return no region.
+    when(wsmDAO.getLandingZone(landingZoneId, testContext)).thenThrow(new RuntimeException("Mock Error"))
+
+    val userService = getUserService(samDAO = samDAO,
+                                     bpmDAO = bpmDAO,
+                                     billingRepository = Some(repository),
+                                     workspaceManagerDao = wsmDAO
+    )
+
+    val expected = Seq(
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.User),
+        project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
+        CloudPlatform.AZURE,
+        Option(false),
+        None
       )
     )
 
@@ -1330,9 +1411,6 @@ class UserServiceSpec
     when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
       .thenReturn(Future.successful(Seq(project)))
 
-    val noRole = SamRolesAndActions(Set.empty, Set.empty)
-    val creatorRole =
-      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -1384,10 +1462,6 @@ class UserServiceSpec
       .thenReturn(Future.successful(billingProjects.toSeq))
 
     // Setup mock DAOs
-    val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
-    val noRole = SamRolesAndActions(Set.empty, Set.empty)
-    val creatorRole =
-      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val userBillingResources = Seq(
       SamUserResource(ownerProject.projectName.value, ownerRole, noRole, noRole, Set.empty, Set.empty),
       SamUserResource(billingProfileBackedProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty),
@@ -1432,10 +1506,6 @@ class UserServiceSpec
     when(repository.getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName))))
       .thenReturn(Future.successful(Seq(ownerProject, userProject)))
 
-    val noRole = SamRolesAndActions(Set.empty, Set.empty)
-    val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
-    val creatorRole =
-      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val userBillingResources = Seq(
       SamUserResource(ownerProject.projectName.value, ownerRole, noRole, noRole, Set.empty, Set.empty),
       SamUserResource(userProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
@@ -1466,10 +1536,6 @@ class UserServiceSpec
     when(repository.getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName))))
       .thenReturn(Future.successful(Seq(ownerProject, userProject)))
 
-    val noRole = SamRolesAndActions(Set.empty, Set.empty)
-    val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
-    val creatorRole =
-      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val userBillingResources = Seq(
       SamUserResource(ownerProject.projectName.value, noRole, noRole, noRole, Set.empty, Set.empty),
       SamUserResource(userProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)

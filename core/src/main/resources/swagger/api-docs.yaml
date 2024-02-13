@@ -6484,6 +6484,9 @@ components:
           type: string
           format: uuid
           description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        region:
+          type: string
+          description: the region that the landing zone is in (cloudPlatform AZURE only)
         protectedData:
           type: boolean
           description: whether this billing project supports protected data (cloudPlatform AZURE only)
