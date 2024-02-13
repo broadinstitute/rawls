@@ -56,11 +56,13 @@ trait BillingProfileManagerDAO {
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
+  @throws[ApiException]
   def updateBillingProfile(billingProfileId: UUID,
                            rawlsBillingAccountName: RawlsBillingAccountName,
                            ctx: RawlsRequestContext
   ): ProfileModel
 
+  @throws[ApiException]
   def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
 
   def addProfilePolicyMember(billingProfileId: UUID,

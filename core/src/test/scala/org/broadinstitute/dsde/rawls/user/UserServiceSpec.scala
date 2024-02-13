@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.client.ApiException
 import bio.terra.profile.model.{BpmApiPolicyInput, BpmApiPolicyInputs, CloudPlatform => BPMCloudPlatform, ProfileModel}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -834,7 +835,16 @@ class UserServiceSpec
       when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
         .thenReturn(Future.successful(true))
 
-      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+      val mockBpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        mockBpmDAO.updateBillingProfile(
+          ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+          ArgumentMatchers.eq(newBillingAccountRequest.billingAccount),
+          any()
+        )
+      ).thenReturn(new ProfileModel())
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
 
       Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest),
                    Duration.Inf
@@ -853,6 +863,12 @@ class UserServiceSpec
         .getOrElse(fail("project not found"))
       project.billingAccount shouldEqual Option(billingAccountName)
       project.invalidBillingAccount shouldBe false
+
+      verify(mockBpmDAO).updateBillingProfile(
+        ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+        ArgumentMatchers.eq(newBillingAccountRequest.billingAccount),
+        any()
+      )
     }
   }
 
@@ -876,8 +892,9 @@ class UserServiceSpec
       ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val mockBpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
 
       Await.result(userService.deleteBillingAccount(billingProject.projectName), Duration.Inf)
 
@@ -894,6 +911,11 @@ class UserServiceSpec
       runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
         .getOrElse(fail("project not found"))
         .billingAccount shouldEqual None
+
+      verify(mockBpmDAO).removeBillingAccountFromBillingProfile(
+        ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+        any()
+      )
     }
   }
 
@@ -1041,6 +1063,108 @@ class UserServiceSpec
       runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
         .getOrElse(fail("project not found"))
         .billingAccount shouldEqual billingProject.billingAccount
+    }
+  }
+
+  it should "not call BPM when updating or removing a billing account if the billing project has no billing profile" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject =
+        minimalTestData.billingProject.copy(projectName = RawlsBillingProjectName("noProfile"), billingProfileId = None)
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      runAndWait(
+        dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject)
+      )
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
+                                 billingProject.projectName.value,
+                                 SamBillingProjectActions.updateBillingAccount,
+                                 testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
+                                            billingProject.projectName.value,
+                                            testContext
+        )
+      ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+        .thenReturn(Future.successful(true))
+
+      val mockBpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
+
+      Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest),
+                   Duration.Inf
+      )
+      Await.result(userService.deleteBillingAccount(billingProject.projectName), Duration.Inf)
+
+      verifyNoInteractions(mockBpmDAO)
+    }
+  }
+
+  it should "not throw if BPM errors while updating the billing profile" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
+                                 billingProject.projectName.value,
+                                 SamBillingProjectActions.updateBillingAccount,
+                                 testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
+                                            billingProject.projectName.value,
+                                            testContext
+        )
+      ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+        .thenReturn(Future.successful(true))
+
+      val mockBpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        mockBpmDAO.updateBillingProfile(
+          ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+          ArgumentMatchers.eq(newBillingAccountRequest.billingAccount),
+          any()
+        )
+      ).thenThrow(new ApiException("oh no"))
+      when(
+        mockBpmDAO.removeBillingAccountFromBillingProfile(
+          ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+          any()
+        )
+      ).thenThrow(new ApiException("oh no"))
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
+
+      Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest),
+                   Duration.Inf
+      )
+      Await.result(userService.deleteBillingAccount(billingProject.projectName), Duration.Inf)
+
+      verify(mockBpmDAO).updateBillingProfile(
+        ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+        ArgumentMatchers.eq(newBillingAccountRequest.billingAccount),
+        any()
+      )
+      verify(mockBpmDAO).removeBillingAccountFromBillingProfile(
+        ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
+        any()
+      )
     }
   }
 
