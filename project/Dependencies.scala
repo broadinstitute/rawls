@@ -151,6 +151,8 @@ object Dependencies {
   // in Rawls by being listed here.
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
+    //Override for reactor-netty to address CVE-2023-34054 and CVE-2023-34062
+    "io.projectreactor.netty"                 % "reactor-netty-http"         % "1.0.39",
   )
 
   val extraOpenTelemetryDependencies = Seq(
