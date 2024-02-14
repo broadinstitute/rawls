@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.config.{FastPassConfig, MultiCloudAppConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.fastpass.{DisabledFastPassService, FastPass, FastPassService}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 
 import scala.concurrent.ExecutionContext
 import scala.language.{higherKinds, postfixOps}
@@ -19,8 +18,7 @@ object MultiCloudFastPassServiceConstructorFactory {
                                  gcsDAO: GoogleServicesDAO,
                                  samDAO: SamDAO
                                 )(implicit
-                                  executionContext: ExecutionContext,
-                                  openTelemetry: OpenTelemetryMetrics[IO]
+                                  executionContext: ExecutionContext
                                 ): (RawlsRequestContext, SlickDataSource) => FastPass =
     appConfigManager.cloudProvider match {
       case "gcp" =>

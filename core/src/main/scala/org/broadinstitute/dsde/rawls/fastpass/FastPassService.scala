@@ -215,7 +215,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                       protected val terraBucketReaderRole: String,
                       protected val terraBucketWriterRole: String
 )(implicit protected val executionContext: ExecutionContext)
-    extends LazyLogging {
+    extends LazyLogging
+    with FastPass {
 
   private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
     samResourceRole match {
