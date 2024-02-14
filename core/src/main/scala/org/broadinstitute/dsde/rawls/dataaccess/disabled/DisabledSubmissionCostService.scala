@@ -1,6 +1,7 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.dataaccess.disabled
 
 import com.google.api.services.bigquery.model._
+import org.broadinstitute.dsde.rawls.dataaccess.SubmissionCost
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.joda.time.DateTime
 

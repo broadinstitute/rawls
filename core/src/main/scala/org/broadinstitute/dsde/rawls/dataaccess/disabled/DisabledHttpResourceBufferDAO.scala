@@ -1,7 +1,8 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.dataaccess.disabled
 
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId}
+
 import scala.concurrent.Future
 
 class DisabledHttpResourceBufferDAO extends ResourceBufferDAO {

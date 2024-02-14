@@ -9,7 +9,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -29,7 +29,7 @@ trait AdminApiService extends UserInfoDirectives {
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val userServiceConstructor: RawlsRequestContext => UserService
-  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
+  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration
 
   def adminRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>

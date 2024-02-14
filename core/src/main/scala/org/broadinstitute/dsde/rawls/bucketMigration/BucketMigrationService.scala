@@ -34,7 +34,8 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
 )(implicit val executionContext: ExecutionContext)
     extends RoleSupport
     with WorkspaceSupport
-    with LazyLogging {
+    with LazyLogging
+    with BucketMigration {
 
   /**
     * Helper functions to enforce appropriate authz and load workspace(s) if authz passes

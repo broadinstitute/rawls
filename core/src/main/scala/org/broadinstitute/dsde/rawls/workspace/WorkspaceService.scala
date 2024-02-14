@@ -37,7 +37,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeter, ServicePerimeterService}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -86,7 +86,7 @@ object WorkspaceService {
                   entityManager: EntityManager,
                   resourceBufferService: ResourceBuffer,
                   resourceBufferSaEmail: String,
-                  servicePerimeterService: ServicePerimeterService,
+                  servicePerimeterService: ServicePerimeter,
                   googleIamDao: GoogleIamDAO,
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
@@ -197,7 +197,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        requesterPaysSetupService: RequesterPaysSetup,
                        resourceBufferService: ResourceBuffer,
                        resourceBufferSaEmail: String,
-                       servicePerimeterService: ServicePerimeterService,
+                       servicePerimeterService: ServicePerimeter,
                        googleIamDao: GoogleIamDAO,
                        val terraBillingProjectOwnerRole: String,
                        val terraWorkspaceCanComputeRole: String,

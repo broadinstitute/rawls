@@ -1,16 +1,18 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
+import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledRequesterPaysSetupService
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.{BondApiDAO, DisabledRequesterPaysSetupService, GoogleServicesDAO, RequesterPaysSetup, RequesterPaysSetupService, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{BondApiDAO, GoogleServicesDAO, RequesterPaysSetup, RequesterPaysSetupService, SlickDataSource}
 
 object MultiCloudRequesterPaysSetupServiceFactory {
-  def createAccessContextManager(dataSource: SlickDataSource,
+  def createAccessContextManager(appConfigManager: MultiCloudAppConfigManager,
+                                 dataSource: SlickDataSource,
                                  googleServicesDAO: GoogleServicesDAO,
                                  bondApiDAO: BondApiDAO,
-                                 requesterPaysRole: String,
-                                 cloudProvider: String
+                                 requesterPaysRole: String
                                 )(implicit executionContext: ExecutionContext): RequesterPaysSetup = {
-    cloudProvider match {
+    appConfigManager.cloudProvider match {
       case "gcp" =>
         new RequesterPaysSetupService(dataSource, googleServicesDAO, bondApiDAO, requesterPaysRole)
       case "azure" =>

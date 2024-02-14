@@ -1,6 +1,8 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.dataaccess.disabled
 
+import org.broadinstitute.dsde.rawls.dataaccess.{BondServiceAccountEmail, RequesterPaysSetup}
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
+
 import scala.concurrent.Future
 
 class DisabledRequesterPaysSetupService

@@ -7,7 +7,7 @@ import akka.http.scaladsl.unmarshalling.Unmarshaller
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -32,7 +32,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   val userServiceConstructor: RawlsRequestContext => UserService
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator
-  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
+  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration
 
   implicit def aggregationKeyParameterUnmarshaller: Unmarshaller[String, SpendReportingAggregationKeyWithSub] =
     Unmarshaller.strict { parameter =>

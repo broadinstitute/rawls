@@ -1,20 +1,19 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
-import com.typesafe.config.Config
-import org.broadinstitute.dsde.rawls.dataaccess.DisabledPubSubNotificationDAO
+import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledPubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.GooglePubSubDAO
 
 object MultiCloudNotificationDAOFactory {
-  def createMultiCloudNotificationDAO(config: Config,
+  def createMultiCloudNotificationDAO(appConfigManager: MultiCloudAppConfigManager,
                                       notificationPubSubDAO: GooglePubSubDAO,
-                                      cloudProvider:String
                                      ): NotificationDAO = {
-    cloudProvider match {
+    appConfigManager.cloudProvider match {
       case "gcp" =>
         new PubSubNotificationDAO(
           notificationPubSubDAO,
-          config.getString("notifications.topicName")
+          appConfigManager.gcsConfig.getString("notifications.topicName")
         )
       case "azure" =>
         new DisabledPubSubNotificationDAO

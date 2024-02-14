@@ -31,7 +31,8 @@ class ServicePerimeterService(dataSource: SlickDataSource,
                               config: ServicePerimeterServiceConfig
 )(implicit val system: ActorSystem, protected val executionContext: ExecutionContext)
     extends LazyLogging
-    with Retry {
+    with Retry
+    with ServicePerimeter {
 
   import dataSource.dataAccess.driver.api._
 

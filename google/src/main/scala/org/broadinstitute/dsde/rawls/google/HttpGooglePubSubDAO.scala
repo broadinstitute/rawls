@@ -6,11 +6,9 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.HttpResponseException
-import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
@@ -22,25 +20,23 @@ import scala.jdk.CollectionConverters._
  * Created by mbemis on 5/6/16.
  */
 
-class HttpGooglePubSubDAO(config: Config,
+class HttpGooglePubSubDAO(clientEmail: String,
+                          pemFile: String,
+                          appName: String,
                           serviceProject: String,
                           override val workbenchMetricBaseName: String
-)(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
-    extends FutureSupport
+                         )(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
+  extends FutureSupport
     with GoogleUtilities
-    with GooglePubSubDAO
-{
-  val clientEmail: String = config.getString("serviceClientEmail")
-  val appName: String = config.getString("appName")
-  val pemFile: String = config.getString("pathToPem")
-  private val pubSubScopes = Seq(PubsubScopes.PUBSUB)
+    with GooglePubSubDAO {
 
-  val httpTransport: NetHttpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance
+  val pubSubScopes = Seq(PubsubScopes.PUBSUB)
+
+  val httpTransport = GoogleNetHttpTransport.newTrustedTransport
+  val jsonFactory = GsonFactory.getDefaultInstance
 
   private val characterEncoding = "UTF-8"
   implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.PubSub
-
   override def createTopic(topicName: String) =
     retryWithRecoverWhen500orGoogleError { () =>
       executeGoogleRequest(getPubSubDirectory.projects().topics().create(topicToFullPath(topicName), new Topic()))

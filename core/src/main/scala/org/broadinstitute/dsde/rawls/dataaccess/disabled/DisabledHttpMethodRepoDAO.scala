@@ -1,6 +1,8 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.dataaccess.disabled
 
+import org.broadinstitute.dsde.rawls.dataaccess.MethodRepoDAO
 import org.broadinstitute.dsde.rawls.model._
+
 import scala.concurrent.{ExecutionContext, Future}
 
 class DisabledHttpMethodRepoDAO extends MethodRepoDAO {

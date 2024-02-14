@@ -1,6 +1,8 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.dataaccess.disabled
 
+import org.broadinstitute.dsde.rawls.dataaccess.{BondApiDAO, BondResponseData}
 import org.broadinstitute.dsde.rawls.model.UserInfo
+
 import scala.concurrent.Future
 
 class DisabledHttpBondApiDAO extends BondApiDAO {
