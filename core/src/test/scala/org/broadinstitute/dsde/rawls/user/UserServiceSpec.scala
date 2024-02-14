@@ -1348,7 +1348,7 @@ class UserServiceSpec
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
   }
 
-  it should "map handle the landing zone being missing in BPM project" in {
+  it should "handle the landing zone being missing in BPM project" in {
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val landingZoneId = UUID.randomUUID()

@@ -328,7 +328,7 @@ class UserService(
         val landingZoneRegion = project.landingZoneId match {
           case Some(landingZoneId) =>
             Try(workspaceManagerDao.getLandingZone(UUID.fromString(landingZoneId), ctx)) match {
-              case Success(landingZone) => Some(landingZone.getRegion)
+              case Success(landingZone) => Option(landingZone.getRegion)
               case Failure(exception) =>
                 logger.debug(
                   s"landing zone ${landingZoneId} could not be retrieved from the workspaceManagerDao",
