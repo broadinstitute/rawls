@@ -3,12 +3,18 @@ package org.broadinstitute.dsde.rawls.metrics
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.http.scaladsl.server.Directives.{extractRequest, handleExceptions, mapResponse, provide}
 import akka.http.scaladsl.server.{Directive1, ExceptionHandler}
+import bio.terra.common.opentelemetry.HttpServerMetrics
 import io.opentelemetry.api.GlobalOpenTelemetry
-import io.opentelemetry.api.trace.Span
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
-import io.opentelemetry.instrumentation.api.instrumenter.http.{HttpSpanNameExtractor, _}
+import io.opentelemetry.instrumentation.api.semconv.http.{
+  HttpServerAttributesExtractor,
+  HttpServerAttributesGetter,
+  HttpServerRoute,
+  HttpSpanNameExtractor,
+  HttpSpanStatusExtractor
+}
 
 import java.util
 import scala.jdk.CollectionConverters._
