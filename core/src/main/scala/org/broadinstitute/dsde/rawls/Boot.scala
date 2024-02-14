@@ -18,6 +18,7 @@ import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator
 import io.opentelemetry.context.propagation.{ContextPropagators, TextMapPropagator}
 import io.opentelemetry.exporter.prometheus.PrometheusHttpServer
+import io.opentelemetry.instrumentation.resources.{ContainerResource, HostResource}
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
@@ -63,7 +64,6 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoog
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -80,8 +80,8 @@ import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
   override def run(
-                    args: List[String]
-                  ): IO[ExitCode] =
+    args: List[String]
+  ): IO[ExitCode] =
     startup() *> ExitCode.Success.pure[IO]
 
   private def startup(): IO[Unit] = {
@@ -100,6 +100,9 @@ object Boot extends IOApp with LazyLogging {
     implicit val system: ActorSystem = ActorSystem("rawls")
     implicit val materializer: ActorMaterializer = ActorMaterializer()
 
+    instantiateOpenTelemetry(conf)
+
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", appConfigManager.conf))
 
     val liquibaseConf = appConfigManager.conf.getConfig("liquibase")
@@ -660,7 +663,6 @@ object Boot extends IOApp with LazyLogging {
           extraAuthParams = Some("prompt=login")
         )
       )
-      openTelemetry <- OpenTelemetryMetrics.resource[F]("rawls", prometheusConfig.endpointPort)
     } yield AppDependencies[F](
       googleStorage,
       googleStorageTransferService,
@@ -669,18 +671,20 @@ object Boot extends IOApp with LazyLogging {
       bqServiceFactory,
       httpGoogleIamDAO,
       httpGoogleStorageDAO,
-      openIdConnect,
-      openTelemetry
+      openIdConnect
     )
   }
 
-  private def instantiateOpenTelemetry(conf: Config): OpenTelemetry = {
+  private def instantiateOpenTelemetry(conf: Config)(implicit system: ActorSystem): OpenTelemetry = {
     val maybeVersion = Option(getClass.getPackage.getImplementationVersion)
     val resourceBuilder =
       resources.Resource.getDefault.toBuilder
         .put(ResourceAttributes.SERVICE_NAME, "rawls")
     maybeVersion.foreach(version => resourceBuilder.put(ResourceAttributes.SERVICE_VERSION, version))
-    val resource = resourceBuilder.build
+    val resource = HostResource
+      .get()
+      .merge(ContainerResource.get())
+      .merge(resourceBuilder.build)
 
     val maybeTracerProvider = conf.getBooleanOption("opencensus-scala.trace.exporters.stackdriver.enabled").flatMap {
       case false => None
@@ -699,17 +703,19 @@ object Boot extends IOApp with LazyLogging {
           .some
     }
 
-//    val prometheusHttpServer = PrometheusHttpServer.builder().setPort(appConfig.prometheusConfig.endpointPort).build()
-//    system.registerOnTermination(prometheusHttpServer.shutdown())
-//    val sdkMeterProvider =
-//      SdkMeterProvider.builder
-//        .registerMetricReader(prometheusHttpServer)
-//        .setResource(resource)
-//        .build
+    val prometheusConfig = PrometheusConfig.apply(conf)
+
+    val prometheusHttpServer = PrometheusHttpServer.builder().setPort(prometheusConfig.endpointPort).build()
+    system.registerOnTermination(prometheusHttpServer.shutdown())
+    val sdkMeterProvider =
+      SdkMeterProvider.builder
+        .registerMetricReader(prometheusHttpServer)
+        .setResource(resource)
+        .build
 
     val otelBuilder = OpenTelemetrySdk.builder
     maybeTracerProvider.foreach(otelBuilder.setTracerProvider)
-//    otelBuilder.setMeterProvider(sdkMeterProvider)
+    otelBuilder.setMeterProvider(sdkMeterProvider)
     otelBuilder.setPropagators(
       ContextPropagators.create(
         TextMapPropagator.composite(W3CTraceContextPropagator.getInstance, W3CBaggagePropagator.getInstance)
@@ -727,6 +733,5 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: HttpGoogleIamDAO,
                                        httpGoogleStorageDAO: HttpGoogleStorageDAO,
-                                       oidcConfiguration: OpenIDConnectConfiguration,
-                                       openTelemetry: OpenTelemetryMetrics[F]
+                                       oidcConfiguration: OpenIDConnectConfiguration
 )

@@ -3,11 +3,18 @@ package org.broadinstitute.dsde.rawls.metrics
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.http.scaladsl.server.Directives.{extractRequest, handleExceptions, mapResponse, provide}
 import akka.http.scaladsl.server.{Directive1, ExceptionHandler}
+import bio.terra.common.opentelemetry.HttpServerMetrics
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.propagation.TextMapGetter
 import io.opentelemetry.instrumentation.api.instrumenter.Instrumenter
-import io.opentelemetry.instrumentation.api.instrumenter.http._
+import io.opentelemetry.instrumentation.api.semconv.http.{
+  HttpServerAttributesExtractor,
+  HttpServerAttributesGetter,
+  HttpServerRoute,
+  HttpSpanNameExtractor,
+  HttpSpanStatusExtractor
+}
 
 import java.util
 import scala.jdk.CollectionConverters._
@@ -17,7 +24,10 @@ trait TracingDirectives {
   // lazy to make sure GlobalOpenTelemetry is initialized
   private lazy val instrumenter: Instrumenter[HttpRequest, HttpResponse] =
     Instrumenter
-      .builder[HttpRequest, HttpResponse](GlobalOpenTelemetry.get(), "RawlsRequest", req => req.uri.path.toString())
+      .builder[HttpRequest, HttpResponse](GlobalOpenTelemetry.get(),
+                                          "RawlsRequest",
+                                          HttpSpanNameExtractor.builder(AkkaHttpServerAttributesGetter).build()
+      )
       .addAttributesExtractor(
         HttpServerAttributesExtractor.create[HttpRequest, HttpResponse](AkkaHttpServerAttributesGetter)
       )
@@ -72,7 +82,8 @@ object AkkaHttpServerAttributesGetter extends HttpServerAttributesGetter[HttpReq
 
   /** Defaults to the path of the request. Overridden by the `addTelemetry` directive.
    */
-  override def getHttpRoute(request: HttpRequest): String = getUrlPath(request)
+  override def getHttpRoute(request: HttpRequest): String =
+    SwaggerRouteMatcher.matchRoute(getUrlPath(request)).map(_.route).getOrElse(getUrlPath(request))
 
   override def getHttpRequestMethod(request: HttpRequest): String = request.method.value
 

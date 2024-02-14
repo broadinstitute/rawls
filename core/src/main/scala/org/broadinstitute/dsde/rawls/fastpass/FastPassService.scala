@@ -8,27 +8,9 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
-  openTelemetryTags,
-  policyBindingsQuotaLimit,
-  removeFastPassGrants,
-  RemovalFailure,
-  SAdomain,
-  UserAndPetEmails
-}
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  FastPassGrant,
-  GoogleProjectId,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  SamResourceRole,
-  SamResourceTypeNames,
-  SamUserStatusResponse,
-  SamWorkspaceRoles,
-  UserIdInfo,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{RemovalFailure, SAdomain, UserAndPetEmails, policyBindingsQuotaLimit, removeFastPassGrants}
+import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, FastPassGrant, GoogleProjectId, RawlsRequestContext, RawlsUserEmail, SamResourceRole, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceRoles, UserIdInfo, Workspace}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
@@ -38,7 +20,6 @@ import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamRe
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
 import spray.json._
 
@@ -60,8 +41,7 @@ object FastPassService extends LazyLogging {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String
   )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
-    executionContext: ExecutionContext,
-    openTelemetry: OpenTelemetryMetrics[IO]
+    executionContext: ExecutionContext
   ): FastPassService =
     new FastPassService(
       ctx,
@@ -82,8 +62,6 @@ object FastPassService extends LazyLogging {
 
   // Copied from https://github.com/broadinstitute/sam/blob/d9b1fda2273ee76de717f8bf932ed8d01b817340/src/main/scala/org/broadinstitute/dsde/workbench/sam/api/StandardSamUserDirectives.scala#L80
   val SAdomain: Regex = "(\\S+@\\S*gserviceaccount\\.com$)".r
-
-  val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassService")
 
   type RemovalFailure = (Throwable, Seq[FastPassGrant])
 
@@ -107,7 +85,6 @@ object FastPassService extends LazyLogging {
     * @param googleStorageDAO Google Storage API access
     * @param optCtx An optional RawlsRequestContext for tracing
     * @param executionContext An implicit Execution Context for Futures
-    * @param openTelemetry An implicit OpenTelemetryMetrics for, well, metrics.
     * @return
     */
   def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
@@ -117,8 +94,7 @@ object FastPassService extends LazyLogging {
                                              googleStorageDAO: GoogleStorageDAO,
                                              optCtx: Option[RawlsRequestContext]
   )(implicit
-    executionContext: ExecutionContext,
-    openTelemetry: OpenTelemetryMetrics[IO]
+    executionContext: ExecutionContext
   ): ReadWriteAction[Seq[RemovalFailure]] = {
 
     type RemovalResult = Either[RemovalFailure, Seq[FastPassGrant]]
@@ -148,7 +124,7 @@ object FastPassService extends LazyLogging {
               s"Encountered an error while removing FastPass grants for ${accountEmail.value} in ${googleProjectId.value}",
               e
             )
-            openTelemetry.incrementCounter("fastpass-removal-failure").unsafeRunSync()
+            MetricsHelper.incrementFastPassFailureCounter("removeFastPassGrantsInWorkspaceProject").unsafeRunSync()
             Success(Left((e, grants)))
           case Success(_) => Success(Right(grants))
         }
@@ -176,7 +152,7 @@ object FastPassService extends LazyLogging {
                                    googleProject: GoogleProject,
                                    googleIamDAO: GoogleIamDAO,
                                    googleStorageDAO: GoogleStorageDAO
-  )(implicit executionContext: ExecutionContext, openTelemetry: OpenTelemetryMetrics[IO]): Future[Unit] = {
+  )(implicit executionContext: ExecutionContext): Future[Unit] = {
     logger.info(
       s"Removing FastPass IAM bindings for ${workbenchEmail.value} on ${resourceType.value} $resourceName"
     )
@@ -198,9 +174,7 @@ object FastPassService extends LazyLogging {
             organizationRoles
           )
       }
-      _ <- openTelemetry
-        .incrementCounter(s"fastpass-iam-revoked-${memberType.value}", tags = openTelemetryTags)
-        .unsafeToFuture()
+      _ <- MetricsHelper.incrementFastPassRevokedCounter(memberType).unsafeToFuture()
     } yield ()
   }
 
@@ -240,9 +214,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                       protected val terraWorkspaceNextflowRole: String,
                       protected val terraBucketReaderRole: String,
                       protected val terraBucketWriterRole: String
-)(implicit protected val executionContext: ExecutionContext, val openTelemetry: OpenTelemetryMetrics[IO])
-    extends LazyLogging
-    with FastPass {
+)(implicit protected val executionContext: ExecutionContext)
+    extends LazyLogging {
 
   private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
     samResourceRole match {
@@ -284,7 +257,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       .transform {
         case Failure(e) =>
           logger.warn(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
-          openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+          MetricsHelper.incrementFastPassFailureCounter("setupFastPassForUserInClonedWorkspace").unsafeRunSync()
           Success()
         case Success(_) => Success()
       }
@@ -344,11 +317,11 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       .transform {
         case Failure(e: FastPassError) =>
           logger.warn(e.getMessage)
-          openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+          MetricsHelper.incrementFastPassFailureCounter("syncFastPassesForUserInWorkspace").unsafeRunSync()
           Success()
         case Failure(e: Throwable) =>
           logger.warn(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
-          openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+          MetricsHelper.incrementFastPassFailureCounter("syncFastPassesForUserInWorkspace").unsafeRunSync()
           Success()
         case Success(_) => Success()
       }
@@ -369,8 +342,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         (for {
           _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
           _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
-          _ <- DBIO
-            .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
         } yield ()).cleanUp {
           case Some(throwable) =>
             for {
@@ -397,7 +368,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         logger.info(
           s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
         )
-        openTelemetry.incrementCounter("fastpass-role-binding-quota-exceeded").unsafeRunSync()
+        MetricsHelper.incrementFastPassQuotaExceededCounter().unsafeRunSync()
         DBIO.successful()
       }
     }
@@ -417,7 +388,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       .transform {
         case Failure(e) =>
           logger.warn(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
-          openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+          MetricsHelper.incrementFastPassFailureCounter("removeFastPassGrantsForWorkspace").unsafeRunSync()
           Success()
         case Success(_) => Success()
       }
@@ -555,7 +526,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         organizationRoles,
         condition = Some(condition)
       )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-granted-user", tags = openTelemetryTags).unsafeToFuture()
+      _ <- MetricsHelper.incrementFastPassGrantedCounter(userAndPet.userType).unsafeToFuture()
       _ <- googleIamDAO.addRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.petEmail,
@@ -563,7 +534,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         organizationRoles,
         condition = Some(condition)
       )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-granted-pet", tags = openTelemetryTags).unsafeToFuture()
+      _ <- MetricsHelper.incrementFastPassGrantedCounter(IamMemberTypes.ServiceAccount).unsafeToFuture()
     } yield ()
   }
 
@@ -585,7 +556,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         condition = Some(condition),
         userProject = Some(GoogleProject(googleProjectId.value))
       )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-granted-user", tags = openTelemetryTags).unsafeToFuture()
+      _ <- MetricsHelper.incrementFastPassGrantedCounter(userAndPet.userType).unsafeToFuture()
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.petEmail,
@@ -594,7 +565,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         condition = Some(condition),
         userProject = Some(GoogleProject(googleProjectId.value))
       )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-granted-pet", tags = openTelemetryTags).unsafeToFuture()
+      _ <- MetricsHelper.incrementFastPassGrantedCounter(IamMemberTypes.ServiceAccount).unsafeToFuture()
     } yield ()
   }
 
