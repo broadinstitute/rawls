@@ -263,7 +263,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   ): Future[ProjectBillingInfo] =
     Future.successful(new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true))
 
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] =
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId,
+                                             tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo] =
     Future.successful(new ProjectBillingInfo().setBillingEnabled(false))
 
   override def getBillingInfoForGoogleProject(
