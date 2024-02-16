@@ -6,7 +6,6 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -16,7 +15,6 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object GoogleServicesDAO {
