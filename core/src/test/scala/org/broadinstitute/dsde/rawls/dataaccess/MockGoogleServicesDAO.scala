@@ -200,8 +200,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 
-  def adminGroupName: String = s"${groupsPrefix}-ADMINS@dev.firecloud.org"
-  def curatorGroupName: String = s"${groupsPrefix}-CURATORS@dev.firecloud.org"
+  def adminGroupName: String = s"$groupsPrefix-ADMINS@dev.firecloud.org"
+  def curatorGroupName: String = s"$groupsPrefix-CURATORS@dev.firecloud.org"
 
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(
     UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000"))
