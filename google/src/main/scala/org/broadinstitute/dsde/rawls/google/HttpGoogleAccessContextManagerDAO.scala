@@ -16,7 +16,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import com.typesafe.config.Config
 
-class HttpGoogleAccessContextManagerDAO(storageConfig: Config,
+class HttpGoogleAccessContextManagerDAO(clientEmail: String,
+                                        pemFile: String,
+                                        appName: String,
+                                        serviceProject: String,
                                         override val workbenchMetricBaseName: String
 )(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
     extends FutureSupport
@@ -27,11 +30,6 @@ class HttpGoogleAccessContextManagerDAO(storageConfig: Config,
   val httpTransport: NetHttpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance
   val accessContextScopes: Seq[String] = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
-
-  val clientEmail: String = storageConfig.getString("serviceClientEmail")
-  val serviceProject: String = storageConfig.getString("serviceProject")
-  val appName: String = storageConfig.getString("appName")
-  val pemFile: String = storageConfig.getString("pathToPem")
 
   def getAccessContextManagerCredential: Credential =
     new GoogleCredential.Builder()

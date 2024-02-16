@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO}
 
 import scala.concurrent.ExecutionContext
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledHttpGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 
@@ -13,8 +12,16 @@ object MultiCloudAccessContextManagerFactory {
                          )(implicit system: ActorSystem, executionContext: ExecutionContext): AccessContextManagerDAO = {
     appConfigManager.cloudProvider match {
       case "gcp" =>
+        val gcsConfig = appConfigManager.gcsConfig
+        val clientEmail = gcsConfig.getString("serviceClientEmail")
+        val serviceProject = gcsConfig.getString("serviceProject")
+        val appName = gcsConfig.getString("appName")
+        val pemFile = gcsConfig.getString("pathToPem")
         new HttpGoogleAccessContextManagerDAO(
-          appConfigManager.gcsConfig,
+          clientEmail,
+          pemFile,
+          appName,
+          serviceProject,
           metricsPrefix
         )
       case "azure" =>
