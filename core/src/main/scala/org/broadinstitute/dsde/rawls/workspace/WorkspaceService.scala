@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
@@ -38,6 +39,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -56,7 +58,7 @@ import spray.json._
 
 import java.io.IOException
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -73,6 +75,7 @@ object WorkspaceService {
                   executionServiceCluster: ExecutionServiceCluster,
                   execServiceBatchSize: Int,
                   workspaceManagerDAO: WorkspaceManagerDAO,
+                  leonardoService: LeonardoService,
                   methodConfigResolver: MethodConfigResolver,
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
@@ -110,6 +113,7 @@ object WorkspaceService {
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
+      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,
@@ -185,6 +189,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        executionServiceCluster: ExecutionServiceCluster,
                        execServiceBatchSize: Int,
                        val workspaceManagerDAO: WorkspaceManagerDAO,
+                       val leonardoService: LeonardoService,
                        val methodConfigResolver: MethodConfigResolver,
                        protected val gcsDAO: GoogleServicesDAO,
                        val samDAO: SamDAO,
@@ -655,12 +660,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
-  ): Future[WorkspaceDeletionResult] =
-    for {
-      _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
-        assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
+  ): Future[WorkspaceDeletionResult] = {
+    if (isAzureMcWorkspace(maybeMcWorkspace)) {
+      return Future.failed(
+        new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "MC workspaces not supported"))
       )
+    }
 
+    for {
       _ <- traceFutureWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
         requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
@@ -701,20 +708,36 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
       )
 
-      // Delete Google Project
+      // Delete Google Project but not the project's Sam record
       _ <- traceFutureWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
-        if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-          maybeDeleteGoogleProject(workspaceContext.googleProjectId,
-                                   workspaceContext.workspaceVersion,
-                                   ctx.userInfo
-          ) recoverWith { case t: Throwable =>
-            logger.error(
-              s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
-              t
-            )
-            Future.failed(t)
-          }
-        } else Future.successful()
+        maybeDeleteGoogleProject(workspaceContext.googleProjectId,
+                                 workspaceContext.workspaceVersion,
+                                 ctx.userInfo
+        ) recoverWith { case t: Throwable =>
+          logger.error(
+            s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
+            t
+          )
+          Future.failed(t)
+        }
+      )
+
+      // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
+      // note this must take place _after_ google project deletion but _before_ the deletion of the project in sam
+      // to avoid orphaning any cloud resources
+      _ <- traceFutureWithParent("notifyLeonardo", parentContext)(_ =>
+        leonardoService.cleanupResources(workspaceContext, ctx)
+      )
+
+      // delete the google project's sam record
+      _ <- traceFutureWithParent("maybeDeleteGoogleProjectInSam", parentContext)(_ =>
+        deleteGoogleProjectInSam(workspaceContext.googleProjectId, ctx.userInfo) recoverWith { case t: Throwable =>
+          logger.error(
+            s"Unexpected failure deleting workspace (while deleting google project in Sam) for workspace `${workspaceContext.toWorkspaceName}`",
+            t
+          )
+          Future.failed(t)
+        }
       )
 
       _ <- traceFutureWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
@@ -777,11 +800,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           logger.info(s"failure aborting workflows while deleting workspace ${workspaceContext.toWorkspaceName}", t)
         case _ => /* ok */
       }
-
-      if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-        WorkspaceDeletionResult.fromGcpBucketName(workspaceContext.bucketName)
-      } else WorkspaceDeletionResult(None, None)
+      WorkspaceDeletionResult.fromGcpBucketName(workspaceContext.bucketName)
     }
+  }
 
   private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
     Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
@@ -828,16 +849,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       _ <- deletePetsInProject(googleProjectId, userInfoForSam)
       _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
-        .recover {
-          case regrets: RawlsExceptionWithErrorReport
-              if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
-            logger.info(
-              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-            )
-        }
     } yield ()
+
+  private def deleteGoogleProjectInSam(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
+    samDAO
+      .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
+      .recover {
+        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+          logger.info(
+            s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+          )
+      }
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {

@@ -15,12 +15,8 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.Workspac
   azureWorkspace,
   monitorRecord
 }
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
-  LeonardoOperationFailureException,
-  LeonardoResourceDeletionAction,
-  WsmDeletionAction
-}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
+import org.broadinstitute.dsde.rawls.workspace.{LeonardoOperationFailureException, LeonardoService, WorkspaceRepository}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
@@ -67,7 +63,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       mock[WsmDeletionAction](RETURNS_SMART_NULLS),
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -87,7 +83,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       wsRepo,
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       mock[WsmDeletionAction](RETURNS_SMART_NULLS),
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -108,7 +104,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       mock[WsmDeletionAction](RETURNS_SMART_NULLS),
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -119,7 +115,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   behavior of "leo app deletion orchestration"
 
   it should "start deletion of leo apps and update job to LeoAppDeletionPoll on init" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.deleteApps(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful())
     val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
 
@@ -140,7 +136,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   }
 
   it should "return incomplete when leo apps are not deleted" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.pollAppDeletion(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(false))
 
     val runner = new WorkspaceDeletionRunner(
@@ -162,7 +158,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   }
 
   it should "fail if the call to poll app deletion fails" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.pollAppDeletion(any(), any())(any[ExecutionContext]()))
       .thenReturn(Future.failed(new IllegalStateException("failed")))
 
@@ -189,7 +185,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   behavior of "leo runtime deletion orchestration"
 
   it should "delete leo runtimes and update the job after leo apps are deleted" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.pollAppDeletion(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(true))
     when(leoDeletion.deleteRuntimes(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful())
     val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -216,7 +212,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   }
 
   it should "return incomplete when leo runtimes are not deleted" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.pollRuntimeDeletion(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(false))
 
     val runner = new WorkspaceDeletionRunner(
@@ -238,7 +234,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   }
 
   it should "fail if the call to poll runtime deletion fails" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.pollRuntimeDeletion(any(), any())(any[ExecutionContext]()))
       .thenReturn(Future.failed(new IllegalStateException("failed")))
 
@@ -265,7 +261,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
   behavior of "wsm deletion orchestration"
 
   it should "delete the wsm workspace and update the job after leo runtimes are deleted" in {
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.pollRuntimeDeletion(any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(true))
     val wsmAction = mock[WsmDeletionAction](RETURNS_SMART_NULLS)
     when(wsmAction.startStep(any(), any(), any())(any[ExecutionContext]())).thenReturn(Future.successful())
@@ -297,7 +293,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       wsmAction,
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -319,7 +315,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       wsmAction,
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -346,7 +342,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       repo,
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       wsmAction,
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -373,7 +369,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       workspaceRepo,
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       mock[WsmDeletionAction](RETURNS_SMART_NULLS),
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -389,7 +385,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-      mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS),
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       mock[WsmDeletionAction](RETURNS_SMART_NULLS),
       mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
@@ -414,7 +410,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
       .thenAnswer(_ => Future.successful(1))
 
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(leoDeletion.deleteApps(ArgumentMatchers.eq(azureWorkspace), any[RawlsRequestContext])(any[ExecutionContext]))
       .thenAnswer(_ => Future.successful())
     when(
@@ -457,7 +453,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
       .thenAnswer(_ => Future.successful(1))
 
-    val leoDeletion = mock[LeonardoResourceDeletionAction](RETURNS_SMART_NULLS)
+    val leoDeletion = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leoDeletion.pollAppDeletion(ArgumentMatchers.eq(azureWorkspace), any[RawlsRequestContext])(
         any[ExecutionContext]

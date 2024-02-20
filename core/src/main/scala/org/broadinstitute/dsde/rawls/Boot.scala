@@ -60,6 +60,7 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{
+  LeonardoService,
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
@@ -488,6 +489,7 @@ object Boot extends IOApp with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
+        new LeonardoService(leonardoDAO),
         methodConfigResolver,
         gcsDAO,
         samDAO,

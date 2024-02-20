@@ -32,17 +32,14 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
-  LeonardoResourceDeletionAction,
-  WsmDeletionAction
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
   LandingZoneCreationStatusRunner
 }
 import org.broadinstitute.dsde.rawls.util
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{LeonardoService, WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
@@ -445,7 +442,7 @@ object BootMonitors extends LazyLogging {
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
-    val leoDeletionAction = new LeonardoResourceDeletionAction(leonardoDAO)(system)
+    val leoDeletionAction = new LeonardoService(leonardoDAO)(system)
     val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
     val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
     val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,

@@ -1,10 +1,11 @@
-package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions
+package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.LeonardoDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
@@ -15,11 +16,16 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   ListRuntimeResponse
 }
 
-import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
+/**
+ * Knows how to connect to a Leonardo instance and poll for the deletion of resources, retry on certain known
+ * error conditions and marshal exceptions.
+ * @param leonardoDAO Instance of a LeonardoDAO
+ * @param system
+ */
+class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
   val system: ActorSystem
 ) extends Retry
     with LazyLogging {
@@ -121,7 +127,32 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
       }
     }
 
-}
+  def cleanupResources(workspaceContext: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Unit] =
+    retry(when500OrProcessingException) { () =>
+      Future {
+        blocking {
+          logger.info("Sending cleanup request to Leonardo [workspaceId=${workspaceContext.toWorkspaceName}]")
+          leonardoDAO.cleanupAllResources(ctx.userInfo.accessToken.token, workspaceContext.googleProjectId)
+        }
+      }.recoverWith { case e: ApiException =>
+        if (e.getCode != StatusCodes.NotFound.intValue) {
+          logger.warn(
+            "Unexpected failure deleting workspace (while notifying Leonardo) for workspace `${workspaceContext.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
+          )
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                        s"Unable to delete ${workspaceContext.name}",
+                                        ErrorReport(e)
+              )
+            )
+          )
+        } else {
+          Future.successful()
+        }
+      }
+    }
 
-class LeonardoOperationFailureException(message: String, val workspaceId: UUID)
-    extends WorkspaceDeletionActionFailureException(message)
+}

@@ -53,6 +53,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
+  LeonardoService,
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
@@ -351,6 +352,7 @@ trait ApiServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
+      mock[LeonardoService](RETURNS_SMART_NULLS),
       methodConfigResolver,
       gcsDAO,
       samDAO,

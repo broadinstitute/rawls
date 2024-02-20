@@ -22,11 +22,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace, WorkspaceState}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.UserCtxCreator
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
-  LeonardoResourceDeletionAction,
-  WsmDeletionAction
-}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
+import org.broadinstitute.dsde.rawls.workspace.{LeonardoService, WorkspaceRepository}
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -47,7 +44,7 @@ import scala.util.{Failure, Success}
 class WorkspaceDeletionRunner(val samDAO: SamDAO,
                               workspaceManagerDAO: WorkspaceManagerDAO,
                               workspaceRepository: WorkspaceRepository,
-                              leonardoResourceDeletionAction: LeonardoResourceDeletionAction,
+                              leonardoResourceDeletionAction: LeonardoService,
                               wsmDeletionAction: WsmDeletionAction,
                               val gcsDAO: GoogleServicesDAO,
                               monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao

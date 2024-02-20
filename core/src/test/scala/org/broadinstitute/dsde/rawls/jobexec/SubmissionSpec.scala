@@ -30,11 +30,7 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  RawlsWorkspaceAclManager,
-  WorkspaceService
-}
+import org.broadinstitute.dsde.rawls.workspace.{LeonardoService, MultiCloudWorkspaceAclManager, RawlsWorkspaceAclManager, WorkspaceService}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -490,6 +486,7 @@ class SubmissionSpec(_system: ActorSystem)
         new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
+      val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
         workspaceManagerDAO,
@@ -532,6 +529,7 @@ class SubmissionSpec(_system: ActorSystem)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
+        leonardoService,
         methodConfigResolver,
         gcsDAO,
         samDAO,
