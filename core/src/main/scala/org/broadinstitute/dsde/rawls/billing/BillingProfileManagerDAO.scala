@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
@@ -16,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   RawlsRequestContext
 }
+import org.broadinstitute.dsde.rawls.util.Retry
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 
 import java.util.{Date, UUID}
@@ -60,10 +62,10 @@ trait BillingProfileManagerDAO {
   def updateBillingProfile(billingProfileId: UUID,
                            rawlsBillingAccountName: RawlsBillingAccountName,
                            ctx: RawlsRequestContext
-  ): ProfileModel
+  ): Future[ProfileModel]
 
   @throws[ApiException]
-  def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
+  def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Future[Unit]
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
@@ -122,8 +124,15 @@ object BillingProfileManagerDAO {
 class BillingProfileManagerDAOImpl(
   apiClientProvider: BillingProfileManagerClientProvider,
   config: MultiCloudWorkspaceConfig
-) extends BillingProfileManagerDAO
-    with LazyLogging {
+)(implicit val executionContext: ExecutionContext, val system: ActorSystem)
+    extends BillingProfileManagerDAO
+    with LazyLogging
+    with Retry {
+
+  private def when5xx: Throwable => Boolean = {
+    case e: ApiException => e.getCode / 100 == 5
+    case _               => false
+  }
 
   override def listManagedApps(subscriptionId: UUID,
                                includeAssignedApps: Boolean,
@@ -224,18 +233,26 @@ class BillingProfileManagerDAOImpl(
   def updateBillingProfile(billingProfileId: UUID,
                            rawlsBillingAccountName: RawlsBillingAccountName,
                            ctx: RawlsRequestContext
-  ): ProfileModel =
-    apiClientProvider
-      .getProfileApi(ctx)
-      .updateProfile(
-        new UpdateProfileRequest().billingAccountId(rawlsBillingAccountName.withoutPrefix()),
-        billingProfileId
-      )
+  ): Future[ProfileModel] =
+    retry(when5xx) { () =>
+      Future {
+        apiClientProvider
+          .getProfileApi(ctx)
+          .updateProfile(
+            new UpdateProfileRequest().billingAccountId(rawlsBillingAccountName.withoutPrefix()),
+            billingProfileId
+          )
+      }
+    }
 
-  override def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
-    apiClientProvider
-      .getProfileApi(ctx)
-      .removeBillingAccount(billingProfileId)
+  override def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Future[Unit] =
+    retry(when5xx) { () =>
+      Future {
+        apiClientProvider
+          .getProfileApi(ctx)
+          .removeBillingAccount(billingProfileId)
+      }
+    }
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
