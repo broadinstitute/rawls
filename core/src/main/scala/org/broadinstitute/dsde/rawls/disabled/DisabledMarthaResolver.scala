@@ -1,6 +1,8 @@
-package org.broadinstitute.dsde.rawls.dataaccess.drs
+package org.broadinstitute.dsde.rawls.disabled
 
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.model.UserInfo
+
 import scala.concurrent.Future
 
 class DisabledMarthaResolver extends DrsResolver {

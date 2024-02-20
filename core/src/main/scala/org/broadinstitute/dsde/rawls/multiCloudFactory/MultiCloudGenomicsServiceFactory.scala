@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.genomics.{DisabledGenomicsService, GenomicsService, GenomicsServiceRequest}
+import org.broadinstitute.dsde.rawls.disabled.DisabledGenomicsService
+import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
 import scala.concurrent.ExecutionContext

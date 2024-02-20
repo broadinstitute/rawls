@@ -1,8 +1,10 @@
-package org.broadinstitute.dsde.rawls.serviceperimeter
+package org.broadinstitute.dsde.rawls.disabled
 
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeter
+
 import scala.concurrent.ExecutionContext
 
 class DisabledServicePerimeterService(implicit val system: ActorSystem,

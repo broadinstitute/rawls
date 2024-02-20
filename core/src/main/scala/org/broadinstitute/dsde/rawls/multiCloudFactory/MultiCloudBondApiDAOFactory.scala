@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledHttpBondApiDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{BondApiDAO, HttpBondApiDAO}
+import org.broadinstitute.dsde.rawls.disabled.DisabledHttpBondApiDAO
 
 import scala.concurrent.ExecutionContext
 

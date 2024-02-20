@@ -40,9 +40,9 @@ object FastPassService extends LazyLogging {
                   terraWorkspaceNextflowRole: String,
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String
-  )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
-    executionContext: ExecutionContext
-  ): FastPassService =
+                 )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
+                                                                          executionContext: ExecutionContext
+                 ): FastPassService =
     new FastPassService(
       ctx,
       dataSource,
@@ -66,36 +66,36 @@ object FastPassService extends LazyLogging {
   type RemovalFailure = (Throwable, Seq[FastPassGrant])
 
   /**
-    * Remove the FastPass grants in a Google Project.
-    *
-    * This method will remove all FastPass grants that it can, collecting errors as it goes.
-    * Once its done processing FastPass grant removals, it will look for any errors that occurred, and if found,
-    * return them along with the FastPassGrants that failed removal.
-    *
-    * This method is set up to only remove FastPass grants from the DB if IAM Policy removals in Google succeed.
-    * Any failed IAM Policy removals will remain present in the DB.
-    *
-    * @param fastPassGrants FastPass grants that all belong to the same Google Project.
-    *                       These grants can be project or bucket grants.
-    * @param googleProjectId Google Project ID for the FastPass grants. For Project grants, the Google Project ID is
-    *                        the Google Project in which those grants exist in.
-    *                        For Bucket grants, the Google Project ID is used as the Requester Pays user project.
-    * @param dataAccess Database access
-    * @param googleIamDAO Google IAM API access
-    * @param googleStorageDAO Google Storage API access
-    * @param optCtx An optional RawlsRequestContext for tracing
-    * @param executionContext An implicit Execution Context for Futures
-    * @return
-    */
+   * Remove the FastPass grants in a Google Project.
+   *
+   * This method will remove all FastPass grants that it can, collecting errors as it goes.
+   * Once its done processing FastPass grant removals, it will look for any errors that occurred, and if found,
+   * return them along with the FastPassGrants that failed removal.
+   *
+   * This method is set up to only remove FastPass grants from the DB if IAM Policy removals in Google succeed.
+   * Any failed IAM Policy removals will remain present in the DB.
+   *
+   * @param fastPassGrants FastPass grants that all belong to the same Google Project.
+   *                       These grants can be project or bucket grants.
+   * @param googleProjectId Google Project ID for the FastPass grants. For Project grants, the Google Project ID is
+   *                        the Google Project in which those grants exist in.
+   *                        For Bucket grants, the Google Project ID is used as the Requester Pays user project.
+   * @param dataAccess Database access
+   * @param googleIamDAO Google IAM API access
+   * @param googleStorageDAO Google Storage API access
+   * @param optCtx An optional RawlsRequestContext for tracing
+   * @param executionContext An implicit Execution Context for Futures
+   * @return
+   */
   def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
                                              googleProjectId: GoogleProjectId,
                                              dataAccess: DataAccess,
                                              googleIamDAO: GoogleIamDAO,
                                              googleStorageDAO: GoogleStorageDAO,
                                              optCtx: Option[RawlsRequestContext]
-  )(implicit
-    executionContext: ExecutionContext
-  ): ReadWriteAction[Seq[RemovalFailure]] = {
+                                            )(implicit
+                                              executionContext: ExecutionContext
+                                            ): ReadWriteAction[Seq[RemovalFailure]] = {
 
     type RemovalResult = Either[RemovalFailure, Seq[FastPassGrant]]
 
@@ -111,13 +111,13 @@ object FastPassService extends LazyLogging {
       val googleProject = GoogleProject(googleProjectId.value)
       () =>
         removeFastPassGrants(resourceType,
-                             resourceName,
-                             workbenchEmail,
-                             accountType,
-                             organizationRoles,
-                             googleProject,
-                             googleIamDAO,
-                             googleStorageDAO
+          resourceName,
+          workbenchEmail,
+          accountType,
+          organizationRoles,
+          googleProject,
+          googleIamDAO,
+          googleStorageDAO
         ).transform {
           case Failure(e) =>
             logger.warn(
@@ -152,7 +152,7 @@ object FastPassService extends LazyLogging {
                                    googleProject: GoogleProject,
                                    googleIamDAO: GoogleIamDAO,
                                    googleStorageDAO: GoogleStorageDAO
-  )(implicit executionContext: ExecutionContext): Future[Unit] = {
+                                  )(implicit executionContext: ExecutionContext): Future[Unit] = {
     logger.info(
       s"Removing FastPass IAM bindings for ${workbenchEmail.value} on ${resourceType.value} $resourceName"
     )
@@ -188,12 +188,12 @@ object FastPassService extends LazyLogging {
     }
 
   /**
-    * org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO#getUserInfoUsingJson(java.lang.String) doesn't actually
-    * return the email of the pet account in its UserInfo response, so we need to parse it ourselves.
-    *
-    * @param petSaKey
-    * @return The Pet Account Email
-    */
+   * org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO#getUserInfoUsingJson(java.lang.String) doesn't actually
+   * return the email of the pet account in its UserInfo response, so we need to parse it ourselves.
+   *
+   * @param petSaKey
+   * @return The Pet Account Email
+   */
   def getEmailFromPetSaKey(petSaKey: String): WorkbenchEmail =
     WorkbenchEmail(petSaKey.parseJson.asJsObject.fields("client_email").asInstanceOf[JsString].value)
 
@@ -214,8 +214,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                       protected val terraWorkspaceNextflowRole: String,
                       protected val terraBucketReaderRole: String,
                       protected val terraBucketWriterRole: String
-)(implicit protected val executionContext: ExecutionContext)
-    extends LazyLogging
+                     )(implicit protected val executionContext: ExecutionContext)
+  extends LazyLogging
     with FastPass {
 
   private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
@@ -299,7 +299,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
           petSAJson <- DBIO.from(
             samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId,
-                                                  RawlsUserEmail(samUserInfo.userEmail.value)
+              RawlsUserEmail(samUserInfo.userEmail.value)
             )
           )
           petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
@@ -332,7 +332,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                         userAndPet: UserAndPetEmails,
                                         workspace: Workspace,
                                         roles: Set[SamResourceRole]
-  )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] =
+                                       )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] =
     DBIO.from(quotaAvailableForFastPassGrants(workspace, roles)).flatMap { quotaAvailable =>
       if (quotaAvailable) {
         logger
@@ -348,15 +348,15 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             for {
               _ <- DBIO.from(
                 removeFastPassProjectGrants(userAndPet,
-                                            roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles),
-                                            workspace.googleProjectId
+                  roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles),
+                  workspace.googleProjectId
                 )
               )
               _ <- DBIO.from(
                 removeFastPassBucketGrants(workspace.bucketName,
-                                           userAndPet,
-                                           roles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles),
-                                           workspace.googleProjectId
+                  userAndPet,
+                  roles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles),
+                  workspace.googleProjectId
                 )
               )
               fastPassGrants <- dataAccess.fastPassGrantQuery
@@ -396,7 +396,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   }
 
   private def removeFastPassesForUserInWorkspace(workspace: Workspace, samUserInfo: SamUserInfo)(implicit
-    dataAccess: DataAccess
+                                                                                                 dataAccess: DataAccess
   ): ReadWriteAction[Unit] = {
     logger.info(s"Removing FastPass grants for ${samUserInfo.userEmail.value} in ${workspace.toWorkspaceName}")
     for {
@@ -410,13 +410,13 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
   private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
                                                      googleProjectId: GoogleProjectId
-  )(implicit dataAccess: DataAccess): ReadWriteAction[Seq[RemovalFailure]] =
+                                                    )(implicit dataAccess: DataAccess): ReadWriteAction[Seq[RemovalFailure]] =
     FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
-                                                           googleProjectId,
-                                                           dataAccess,
-                                                           googleIamDAO,
-                                                           googleStorageDAO,
-                                                           Some(ctx)
+      googleProjectId,
+      dataAccess,
+      googleIamDAO,
+      googleStorageDAO,
+      Some(ctx)
     )
 
   private def setupProjectRoles(workspace: Workspace,
@@ -424,7 +424,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                 userAndPet: UserAndPetEmails,
                                 samUserInfo: SamUserInfo,
                                 expirationDate: OffsetDateTime
-  )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
+                               )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
     val projectIamRoles = samResourceRoles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles)
     val condition = conditionFromExpirationDate(samUserInfo, expirationDate)
 
@@ -453,7 +453,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                userAndPet: UserAndPetEmails,
                                samUserInfo: SamUserInfo,
                                expirationDate: OffsetDateTime
-  )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
+                              )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
     val bucketIamRoles = samResourceRoles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles)
     val condition = conditionFromExpirationDate(samUserInfo, expirationDate)
 
@@ -470,10 +470,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         )
         _ <- DBIO.from(
           addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName),
-                                       bucketIamRoles,
-                                       userAndPet,
-                                       condition,
-                                       workspace.googleProjectId
+            bucketIamRoles,
+            userAndPet,
+            condition,
+            workspace.googleProjectId
           )
         )
       } yield ()
@@ -489,7 +489,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                 resourceName: String,
                                 organizationRoles: Set[String],
                                 expiration: OffsetDateTime
-  )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
+                               )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
     val rolesToWrite =
       Seq((userAndPet.userEmail, userAndPet.userType), (userAndPet.petEmail, IamMemberTypes.ServiceAccount)).flatMap(
         tuple => organizationRoles.map(r => (tuple._1, tuple._2, r))
@@ -515,7 +515,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                              organizationRoles: Set[String],
                                              userAndPet: UserAndPetEmails,
                                              condition: Expr
-  ): Future[Unit] = {
+                                            ): Future[Unit] = {
     logger.info(
       s"Adding project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
@@ -544,7 +544,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                            userAndPet: UserAndPetEmails,
                                            condition: Expr,
                                            googleProjectId: GoogleProjectId
-  ): Future[Unit] = {
+                                          ): Future[Unit] = {
     logger.info(
       s"Adding bucket-level FastPass access for $userAndPet in ${gcsBucketName.value} [${organizationRoles.mkString(" ")}]"
     )
@@ -573,7 +573,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def removeFastPassProjectGrants(userAndPet: UserAndPetEmails,
                                           organizationRoles: Set[String],
                                           googleProjectId: GoogleProjectId
-  ): Future[Unit] = {
+                                         ): Future[Unit] = {
 
     val userRemoval = () =>
       removeFastPassGrants(
@@ -605,7 +605,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                          userAndPet: UserAndPetEmails,
                                          organizationRoles: Set[String],
                                          googleProjectId: GoogleProjectId
-  ): Future[Unit] = {
+                                        ): Future[Unit] = {
 
     val userRemoval = () =>
       removeFastPassGrants(
@@ -637,7 +637,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     futures.foldLeft(Future.successful[Unit](()))((a, b) => a.flatMap(_ => b()))
 
   private def removeParentBucketReaderGrant(parentWorkspace: Workspace, samUserInfo: SamUserInfo)(implicit
-    dataAccess: DataAccess
+                                                                                                  dataAccess: DataAccess
   ): ReadWriteAction[Unit] = {
     val predicate = (g: FastPassGrant) =>
       g.resourceType.equals(IamResourceTypes.Bucket) &&

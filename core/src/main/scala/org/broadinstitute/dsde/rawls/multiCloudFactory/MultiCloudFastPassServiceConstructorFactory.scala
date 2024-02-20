@@ -4,7 +4,8 @@ import cats.effect.IO
 import org.broadinstitute.dsde.rawls.AppDependencies
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, MultiCloudAppConfigManager}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.fastpass.{DisabledFastPassService, FastPass, FastPassService}
+import org.broadinstitute.dsde.rawls.disabled.DisabledFastPassService
+import org.broadinstitute.dsde.rawls.fastpass.{FastPass, FastPassService}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
 import scala.concurrent.ExecutionContext

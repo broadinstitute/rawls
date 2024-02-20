@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.{MultiCloudAppConfigManager, ServicePerimeterServiceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.serviceperimeter.{DisabledServicePerimeterService, ServicePerimeter, ServicePerimeterService}
+import org.broadinstitute.dsde.rawls.disabled.DisabledServicePerimeterService
+import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeter, ServicePerimeterService}
 
 import scala.concurrent.ExecutionContext
 

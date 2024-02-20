@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{HttpImportServiceDAO, ImportServiceDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledImportServiceDAO
+import org.broadinstitute.dsde.rawls.disabled.DisabledImportServiceDAO
 
 import scala.concurrent.ExecutionContext
 

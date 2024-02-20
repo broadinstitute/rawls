@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.disabled
+package org.broadinstitute.dsde.rawls.disabled
 
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 

@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.disabled
+package org.broadinstitute.dsde.rawls.disabled
 
 import com.google.api.services.bigquery.model._
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO

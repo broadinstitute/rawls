@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import org.broadinstitute.dsde.rawls.config.{MultiCloudAppConfigManager, ResourceBufferConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.ResourceBuffer
-import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledResourceBufferService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
+import org.broadinstitute.dsde.rawls.disabled.DisabledResourceBufferService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 
 object MultiCloudResourceBufferServiceFactory {

@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 import akka.actor.ActorSystem
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.dataaccess.drs.{DisabledDrsHubResolver, DisabledMarthaResolver, DrsHubResolver, DrsResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, DrsResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.disabled.{DisabledDrsHubResolver, DisabledMarthaResolver}
 
 import scala.concurrent.ExecutionContext
 

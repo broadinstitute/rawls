@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.disabled
+package org.broadinstitute.dsde.rawls.disabled
 
 import org.broadinstitute.dsde.rawls.dataaccess.ResourceBuffer
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType

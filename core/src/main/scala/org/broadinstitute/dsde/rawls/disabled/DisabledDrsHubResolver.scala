@@ -1,9 +1,10 @@
-package org.broadinstitute.dsde.rawls.dataaccess.drs
+package org.broadinstitute.dsde.rawls.disabled
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.{Http, HttpExt}
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.dataaccess.DsdeHttpDAO
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubMinimalResponse, DrsResolver}
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 

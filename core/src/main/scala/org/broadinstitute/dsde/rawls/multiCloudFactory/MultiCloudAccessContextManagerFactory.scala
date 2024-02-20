@@ -4,8 +4,8 @@ import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO}
 
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledHttpGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.disabled.DisabledHttpGoogleAccessContextManagerDAO
 
 object MultiCloudAccessContextManagerFactory {
   def createAccessContextManager(metricsPrefix: String, appConfigManager: MultiCloudAppConfigManager

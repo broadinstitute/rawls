@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.disabled
+package org.broadinstitute.dsde.rawls.disabled
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo

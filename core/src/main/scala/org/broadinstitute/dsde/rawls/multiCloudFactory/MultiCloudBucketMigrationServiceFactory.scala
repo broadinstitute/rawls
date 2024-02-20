@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService, DisabledBucketMigrationService}
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.disabled.DisabledBucketMigrationService
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
 import scala.concurrent.ExecutionContext

@@ -1,5 +1,6 @@
-package org.broadinstitute.dsde.rawls.bucketMigration
+package org.broadinstitute.dsde.rawls.disabled
 
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigration
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.migration._
 

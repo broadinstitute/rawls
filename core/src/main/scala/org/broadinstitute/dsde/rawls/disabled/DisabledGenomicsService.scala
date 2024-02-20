@@ -1,5 +1,6 @@
-package org.broadinstitute.dsde.rawls.genomics
+package org.broadinstitute.dsde.rawls.disabled
 
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceRequest
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import spray.json.JsObject
 

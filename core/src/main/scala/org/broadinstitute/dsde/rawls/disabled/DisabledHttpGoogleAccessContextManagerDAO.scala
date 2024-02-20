@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.disabled
+package org.broadinstitute.dsde.rawls.disabled
 
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO

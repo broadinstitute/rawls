@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledRequesterPaysSetupService
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{BondApiDAO, GoogleServicesDAO, RequesterPaysSetup, RequesterPaysSetupService, SlickDataSource}
+import org.broadinstitute.dsde.rawls.disabled.DisabledRequesterPaysSetupService
 
 object MultiCloudRequesterPaysSetupServiceFactory {
   def createAccessContextManager(appConfigManager: MultiCloudAppConfigManager,

@@ -1,6 +1,7 @@
-package org.broadinstitute.dsde.rawls.fastpass
+package org.broadinstitute.dsde.rawls.disabled
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.fastpass.FastPass
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
 
 import scala.concurrent.{ExecutionContext, Future}

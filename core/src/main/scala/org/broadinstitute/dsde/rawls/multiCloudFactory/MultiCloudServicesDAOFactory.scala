@@ -7,8 +7,8 @@ import com.google.api.client.json.gson.GsonFactory
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.AppDependencies
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.dataaccess.disabled.DisabledHttpGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, HttpGoogleServicesDAO}
+import org.broadinstitute.dsde.rawls.disabled.DisabledHttpGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.util.ScalaConfig.EnhancedScalaConfig
 
