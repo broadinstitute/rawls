@@ -30,7 +30,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 10/27/15.
@@ -65,7 +65,7 @@ object UserService {
       workspaceManagerDAO,
       billingProfileManagerDAO,
       new BillingRepository(dataSource),
-      new WorkspaceManagerResourceMonitorRecordDao(dataSource),
+      WorkspaceManagerResourceMonitorRecordDao(dataSource),
       notificationDAO
     )
 
@@ -179,10 +179,10 @@ class UserService(
   requesterPaysRole: String,
   servicePerimeterService: ServicePerimeterService,
   adminRegisterBillingAccountId: RawlsBillingAccountName,
-  workspaceManagerDAO: WorkspaceManagerDAO,
+  val workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
   val billingRepository: BillingRepository,
-  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao,
+  workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao,
   notificationDAO: NotificationDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
@@ -286,7 +286,7 @@ class UserService(
       _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
     }
   } yield billingProject.flatMap(p =>
-    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles)) else None
+    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDAO)) else None
   )
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
@@ -299,11 +299,12 @@ class UserService(
     resourceIds = rolesByResourceId.keySet
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
     projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
+    workspaceManagerDao = workspaceManagerDAO
   } yield projectsInDB.toList
     .map { p =>
       val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
       val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
-      mapCloudPlatformAndPolicies(p, billingProfile, roles)
+      mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDao)
     }
     .filter(p => p.roles.nonEmpty)
 
@@ -316,15 +317,30 @@ class UserService(
   def mapCloudPlatformAndPolicies(
     project: RawlsBillingProject,
     billingProfile: Option[ProfileModel],
-    roles: Set[ProjectRole]
+    roles: Set[ProjectRole],
+    workspaceManagerDao: WorkspaceManagerDAO
   ): RawlsBillingProjectResponse = (project.billingProfileId, billingProfile) match {
     case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP, protectedData = None)
     case (Some(_), Some(p)) =>
       val platform = CloudPlatform(p)
-      val responseProject = if (platform == CloudPlatform.AZURE) {
+      val (responseProject, maybeRegion) = if (platform == CloudPlatform.AZURE) {
         val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-        project.copy(azureManagedAppCoordinates = Some(c))
-      } else project
+        val projectWithCoords = project.copy(azureManagedAppCoordinates = Some(c))
+        val landingZoneRegion = project.landingZoneId match {
+          case Some(landingZoneId) =>
+            Try(workspaceManagerDao.getLandingZone(UUID.fromString(landingZoneId), ctx)) match {
+              case Success(landingZone) => Option(landingZone.getRegion)
+              case Failure(exception) =>
+                logger.debug(
+                  s"landing zone ${landingZoneId} could not be retrieved from the workspaceManagerDao",
+                  exception
+                )
+                None
+            }
+          case None => None
+        }
+        (projectWithCoords, landingZoneRegion)
+      } else (project, None)
       val protectedData = Option(p.getPolicies) match {
         case Some(policies) =>
           Option(
@@ -334,8 +350,7 @@ class UserService(
           )
         case None => Option(false)
       }
-
-      RawlsBillingProjectResponse(roles, responseProject, platform, protectedData)
+      RawlsBillingProjectResponse(roles, responseProject, platform, protectedData, region = maybeRegion)
     case (Some(id), None) =>
       val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
       RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
