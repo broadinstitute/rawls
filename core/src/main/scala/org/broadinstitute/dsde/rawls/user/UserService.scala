@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.client.ApiException
 import bio.terra.profile.model.ProfileModel
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
@@ -880,7 +879,7 @@ class UserService(
         billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
     }).recover {
       // Until BPM is the system of record for Terra billing information, Rawls will not throw an exception if BPM fails to update
-      case e: ApiException =>
+      case e: Exception =>
         val message =
           s"Failed to update billing account in BPM [billingProfile=$billingProfileId, billingAccount=${billingAccount
               .map(_.value)}]"
