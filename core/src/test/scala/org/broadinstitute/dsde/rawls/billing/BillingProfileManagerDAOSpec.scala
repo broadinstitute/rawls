@@ -305,6 +305,84 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
   }
 
+  behavior of "updateBillingProfile"
+
+  it should "retry 5xx errors" in {
+    val profileApi = mock[ProfileApi]
+    when(profileApi.updateProfile(any(), any()))
+      .thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "internal server error"))
+      .thenReturn(new ProfileModel().id(UUID.randomUUID()))
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+
+    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
+
+    Await.result(bpmDAO.updateBillingProfile(UUID.randomUUID(), RawlsBillingAccountName("billingAccount"), testContext),
+                 Duration.Inf
+    )
+
+    verify(profileApi, times(2)).updateProfile(any(), any())
+  }
+
+  it should "throw 4xx errors" in {
+    val profileApi = mock[ProfileApi]
+    when(profileApi.updateProfile(any(), any()))
+      .thenThrow(new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
+      .thenReturn(new ProfileModel().id(UUID.randomUUID()))
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+
+    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
+
+    assertThrows[ApiException] {
+      Await.result(
+        bpmDAO.updateBillingProfile(UUID.randomUUID(), RawlsBillingAccountName("billingAccount"), testContext),
+        Duration.Inf
+      )
+    }
+    verify(profileApi, times(1)).updateProfile(any(), any())
+  }
+
+  behavior of "removeBillingAccount"
+
+  it should "retry 5xx errors" in {
+    val profileApi = mock[ProfileApi]
+    doThrow(new ApiException(StatusCodes.InternalServerError.intValue, "internal server error"))
+      .doNothing()
+      .when(profileApi)
+      .removeBillingAccount(any())
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+
+    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
+
+    Await.result(bpmDAO.removeBillingAccountFromBillingProfile(UUID.randomUUID(), testContext), Duration.Inf)
+
+    verify(profileApi, times(2)).removeBillingAccount(any())
+  }
+
+  it should "throw 4xx errors" in {
+    val profileApi = mock[ProfileApi]
+    doThrow(new ApiException(StatusCodes.Forbidden.intValue, "internal server error"))
+      .doNothing()
+      .when(profileApi)
+      .removeBillingAccount(any())
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
+
+    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
+
+    assertThrows[ApiException] {
+      Await.result(bpmDAO.removeBillingAccountFromBillingProfile(UUID.randomUUID(), testContext), Duration.Inf)
+    }
+
+    verify(profileApi, times(1)).removeBillingAccount(any())
+  }
+
   behavior of "addProfilePolicyMember"
 
   it should "call BPM's add method with the correct policy names" in {
