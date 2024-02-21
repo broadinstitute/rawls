@@ -881,11 +881,11 @@ class UserService(
     }).recover {
       // Until BPM is the system of record for Terra billing information, Rawls will not throw an exception if BPM fails to update
       case e: ApiException =>
-        logger.warn(
-          s"Failed to update billing account in BPM [billingProfile=$billingProfileId]",
-          e
-        )
-        Sentry.captureException(e)
+        val message =
+          s"Failed to update billing account in BPM [billingProfile=$billingProfileId, billingAccount=${billingAccount
+              .map(_.value)}]"
+        logger.warn(message, e)
+        Sentry.captureException(new RawlsException(message, cause = e))
     }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
