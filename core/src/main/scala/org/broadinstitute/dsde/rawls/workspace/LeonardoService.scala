@@ -21,7 +21,7 @@ import scala.util.{Failure, Success}
 
 /**
  * Knows how to connect to a Leonardo instance and poll for the deletion of resources, retry on certain known
- * error conditions and marshal exceptions.
+ * error conditions
  * @param leonardoDAO Instance of a LeonardoDAO
  * @param system
  */
