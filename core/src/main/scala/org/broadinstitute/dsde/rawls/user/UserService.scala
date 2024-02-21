@@ -9,6 +9,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -870,23 +871,21 @@ class UserService(
   private def updateBillingAccountInBillingProfile(billingProfileId: String,
                                                    billingAccount: Option[RawlsBillingAccountName]
   ): Future[Unit] =
-    try
-      billingAccount match {
-        case Some(newBillingAccount) =>
-          billingProfileManagerDAO
-            .updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
-            .flatMap(_ => Future.unit)
-        case None =>
-          billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
-      }
-    catch {
+    (billingAccount match {
+      case Some(newBillingAccount) =>
+        billingProfileManagerDAO
+          .updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
+          .flatMap(_ => Future.unit)
+      case None =>
+        billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
+    }).recover {
       // Until BPM is the system of record for Terra billing information, Rawls will not throw an exception if BPM fails to update
       case e: ApiException =>
         logger.warn(
           s"Failed to update billing account in BPM [billingProfile=$billingProfileId]",
           e
         )
-        Future.unit
+        Sentry.captureException(e)
     }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
