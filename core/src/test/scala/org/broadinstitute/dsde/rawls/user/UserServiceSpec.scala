@@ -842,7 +842,7 @@ class UserServiceSpec
           ArgumentMatchers.eq(newBillingAccountRequest.billingAccount),
           any()
         )
-      ).thenReturn(new ProfileModel())
+      ).thenReturn(Future.successful(new ProfileModel()))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
 
@@ -893,6 +893,7 @@ class UserServiceSpec
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       val mockBpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(mockBpmDAO.removeBillingAccountFromBillingProfile(any(), any())).thenReturn(Future.unit)
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
 
@@ -1141,13 +1142,13 @@ class UserServiceSpec
           ArgumentMatchers.eq(newBillingAccountRequest.billingAccount),
           any()
         )
-      ).thenThrow(new ApiException("oh no"))
+      ).thenReturn(Future.failed(new ApiException("oh no")))
       when(
         mockBpmDAO.removeBillingAccountFromBillingProfile(
           ArgumentMatchers.eq(UUID.fromString(billingProject.billingProfileId.getOrElse(fail()))),
           any()
         )
-      ).thenThrow(new ApiException("oh no"))
+      ).thenReturn(Future.failed(new ApiException("oh no")))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO, bpmDAO = mockBpmDAO)
 

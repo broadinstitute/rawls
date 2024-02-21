@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
@@ -33,6 +34,7 @@ import scala.jdk.CollectionConverters.SeqHasAsJava
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
+  implicit val actor: ActorSystem = ActorSystem("BillingProfileManagerDAOSpec")
 
   val azConfig: AzureConfig = AzureConfig(
     "fake-landing-zone-definition",
