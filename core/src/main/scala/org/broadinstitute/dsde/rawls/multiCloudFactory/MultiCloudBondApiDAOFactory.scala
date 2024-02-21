@@ -8,8 +8,9 @@ import org.broadinstitute.dsde.rawls.disabled.DisabledHttpBondApiDAO
 import scala.concurrent.ExecutionContext
 
 object MultiCloudBondApiDAOFactory {
-  def createMultiCloudBondApiDAO(appConfigManager: MultiCloudAppConfigManager
-                                )(implicit system: ActorSystem, executionContext: ExecutionContext): BondApiDAO = {
+  def createMultiCloudBondApiDAO(
+    appConfigManager: MultiCloudAppConfigManager
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): BondApiDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         val bondConfig = appConfigManager.conf.getConfig("bond")
@@ -18,5 +19,4 @@ object MultiCloudBondApiDAOFactory {
         new DisabledHttpBondApiDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

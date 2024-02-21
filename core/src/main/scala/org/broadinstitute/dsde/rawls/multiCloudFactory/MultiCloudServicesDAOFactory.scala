@@ -16,9 +16,11 @@ import java.io.StringReader
 import scala.concurrent.ExecutionContext
 
 object MultiCloudServicesDAOFactory {
-  def createHttpMultiCloudServicesDAO(appConfigManager: MultiCloudAppConfigManager, appDependencies: AppDependencies[IO], metricsPrefix: String,
+  def createHttpMultiCloudServicesDAO(appConfigManager: MultiCloudAppConfigManager,
+                                      appDependencies: AppDependencies[IO],
+                                      metricsPrefix: String,
                                       accessContextManagerDAO: AccessContextManagerDAO
-                                     )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleServicesDAO = {
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleServicesDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         val gcsConfig = appConfigManager.gcsConfig
@@ -51,5 +53,4 @@ object MultiCloudServicesDAOFactory {
         )
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

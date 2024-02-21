@@ -9,15 +9,17 @@ import org.broadinstitute.dsde.rawls.disabled.DisabledHttpResourceBufferDAO
 import scala.concurrent.ExecutionContext
 
 object MultiCloudResourceBufferDAOFactory {
-  def createResourceBuffer(appConfigManager: MultiCloudAppConfigManager,
-                           clientServiceAccountCreds: Credential
-                          )(implicit system: ActorSystem, executionContext: ExecutionContext): ResourceBufferDAO = {
+  def createResourceBuffer(appConfigManager: MultiCloudAppConfigManager, clientServiceAccountCreds: Credential)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): ResourceBufferDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
-        new HttpResourceBufferDAO(ResourceBufferConfig(appConfigManager.conf.getConfig("resourceBuffer")), clientServiceAccountCreds)
+        new HttpResourceBufferDAO(ResourceBufferConfig(appConfigManager.conf.getConfig("resourceBuffer")),
+                                  clientServiceAccountCreds
+        )
       case "azure" =>
         new DisabledHttpResourceBufferDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

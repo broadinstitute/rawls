@@ -11,9 +11,7 @@ object DisabledGenomicsService {
     new DisabledGenomicsService(ctx)
 
 }
-class DisabledGenomicsService(protected val ctx: RawlsRequestContext)
-  extends GenomicsServiceRequest {
+class DisabledGenomicsService(protected val ctx: RawlsRequestContext) extends GenomicsServiceRequest {
   def getOperation(jobId: String): Future[Option[JsObject]] =
     throw new NotImplementedError("getOperation is not implemented for Azure.")
 }
-

@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
 object MultiCloudNotificationPubSubDAOFactory {
   def createMultiCloudNotificationPubSubDAO(appConfigManager: MultiCloudAppConfigManager,
                                             workbenchMetricBaseName: String
-                                           )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO = {
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         val gcsConfig = appConfigManager.gcsConfig
@@ -26,5 +26,4 @@ object MultiCloudNotificationPubSubDAOFactory {
         new DisabledHttpGooglePubSubDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

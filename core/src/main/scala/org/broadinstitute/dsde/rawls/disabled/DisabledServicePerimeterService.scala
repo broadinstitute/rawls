@@ -7,12 +7,12 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeter
 
 import scala.concurrent.ExecutionContext
 
-class DisabledServicePerimeterService(implicit val system: ActorSystem,
-                                      protected val executionContext: ExecutionContext)
-  extends ServicePerimeter {
+class DisabledServicePerimeterService(implicit
+  val system: ActorSystem,
+  protected val executionContext: ExecutionContext
+) extends ServicePerimeter {
   override def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName,
                                                   dataAccess: DataAccess
-                                                 ): ReadAction[Unit] =
+  ): ReadAction[Unit] =
     throw new NotImplementedError("overwriteGoogleProjectsInPerimeter is not implemented for Azure.")
 }
-

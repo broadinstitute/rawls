@@ -8,7 +8,9 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import scala.concurrent._
 
 class DisabledHttpGooglePubSubDAO extends GooglePubSubDAO {
-  override implicit val executionContext: ExecutionContext = throw new NotImplementedError("executionContext is not implemented for Azure.")
+  implicit override val executionContext: ExecutionContext = throw new NotImplementedError(
+    "executionContext is not implemented for Azure."
+  )
   override def createTopic(topicName: String) =
     throw new NotImplementedError("createTopic is not implemented for Azure.")
   override def deleteTopic(topicName: String): Future[Boolean] =
@@ -27,9 +29,15 @@ class DisabledHttpGooglePubSubDAO extends GooglePubSubDAO {
     throw new NotImplementedError("acknowledgeMessages is not implemented for Azure.")
   override def acknowledgeMessagesById(subscriptionName: String, ackIds: scala.collection.Seq[String]) =
     throw new NotImplementedError("acknowledgeMessagesById is not implemented for Azure.")
-  override def extendDeadline(subscriptionName: String, messages: scala.collection.Seq[PubSubMessage], extendDeadlineBySeconds: Int): Future[Unit] =
+  override def extendDeadline(subscriptionName: String,
+                              messages: scala.collection.Seq[PubSubMessage],
+                              extendDeadlineBySeconds: Int
+  ): Future[Unit] =
     throw new NotImplementedError("extendDeadline is not implemented for Azure.")
-  override def extendDeadlineById(subscriptionName: String, ackIds: scala.collection.Seq[String], extendDeadlineBySeconds: Int): Future[Unit] =
+  override def extendDeadlineById(subscriptionName: String,
+                                  ackIds: scala.collection.Seq[String],
+                                  extendDeadlineBySeconds: Int
+  ): Future[Unit] =
     throw new NotImplementedError("extendDeadlineById is not implemented for Azure.")
   override def pullMessages(subscriptionName: String, maxMessages: Int): Future[scala.collection.Seq[PubSubMessage]] =
     throw new NotImplementedError("pullMessages is not implemented for Azure.")

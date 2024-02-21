@@ -9,8 +9,9 @@ import org.broadinstitute.dsde.rawls.disabled.{DisabledDrsHubResolver, DisabledM
 import scala.concurrent.ExecutionContext
 
 object MultiCloudDrsResolverFactory {
-  def createMultiCloudDrsResolver(appConfigManager: MultiCloudAppConfigManager
-                                 )(implicit system: ActorSystem, executionContext: ExecutionContext): DrsResolver = {
+  def createMultiCloudDrsResolver(
+    appConfigManager: MultiCloudAppConfigManager
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): DrsResolver =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         if (appConfigManager.conf.hasPath("drs")) {
@@ -31,8 +32,7 @@ object MultiCloudDrsResolverFactory {
           new MarthaResolver(marthaUrl)
         }
       case "azure" =>
-          new DisabledMarthaResolver
+        new DisabledMarthaResolver
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

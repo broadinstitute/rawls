@@ -16,15 +16,18 @@ import spray.json._
 
 import scala.concurrent._
 
-class DisabledHttpGoogleServicesDAO(config:Config) extends GoogleServicesDAO(config.getString("groupsPrefix")) {
+class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(config.getString("groupsPrefix")) {
   override val billingEmail: String = config.getString("billingEmail")
   override val billingGroupEmail: String = config.getString("billingGroupEmail")
   def adminGroupName =
     throw new NotImplementedError("adminGroupName method is not implemented for Azure.")
   def curatorGroupName =
     throw new NotImplementedError("curatorGroupName method is not implemented for Azure.")
-  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                               userProject: Option[GoogleProjectId], iamPolicyVersion: Int = 1): Future[Unit] =
+  override def updateBucketIam(bucketName: GcsBucketName,
+                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                               userProject: Option[GoogleProjectId],
+                               iamPolicyVersion: Int = 1
+  ): Future[Unit] =
     throw new NotImplementedError("updateBucketIam method is not implemented for Azure.")
   override def grantReadAccess(bucketName: String, authBucketReaders: Set[WorkbenchEmail]): Future[String] =
     throw new NotImplementedError("grantReadAccess method is not implemented for Azure.")
@@ -42,13 +45,20 @@ class DisabledHttpGoogleServicesDAO(config:Config) extends GoogleServicesDAO(con
     throw new NotImplementedError("hasGoogleRole method is not implemented for Azure.")
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] =
     throw new NotImplementedError("getGoogleGroup method is not implemented for Azure.")
-  override def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BucketUsageResponse] =
+  override def getBucketUsage(googleProject: GoogleProjectId,
+                              bucketName: String,
+                              maxResults: Option[Long]
+  ): Future[BucketUsageResponse] =
     throw new NotImplementedError("getBucketUsage method is not implemented for Azure.")
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] =
     throw new NotImplementedError("getBucketACL method is not implemented for Azure.")
-  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]] =
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
+    executionContext: ExecutionContext
+  ): Future[Either[String, Bucket]] =
     throw new NotImplementedError("getBucket method is not implemented for Azure.")
-  override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] =
+  override def getRegionForRegionalBucket(bucketName: String,
+                                          userProject: Option[GoogleProjectId]
+  ): Future[Option[String]] =
     throw new NotImplementedError("getRegionForRegionalBucket method is not implemented for Azure.")
   override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] =
     throw new NotImplementedError("getComputeZonesForRegion method is not implemented for Azure.")
@@ -56,31 +66,54 @@ class DisabledHttpGoogleServicesDAO(config:Config) extends GoogleServicesDAO(con
     throw new NotImplementedError("addEmailToGoogleGroup method is not implemented for Azure.")
   override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] =
     throw new NotImplementedError("removeEmailFromGoogleGroup method is not implemented for Azure.")
-  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String,
-                        userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[StorageObject]] =
+  override def copyFile(sourceBucket: String,
+                        sourceObject: String,
+                        destinationBucket: String,
+                        destinationObject: String,
+                        userProject: Option[GoogleProjectId]
+  )(implicit executionContext: ExecutionContext): Future[Option[StorageObject]] =
     throw new NotImplementedError("copyFile method is not implemented for Azure.")
-  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]] =
+  override def listObjectsWithPrefix(bucketName: String,
+                                     objectNamePrefix: String,
+                                     userProject: Option[GoogleProjectId]
+  ): Future[List[StorageObject]] =
     throw new NotImplementedError("listObjectsWithPrefix method is not implemented for Azure.")
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] =
     throw new NotImplementedError("diagnosticBucketRead method is not implemented for Azure.")
   override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
     throw new NotImplementedError("testTerraBillingAccountAccess method is not implemented for Azure.")
-  override def testTerraAndUserBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] =
+  override def testTerraAndUserBillingAccountAccess(billingAccount: RawlsBillingAccountName,
+                                                    userInfo: UserInfo
+  ): Future[Boolean] =
     throw new NotImplementedError("testTerraAndUserBillingAccountAccess method is not implemented for Azure.")
-  override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit executionContext: ExecutionContext): Future[Set[IamPermission]] =
+  override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
+    executionContext: ExecutionContext
+  ): Future[Set[IamPermission]] =
     throw new NotImplementedError("testSAGoogleBucketIam method is not implemented for Azure.")
-  override def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject, bucketName: GcsBucketName, saKey: String)
-                                                           (implicit executionContext: ExecutionContext): Future[Boolean] =
+  override def testSAGoogleBucketGetLocationOrRequesterPays(googleProject: GoogleProject,
+                                                            bucketName: GcsBucketName,
+                                                            saKey: String
+  )(implicit executionContext: ExecutionContext): Future[Boolean] =
     throw new NotImplementedError("testSAGoogleBucketGetLocationOrRequesterPays method is not implemented for Azure.")
-  override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit executionContext: ExecutionContext): Future[Set[IamPermission]] =
+  override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
+    executionContext: ExecutionContext
+  ): Future[Set[IamPermission]] =
     throw new NotImplementedError("testSAGoogleProjectIam method is not implemented for Azure.")
-  override def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] =
+  override def listBillingAccounts(userInfo: UserInfo,
+                                   firecloudHasAccess: Option[Boolean] = None
+  ): Future[Seq[RawlsBillingAccount]] =
     throw new NotImplementedError("listBillingAccounts method is not implemented for Azure.")
-  override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] =
+  override def listBillingAccountsUsingServiceCredential(implicit
+    executionContext: ExecutionContext
+  ): Future[Seq[RawlsBillingAccount]] =
     throw new NotImplementedError("listBillingAccountsUsingServiceCredential method is not implemented for Azure.")
-  override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
+  override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit
+    executionContext: ExecutionContext
+  ): Future[ProjectBillingInfo] =
     throw new NotImplementedError("getBillingInfoForGoogleProject method is not implemented for Azure.")
-  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] =
+  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit
+    executionContext: ExecutionContext
+  ): Future[Option[String]] =
     throw new NotImplementedError("getBillingAccountIdForGoogleProject method is not implemented for Azure.")
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] =
     throw new NotImplementedError("getGenomicsOperation method is not implemented for Azure.")
@@ -90,11 +123,15 @@ class DisabledHttpGoogleServicesDAO(config:Config) extends GoogleServicesDAO(con
     throw new NotImplementedError("getGoogleProject method is not implemented for Azure.")
   override def pollOperation(operationId: OperationId): Future[OperationStatus] =
     throw new NotImplementedError("pollOperation method is not implemented for Azure.")
-  override protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] =
+  override protected def updatePolicyBindings(googleProject: GoogleProjectId)(
+    updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]
+  ): Future[Boolean] =
     throw new NotImplementedError("updatePolicyBindings method is not implemented for Azure.")
   override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] =
     throw new NotImplementedError("deleteV1Project method is not implemented for Azure.")
-  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] =
+  override def updateGoogleProject(googleProjectId: GoogleProjectId,
+                                   googleProjectWithUpdates: Project
+  ): Future[Project] =
     throw new NotImplementedError("updateGoogleProject method is not implemented for Azure.")
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit] =
     throw new NotImplementedError("deleteGoogleProject method is not implemented for Azure.")
@@ -118,10 +155,22 @@ class DisabledHttpGoogleServicesDAO(config:Config) extends GoogleServicesDAO(con
     throw new NotImplementedError("getFolderId method is not implemented for Azure.")
   override val accessContextManagerDAO: AccessContextManagerDAO =
     throw new NotImplementedError("accessContextManagerDAO method is not implemented for Azure.")
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: GcsBucketName, labels: Map[String, String], requestContext: RawlsRequestContext, bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] =
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: GcsBucketName,
+                              labels: Map[String, String],
+                              requestContext: RawlsRequestContext,
+                              bucketLocation: Option[String]
+  ): Future[GoogleWorkspaceInfo] =
     throw new NotImplementedError("setupWorkspac method is not implemented for Azure.")
-  override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] =
+  override def setBillingAccountName(googleProjectId: GoogleProjectId,
+                                     billingAccountName: RawlsBillingAccountName,
+                                     tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo] =
     throw new NotImplementedError("setBillingAccountName method is not implemented for Azure.")
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] =
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId,
+                                             tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo] =
     throw new NotImplementedError("disableBillingOnGoogleProject method is not implemented for Azure.")
 }

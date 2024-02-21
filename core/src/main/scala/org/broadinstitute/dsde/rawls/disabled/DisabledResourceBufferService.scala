@@ -6,10 +6,10 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId, Proj
 
 import scala.concurrent.Future
 
-class DisabledResourceBufferService extends ResourceBuffer{
+class DisabledResourceBufferService extends ResourceBuffer {
   def getGoogleProjectFromBuffer(projectPoolType: ProjectPoolType = ProjectPoolType.Regular,
                                  handoutRequestId: String
-                                ): Future[GoogleProjectId] =
+  ): Future[GoogleProjectId] =
     throw new NotImplementedError("getGoogleProjectFromBuffer is not implemented for Azure.")
   def toProjectPoolId(projectPoolType: ProjectPoolType): ProjectPoolId =
     throw new NotImplementedError("toProjectPoolId is not implemented for Azure.")

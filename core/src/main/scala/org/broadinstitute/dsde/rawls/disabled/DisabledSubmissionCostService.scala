@@ -12,8 +12,7 @@ object DisabledSubmissionCostService {
   def constructor = new DisabledSubmissionCostService
 }
 
-class DisabledSubmissionCostService
-  extends SubmissionCost {
+class DisabledSubmissionCostService extends SubmissionCost {
 
   val stringParamType: QueryParameterType = new QueryParameterType().setType("STRING")
 
@@ -23,7 +22,7 @@ class DisabledSubmissionCostService
                          submissionDate: DateTime,
                          terminalStatusDate: Option[DateTime],
                          tableNameOpt: Option[String]
-                        ): Future[Map[String, Float]] =
+  ): Future[Map[String, Float]] =
     throw new NotImplementedError("getSubmissionCosts is not implemented for Azure.")
 
   def getWorkflowCost(workflowId: String,
@@ -31,19 +30,18 @@ class DisabledSubmissionCostService
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],
                       tableNameOpt: Option[String]
-                     ): Future[Map[String, Float]] =
+  ): Future[Map[String, Float]] =
     throw new NotImplementedError("getWorkflowCost is not implemented for Azure.")
 
   def extractCostResults(rows: util.List[TableRow]): Map[String, Float] =
     throw new NotImplementedError("extractCostResults is not implemented for Azure.")
-
 
   def generateSubmissionCostsQuery(submissionId: String,
                                    submissionDate: DateTime,
                                    terminalStatusDate: Option[DateTime],
                                    tableName: String,
                                    datePartitionColumn: Option[String]
-                                  ): String =
+  ): String =
     throw new NotImplementedError("generateSubmissionCostsQuery is not implemented for Azure.")
 
   def generateWorkflowCostsQuery(submissionDate: DateTime,
@@ -51,7 +49,6 @@ class DisabledSubmissionCostService
                                  subquery: String,
                                  tableName: String,
                                  datePartitionColumn: Option[String]
-                                ): String =
+  ): String =
     throw new NotImplementedError("generateWorkflowCostsQuery is not implemented for Azure.")
 }
-

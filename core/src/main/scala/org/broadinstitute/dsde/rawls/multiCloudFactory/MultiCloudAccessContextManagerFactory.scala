@@ -8,8 +8,10 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.disabled.DisabledHttpGoogleAccessContextManagerDAO
 
 object MultiCloudAccessContextManagerFactory {
-  def createAccessContextManager(metricsPrefix: String, appConfigManager: MultiCloudAppConfigManager
-                         )(implicit system: ActorSystem, executionContext: ExecutionContext): AccessContextManagerDAO = {
+  def createAccessContextManager(metricsPrefix: String, appConfigManager: MultiCloudAppConfigManager)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): AccessContextManagerDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         val gcsConfig = appConfigManager.gcsConfig
@@ -28,5 +30,4 @@ object MultiCloudAccessContextManagerFactory {
         new DisabledHttpGoogleAccessContextManagerDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

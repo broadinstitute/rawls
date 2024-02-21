@@ -11,12 +11,12 @@ import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 import scala.concurrent.{ExecutionContext, Future}
 
 class DisabledDrsHubResolver(drsHubUrl: String)(implicit
-                                        val system: ActorSystem,
-                                        val materializer: Materializer,
-                                        val executionContext: ExecutionContext
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
 ) extends DrsResolver
-  with DsdeHttpDAO
-  with Retry {
+    with DsdeHttpDAO
+    with Retry {
 
   // the list of fields we want in DrsHub response. More info can be found here: https://github.com/broadinstitute/drsHub#drsHub-v3
   private val DrsHubRequestFieldsKey: Array[String] = Array("googleServiceAccount")
@@ -30,4 +30,3 @@ class DisabledDrsHubResolver(drsHubUrl: String)(implicit
   override def drsServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
     throw new NotImplementedError("drsServiceAccountEmail is not implemented for Azure.")
 }
-

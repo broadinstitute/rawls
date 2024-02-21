@@ -13,7 +13,7 @@ object MultiCloudBucketMigrationServiceFactory {
                                              slickDataSource: SlickDataSource,
                                              samDAO: SamDAO,
                                              gcsDAO: GoogleServicesDAO
-                                             )(implicit executionContext: ExecutionContext): RawlsRequestContext => BucketMigration  = {
+  )(implicit executionContext: ExecutionContext): RawlsRequestContext => BucketMigration =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
@@ -21,5 +21,4 @@ object MultiCloudBucketMigrationServiceFactory {
         DisabledBucketMigrationService.constructor()
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

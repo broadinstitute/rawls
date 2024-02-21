@@ -11,16 +11,14 @@ import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import scala.concurrent.ExecutionContext
 import scala.language.{higherKinds, postfixOps}
 
-
-
 object MultiCloudFastPassServiceConstructorFactory {
   def createCloudFastPassService(appConfigManager: MultiCloudAppConfigManager,
                                  appDependencies: AppDependencies[IO],
                                  gcsDAO: GoogleServicesDAO,
                                  samDAO: SamDAO
-                                )(implicit
-                                  executionContext: ExecutionContext
-                                ): (RawlsRequestContext, SlickDataSource) => FastPass =
+  )(implicit
+    executionContext: ExecutionContext
+  ): (RawlsRequestContext, SlickDataSource) => FastPass =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         val gcsConfig = appConfigManager.gcsConfig

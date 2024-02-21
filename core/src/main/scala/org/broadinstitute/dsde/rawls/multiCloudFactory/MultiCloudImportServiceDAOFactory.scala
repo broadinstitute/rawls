@@ -9,8 +9,9 @@ import org.broadinstitute.dsde.rawls.disabled.DisabledImportServiceDAO
 import scala.concurrent.ExecutionContext
 
 object MultiCloudImportServiceDAOFactory {
-  def createMultiCloudImportServiceDAO(appConfigManager: MultiCloudAppConfigManager
-                                      )(implicit system: ActorSystem, executionContext: ExecutionContext): ImportServiceDAO = {
+  def createMultiCloudImportServiceDAO(
+    appConfigManager: MultiCloudAppConfigManager
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): ImportServiceDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         new HttpImportServiceDAO(appConfigManager.conf.getString("avroUpsertMonitor.server"))
@@ -18,5 +19,4 @@ object MultiCloudImportServiceDAOFactory {
         new DisabledImportServiceDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

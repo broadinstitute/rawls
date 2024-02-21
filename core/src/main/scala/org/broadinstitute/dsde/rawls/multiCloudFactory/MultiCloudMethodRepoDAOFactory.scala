@@ -10,9 +10,10 @@ import org.broadinstitute.dsde.rawls.model.{Agora, Dockstore}
 import scala.concurrent.ExecutionContext
 
 object MultiCloudMethodRepoDAOFactory {
-  def createMultiCloudMethodRepoDAO(appConfigManager: MultiCloudAppConfigManager,
-                                    metricsPrefix: String
-                                   )(implicit system: ActorSystem, executionContext: ExecutionContext): MethodRepoDAO = {
+  def createMultiCloudMethodRepoDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): MethodRepoDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         new HttpMethodRepoDAO(
@@ -24,5 +25,4 @@ object MultiCloudMethodRepoDAOFactory {
         new DisabledHttpMethodRepoDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

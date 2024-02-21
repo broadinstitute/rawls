@@ -7,8 +7,8 @@ import org.broadinstitute.dsde.workbench.google.GooglePubSubDAO
 
 object MultiCloudNotificationDAOFactory {
   def createMultiCloudNotificationDAO(appConfigManager: MultiCloudAppConfigManager,
-                                      notificationPubSubDAO: GooglePubSubDAO,
-                                     ): NotificationDAO = {
+                                      notificationPubSubDAO: GooglePubSubDAO
+  ): NotificationDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         new PubSubNotificationDAO(
@@ -19,5 +19,4 @@ object MultiCloudNotificationDAOFactory {
         new DisabledPubSubNotificationDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

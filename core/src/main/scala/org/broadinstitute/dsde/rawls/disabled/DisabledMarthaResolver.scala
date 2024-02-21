@@ -9,4 +9,3 @@ class DisabledMarthaResolver extends DrsResolver {
   override def drsServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
     throw new NotImplementedError("drsServiceAccountEmail is not implemented for Azure.")
 }
-

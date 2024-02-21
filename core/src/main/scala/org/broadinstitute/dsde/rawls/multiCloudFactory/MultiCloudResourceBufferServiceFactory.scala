@@ -9,13 +9,14 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 object MultiCloudResourceBufferServiceFactory {
   def createResourceBufferService(appConfigManager: MultiCloudAppConfigManager,
                                   resourceBufferDAO: ResourceBufferDAO
-                                  ): ResourceBuffer = {
+  ): ResourceBuffer =
     appConfigManager.cloudProvider match {
       case "gcp" =>
-        new ResourceBufferService(resourceBufferDAO, ResourceBufferConfig(appConfigManager.conf.getConfig("resourceBuffer")))
+        new ResourceBufferService(resourceBufferDAO,
+                                  ResourceBufferConfig(appConfigManager.conf.getConfig("resourceBuffer"))
+        )
       case "azure" =>
         new DisabledResourceBufferService
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

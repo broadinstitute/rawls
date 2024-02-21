@@ -13,8 +13,7 @@ object MultiCloudBigQueryDAOFactory {
   def createHttpMultiCloudBigQueryDAO(appConfigManager: MultiCloudAppConfigManager,
                                       googleCredentialMode: GoogleCredentialMode,
                                       metricsPrefix: String
-                                     )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleBigQueryDAO = {
-
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleBigQueryDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         new HttpGoogleBigQueryDAO(
@@ -26,5 +25,4 @@ object MultiCloudBigQueryDAOFactory {
         new DisabledGoogleBigQueryDAO
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

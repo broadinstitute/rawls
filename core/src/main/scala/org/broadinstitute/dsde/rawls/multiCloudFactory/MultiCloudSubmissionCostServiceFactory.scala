@@ -11,8 +11,8 @@ import scala.concurrent.ExecutionContext
 object MultiCloudSubmissionCostServiceFactory {
   def createMultiCloudSubmissionCostService(appConfigManager: MultiCloudAppConfigManager,
                                             bigQueryDAO: GoogleBigQueryDAO
-                                           )(implicit executionContext: ExecutionContext): SubmissionCost = {
-    appConfigManager.cloudProvider match{
+  )(implicit executionContext: ExecutionContext): SubmissionCost =
+    appConfigManager.cloudProvider match {
       case "gcp" =>
         val gcsConfig = appConfigManager.gcsConfig
         SubmissionCostService.constructor(
@@ -26,5 +26,4 @@ object MultiCloudSubmissionCostServiceFactory {
         DisabledSubmissionCostService.constructor
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }
