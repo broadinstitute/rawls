@@ -879,7 +879,7 @@ class UserService(
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
   } yield project.flatMap { p =>
-    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
+    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p, platform = CloudPlatform.GCP)) else None
   }
 
   private def updateBillingAccountInBillingProfile(billingProfileId: String,
