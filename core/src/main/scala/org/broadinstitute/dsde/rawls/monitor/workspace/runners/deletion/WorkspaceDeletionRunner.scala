@@ -45,7 +45,7 @@ import scala.util.{Failure, Success}
 class WorkspaceDeletionRunner(val samDAO: SamDAO,
                               workspaceManagerDAO: WorkspaceManagerDAO,
                               workspaceRepository: WorkspaceRepository,
-                              leonardoResourceDeletionAction: LeonardoService,
+                              leoService: LeonardoService,
                               wsmDeletionAction: WsmDeletionAction,
                               val gcsDAO: GoogleServicesDAO,
                               monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
@@ -120,7 +120,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     job.jobType match {
       case WorkspaceDeleteInit => completeStep(job, workspace, ctx)
       case LeoAppDeletionPoll =>
-        leonardoResourceDeletionAction.pollAppDeletion(workspace, ctx).transformWith {
+        leoService.pollAppDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
             Future.failed(
               new WorkspaceDeletionException(
@@ -132,7 +132,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           case Success(true)  => completeStep(job, workspace, ctx)
         }
       case LeoRuntimeDeletionPoll =>
-        leonardoResourceDeletionAction.pollRuntimeDeletion(workspace, ctx).transformWith {
+        leoService.pollRuntimeDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
             Future.failed(
               new WorkspaceDeletionException(
@@ -190,12 +190,12 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     job.jobType match {
       case WorkspaceDeleteInit =>
         for {
-          _ <- leonardoResourceDeletionAction.deleteApps(workspace, ctx)
+          _ <- leoService.deleteApps(workspace, ctx)
           _ <- monitorRecordDao.update(job.copy(jobType = LeoAppDeletionPoll))
         } yield Incomplete
       case LeoAppDeletionPoll =>
         for {
-          _ <- leonardoResourceDeletionAction.deleteRuntimes(workspace, ctx)
+          _ <- leoService.deleteRuntimes(workspace, ctx)
           _ <- monitorRecordDao.update(job.copy(jobType = LeoRuntimeDeletionPoll))
         } yield Incomplete
       case LeoRuntimeDeletionPoll =>

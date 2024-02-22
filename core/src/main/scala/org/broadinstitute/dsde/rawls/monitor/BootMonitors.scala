@@ -46,7 +46,6 @@ import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import spray.json._
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -443,13 +442,13 @@ object BootMonitors extends LazyLogging {
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
-    val leoDeletionAction = new LeonardoService(leonardoDAO)(system)
+    val leoService = new LeonardoService(leonardoDAO)(system)
     val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
     val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
     val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
                                                               workspaceManagerDAO,
                                                               workspaceRepository,
-                                                              leoDeletionAction,
+                                                              leoService,
                                                               wsmDeletionAction,
                                                               gcsDAO,
                                                               monitorRecordDao

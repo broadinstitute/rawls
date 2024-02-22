@@ -130,7 +130,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
 
   /**
    * Notifies leonardo that it should delete any resource records related to the given google project ID *without*
-   * deleting the actual cleanup resources.
+   * deleting the actual cloud resources.
    *
    * NB: This should only be called after a workspace's google project has been deleted and we want to ensure there
    * are no further dangling references from Leo to resources within that google project.

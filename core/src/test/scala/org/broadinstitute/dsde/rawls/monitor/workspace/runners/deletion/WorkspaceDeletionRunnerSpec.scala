@@ -17,7 +17,8 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.Workspac
   monitorRecord
 }
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
-import org.broadinstitute.dsde.rawls.workspace.{LeonardoOperationFailureException, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
@@ -418,7 +419,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       leoDeletion.pollAppDeletion(ArgumentMatchers.eq(azureWorkspace), any[RawlsRequestContext])(
         any[ExecutionContext]
       )
-    ).thenAnswer(_ => Future.failed(new LeonardoOperationFailureException("failed", azureWorkspace.workspaceIdAsUUID)))
+    ).thenAnswer(_ => Future.failed(new ApiException("failed")))
 
     val runner = spy(
       new WorkspaceDeletionRunner(
