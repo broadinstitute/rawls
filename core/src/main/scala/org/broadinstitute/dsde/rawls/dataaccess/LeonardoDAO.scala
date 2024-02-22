@@ -3,6 +3,7 @@ import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsApi
 
 import scala.concurrent.{ExecutionContext, Future}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, WorkspaceName}
+import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
 
 import java.util.UUID
@@ -26,5 +27,6 @@ trait LeonardoDAO {
 
   def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit
 
+  @throws(classOf[ApiException])
   def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit
 }

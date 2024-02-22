@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
@@ -16,7 +17,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.Workspac
   monitorRecord
 }
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
-import org.broadinstitute.dsde.rawls.workspace.{LeonardoOperationFailureException, LeonardoService, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.{LeonardoOperationFailureException, WorkspaceRepository}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
@@ -11,12 +10,13 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -58,7 +58,7 @@ import spray.json._
 
 import java.io.IOException
 import java.util.UUID
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -726,7 +726,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // note this must take place _after_ google project deletion but _before_ the deletion of the project in sam
       // to avoid orphaning any cloud resources
       _ <- traceFutureWithParent("notifyLeonardo", parentContext)(_ =>
-        leonardoService.cleanupResources(workspaceContext, ctx)
+        leonardoService.cleanupResources(workspaceContext.googleProjectId, workspaceContext.workspaceIdAsUUID, ctx)
       )
 
       // delete the google project's sam record

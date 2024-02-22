@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -39,7 +40,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   LandingZoneCreationStatusRunner
 }
 import org.broadinstitute.dsde.rawls.util
-import org.broadinstitute.dsde.rawls.workspace.{LeonardoService, WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
