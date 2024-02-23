@@ -288,16 +288,6 @@ object MultiregionalBucketMigrationActor {
           throw makeError("no billing account on billing project", Map("billingProject" -> billingProject.projectName))
         )
 
-        _ <- raiseWhen(billingProject.invalidBillingAccount) {
-          makeError(
-            "invalid billing account on billing project",
-            Map(
-              "billingProject" -> billingProject.projectName,
-              "billingProjectBillingAccount" -> billingProjectBillingAccount
-            )
-          )
-        }
-
         _ <- raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
           makeError(
             "billing account on workspace differs from billing account on billing project",
