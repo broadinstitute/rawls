@@ -871,7 +871,7 @@ class UserServiceSpec
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
-                                 SamBillingProjectActions.updateBillingAccount,†
+                                 SamBillingProjectActions.updateBillingAccount,
                                  testContext
         )
       ).thenReturn(Future.successful(true))
