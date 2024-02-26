@@ -3410,9 +3410,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         case _ =>
           DBIO.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          s"Billing Account is missing: ${billingProject}"
-              )
+              ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing: ${billingProject}")
             )
           )
       }
