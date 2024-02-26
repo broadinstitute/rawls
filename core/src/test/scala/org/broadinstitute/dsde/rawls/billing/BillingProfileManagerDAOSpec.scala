@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
@@ -34,7 +33,6 @@ import scala.jdk.CollectionConverters.SeqHasAsJava
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
-  implicit val actor: ActorSystem = ActorSystem("BillingProfileManagerDAOSpec")
 
   val azConfig: AzureConfig = AzureConfig(
     "fake-landing-zone-definition",
@@ -130,25 +128,16 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
   behavior of "createBillingProfile"
 
-  it should "create a GCP profile in billing profile manager if given RawlsBillingAccountName" in {
+  it should "fail when provided with Google billing account information" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
-    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
-    val expectedProfile = new ProfileModel().id(UUID.randomUUID())
-    val billingAccountName = RawlsBillingAccountName("billingAccounts/billingAccountName")
-    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
-    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
 
-    val profile = bpmDAO.createBillingProfile("fake", Left(billingAccountName), Map.empty, testContext)
-
-    assertResult(expectedProfile)(profile)
-    val createProfileRequestCaptor = captor[CreateProfileRequest]
-    verify(profileApi).createProfile(createProfileRequestCaptor.capture)
-    assertResult(CloudPlatform.GCP)(createProfileRequestCaptor.getValue.getCloudPlatform)
-    assertResult("billingAccountName")(createProfileRequestCaptor.getValue.getBillingAccountId)
+    intercept[NotImplementedError] {
+      bpmDAO.createBillingProfile("fake", Left(RawlsBillingAccountName("fake")), Map.empty, testContext)
+    }
   }
 
-  it should "create an Azure profile in billing profile manager if given AzureManagedAppCoordinates" in {
+  it should "create the profile in billing profile manager" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val expectedProfile = new ProfileModel().id(UUID.randomUUID())
@@ -160,12 +149,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     val profile = bpmDAO.createBillingProfile("fake", Right(coords), Map.empty, testContext)
 
     assertResult(expectedProfile)(profile)
-    val createProfileRequestCaptor = captor[CreateProfileRequest]
-    verify(profileApi).createProfile(createProfileRequestCaptor.capture)
-    assertResult(CloudPlatform.AZURE)(createProfileRequestCaptor.getValue.getCloudPlatform)
-    assertResult(coords.managedResourceGroupId)(createProfileRequestCaptor.getValue.getManagedResourceGroupId)
-    assertResult(coords.tenantId)(createProfileRequestCaptor.getValue.getTenantId)
-    assertResult(coords.subscriptionId)(createProfileRequestCaptor.getValue.getSubscriptionId)
+    verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
   }
 
   it should "include an empty set of policy inputs if no policies are present" in {
@@ -303,84 +287,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
     result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
 
-  }
-
-  behavior of "updateBillingProfile"
-
-  it should "retry 5xx errors" in {
-    val profileApi = mock[ProfileApi]
-    when(profileApi.updateProfile(any(), any()))
-      .thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "internal server error"))
-      .thenReturn(new ProfileModel().id(UUID.randomUUID()))
-
-    val apiProvider = mock[BillingProfileManagerClientProvider]
-    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
-
-    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
-
-    Await.result(bpmDAO.updateBillingProfile(UUID.randomUUID(), RawlsBillingAccountName("billingAccount"), testContext),
-                 Duration.Inf
-    )
-
-    verify(profileApi, times(2)).updateProfile(any(), any())
-  }
-
-  it should "throw 4xx errors" in {
-    val profileApi = mock[ProfileApi]
-    when(profileApi.updateProfile(any(), any()))
-      .thenThrow(new ApiException(StatusCodes.Forbidden.intValue, "forbidden"))
-      .thenReturn(new ProfileModel().id(UUID.randomUUID()))
-
-    val apiProvider = mock[BillingProfileManagerClientProvider]
-    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
-
-    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
-
-    assertThrows[ApiException] {
-      Await.result(
-        bpmDAO.updateBillingProfile(UUID.randomUUID(), RawlsBillingAccountName("billingAccount"), testContext),
-        Duration.Inf
-      )
-    }
-    verify(profileApi, times(1)).updateProfile(any(), any())
-  }
-
-  behavior of "removeBillingAccount"
-
-  it should "retry 5xx errors" in {
-    val profileApi = mock[ProfileApi]
-    doThrow(new ApiException(StatusCodes.InternalServerError.intValue, "internal server error"))
-      .doNothing()
-      .when(profileApi)
-      .removeBillingAccount(any())
-
-    val apiProvider = mock[BillingProfileManagerClientProvider]
-    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
-
-    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
-
-    Await.result(bpmDAO.removeBillingAccountFromBillingProfile(UUID.randomUUID(), testContext), Duration.Inf)
-
-    verify(profileApi, times(2)).removeBillingAccount(any())
-  }
-
-  it should "throw 4xx errors" in {
-    val profileApi = mock[ProfileApi]
-    doThrow(new ApiException(StatusCodes.Forbidden.intValue, "internal server error"))
-      .doNothing()
-      .when(profileApi)
-      .removeBillingAccount(any())
-
-    val apiProvider = mock[BillingProfileManagerClientProvider]
-    when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
-
-    val bpmDAO = new BillingProfileManagerDAOImpl(apiProvider, multiCloudWorkspaceConfig)
-
-    assertThrows[ApiException] {
-      Await.result(bpmDAO.removeBillingAccountFromBillingProfile(UUID.randomUUID(), testContext), Duration.Inf)
-    }
-
-    verify(profileApi, times(1)).removeBillingAccount(any())
   }
 
   behavior of "addProfilePolicyMember"
