@@ -10,7 +10,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
@@ -58,7 +58,7 @@ import spray.json._
 
 import java.io.IOException
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
