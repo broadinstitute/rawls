@@ -50,7 +50,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  notificationDAO: NotificationDAO,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: BillingProjectLifecycle,
-                                 bpmBillingProjectLifecycle: BillingProjectLifecycle,
+                                 azureBillingProjectLifecycle: BillingProjectLifecycle,
                                  config: MultiCloudWorkspaceConfig,
                                  resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
@@ -73,7 +73,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
 
     val billingProjectLifecycle = createProjectRequest.billingInfo match {
       case Left(_)  => googleBillingProjectLifecycle
-      case Right(_) => bpmBillingProjectLifecycle
+      case Right(_) => azureBillingProjectLifecycle
     }
     val billingProjectName = createProjectRequest.projectName
 
@@ -184,10 +184,10 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
               )
             )
         }
-      billingProfileId <- billingRepository.getBillingProfileId(projectName)
-      projectLifecycle = billingProfileId match {
+      azureManagedAppCoordinates <- billingRepository.getAzureManagedAppCoordinates(projectName)
+      projectLifecycle = azureManagedAppCoordinates match {
         case None    => googleBillingProjectLifecycle
-        case Some(_) => bpmBillingProjectLifecycle
+        case Some(_) => azureBillingProjectLifecycle
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
       _ <- billingRepository.getCreationStatus(projectName).map { status =>
@@ -223,7 +223,7 @@ object BillingProjectOrchestrator {
     notificationDAO: NotificationDAO,
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-    bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
+    azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
     resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
     config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
@@ -233,7 +233,7 @@ object BillingProjectOrchestrator {
       notificationDAO,
       billingRepository,
       googleBillingProjectLifecycle,
-      bpmBillingProjectLifecycle,
+      azureBillingProjectLifecycle,
       config,
       resourceMonitorRecordDao
     )

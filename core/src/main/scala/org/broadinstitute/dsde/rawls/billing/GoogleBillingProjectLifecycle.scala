@@ -27,6 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class GoogleBillingProjectLifecycle(
   val billingRepository: BillingRepository,
+  val billingProfileManagerDAO: BillingProfileManagerDAO,
   val samDAO: SamDAO,
   gcsDAO: GoogleServicesDAO
 )(implicit
@@ -62,6 +63,9 @@ class GoogleBillingProjectLifecycle(
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] =
     for {
+      profileModel <- createBillingProfile(createProjectRequest, ctx)
+      _ <- addMembersToBillingProfile(profileModel, createProjectRequest, ctx)
+      _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
 
@@ -77,6 +81,6 @@ class GoogleBillingProjectLifecycle(
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit] =
-    unregisterBillingProject(projectName, ctx)
-
+    // Should change this to expecting a billing profile once we have migrated all billing projects (WOR-866)
+    deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = false, ctx)
 }
