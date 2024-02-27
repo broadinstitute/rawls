@@ -209,7 +209,7 @@ jobs:
           run-name: "${{ env.ATTACH_BP_TO_LZ_RUN_NAME }}"
           workflow: attach-billing-project-to-landing-zone.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/arh-wor-1541-update-e2e-lz
           token: ${{ env.TOKEN }}
           inputs: '{
             "run-name": "${{ env.ATTACH_BP_TO_LZ_RUN_NAME }}",
