@@ -476,7 +476,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
       dosServiceAccounts <- resolveDrsUriServiceAccounts(dosUris, petUserInfo)
       // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
-      // We still call Martha for those because we can verify the user has permission on the DRS object as
+      // We still call DRSHub for those because we can verify the user has permission on the DRS object as
       // early as possible, rather than letting the workflow(s) launch and fail
       // AEN 2020-09-08 [WA-325]
       _ <-
