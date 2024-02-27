@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
   BillingProjectOrchestrator,
   GoogleBillingAccountAccessException,
   GoogleBillingProjectLifecycle
@@ -39,7 +40,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
 
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
-      new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO)
+      new GoogleBillingProjectLifecycle(billingRepository, mock[BillingProfileManagerDAO], samDAO, gcsDAO)
     )
     when(
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
