@@ -14,10 +14,10 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
-  AzureBillingProjectLifecycle,
   BillingProfileManagerDAO,
   BillingProjectOrchestrator,
   BillingRepository,
+  BpmBillingProjectLifecycle,
   GoogleBillingProjectLifecycle
 }
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
@@ -236,7 +236,7 @@ trait ApiServiceSpec
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      mock[AzureBillingProjectLifecycle],
+      mock[BpmBillingProjectLifecycle],
       workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )

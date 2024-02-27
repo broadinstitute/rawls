@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
@@ -17,7 +16,6 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   RawlsRequestContext
 }
-import org.broadinstitute.dsde.rawls.util.Retry
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 
 import java.util.{Date, UUID}
@@ -57,15 +55,6 @@ trait BillingProfileManagerDAO {
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel]
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
-
-  @throws[ApiException]
-  def updateBillingProfile(billingProfileId: UUID,
-                           rawlsBillingAccountName: RawlsBillingAccountName,
-                           ctx: RawlsRequestContext
-  ): Future[ProfileModel]
-
-  @throws[ApiException]
-  def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Future[Unit]
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
@@ -124,15 +113,8 @@ object BillingProfileManagerDAO {
 class BillingProfileManagerDAOImpl(
   apiClientProvider: BillingProfileManagerClientProvider,
   config: MultiCloudWorkspaceConfig
-)(implicit val executionContext: ExecutionContext, val system: ActorSystem)
-    extends BillingProfileManagerDAO
-    with LazyLogging
-    with Retry {
-
-  private def when5xx: Throwable => Boolean = {
-    case e: ApiException => e.getCode / 100 == 5
-    case _               => false
-  }
+) extends BillingProfileManagerDAO
+    with LazyLogging {
 
   override def listManagedApps(subscriptionId: UUID,
                                includeAssignedApps: Boolean,
@@ -149,6 +131,10 @@ class BillingProfileManagerDAOImpl(
     policies: Map[String, List[(String, String)]] = Map.empty,
     ctx: RawlsRequestContext
   ): ProfileModel = {
+    val azureManagedAppCoordinates = billingInfo match {
+      case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
+      case Right(coords) => coords
+    }
 
     val policyInputs = new BpmApiPolicyInputs().inputs(
       policies
@@ -168,29 +154,15 @@ class BillingProfileManagerDAOImpl(
 
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(ctx)
-
-    val commonCreateProfileRequest =
-      new CreateProfileRequest()
-        .displayName(displayName)
-        .id(UUID.randomUUID())
-        .biller("direct") // community terra is always 'direct' (i.e., no reseller)
-        .policies(policyInputs)
-
-    val createProfileRequest = billingInfo match {
-      case Left(billingAccountName) =>
-        val rawlsBillingAccountName = billingAccountName
-        commonCreateProfileRequest
-          .billingAccountId(rawlsBillingAccountName.withoutPrefix())
-          .cloudPlatform(CloudPlatform.GCP)
-
-      case Right(coords) =>
-        val azureManagedAppCoordinates = coords
-        commonCreateProfileRequest
-          .tenantId(azureManagedAppCoordinates.tenantId)
-          .subscriptionId(azureManagedAppCoordinates.subscriptionId)
-          .managedResourceGroupId(azureManagedAppCoordinates.managedResourceGroupId)
-          .cloudPlatform(CloudPlatform.AZURE)
-    }
+    val createProfileRequest = new CreateProfileRequest()
+      .tenantId(azureManagedAppCoordinates.tenantId)
+      .subscriptionId(azureManagedAppCoordinates.subscriptionId)
+      .managedResourceGroupId(azureManagedAppCoordinates.managedResourceGroupId)
+      .displayName(displayName)
+      .id(UUID.randomUUID())
+      .biller("direct") // community terra is always 'direct' (i.e., no reseller)
+      .cloudPlatform(CloudPlatform.AZURE)
+      .policies(policyInputs)
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
     profileApi.createProfile(createProfileRequest)
@@ -229,30 +201,6 @@ class BillingProfileManagerDAOImpl(
 
     Future.successful(callListProfiles())
   }
-
-  def updateBillingProfile(billingProfileId: UUID,
-                           rawlsBillingAccountName: RawlsBillingAccountName,
-                           ctx: RawlsRequestContext
-  ): Future[ProfileModel] =
-    retry(when5xx) { () =>
-      Future {
-        apiClientProvider
-          .getProfileApi(ctx)
-          .updateProfile(
-            new UpdateProfileRequest().billingAccountId(rawlsBillingAccountName.withoutPrefix()),
-            billingProfileId
-          )
-      }
-    }
-
-  override def removeBillingAccountFromBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Future[Unit] =
-    retry(when5xx) { () =>
-      Future {
-        apiClientProvider
-          .getProfileApi(ctx)
-          .removeBillingAccount(billingProfileId)
-      }
-    }
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
