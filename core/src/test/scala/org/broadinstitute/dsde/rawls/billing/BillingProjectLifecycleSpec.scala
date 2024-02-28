@@ -49,12 +49,9 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.deleteBillingProject(billingProjectName)).thenReturn(Future.successful(true))
     when(repo.getBillingProfileId(billingProjectName)(executionContext)).thenReturn(Future.successful(None))
 
-    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
     val billingLifecycle = new BillingProjectLifecycle {
       override val samDAO: SamDAO = samDAOMock
       override val billingRepository: BillingRepository = repo
-      override val billingProfileManagerDAO: BillingProfileManagerDAO = bpmDAO
       override val deleteJobType: JobType = GoogleBillingProjectDelete
 
       override def validateBillingProjectCreationRequest(
