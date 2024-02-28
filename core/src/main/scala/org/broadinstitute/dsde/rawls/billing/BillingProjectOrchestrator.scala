@@ -82,9 +82,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     (for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
-      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest,
-                                                                         billingProfileManagerDAO,
-                                                                         ctx
+      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx
       )
 
       _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
@@ -92,7 +90,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       creationStatus <- billingProjectLifecycle
-        .postCreationSteps(createProjectRequest, config, billingProfileManagerDAO, ctx)
+        .postCreationSteps(createProjectRequest, config, ctx)
         .recoverWith { case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
           billingProjectLifecycle.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
@@ -229,7 +227,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
               )
             )
             .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
-        case None => projectLifecycle.finalizeDelete(projectName, billingProfileManagerDAO, ctx)
+        case None => projectLifecycle.finalizeDelete(projectName, ctx)
       }
     } yield ()
 

@@ -54,25 +54,21 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
     val billingLifecycle = new BillingProjectLifecycle {
       override val samDAO: SamDAO = samDAOMock
       override val billingRepository: BillingRepository = repo
+      override val billingProfileManagerDAO: BillingProfileManagerDAO = bpmDAO
       override val deleteJobType: JobType = GoogleBillingProjectDelete
 
       override def validateBillingProjectCreationRequest(
         createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-        billingProfileManagerDAO: BillingProfileManagerDAO,
         ctx: RawlsRequestContext
       ): Future[Unit] = ???
       override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                      config: MultiCloudWorkspaceConfig,
-                                     billingProfileManagerDAO: BillingProfileManagerDAO,
                                      ctx: RawlsRequestContext
       ): Future[CreationStatuses.CreationStatus] = ???
       override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
         executionContext: ExecutionContext
       ): Future[Option[UUID]] = ???
-      override def finalizeDelete(projectName: RawlsBillingProjectName,
-                                  billingProfileManagerDAO: BillingProfileManagerDAO,
-                                  ctx: RawlsRequestContext
-      )(implicit
+      override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
         executionContext: ExecutionContext
       ): Future[Unit] = ???
 

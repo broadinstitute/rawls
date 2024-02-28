@@ -72,13 +72,10 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                   ArgumentMatchers.eq(userInfo)
       )
     ).thenReturn(Future.successful(false))
-    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository], samDAO, gcsDAO)
+    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository], mock[BillingProfileManagerDAO], samDAO, gcsDAO)
 
     val ex = intercept[GoogleBillingAccountAccessException] {
-      Await.result(
-        gbp.validateBillingProjectCreationRequest(createRequest, mock[BillingProfileManagerDAO], testContext),
-        Duration.Inf
-      )
+      Await.result(gbp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.BadRequest)) {
@@ -109,15 +106,13 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     val bpo = new GoogleBillingProjectLifecycle(
       mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       samDAO,
       mock[GoogleServicesDAO]
     )
 
     val ex = intercept[ServicePerimeterAccessException] {
-      Await.result(
-        bpo.validateBillingProjectCreationRequest(createRequest, mock[BillingProfileManagerDAO], testContext),
-        Duration.Inf
-      )
+      Await.result(bpo.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.Forbidden)) {
@@ -146,7 +141,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
         SamBillingProjectPolicyNames.owner
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    val gbp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
+    val gbp = new GoogleBillingProjectLifecycle(repo, bpm, samDAO, mock[GoogleServicesDAO])
 
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId))
       .thenReturn(Future.successful(1))
@@ -162,9 +157,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       .thenReturn(profileModel)
 
     assertResult(CreationStatuses.Ready) {
-      Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], bpm, testContext),
-                   Duration.Inf
-      )
+      Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], testContext), Duration.Inf)
     }
 
     verify(samDAO)
@@ -180,7 +173,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val samDAO = mock[SamDAO]
     val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val bp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
+    val bp = new GoogleBillingProjectLifecycle(repo, bpm, samDAO, mock[GoogleServicesDAO])
 
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
@@ -219,7 +212,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.postCreationSteps(
                    createRequest,
                    mock[MultiCloudWorkspaceConfig],
-                   bpm,
                    testContext
                  ),
                  Duration.Inf
@@ -236,7 +228,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val samDAO = mock[SamDAO]
     val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val bp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
+    val bp = new GoogleBillingProjectLifecycle(repo, bpm, samDAO, mock[GoogleServicesDAO])
 
     val user1Email = "user1@foo.bar"
     val user2Email = "user2@foo.bar"
@@ -280,7 +272,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
                    mock[MultiCloudWorkspaceConfig],
-                   bpm,
                    testContext
                  ),
                  Duration.Inf
@@ -337,8 +328,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       .when(bpm)
       .deleteBillingProfile(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(testContext))
 
-    val bp = new GoogleBillingProjectLifecycle(repo, mock[SamDAO], mock[GoogleServicesDAO])
-    Await.result(bp.finalizeDelete(billingProjectName, bpm, testContext), Duration.Inf)
+    val bp = new GoogleBillingProjectLifecycle(repo, bpm, mock[SamDAO], mock[GoogleServicesDAO])
+    Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(testContext))
     verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
@@ -366,8 +357,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
 
     val bpm = mock[BillingProfileManagerDAO]
-    val bp = new GoogleBillingProjectLifecycle(repo, mock[SamDAO], mock[GoogleServicesDAO])
-    Await.result(bp.finalizeDelete(billingProjectName, bpm, testContext), Duration.Inf)
+    val bp = new GoogleBillingProjectLifecycle(repo, bpm, mock[SamDAO], mock[GoogleServicesDAO])
+    Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm, Mockito.never).deleteBillingProfile(profileModel.getId, testContext)
     // Billing project is still deleted
@@ -380,8 +371,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.deleteBillingProject(ArgumentMatchers.eq(billingProjectName))).thenReturn(Future.successful(true))
 
     val bpm = mock[BillingProfileManagerDAO]
-    val bp = new GoogleBillingProjectLifecycle(repo, mock[SamDAO], mock[GoogleServicesDAO])
-    Await.result(bp.finalizeDelete(billingProjectName, bpm, testContext), Duration.Inf)
+    val bp = new GoogleBillingProjectLifecycle(repo, bpm, mock[SamDAO], mock[GoogleServicesDAO])
+    Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm, Mockito.never()).deleteBillingProfile(ArgumentMatchers.any[UUID], ArgumentMatchers.eq(testContext))
     verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
@@ -394,10 +385,10 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(bpm.deleteBillingProfile(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(testContext)))
       .thenAnswer(_ => throw new BpmApiException(HttpStatus.SC_FORBIDDEN, "forbidden"))
 
-    val bp = new GoogleBillingProjectLifecycle(repo, mock[SamDAO], mock[GoogleServicesDAO])
+    val bp = new GoogleBillingProjectLifecycle(repo, bpm, mock[SamDAO], mock[GoogleServicesDAO])
 
     intercept[BpmApiException] {
-      Await.result(bp.finalizeDelete(billingProjectName, bpm, testContext), Duration.Inf)
+      Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
     }
     verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(testContext))
     verify(repo, Mockito.never).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))

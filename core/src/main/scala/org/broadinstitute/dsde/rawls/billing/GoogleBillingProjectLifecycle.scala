@@ -27,6 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class GoogleBillingProjectLifecycle(
   val billingRepository: BillingRepository,
+  val billingProfileManagerDAO: BillingProfileManagerDAO,
   val samDAO: SamDAO,
   gcsDAO: GoogleServicesDAO
 )(implicit
@@ -43,7 +44,6 @@ class GoogleBillingProjectLifecycle(
    *         validation failure.
    */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-                                                     billingProfileManagerDAO: BillingProfileManagerDAO,
                                                      ctx: RawlsRequestContext
   ): Future[Unit] =
     for {
@@ -60,12 +60,11 @@ class GoogleBillingProjectLifecycle(
 
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
-                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] =
     for {
-      profileModel <- createBillingProfile(createProjectRequest, billingProfileManagerDAO, ctx)
-      _ <- addMembersToBillingProfile(profileModel, createProjectRequest, billingProfileManagerDAO, ctx)
+      profileModel <- createBillingProfile(createProjectRequest, ctx)
+      _ <- addMembersToBillingProfile(profileModel, createProjectRequest, ctx)
       _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
@@ -79,16 +78,9 @@ class GoogleBillingProjectLifecycle(
     // does verify that code in this method is executed when a Google-based project is deleted.
     deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx).map(_ => None)
 
-  override def finalizeDelete(projectName: RawlsBillingProjectName,
-                              billingProfileManagerDAO: BillingProfileManagerDAO,
-                              ctx: RawlsRequestContext
-  )(implicit
+  override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit] =
     // Should change this to expecting a billing profile once we have migrated all billing projects (WOR-866)
-    deleteBillingProfileAndUnregisterBillingProject(projectName,
-                                                    billingProfileExpected = false,
-                                                    billingProfileManagerDAO,
-                                                    ctx
-    )
+    deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = false, ctx)
 }
