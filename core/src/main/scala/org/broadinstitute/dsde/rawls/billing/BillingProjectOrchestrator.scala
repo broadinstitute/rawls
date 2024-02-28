@@ -3,13 +3,13 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.ServerError
 import bio.terra.profile.client.{ApiException => BpmApiException}
+import bio.terra.profile.model.CloudPlatform
 import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValid
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -48,6 +49,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  val samDAO: SamDAO,
                                  notificationDAO: NotificationDAO,
+                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: BillingProjectLifecycle,
                                  azureBillingProjectLifecycle: BillingProjectLifecycle,
@@ -80,17 +82,21 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     (for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
-      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx)
+      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest,
+                                                                         billingProfileManagerDAO,
+                                                                         ctx
+      )
 
       _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
       _ <- createV2BillingProjectInternal(createProjectRequest, ctx)
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
-      creationStatus <- billingProjectLifecycle.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
-        case t: Throwable =>
+      creationStatus <- billingProjectLifecycle
+        .postCreationSteps(createProjectRequest, config, billingProfileManagerDAO, ctx)
+        .recoverWith { case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
           billingProjectLifecycle.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
-      }
+        }
       _ = logger.info(s"Post-creation steps succeeded, setting billing project status [status=$creationStatus]")
       _ <- billingRepository.updateCreationStatus(
         createProjectRequest.projectName,
@@ -184,10 +190,22 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
               )
             )
         }
-      azureManagedAppCoordinates <- billingRepository.getAzureManagedAppCoordinates(projectName)
-      projectLifecycle = azureManagedAppCoordinates match {
-        case None    => googleBillingProjectLifecycle
-        case Some(_) => azureBillingProjectLifecycle
+      billingProfileId <- billingRepository.getBillingProfileId(projectName)
+      cloudPlatform = billingProfileId match {
+        case Some(profileId) =>
+          // What if this throws an error?
+          // Note: both implementations of BillingProjectLifecycle have a reference to billingProfileManagerDAO
+          val billingProfile = billingProfileManagerDAO.getBillingProfile(UUID.fromString(profileId), ctx)
+          billingProfile
+            .getOrElse(
+              throw new BillingProjectDeletionException(ErrorReport(s"Could not find billing profile $profileId"))
+            )
+            .getCloudPlatform
+        case None => CloudPlatform.GCP
+      }
+      projectLifecycle = cloudPlatform match {
+        case CloudPlatform.GCP   => googleBillingProjectLifecycle
+        case CloudPlatform.AZURE => azureBillingProjectLifecycle
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
       _ <- billingRepository.getCreationStatus(projectName).map { status =>
@@ -211,7 +229,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
               )
             )
             .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
-        case None => projectLifecycle.finalizeDelete(projectName, ctx)
+        case None => projectLifecycle.finalizeDelete(projectName, billingProfileManagerDAO, ctx)
       }
     } yield ()
 
@@ -221,6 +239,7 @@ object BillingProjectOrchestrator {
   def constructor(
     samDAO: SamDAO,
     notificationDAO: NotificationDAO,
+    billingProfileManagerDAO: BillingProfileManagerDAO,
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
     azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
@@ -231,6 +250,7 @@ object BillingProjectOrchestrator {
       ctx,
       samDAO,
       notificationDAO,
+      billingProfileManagerDAO,
       billingRepository,
       googleBillingProjectLifecycle,
       azureBillingProjectLifecycle,

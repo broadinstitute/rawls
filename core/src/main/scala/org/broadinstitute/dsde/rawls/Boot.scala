@@ -551,11 +551,11 @@ object Boot extends IOApp with LazyLogging {
         BillingProjectOrchestrator.constructor(
           samDAO,
           notificationDAO,
+          billingProfileManagerDAO,
           billingRepository,
-          new GoogleBillingProjectLifecycle(billingRepository, billingProfileManagerDAO, samDAO, gcsDAO),
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
           new AzureBillingProjectLifecycle(samDAO,
                                            billingRepository,
-                                           billingProfileManagerDAO,
                                            workspaceManagerDAO,
                                            workspaceManagerResourceMonitorRecordDao
           ),
