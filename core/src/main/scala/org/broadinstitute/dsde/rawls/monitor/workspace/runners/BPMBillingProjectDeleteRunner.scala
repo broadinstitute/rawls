@@ -4,8 +4,15 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.{BillingProjectLifecycle, BillingRepository}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobStatus}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobStatus
+}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.{Deleting, DeletionFailed}

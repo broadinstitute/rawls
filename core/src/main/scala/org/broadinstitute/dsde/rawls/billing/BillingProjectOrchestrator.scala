@@ -82,8 +82,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     (for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
-      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx
-      )
+      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx)
 
       _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
       _ <- createV2BillingProjectInternal(createProjectRequest, ctx)
