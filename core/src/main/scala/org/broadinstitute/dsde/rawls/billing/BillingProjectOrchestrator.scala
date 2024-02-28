@@ -190,12 +190,14 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       billingProfileId <- billingRepository.getBillingProfileId(projectName)
       cloudPlatform = billingProfileId match {
         case Some(profileId) =>
-          // What if this throws an error?
-          // Note: both implementations of BillingProjectLifecycle have a reference to billingProfileManagerDAO
           val billingProfile = billingProfileManagerDAO.getBillingProfile(UUID.fromString(profileId), ctx)
           billingProfile
             .getOrElse(
-              throw new BillingProjectDeletionException(ErrorReport(s"Could not find billing profile $profileId"))
+              throw new BillingProjectDeletionException(
+                ErrorReport(
+                  s"Unable to find billing profile with billingProfileId: $profileId. Deletion cannot continue because the CloudPlatform cannot be determined."
+                )
+              )
             )
             .getCloudPlatform
         case None => CloudPlatform.GCP
