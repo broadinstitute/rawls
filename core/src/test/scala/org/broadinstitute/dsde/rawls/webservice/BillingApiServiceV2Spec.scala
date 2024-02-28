@@ -40,7 +40,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
 
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
-      new GoogleBillingProjectLifecycle(billingRepository, mock[BillingProfileManagerDAO], samDAO, gcsDAO)
+      new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO)
     )
     when(
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -67,12 +67,16 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     ).thenReturn(Future.successful(()))
     doReturn(Future.successful())
       .when(googleBillingProjectLifecycle)
-      .validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext])
+      .validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest],
+                                             any[BillingProfileManagerDAO],
+                                             any[RawlsRequestContext]
+      )
 
     doReturn(Future.successful(CreationStatuses.Ready))
       .when(googleBillingProjectLifecycle)
       .postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
                          any[MultiCloudWorkspaceConfig],
+                         any[BillingProfileManagerDAO],
                          any[RawlsRequestContext]
       )
 
@@ -396,6 +400,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       when(
         services.googleBillingProjectLifecycle.validateBillingProjectCreationRequest(
           ArgumentMatchers.any[CreateRawlsV2BillingProjectFullRequest],
+          any[BillingProfileManagerDAO],
           ArgumentMatchers.any[RawlsRequestContext]
         )
       )
@@ -514,12 +519,16 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     when(
       services.googleBillingProjectLifecycle
-        .validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext])
+        .validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest],
+                                               any[BillingProfileManagerDAO],
+                                               any[RawlsRequestContext]
+        )
     )
       .thenReturn(Future.successful())
     when(
       services.googleBillingProjectLifecycle.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
                                                                any[MultiCloudWorkspaceConfig],
+                                                               any[BillingProfileManagerDAO],
                                                                any[RawlsRequestContext]
       )
     )

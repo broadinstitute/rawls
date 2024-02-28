@@ -222,6 +222,7 @@ trait ApiServiceSpec
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
+      mock[BillingProfileManagerDAO],
       billingRepository,
       googleBillingProjectLifecycle,
       mock[AzureBillingProjectLifecycle],
