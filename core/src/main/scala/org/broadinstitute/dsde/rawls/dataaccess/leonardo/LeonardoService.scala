@@ -1,10 +1,11 @@
-package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions
+package org.broadinstitute.dsde.rawls.dataaccess.leonardo
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.LeonardoDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
@@ -14,12 +15,18 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   ListAppResponse,
   ListRuntimeResponse
 }
+import org.broadinstitute.dsde.workbench.model.Notifications.WorkspaceName
 
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
+/**
+ * Wraps the leonardo DAO with retry logic and error handling
+ * @param leonardoDAO Instance of a LeonardoDAO
+ * @param system Instance of an ActorSystem
+ */
+class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
   val system: ActorSystem
 ) extends Retry
     with LazyLogging {
@@ -121,7 +128,38 @@ class LeonardoResourceDeletionAction(leonardoDAO: LeonardoDAO)(implicit
       }
     }
 
-}
+  /**
+   * Notifies leonardo that it should delete any resource records related to the given google project ID *without*
+   * deleting the actual cloud resources.
+   *
+   * NB: This should only be called after a workspace's google project has been deleted and we want to ensure there
+   * are no further dangling references from Leo to resources within that google project.
+   *
+   * @param googleProjectId ID of the workspace's google project
+   * @param workspaceId ID of the workspace
+   * @param ctx RawlsRequestContext containing auth info
+   */
+  def cleanupResources(googleProjectId: GoogleProjectId, workspaceId: UUID, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Unit] =
+    retry(when500OrProcessingException) { () =>
+      Future {
+        blocking {
+          logger.info(
+            s"Sending resource cleanup request to Leonardo [workspaceId=$workspaceId, googleProjectId=${googleProjectId.value}]"
+          )
+          leonardoDAO.cleanupAllResources(ctx.userInfo.accessToken.token, googleProjectId)
+        }
+      }.recoverWith { case t: ApiException =>
+        if (t.getCode != StatusCodes.NotFound.intValue) {
+          logger.warn(
+            s"Unexpected failure cleaning up leonardo workspace resources for workspaceId=$workspaceId . Received ${t.getCode}: [${t.getResponseBody}]"
+          )
+          Future.failed(t)
+        } else {
+          Future.successful()
+        }
+      }
+    }
 
-class LeonardoOperationFailureException(message: String, val workspaceId: UUID)
-    extends WorkspaceDeletionActionFailureException(message)
+}

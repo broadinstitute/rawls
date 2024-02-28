@@ -6,14 +6,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  GcpContext,
-  WorkspaceDescription,
-  WorkspaceStageModel,
-  WsmPolicyInput,
-  WsmPolicyPair
-}
+import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WorkspaceStageModel, WsmPolicyInput, WsmPolicyPair}
 import cats.effect.IO
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -28,6 +21,7 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -52,13 +46,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.google.{
-  BigQueryDatasetName,
-  BigQueryTableName,
-  GcsBucketName,
-  GoogleProject,
-  IamPermission
-}
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -149,6 +137,9 @@ class WorkspaceServiceSpec
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
+    when(leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext]))
+      .thenReturn(Future.successful())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
@@ -295,6 +286,7 @@ class WorkspaceServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
+      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,
@@ -1308,7 +1300,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "delete an Azure workspace" in withTestDataServices { services =>
+  it should "fail if called with an MC workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
@@ -1334,99 +1326,16 @@ class WorkspaceServiceSpec
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    val deletionResult = Await.result(services.workspaceService.deleteWorkspace(
-                                        WorkspaceName(workspace.namespace, workspace.name)
-                                      ),
-                                      Duration.Inf
-    )
-
-    deletionResult.gcpContext shouldBe None
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(
+                     WorkspaceName(workspace.namespace, workspace.name)
+                   ),
+                   Duration.Inf
+      )
     }
-  }
-
-  it should "not delete the rawls Azure workspace when WSM errors out for an azure workspace" in withTestDataServices {
-    services =>
-      val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val workspaceRequest = WorkspaceRequest(
-        testData.testProject1Name.value,
-        workspaceName,
-        Map.empty
-      )
-      when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-        new WorkspaceDescription()
-          .stage(WorkspaceStageModel.MC_WORKSPACE)
-          .azureContext(
-            new AzureContext()
-              .tenantId("fake_tenant_id")
-              .subscriptionId("fake_sub_id")
-              .resourceGroupId("fake_mrg_id")
-          )
-      )
-      when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
-        throw new ApiException("error")
-      )
-
-      val workspace =
-        Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
-                                                                           new ProfileModel().id(UUID.randomUUID())
-                     ),
-                     Duration.Inf
-        )
-      assertResult(Option(workspace.toWorkspaceName)) {
-        runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
-      }
-
-      val ex = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.deleteWorkspace(
-                       WorkspaceName(workspace.namespace, workspace.name)
-                     ),
-                     Duration.Inf
-        )
-      }
-
-      val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-      assert(maybeWorkspace.isDefined)
-  }
-
-  it should "delete the rawls workspace when WSM returns 404" in withTestDataServices { services =>
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = WorkspaceRequest(
-      testData.testProject1Name.value,
-      workspaceName,
-      Map.empty
-    )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
-    )
-    when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
-      throw new ApiException(404, "not found")
-    )
-
-    val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
-      Duration.Inf
-    )
-    assertResult(Option(workspace.toWorkspaceName)) {
-      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    assertResult(Some(StatusCodes.InternalServerError)) {
+      error.errorReport.statusCode
     }
-
-    Await.result(services.workspaceService.deleteWorkspace(
-                   WorkspaceName(workspace.namespace, workspace.name)
-                 ),
-                 Duration.Inf
-    )
-
-    val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-    assert(maybeWorkspace.isEmpty)
   }
 
   behavior of "getTags"

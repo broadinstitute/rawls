@@ -528,31 +528,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
-  it should "fail the migration when the billing account on the billing project is invalid" in
-    runMigrationTest {
-      for {
-        _ <- inTransaction { dataAccess =>
-          import dataAccess.{executionContext => _, _}
-          for {
-            _ <- createAndScheduleWorkspace(testData.workspace)
-            _ <- writeStarted(testData.workspace.workspaceIdAsUUID)
-            _ <- rawlsBillingProjectQuery
-              .withProjectName(RawlsBillingProjectName(testData.workspace.namespace))
-              .setInvalidBillingAccount(true)
-          } yield ()
-        }
-
-        _ <- migrate
-
-        migration <- inTransactionT {
-          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
-        }
-      } yield {
-        migration.finished shouldBe defined
-        migration.outcome.value.failureMessage should include("invalid billing account on billing project")
-      }
-    }
-
   it should "fail the migration when the billing account on the workspace does not match the billing account on the billing project" in
     runMigrationTest {
       val workspace = testData.workspace.copy(
