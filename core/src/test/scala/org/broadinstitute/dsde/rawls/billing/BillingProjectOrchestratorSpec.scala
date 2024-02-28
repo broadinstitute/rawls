@@ -83,7 +83,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val gbp = mock[BillingProjectLifecycle]
-    when(gbp.validateBillingProjectCreationRequest(createRequest, bpmDAO, testContext))
+    when(gbp.validateBillingProjectCreationRequest(createRequest, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "failed"))))
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -125,9 +125,9 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpCreator = mock[BillingProjectLifecycle]
     val bpCreatorReturnedStatus = CreationStatuses.CreatingLandingZone
 
-    when(bpCreator.validateBillingProjectCreationRequest(createRequest, bpmDAO, testContext))
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext))
       .thenReturn(Future.successful())
-    when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, bpmDAO, testContext))
+    when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.successful(bpCreatorReturnedStatus))
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
@@ -203,7 +203,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       Future.successful(Some(RawlsBillingProject(RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)))
     )
     val bpCreator = mock[BillingProjectLifecycle]
-    when(bpCreator.validateBillingProjectCreationRequest(createRequest, bpmDAO, testContext))
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext))
       .thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
@@ -270,11 +270,10 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpmDAO = mock[BillingProfileManagerDAO]
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
-                                                    ArgumentMatchers.eq(bpmDAO),
                                                     ArgumentMatchers.eq(testContext)
       )
     ).thenReturn(Future.successful())
-    when(creator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, bpmDAO, testContext))
+    when(creator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, "Failed"))))
     when(creator.unregisterBillingProject(createRequest.projectName, testContext)).thenReturn(Future.successful())
     val repo = mock[BillingRepository]
@@ -499,7 +498,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     val bpmDAO = mock[BillingProfileManagerDAO]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
-    when(billingProjectLifecycle.finalizeDelete(billingProjectName, bpmDAO, testContext))
+    when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext))
       .thenReturn(Future.successful())
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -516,7 +515,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
     verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
-    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, bpmDAO, testContext)
+    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
   }
 
   it should "call initiateDelete and finalizeDelete when the BPM lifecycle returns a jobId of None" in {
@@ -525,7 +524,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
 
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
-    when(billingProjectLifecycle.finalizeDelete(billingProjectName, billingProfileManagerDAO, testContext))
+    when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext))
       .thenReturn(Future.successful())
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -542,7 +541,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
     verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
-    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, billingProfileManagerDAO, testContext)
+    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
   }
 
   it should "call the BPM lifecycle to initiate delete of an Azure project" in {

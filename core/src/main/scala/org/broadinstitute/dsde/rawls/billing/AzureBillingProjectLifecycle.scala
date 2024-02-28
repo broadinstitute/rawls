@@ -34,6 +34,7 @@ import scala.util.{Failure, Success, Try}
 class AzureBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
+  val billingProfileManagerDAO: BillingProfileManagerDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
@@ -47,7 +48,6 @@ class AzureBillingProjectLifecycle(
     *         in the event of validation failure.
     */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-                                                     billingProfileManagerDAO: BillingProfileManagerDAO,
                                                      ctx: RawlsRequestContext
   ): Future[Unit] = {
     val azureManagedAppCoordinates = createProjectRequest.billingInfo match {
@@ -84,7 +84,6 @@ class AzureBillingProjectLifecycle(
     */
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
-                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
@@ -121,8 +120,8 @@ class AzureBillingProjectLifecycle(
       })
     }
 
-    createBillingProfile(createProjectRequest, billingProfileManagerDAO, ctx).flatMap { profileModel =>
-      addMembersToBillingProfile(profileModel, createProjectRequest, billingProfileManagerDAO, ctx).flatMap { _ =>
+    createBillingProfile(createProjectRequest, ctx).flatMap { profileModel =>
+      addMembersToBillingProfile(profileModel, createProjectRequest, ctx).flatMap { _ =>
         createLandingZone(profileModel)
           .flatMap { landingZone =>
             (for {
@@ -166,14 +165,13 @@ class AzureBillingProjectLifecycle(
           }
           .recoverWith { case t: Throwable =>
             logger.error("Billing project creation failed, cleaning up billing profile", t)
-            cleanupBillingProfile(profileModel.getId, projectName, billingProfileManagerDAO, ctx).recover {
-              case cleanupError: Throwable =>
-                // Log the exception that prevented cleanup from completing, but do not throw it so original
-                // cause of billing project failure is shown to user.
-                logger.warn(
-                  s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
-                  cleanupError
-                )
+            cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
+              // Log the exception that prevented cleanup from completing, but do not throw it so original
+              // cause of billing project failure is shown to user.
+              logger.warn(
+                s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+                cleanupError
+              )
             } >> Future.failed(t)
           }
       }
@@ -226,14 +224,7 @@ class AzureBillingProjectLifecycle(
       }
     } yield jobControlId
 
-  override def finalizeDelete(projectName: RawlsBillingProjectName,
-                              billingProfileManagerDAO: BillingProfileManagerDAO,
-                              ctx: RawlsRequestContext
-  )(implicit
+  override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[Unit] = deleteBillingProfileAndUnregisterBillingProject(projectName,
-                                                                    billingProfileExpected = true,
-                                                                    billingProfileManagerDAO,
-                                                                    ctx
-  )
+  ): Future[Unit] = deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = true, ctx)
 }

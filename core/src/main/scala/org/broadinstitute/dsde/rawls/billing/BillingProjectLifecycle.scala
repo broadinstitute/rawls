@@ -30,6 +30,7 @@ trait BillingProjectLifecycle extends LazyLogging {
   // Resources common to all implementations.
   val samDAO: SamDAO
   val billingRepository: BillingRepository
+  val billingProfileManagerDAO: BillingProfileManagerDAO
 
   // The type of WorkspaceManagerResourceMonitorRecord job that should be created to finalize deletion when necessary
   val deleteJobType: JobType
@@ -54,14 +55,12 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   def validateBillingProjectCreationRequest(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-    billingProfileManagerDAO: BillingProfileManagerDAO,
     ctx: RawlsRequestContext
   ): Future[Unit]
 
   def postCreationSteps(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
     config: MultiCloudWorkspaceConfig,
-    billingProfileManagerDAO: BillingProfileManagerDAO,
     ctx: RawlsRequestContext
   ): Future[CreationStatus]
 
@@ -74,18 +73,12 @@ trait BillingProjectLifecycle extends LazyLogging {
     executionContext: ExecutionContext
   ): Future[Option[UUID]]
 
-  def finalizeDelete(projectName: RawlsBillingProjectName,
-                     billingProfileManagerDAO: BillingProfileManagerDAO,
-                     ctx: RawlsRequestContext
-  )(implicit
+  def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit]
 
-  def createBillingProfile(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-                           billingProfileManagerDAO: BillingProfileManagerDAO,
-                           ctx: RawlsRequestContext
-  )(implicit
-    executionContext: ExecutionContext
+  def createBillingProfile(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext)(
+    implicit executionContext: ExecutionContext
   ): Future[ProfileModel] =
     Future(blocking {
       val policies: Map[String, List[(String, String)]] =
@@ -105,7 +98,6 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   def addMembersToBillingProfile(profileModel: ProfileModel,
                                  createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): Future[Set[Unit]] = {
     val members = createProjectRequest.members.getOrElse(Set.empty)
@@ -122,14 +114,13 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   def deleteBillingProfileAndUnregisterBillingProject(projectName: RawlsBillingProjectName,
                                                       billingProfileExpected: Boolean,
-                                                      billingProfileManagerDAO: BillingProfileManagerDAO,
                                                       ctx: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
   ): Future[Unit] = for {
     billingProfileId <- billingRepository.getBillingProfileId(projectName)
     _ <- (billingProfileId, billingProfileExpected) match {
-      case (Some(id), _) => cleanupBillingProfile(UUID.fromString(id), projectName, billingProfileManagerDAO, ctx)
+      case (Some(id), _) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
       case (None, true) =>
         logger.warn(
           s"Deleting billing project $projectName that was expected to have a billing profile, but no associated billing profile record to delete"
@@ -148,12 +139,8 @@ trait BillingProjectLifecycle extends LazyLogging {
     * is failed during deletion, allow it to pass up so caller can choose to disallow deletion
     * of parent billing project.
     */
-  def cleanupBillingProfile(profileModelId: UUID,
-                            projectName: RawlsBillingProjectName,
-                            billingProfileManagerDAO: BillingProfileManagerDAO,
-                            ctx: RawlsRequestContext
-  )(implicit
-    executionContext: ExecutionContext
+  def cleanupBillingProfile(profileModelId: UUID, projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(
+    implicit executionContext: ExecutionContext
   ): Future[Unit] = {
     val numOtherProjectsWithProfile = for {
       allProjectsWithProfile <- billingRepository

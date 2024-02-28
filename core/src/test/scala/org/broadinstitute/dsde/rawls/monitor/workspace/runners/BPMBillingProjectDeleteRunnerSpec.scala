@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
 import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectLifecycle, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProjectLifecycle, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
@@ -41,7 +41,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       mock[SamDAO],
       mock[GoogleServicesDAO],
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       mock[BillingRepository],
       mock[BillingProjectLifecycle]
     )
@@ -68,7 +67,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       mock[SamDAO],
       mock[GoogleServicesDAO],
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       billingRepository,
       mock[BillingProjectLifecycle]
     )
@@ -111,7 +109,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
           mock[SamDAO],
           mock[GoogleServicesDAO],
           mock[WorkspaceManagerDAO],
-          mock[BillingProfileManagerDAO],
           billingRepository,
           mock[BillingProjectLifecycle]
         )
@@ -177,7 +174,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         wsmDao,
-        mock[BillingProfileManagerDAO],
         billingRepository,
         mock[BillingProjectLifecycle]
       )
@@ -238,7 +234,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         wsmDao,
-        mock[BillingProfileManagerDAO],
         billingRepository,
         mock[BillingProjectLifecycle]
       )
@@ -297,7 +292,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         wsmDao,
-        mock[BillingProfileManagerDAO],
         billingRepository,
         mock[BillingProjectLifecycle]
       )
@@ -356,7 +350,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         wsmDao,
-        mock[BillingProfileManagerDAO],
         billingRepository,
         mock[BillingProjectLifecycle]
       )
@@ -401,7 +394,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         wsmDao,
-        mock[BillingProfileManagerDAO],
         billingRepository,
         mock[BillingProjectLifecycle]
       )
@@ -443,7 +435,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     when(
       bpLifecycle.finalizeDelete(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.any(),
         ArgumentMatchers.any()
       )(ArgumentMatchers.any())
     ).thenReturn(Future.successful())
@@ -453,7 +444,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         wsmDao,
-        mock[BillingProfileManagerDAO],
         billingRepository,
         bpLifecycle
       )
@@ -464,7 +454,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
 
     verify(bpLifecycle).finalizeDelete(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.any(),
       ArgumentMatchers.any()
     )(ArgumentMatchers.any())
   }
@@ -484,7 +473,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     when(
       bpLifecycle.finalizeDelete(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.any(),
         ArgumentMatchers.any()
       )(ArgumentMatchers.any())
     ).thenReturn(Future.successful())
@@ -498,7 +486,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[SamDAO],
         mock[GoogleServicesDAO],
         mock[WorkspaceManagerDAO],
-        mock[BillingProfileManagerDAO],
         repo,
         bpLifecycle
       )
@@ -510,7 +497,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
 
     verify(bpLifecycle).finalizeDelete(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.any(),
       ArgumentMatchers.any()
     )(ArgumentMatchers.any())
   }
