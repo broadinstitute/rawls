@@ -472,7 +472,12 @@ object BootMonitors extends LazyLogging {
             gcsDAO,
             workspaceManagerDAO,
             billingRepo,
-            new AzureBillingProjectLifecycle(samDAO, billingRepo, billingProfileManagerDAO, workspaceManagerDAO, monitorRecordDao)
+            new AzureBillingProjectLifecycle(samDAO,
+                                             billingRepo,
+                                             billingProfileManagerDAO,
+                                             workspaceManagerDAO,
+                                             monitorRecordDao
+            )
           )
         )
       )
