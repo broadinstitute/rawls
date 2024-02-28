@@ -42,6 +42,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -488,6 +489,7 @@ object Boot extends IOApp with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
+        new LeonardoService(leonardoDAO),
         methodConfigResolver,
         gcsDAO,
         samDAO,
@@ -550,12 +552,12 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           notificationDAO,
           billingRepository,
-          new GoogleBillingProjectLifecycle(billingRepository, billingProfileManagerDAO, samDAO, gcsDAO),
-          new AzureBillingProjectLifecycle(samDAO,
-                                           billingRepository,
-                                           billingProfileManagerDAO,
-                                           workspaceManagerDAO,
-                                           workspaceManagerResourceMonitorRecordDao
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
+          new BpmBillingProjectLifecycle(samDAO,
+                                         billingRepository,
+                                         billingProfileManagerDAO,
+                                         workspaceManagerDAO,
+                                         workspaceManagerResourceMonitorRecordDao
           ),
           workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig

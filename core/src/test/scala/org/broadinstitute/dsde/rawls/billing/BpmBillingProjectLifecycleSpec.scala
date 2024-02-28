@@ -40,7 +40,7 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
+class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val userInfo: UserInfo =
@@ -89,7 +89,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
   behavior of "validateBillingProjectCreationRequest"
 
   it should "fail when provided GCP billing info" in {
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
@@ -114,7 +114,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     when(bpm.listManagedApps(coords.subscriptionId, false, testContext))
       .thenReturn(Seq())
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       mock[BillingRepository],
       bpm,
@@ -132,7 +132,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(bpm.listManagedApps(coords.subscriptionId, false, testContext))
       .thenThrow(new RuntimeException("failed"))
 
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       mock[BillingRepository],
       bpm,
@@ -156,7 +156,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
             .tenantId(coords.tenantId)
         )
       )
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       mock[BillingRepository],
       bpm,
@@ -192,7 +192,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       .thenReturn(profileModel)
     val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
 
-    val bp = new AzureBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, monitorRecordDao)
+    val bp = new BpmBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, monitorRecordDao)
 
     intercept[LandingZoneCreationException] {
       Await.result(bp.postCreationSteps(
@@ -268,7 +268,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     doReturn(Future.successful())
       .when(monitorRecordDao)
       .create(any)
-    val bp = new AzureBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, monitorRecordDao)
+    val bp = new BpmBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, monitorRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
@@ -325,7 +325,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       .when(wsmResouceRecordDao)
       .create(any)
 
-    val bp = new AzureBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
+    val bp = new BpmBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
@@ -363,7 +363,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val bp = new AzureBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResourceRecordDao)
+    val bp = new BpmBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResourceRecordDao)
 
     val user1Email = "user1@foo.bar"
     val user2Email = "user2@foo.bar"
@@ -418,23 +418,16 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                  Duration.Inf
     )
 
-    verify(bpm).addProfilePolicyMember(
+    verify(bpm, Mockito.times(2)).addProfilePolicyMember(
       ArgumentMatchers.eq(profileModel.getId),
       ArgumentMatchers.eq(ProfilePolicy.Owner),
-      ArgumentMatchers.eq(user1Email),
-      ArgumentMatchers.any[RawlsRequestContext]
+      ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)),
+      any[RawlsRequestContext]
     )
-    verify(bpm).addProfilePolicyMember(
-      ArgumentMatchers.eq(profileModel.getId),
-      ArgumentMatchers.eq(ProfilePolicy.Owner),
-      ArgumentMatchers.eq(user2Email),
-      ArgumentMatchers.any[RawlsRequestContext]
-    )
-    verify(bpm).addProfilePolicyMember(
-      ArgumentMatchers.eq(profileModel.getId),
-      ArgumentMatchers.eq(ProfilePolicy.User),
-      ArgumentMatchers.eq(user3Email),
-      ArgumentMatchers.any[RawlsRequestContext]
+    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId),
+                                                         ArgumentMatchers.eq(ProfilePolicy.User),
+                                                         ArgumentMatchers.eq(user3Email),
+                                                         any[RawlsRequestContext]
     )
   }
 
@@ -450,7 +443,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenThrow(new RuntimeException(thrownExceptionMessage))
 
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       mock[BillingRepository],
       bpm,
@@ -507,7 +500,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       .when(wsmResouceRecordDao)
       .create(any)
 
-    val bp = new AzureBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
+    val bp = new BpmBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
@@ -569,11 +562,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     )
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
     val result = bp.postCreationSteps(
       createRequest,
@@ -627,11 +620,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     )
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
     val result = bp.postCreationSteps(
       createRequest,
@@ -680,11 +673,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     )
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
     val result = bp.postCreationSteps(
       createRequest,
@@ -743,11 +736,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
 
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
     val result = bp.postCreationSteps(
       createRequest,
@@ -812,11 +805,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
 
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
     val result = bp.postCreationSteps(
       createRequest,
@@ -841,11 +834,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
     val jobId = Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf)
@@ -869,11 +862,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
         Some(new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(jobReportId.toString)))
       )
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
     Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf) shouldBe (Some(jobReportId))
@@ -892,11 +885,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
       .thenAnswer(_ => None)
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
     Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf) shouldBe None
@@ -935,11 +928,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     )
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
     val e = intercept[RawlsExceptionWithErrorReport](
@@ -975,7 +968,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     val bpm = mock[BillingProfileManagerDAO]
     doNothing().when(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       repo,
       bpm,
@@ -986,7 +979,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
-    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 
   it should "not delete the billing profile if other projects reference it" in {
@@ -1020,18 +1012,16 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
+      new BpmBillingProjectLifecycle(mock[SamDAO],
+                                     repo,
+                                     bpm,
+                                     workspaceManagerDAO,
+                                     mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
     Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm, Mockito.never).deleteBillingProfile(billingProfileId, testContext)
-    // Billing project is still deleted
-    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 
   it should "succeed if the billing profile id does not exist" in {
@@ -1042,7 +1032,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val bp =
-      new AzureBillingProjectLifecycle(
+      new BpmBillingProjectLifecycle(
         mock[SamDAO],
         repo,
         bpm,
@@ -1082,7 +1072,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(bpm.deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext)))
       .thenAnswer(_ => throw new BpmApiException(HttpStatus.SC_FORBIDDEN, "forbidden"))
 
-    val bp = new AzureBillingProjectLifecycle(
+    val bp = new BpmBillingProjectLifecycle(
       mock[SamDAO],
       repo,
       bpm,
@@ -1094,6 +1084,5 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
     }
     verify(bpm).deleteBillingProfile(ArgumentMatchers.eq(billingProfileId), ArgumentMatchers.eq(testContext))
-    verify(repo, Mockito.never).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 }
