@@ -48,6 +48,12 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   /**
     * Initiates deletion of a billing project
+    *
+    * @param projectName the Rawls billing project name
+    * @param maybeGoogleProject true if we cannot guarantee that the project is an Azure billing project.
+    *                           For example, true if the billing profile is GCP Cloud Platform, and also
+    *                           true if the billing profile cannot be obtained at all.
+    * @param ctx the Rawls request context
     * @return an id of an async job the final stages of deleting are waiting on, if applicable.
     *         If None is returned, the project can be deleted immediately via finalizeDelete
     */

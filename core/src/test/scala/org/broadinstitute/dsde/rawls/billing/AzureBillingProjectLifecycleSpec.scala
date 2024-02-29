@@ -366,7 +366,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     val bp = new AzureBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResourceRecordDao)
-    val billingProjectDeletion = new BillingProjectDeletion(mock[SamDAO], repo, bpm)
 
     val user1Email = "user1@foo.bar"
     val user2Email = "user2@foo.bar"
@@ -416,7 +415,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
                    multiCloudWorkspaceConfig,
-                   billingProjectDeletion,
+                   mock[BillingProjectDeletion],
                    testContext
                  ),
                  Duration.Inf
@@ -750,6 +749,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
         )
       )
     )
+
     val bp =
       new AzureBillingProjectLifecycle(mock[SamDAO],
                                        repo,
@@ -819,6 +819,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
         )
       )
     )
+
     val bp =
       new AzureBillingProjectLifecycle(mock[SamDAO],
                                        repo,
@@ -857,7 +858,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                                        mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
-    val jobId = Await.result(bp.maybeCleanupResources(billingProjectName, true, testContext), Duration.Inf)
+    val jobId =
+      Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = true, testContext), Duration.Inf)
 
     assert(jobId.isEmpty)
 
@@ -885,7 +887,9 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                                        mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
-    Await.result(bp.maybeCleanupResources(billingProjectName, true, testContext), Duration.Inf) shouldBe (Some(
+    Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = false, testContext),
+                 Duration.Inf
+    ) shouldBe (Some(
       jobReportId
     ))
 
@@ -910,7 +914,9 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                                        mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
-    Await.result(bp.maybeCleanupResources(billingProjectName, false, testContext), Duration.Inf) shouldBe None
+    Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = false, testContext),
+                 Duration.Inf
+    ) shouldBe None
 
     verify(workspaceManagerDAO).deleteLandingZone(landingZoneId, testContext)
   }
@@ -954,7 +960,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
 
     val e = intercept[RawlsExceptionWithErrorReport](
-      Await.result(bp.maybeCleanupResources(billingProjectName, true, testContext), Duration.Inf)
+      Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = false, testContext), Duration.Inf)
     )
 
     assert(e.errorReport.statusCode.get == StatusCode.int2StatusCode(500))

@@ -16,6 +16,12 @@ class BillingProjectDeletion(
 
   /**
     * Delete the billing project and associated billing profile.
+    *
+    * @param projectName            the Rawls billing project name
+    * @param ctx                    the Rawls request context
+    * @param billingProfileExpected true if it is expected that a billing profile exists for this type of billing
+    *                               project. Once all GCP billing projects have been backfilled with profiles (WOR-866),
+    *                               this argument can be removed.
     */
   def finalizeDelete(projectName: RawlsBillingProjectName,
                      ctx: RawlsRequestContext,

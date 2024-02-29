@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
+  AzureBillingProjectLifecycle,
   BillingProfileManagerDAO,
   BillingProjectDeletion,
   BillingProjectOrchestrator,
@@ -78,6 +79,18 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                          any[RawlsRequestContext]
       )
 
+    // Even though we aren't deleting an Azure BillingProject in these tests, we will call this method
+    // to ensure any existing landing zone is cleaned up.
+    override val azureBillingProjectLifecycle: AzureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
+    when(
+      azureBillingProjectLifecycle.maybeCleanupResources(any(), any(), any())(any())
+    )
+      .thenReturn(Future.successful(None))
+
+    // Mock the billing project having no billing profile ID (legacy GCP billing project)
+    doReturn(Future.successful(None))
+      .when(billingRepository)
+      .getBillingProfileId(any())(any())
   }
 
   case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource,
