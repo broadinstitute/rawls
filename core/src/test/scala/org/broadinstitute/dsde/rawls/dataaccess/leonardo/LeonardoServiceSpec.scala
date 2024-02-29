@@ -301,7 +301,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
       .cleanupAllResources(anyString(), any[GoogleProjectId])
 
     Await.result(action.cleanupResources(googleWorkspace.googleProjectId, googleWorkspace.workspaceIdAsUUID, ctx),
-      Duration.Inf
+                 Duration.Inf
     )
 
     verify(leoDAO).cleanupAllResources(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
@@ -317,7 +317,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
     intercept[ApiException] {
       Await.result(action.cleanupResources(googleWorkspace.googleProjectId, googleWorkspace.workspaceIdAsUUID, ctx),
-        Duration.Inf
+                   Duration.Inf
       )
     }
   }
