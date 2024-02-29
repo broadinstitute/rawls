@@ -1,19 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
-import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, RuntimesApi}
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{
-  AppAccessScope,
-  AppType,
-  CreateAppRequest,
-  ListAppResponse,
-  ListRuntimeResponse
-}
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
+import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, ResourcesApi, RuntimesApi}
+import org.broadinstitute.dsde.workbench.client.leonardo.model._
 
 import java.util.UUID
-import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
-
-import java.util
 import scala.jdk.CollectionConverters._
 
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
@@ -25,18 +18,24 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new AppsApi(apiClient)
   }
 
+  private def getResourcesLeonardoApi(accessToken: String) = {
+    val apiClient = new ApiClient()
+    apiClient.setAccessToken(accessToken)
+    apiClient.setBasePath(leonardoConfig.baseUrl)
+    new ResourcesApi(apiClient)
+  }
+
   private def getRuntimesV2LeonardoApi(accessToken: String): RuntimesApi = {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
     apiClient.setBasePath(leonardoConfig.baseUrl)
     new RuntimesApi(apiClient)
   }
-
   override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =
     getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
 
   override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
-    getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null).asScala.toSeq
+    getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null, null).asScala.toSeq
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
     getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq
@@ -56,6 +55,9 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     val createAppRequest = buildAppRequest(appType, sourceWorkspaceId)
     getAppsV2LeonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest)
   }
+
+  override def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit =
+    getResourcesLeonardoApi(token).cleanupAllResources(googleProjectId.value)
 
   protected[dataaccess] def buildAppRequest(appType: String, sourceWorkspaceId: Option[UUID]): CreateAppRequest = {
     val createAppRequest = new CreateAppRequest()
