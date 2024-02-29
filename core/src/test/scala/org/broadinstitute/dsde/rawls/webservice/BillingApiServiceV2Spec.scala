@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProfileManagerDAO,
+  BillingProjectDeletion,
   BillingProjectOrchestrator,
   GoogleBillingAccountAccessException,
   GoogleBillingProjectLifecycle
@@ -73,6 +74,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       .when(googleBillingProjectLifecycle)
       .postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
                          any[MultiCloudWorkspaceConfig],
+                         any[BillingProjectDeletion],
                          any[RawlsRequestContext]
       )
 
@@ -520,6 +522,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(
       services.googleBillingProjectLifecycle.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
                                                                any[MultiCloudWorkspaceConfig],
+                                                               any[BillingProjectDeletion],
                                                                any[RawlsRequestContext]
       )
     )

@@ -53,6 +53,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: BillingProjectLifecycle,
                                  azureBillingProjectLifecycle: BillingProjectLifecycle,
+                                 billingProjectDeletion: BillingProjectDeletion,
                                  config: MultiCloudWorkspaceConfig,
                                  resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
@@ -89,10 +90,10 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       creationStatus <- billingProjectLifecycle
-        .postCreationSteps(createProjectRequest, config, ctx)
+        .postCreationSteps(createProjectRequest, config, billingProjectDeletion, ctx)
         .recoverWith { case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
-          billingProjectLifecycle.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
+          billingProjectDeletion.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
         }
       _ = logger.info(s"Post-creation steps succeeded, setting billing project status [status=$creationStatus]")
       _ <- billingRepository.updateCreationStatus(
@@ -187,25 +188,6 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
               )
             )
         }
-      billingProfileId <- billingRepository.getBillingProfileId(projectName)
-      cloudPlatform = billingProfileId match {
-        case Some(profileId) =>
-          val billingProfile = billingProfileManagerDAO.getBillingProfile(UUID.fromString(profileId), ctx)
-          billingProfile
-            .getOrElse(
-              throw new BillingProjectDeletionException(
-                ErrorReport(
-                  s"Unable to find billing profile with billingProfileId: $profileId. Deletion cannot continue because the CloudPlatform cannot be determined."
-                )
-              )
-            )
-            .getCloudPlatform
-        case None => CloudPlatform.GCP
-      }
-      projectLifecycle = cloudPlatform match {
-        case CloudPlatform.GCP   => googleBillingProjectLifecycle
-        case CloudPlatform.AZURE => azureBillingProjectLifecycle
-      }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
       _ <- billingRepository.getCreationStatus(projectName).map { status =>
         if (!CreationStatuses.terminal.contains(status))
@@ -215,7 +197,21 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             )
           )
       }
-      jobControlId <- projectLifecycle.initiateDelete(projectName, ctx)
+      billingProfileId <- billingRepository.getBillingProfileId(projectName)
+
+      maybeGoogleProject = billingProfileId match {
+        case Some(profileId) =>
+          val billingProfile = billingProfileManagerDAO.getBillingProfile(UUID.fromString(profileId), ctx)
+          val googleOrUnknownPlatform = billingProfile match {
+            case Some(profile) => profile.getCloudPlatform.equals(CloudPlatform.GCP)
+            case None          => true
+          }
+          googleOrUnknownPlatform
+        case None => true
+      }
+      _ = googleBillingProjectLifecycle.maybeCleanupResources(projectName, maybeGoogleProject, ctx)
+
+      jobControlId <- azureBillingProjectLifecycle.maybeCleanupResources(projectName, maybeGoogleProject, ctx)
       _ <- jobControlId match {
         case Some(id) =>
           resourceMonitorRecordDao
@@ -224,11 +220,12 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                 id,
                 projectName,
                 ctx.userInfo.userEmail,
-                projectLifecycle.deleteJobType
+                azureBillingProjectLifecycle.deleteJobType
               )
             )
             .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
-        case None => projectLifecycle.finalizeDelete(projectName, ctx)
+        case None =>
+          billingProjectDeletion.finalizeDelete(projectName, ctx, billingProfileId.nonEmpty)
       }
     } yield ()
 
@@ -242,6 +239,7 @@ object BillingProjectOrchestrator {
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
     azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
+    billingProjectDeletion: BillingProjectDeletion,
     resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
     config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
@@ -253,6 +251,7 @@ object BillingProjectOrchestrator {
       billingRepository,
       googleBillingProjectLifecycle,
       azureBillingProjectLifecycle,
+      billingProjectDeletion,
       config,
       resourceMonitorRecordDao
     )

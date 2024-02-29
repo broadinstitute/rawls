@@ -545,6 +545,7 @@ object Boot extends IOApp with LazyLogging {
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
       val workspaceRepository = new WorkspaceRepository(slickDataSource)
+      val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
@@ -558,6 +559,7 @@ object Boot extends IOApp with LazyLogging {
                                            workspaceManagerDAO,
                                            workspaceManagerResourceMonitorRecordDao
           ),
+          billingProjectDeletion,
           workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig
         )

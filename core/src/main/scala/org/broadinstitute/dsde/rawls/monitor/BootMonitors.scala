@@ -6,7 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{AzureBillingProjectLifecycle, BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectDeletion, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -474,12 +474,7 @@ object BootMonitors extends LazyLogging {
             gcsDAO,
             workspaceManagerDAO,
             billingRepo,
-            new AzureBillingProjectLifecycle(samDAO,
-                                             billingRepo,
-                                             billingProfileManagerDAO,
-                                             workspaceManagerDAO,
-                                             monitorRecordDao
-            )
+            new BillingProjectDeletion(samDAO, billingRepo, billingProfileManagerDAO)
           )
         )
       )

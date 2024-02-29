@@ -12,8 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   ErrorReport,
   RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamResourceTypeNames
+  RawlsRequestContext
 }
 
 import java.util.UUID
@@ -35,24 +34,6 @@ trait BillingProjectLifecycle extends LazyLogging {
   // The type of WorkspaceManagerResourceMonitorRecord job that should be created to finalize deletion when necessary
   val deleteJobType: JobType
 
-  // This code also lives in UserService as unregisterBillingProjectWithUserInfo
-  // if this was scala 3.x, we could just use a parameterized trait and this would work basically everywhere
-  def unregisterBillingProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit] =
-    for {
-      _ <- billingRepository.deleteBillingProject(projectName)
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, projectName.value, ctx) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
-        case t: Throwable =>
-          logger.warn(
-            s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`",
-            t
-          )
-          throw t
-      }
-    } yield {}
-
   def validateBillingProjectCreationRequest(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
     ctx: RawlsRequestContext
@@ -61,6 +42,7 @@ trait BillingProjectLifecycle extends LazyLogging {
   def postCreationSteps(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
     config: MultiCloudWorkspaceConfig,
+    billingProjectDeletion: BillingProjectDeletion,
     ctx: RawlsRequestContext
   ): Future[CreationStatus]
 
@@ -69,13 +51,12 @@ trait BillingProjectLifecycle extends LazyLogging {
     * @return an id of an async job the final stages of deleting are waiting on, if applicable.
     *         If None is returned, the project can be deleted immediately via finalizeDelete
     */
-  def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
+  def maybeCleanupResources(projectName: RawlsBillingProjectName,
+                            maybeGoogleProject: Boolean,
+                            ctx: RawlsRequestContext
+  )(implicit
     executionContext: ExecutionContext
   ): Future[Option[UUID]]
-
-  def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit]
 
   def createBillingProfile(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext)(
     implicit executionContext: ExecutionContext
@@ -109,54 +90,6 @@ trait BillingProjectLifecycle extends LazyLogging {
                                                         ctx
         )
       })
-    }
-  }
-
-  def deleteBillingProfileAndUnregisterBillingProject(projectName: RawlsBillingProjectName,
-                                                      billingProfileExpected: Boolean,
-                                                      ctx: RawlsRequestContext
-  )(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit] = for {
-    billingProfileId <- billingRepository.getBillingProfileId(projectName)
-    _ <- (billingProfileId, billingProfileExpected) match {
-      case (Some(id), _) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
-      case (None, true) =>
-        logger.warn(
-          s"Deleting billing project $projectName that was expected to have a billing profile, but no associated billing profile record to delete"
-        )
-        Future.successful()
-      case (None, false) =>
-        logger.info(
-          s"Deleting billing project $projectName, but no associated billing profile record to delete (could be a legacy project)"
-        )
-        Future.successful()
-    }
-  } yield unregisterBillingProject(projectName, ctx)
-
-  /**
-    * Delete the billing profile if no other billing projects reference it. If an exception
-    * is failed during deletion, allow it to pass up so caller can choose to disallow deletion
-    * of parent billing project.
-    */
-  def cleanupBillingProfile(profileModelId: UUID, projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(
-    implicit executionContext: ExecutionContext
-  ): Future[Unit] = {
-    val numOtherProjectsWithProfile = for {
-      allProjectsWithProfile <- billingRepository
-        .getBillingProjectsWithProfile(Some(profileModelId))
-      filtered = allProjectsWithProfile.filterNot(_.projectName == projectName)
-    } yield filtered.length
-    numOtherProjectsWithProfile map {
-      case 0 =>
-        logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
-        )
-        billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
-      case num =>
-        logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
-        )
     }
   }
 }

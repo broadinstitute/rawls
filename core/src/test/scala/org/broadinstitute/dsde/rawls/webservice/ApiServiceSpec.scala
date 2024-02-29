@@ -9,13 +9,13 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKitBase
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
   AzureBillingProjectLifecycle,
   BillingProfileManagerDAO,
+  BillingProjectDeletion,
   BillingProjectOrchestrator,
   BillingRepository,
   GoogleBillingProjectLifecycle
@@ -219,13 +219,15 @@ trait ApiServiceSpec
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val billingRepository = new BillingRepository(slickDataSource)
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
+    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
-      mock[BillingProfileManagerDAO],
+      billingProfileManagerDAO,
       billingRepository,
       googleBillingProjectLifecycle,
       mock[AzureBillingProjectLifecycle],
+      billingProjectDeletion,
       workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
