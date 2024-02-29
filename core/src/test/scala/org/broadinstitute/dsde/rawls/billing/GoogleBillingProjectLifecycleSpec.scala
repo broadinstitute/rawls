@@ -154,7 +154,13 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       .thenReturn(profileModel)
 
     assertResult(CreationStatuses.Ready) {
-      Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], mock[BillingProjectDeletion], testContext), Duration.Inf)
+      Await.result(gbp.postCreationSteps(createRequest,
+                                         mock[MultiCloudWorkspaceConfig],
+                                         mock[BillingProjectDeletion],
+                                         testContext
+                   ),
+                   Duration.Inf
+      )
     }
 
     verify(samDAO)
@@ -209,7 +215,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.postCreationSteps(
                    createRequest,
                    mock[MultiCloudWorkspaceConfig],
-      mock[BillingProjectDeletion],
+                   mock[BillingProjectDeletion],
                    testContext
                  ),
                  Duration.Inf
@@ -270,7 +276,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
                    mock[MultiCloudWorkspaceConfig],
-                  mock[BillingProjectDeletion],
+                   mock[BillingProjectDeletion],
                    testContext
                  ),
                  Duration.Inf

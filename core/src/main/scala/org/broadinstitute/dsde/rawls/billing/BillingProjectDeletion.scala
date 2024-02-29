@@ -17,7 +17,10 @@ class BillingProjectDeletion(
   /**
     * Delete the billing project and associated billing profile.
     */
-  def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext, billingProfileExpected: Boolean = true)(implicit
+  def finalizeDelete(projectName: RawlsBillingProjectName,
+                     ctx: RawlsRequestContext,
+                     billingProfileExpected: Boolean = true
+  )(implicit
     executionContext: ExecutionContext
   ): Future[Unit] = deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected, ctx)
 
