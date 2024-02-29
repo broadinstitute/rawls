@@ -9,7 +9,7 @@ import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.{TracingUtils, WithOtelContextFilter}
 import org.glassfish.jersey.client.ClientConfig
-import org.glassfish.jersey.grizzly.connector.GrizzlyConnectorProvider
+import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
 /**
  * Implementors of this trait know how to instantiate billing profile manager client
@@ -32,7 +32,7 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
     val client: ApiClient = new ApiClient()
 
     val clientConfig = new ClientConfig()
-    clientConfig.connectorProvider(new GrizzlyConnectorProvider())
+    clientConfig.connectorProvider(new JavaNetHttpConnectorProvider())
     client.setHttpClient(ClientBuilder.newClient(clientConfig))
 
     TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
