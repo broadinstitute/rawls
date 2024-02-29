@@ -75,7 +75,7 @@ class GoogleBillingProjectLifecycle(
                                      ctx: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
-  ): Future[Option[UUID]] = {
+  ): Future[Option[UUID]] =
     // Note: GoogleBillingProjectLifecycleSpec does not test that this method is called because the method
     // lives in a companion object (which makes straight mocking impossible), and the method will be removed
     // once workspace migration is complete. Note also that the more "integration" level test BillingApiServiceV2Spec
@@ -85,5 +85,4 @@ class GoogleBillingProjectLifecycle(
     } else {
       Future.successful(None)
     }
-  }
 }
