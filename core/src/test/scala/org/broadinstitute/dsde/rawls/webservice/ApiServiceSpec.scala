@@ -26,7 +26,6 @@ import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -41,11 +40,9 @@ import org.broadinstitute.dsde.rawls.model.{
   Agora,
   ApplicationVersion,
   Dockstore,
-  GoogleProjectId,
   RawlsBillingAccountName,
   RawlsRequestContext,
-  RawlsUser,
-  Workspace
+  RawlsUser
 }
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -65,16 +62,13 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
-import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
-import org.mockito.ArgumentMatchers.any
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
 import java.time.temporal.ChronoUnit
-import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
@@ -180,12 +174,6 @@ trait ApiServiceSpec
     val samDAO: SamDAO = new MockSamDAO(dataSource)
 
     val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
-
-    val leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
-    when(
-      leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
-    )
-      .thenReturn(Future.successful())
 
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
@@ -363,7 +351,6 @@ trait ApiServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,

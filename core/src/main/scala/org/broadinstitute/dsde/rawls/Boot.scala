@@ -42,7 +42,6 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -489,7 +488,6 @@ object Boot extends IOApp with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
-        new LeonardoService(leonardoDAO),
         methodConfigResolver,
         gcsDAO,
         samDAO,
