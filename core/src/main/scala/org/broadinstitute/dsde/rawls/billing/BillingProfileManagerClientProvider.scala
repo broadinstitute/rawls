@@ -9,7 +9,7 @@ import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.{TracingUtils, WithOtelContextFilter}
 import org.glassfish.jersey.client.ClientConfig
-import org.glassfish.jersey.jdk.connector.JdkConnectorProvider
+import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
 /**
  * Implementors of this trait know how to instantiate billing profile manager client
@@ -31,8 +31,11 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
   def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
+    // By default, the client uses the `HttpUrlConnectorProvider` which relies on a workaround for
+    // PATCH endpoints that is incompatible with Java 17. Specifying a different ConnectorProvider
+    // allows us to call PATCH endpoints in BPM.
     val clientConfig = new ClientConfig()
-    clientConfig.connectorProvider(new JdkConnectorProvider)
+    clientConfig.connectorProvider(new JavaNetHttpConnectorProvider())
     client.setHttpClient(ClientBuilder.newClient(clientConfig))
 
     TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
