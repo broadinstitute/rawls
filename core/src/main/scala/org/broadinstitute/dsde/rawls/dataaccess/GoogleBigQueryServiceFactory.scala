@@ -22,7 +22,8 @@ import scala.concurrent.ExecutionContext
  * This factory class contains boilerplate and allows callers to easily and quickly get
  * a new service instance for each user's credentials.
  */
-class GoogleBigQueryServiceFactory(pathToCredentialJson: String)(implicit executionContext: ExecutionContext) {
+class GoogleBigQueryServiceFactory(pathToCredentialJson: String)(implicit executionContext: ExecutionContext)
+  extends GoogleBigQueryFactoryService{
 
   implicit lazy val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
   implicit lazy val timer: Temporal[IO] = Temporal[IO]

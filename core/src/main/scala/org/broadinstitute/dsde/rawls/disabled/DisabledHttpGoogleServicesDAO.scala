@@ -1,9 +1,15 @@
 package org.broadinstitute.dsde.rawls.disabled
 
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.http.javanet.NetHttpTransport
+import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model._
+import com.google.api.services.compute.ComputeScopes
 import com.google.api.services.directory.model.Group
+import com.google.api.services.storage.StorageScopes
 import com.google.api.services.storage.model._
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, GoogleWorkspaceInfo, OperationId, OperationStatus}
@@ -15,14 +21,14 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 import spray.json._
 
 import scala.concurrent._
+import scala.jdk.CollectionConverters._
 
-class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(config.getString("groupsPrefix")) {
+class DisabledHttpGoogleServicesDAO(config: Config, override val accessContextManagerDAO: AccessContextManagerDAO)
+    extends GoogleServicesDAO(config.getString("groupsPrefix")) {
   override val billingEmail: String = config.getString("billingEmail")
   override val billingGroupEmail: String = config.getString("billingGroupEmail")
-  def adminGroupName =
-    throw new NotImplementedError("adminGroupName method is not implemented for Azure.")
-  def curatorGroupName =
-    throw new NotImplementedError("curatorGroupName method is not implemented for Azure.")
+  def adminGroupName = ""
+  def curatorGroupName = ""
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
@@ -106,7 +112,8 @@ class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(co
   override def listBillingAccountsUsingServiceCredential(implicit
     executionContext: ExecutionContext
   ): Future[Seq[RawlsBillingAccount]] =
-    throw new NotImplementedError("listBillingAccountsUsingServiceCredential method is not implemented for Azure.")
+    Future.successful(Seq.empty)
+//    throw new NotImplementedError("listBillingAccountsUsingServiceCredential method is not implemented for Azure.")
   override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit
     executionContext: ExecutionContext
   ): Future[ProjectBillingInfo] =
@@ -118,7 +125,7 @@ class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(co
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] =
     throw new NotImplementedError("getGenomicsOperation method is not implemented for Azure.")
   override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] =
-    throw new NotImplementedError("checkGenomicsOperationsHealth method is not implemented for Azure.")
+    Future.successful(true)
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] =
     throw new NotImplementedError("getGoogleProject method is not implemented for Azure.")
   override def pollOperation(operationId: OperationId): Future[OperationStatus] =
@@ -127,6 +134,7 @@ class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(co
     updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]
   ): Future[Boolean] =
     throw new NotImplementedError("updatePolicyBindings method is not implemented for Azure.")
+
   override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] =
     throw new NotImplementedError("deleteV1Project method is not implemented for Azure.")
   override def updateGoogleProject(googleProjectId: GoogleProjectId,
@@ -137,10 +145,25 @@ class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(co
     throw new NotImplementedError("deleteGoogleProject method is not implemented for Azure.")
   override def getBucketDetails(bucketName: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] =
     throw new NotImplementedError("getBucketDetails method is not implemented for Azure.")
-  override def getBucketServiceAccountCredential: Credential =
-    throw new NotImplementedError("updatePolicyBindings method is not implemented for Azure.")
+  def getBucketServiceAccountCredential: Credential =
+    new GoogleCredential.Builder()
+      .setTransport(GoogleNetHttpTransport.newTrustedTransport)
+      .setJsonFactory(GsonFactory.getDefaultInstance)
+      .setServiceAccountId("defaultemail")
+      .setServiceAccountScopes(Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE).asJava)
+// grant bucket-creation powers
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File("/etc/rawls-account.pem"))
+      .build()
+
   override lazy val getResourceBufferServiceAccountCredential: Credential =
-    throw new NotImplementedError("getResourceBufferServiceAccountCredential method is not implemented for Azure.")
+    new GoogleCredential.Builder()
+      .setTransport(GoogleNetHttpTransport.newTrustedTransport)
+      .setJsonFactory(GsonFactory.getDefaultInstance)
+      .setServiceAccountId("defaultemail")
+      .setServiceAccountScopes(Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE).asJava)
+      // grant bucket-creation powers
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File("/etc/rawls-account.pem"))
+      .build()
   override def toGoogleGroupName(groupName: RawlsGroupName) =
     throw new NotImplementedError("toGoogleGroupName method is not implemented for Azure.")
   override def getAccessTokenUsingJson(saKey: String): Future[String] =
@@ -153,8 +176,6 @@ class DisabledHttpGoogleServicesDAO(config: Config) extends GoogleServicesDAO(co
     throw new NotImplementedError("addProjectToFolder method is not implemented for Azure.")
   override def getFolderId(folderName: String): Future[Option[String]] =
     throw new NotImplementedError("getFolderId method is not implemented for Azure.")
-  override val accessContextManagerDAO: AccessContextManagerDAO =
-    throw new NotImplementedError("accessContextManagerDAO method is not implemented for Azure.")
   override def setupWorkspace(userInfo: UserInfo,
                               googleProject: GoogleProjectId,
                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],

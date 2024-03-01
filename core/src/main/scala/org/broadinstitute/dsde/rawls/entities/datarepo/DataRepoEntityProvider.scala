@@ -11,46 +11,16 @@ import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, Quer
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryFactoryService, GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
-  EntityName,
-  ExpressionAndResult,
-  LookupExpression
-}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{
-  AntlrTerraExpressionParser,
-  DataRepoEvaluateToAttributeVisitor,
-  LookupExpressionExtractionVisitor,
-  ParsedEntityLookupExpression
-}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeBoolean,
-  AttributeEntityReference,
-  AttributeNull,
-  AttributeNumber,
-  AttributeString,
-  AttributeValue,
-  AttributeValueList,
-  AttributeValueRawJson,
-  Entity,
-  EntityCopyDefinition,
-  EntityCopyResponse,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  ErrorReport,
-  GoogleProjectId,
-  RawlsRequestContext,
-  SubmissionValidationEntityInputs,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityCopyDefinition, EntityCopyResponse, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, GoogleProjectId, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -64,7 +34,7 @@ import scala.util.{Failure, Success, Try}
 class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                              requestArguments: EntityRequestArguments,
                              samDAO: SamDAO,
-                             bqServiceFactory: GoogleBigQueryServiceFactory,
+                             bqServiceFactory: GoogleBigQueryFactoryService,
                              config: DataRepoEntityProviderConfig
 )(implicit protected val executionContext: ExecutionContext)
     extends EntityProvider

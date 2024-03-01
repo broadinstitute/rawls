@@ -1,11 +1,19 @@
 package org.broadinstitute.dsde.rawls.disabled
 
+import akka.actor.ActorSystem
+import akka.http.scaladsl.client.RequestBuilding
+import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.dataaccess.MethodRepoDAO
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.HttpClientUtilsGzipInstrumented
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class DisabledHttpMethodRepoDAO extends MethodRepoDAO {
+class DisabledHttpMethodRepoDAO(implicit
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
+) extends MethodRepoDAO {
   override def getMethodConfig(namespace: String,
                                name: String,
                                version: Int,
@@ -21,5 +29,5 @@ class DisabledHttpMethodRepoDAO extends MethodRepoDAO {
   ): Future[AgoraEntity] =
     throw new NotImplementedError("postMethodConfig is not implemented for Azure.")
   override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] =
-    throw new NotImplementedError("getStatus is not implemented for Azure.")
+    Future.successful(SubsystemStatus(ok = true, None))
 }

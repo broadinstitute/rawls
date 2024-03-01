@@ -16,11 +16,11 @@ class DisabledFastPassService(protected val ctx: RawlsRequestContext, protected 
   implicit protected val executionContext: ExecutionContext
 ) extends FastPass {
   def setupFastPassForUserInClonedWorkspace(parentWorkspace: Workspace, childWorkspace: Workspace): Future[Unit] =
-    throw new NotImplementedError("getBondProviderServiceAccountEmails is not implemented for Azure.")
+    throw new NotImplementedError("setupFastPassForUserInClonedWorkspace is not implemented for Azure.")
   def syncFastPassesForUserInWorkspace(workspace: Workspace): Future[Unit] =
-    throw new NotImplementedError("getBondProviderServiceAccountEmails is not implemented for Azure.")
+    throw new NotImplementedError("syncFastPassesForUserInWorkspace is not implemented for Azure.")
   def syncFastPassesForUserInWorkspace(workspace: Workspace, email: String): Future[Unit] =
-    throw new NotImplementedError("getBondProviderServiceAccountEmails is not implemented for Azure.")
+    throw new NotImplementedError("syncFastPassesForUserInWorkspace is not implemented for Azure.")
   def removeFastPassGrantsForWorkspace(workspace: Workspace): Future[Unit] =
-    throw new NotImplementedError("getBondProviderServiceAccountEmails is not implemented for Azure.")
+    throw new NotImplementedError("removeFastPassGrantsForWorkspace is not implemented for Azure.")
 }

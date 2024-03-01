@@ -49,7 +49,8 @@ object MultiCloudServicesDAOFactory {
         )
       case "azure" =>
         new DisabledHttpGoogleServicesDAO(
-          appConfigManager.gcsConfig
+          appConfigManager.gcsConfig,
+          accessContextManagerDAO = accessContextManagerDAO
         )
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
