@@ -363,7 +363,6 @@ trait ApiServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,

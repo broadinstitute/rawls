@@ -110,7 +110,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,

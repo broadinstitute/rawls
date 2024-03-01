@@ -534,7 +534,6 @@ class SubmissionSpec(_system: ActorSystem)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
-        leonardoService,
         methodConfigResolver,
         gcsDAO,
         samDAO,

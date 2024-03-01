@@ -307,7 +307,6 @@ class FastPassServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,

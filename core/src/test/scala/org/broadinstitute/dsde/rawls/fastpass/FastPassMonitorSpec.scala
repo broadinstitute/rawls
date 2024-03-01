@@ -278,7 +278,6 @@ class FastPassMonitorSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,

@@ -301,7 +301,6 @@ class WorkspaceServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,
