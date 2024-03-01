@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -153,10 +152,8 @@ class FastPassServiceSpec
     val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new SlowGoogleStorageDAO(slowIam))
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
-    val mockNotificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS)
+    val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-    val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
-    val leonardoDAO = Mockito.spy(new MockLeonardoDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
@@ -307,7 +304,6 @@ class FastPassServiceSpec
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,
