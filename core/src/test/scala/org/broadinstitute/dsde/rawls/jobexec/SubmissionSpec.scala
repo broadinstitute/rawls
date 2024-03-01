@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -491,7 +490,6 @@ class SubmissionSpec(_system: ActorSystem)
         new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
         workspaceManagerDAO,
@@ -534,7 +532,6 @@ class SubmissionSpec(_system: ActorSystem)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
-        leonardoService,
         methodConfigResolver,
         gcsDAO,
         samDAO,

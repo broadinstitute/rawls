@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   LeoAppDeletionPoll,
   LeoRuntimeDeletionPoll,
@@ -23,7 +22,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace, WorkspaceState}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.UserCtxCreator
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
+  LeonardoResourceDeletionAction,
+  WsmDeletionAction
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.sql.Timestamp
@@ -45,7 +47,7 @@ import scala.util.{Failure, Success}
 class WorkspaceDeletionRunner(val samDAO: SamDAO,
                               workspaceManagerDAO: WorkspaceManagerDAO,
                               workspaceRepository: WorkspaceRepository,
-                              leoService: LeonardoService,
+                              leonardoResourceDeletionAction: LeonardoResourceDeletionAction,
                               wsmDeletionAction: WsmDeletionAction,
                               val gcsDAO: GoogleServicesDAO,
                               monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
@@ -120,7 +122,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     job.jobType match {
       case WorkspaceDeleteInit => completeStep(job, workspace, ctx)
       case LeoAppDeletionPoll =>
-        leoService.pollAppDeletion(workspace, ctx).transformWith {
+        leonardoResourceDeletionAction.pollAppDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
             Future.failed(
               new WorkspaceDeletionException(
@@ -132,7 +134,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
           case Success(true)  => completeStep(job, workspace, ctx)
         }
       case LeoRuntimeDeletionPoll =>
-        leoService.pollRuntimeDeletion(workspace, ctx).transformWith {
+        leonardoResourceDeletionAction.pollRuntimeDeletion(workspace, ctx).transformWith {
           case Failure(t) =>
             Future.failed(
               new WorkspaceDeletionException(
@@ -190,12 +192,12 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     job.jobType match {
       case WorkspaceDeleteInit =>
         for {
-          _ <- leoService.deleteApps(workspace, ctx)
+          _ <- leonardoResourceDeletionAction.deleteApps(workspace, ctx)
           _ <- monitorRecordDao.update(job.copy(jobType = LeoAppDeletionPoll))
         } yield Incomplete
       case LeoAppDeletionPoll =>
         for {
-          _ <- leoService.deleteRuntimes(workspace, ctx)
+          _ <- leonardoResourceDeletionAction.deleteRuntimes(workspace, ctx)
           _ <- monitorRecordDao.update(job.copy(jobType = LeoRuntimeDeletionPoll))
         } yield Incomplete
       case LeoRuntimeDeletionPoll =>
