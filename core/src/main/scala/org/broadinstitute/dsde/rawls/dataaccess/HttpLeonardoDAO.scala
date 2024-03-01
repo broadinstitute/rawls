@@ -36,7 +36,7 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
 
   override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
-    getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null).asScala.toSeq
+    getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null, null).asScala.toSeq
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
     getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq

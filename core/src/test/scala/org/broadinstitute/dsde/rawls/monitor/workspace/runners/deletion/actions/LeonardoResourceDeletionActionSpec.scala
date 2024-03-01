@@ -249,5 +249,4 @@ class LeonardoResourceDeletionActionSpec extends AnyFlatSpec with MockitoSugar w
     Await.result(action.pollRuntimeDeletion(azureWorkspace, ctx), Duration.Inf) shouldBe true
     verify(leoDAO).listAzureRuntimes(anyString(), any[UUID])
   }
-
 }

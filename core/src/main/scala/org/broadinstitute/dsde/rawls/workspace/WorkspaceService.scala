@@ -3382,16 +3382,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           identity
         )
       )
-      // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
-      // Option, so we are being thorough
+
       billingAccount <- billingProject.billingAccount match {
-        case Some(ba) if !billingProject.invalidBillingAccount => DBIO.successful(ba)
+        case Some(ba) => DBIO.successful(ba)
         case _ =>
           DBIO.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          s"Billing Account is missing or invalid for Billing Project: ${billingProject}"
-              )
+              ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing: ${billingProject}")
             )
           )
       }
