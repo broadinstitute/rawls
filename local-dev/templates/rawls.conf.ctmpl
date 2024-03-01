@@ -14,8 +14,65 @@
 {{- $landingZonePostgres := (secret "secret/dsde/terra/azure/dev/workspacemanager/azure-postgres-credential" ).Data -}}
 
 backRawls = false
-cloudProvider = "gcp"
+cloudProvider = "azure"
 gcs {
+  deletedBucketCheckSeconds = "21600"
+  adminRegisterBillingAccountId = "billingAccounts/{{ (secret "secret/dsde/firecloud/local/rawls/gcs/admin-billing-account-id").Data.id }}"
+  appName = "firecloud:rawls"
+  # Changes to gcs.appsDomain value must also be reflected in liquibase.properties
+  appsDomain = "{{ $appsSubDomain }}"
+  groupsPrefix = "fc"
+  pathToPem = "/etc/rawls-account.pem"
+  pathToCredentialJson = "/etc/rawls-account.json"
+  secrets = """{{ $rawlsOauthCredential | toJSON }}"""
+  serviceClientEmail = "{{ $rawlsSaKey.client_email }}"
+  serviceProject = "broad-dsde-dev"
+  subEmail = "google@{{ $appsSubDomain }}"
+  tokenEncryptionKey = "{{ $rawlsConf.gcs_tokenEncryptionKey }}"
+  tokenSecretsJson = """{{ $refreshTokenCredential | toJSON }}"""
+  pathToBillingPem = "/etc/billing-account.pem"
+  billingPemEmail = "billing@broad-dsde-dev.iam.gserviceaccount.com"
+  billingEmail = "billing@{{ $appsDomain }}"
+  billingGroupEmail = "terra-billing@{{ $appsDomain }}"
+  billingGroupEmailAliases = ["terra-billing@{{ $appsDomain }}"]
+  pathToBigQueryJson = "/etc/bigquery-account.json"
+  billingExportTableName = "broad-gcp-billing.gcp_billing_export_views.gcp_billing_export_v1_001AC2_2B914D_822931"
+  billingExportTimePartitionColumn = "partition_time"
+  billingExportDatePartitionColumn = "partition_date"
+  billingSearchWindowDays = 31
+  pathToResourceBufferJson = "/etc/buffer-account.json"
+
+  groupMonitor {
+   pollInterval = 45s
+   pollIntervalJitter = 15s
+   topicName = rawls-groups-to-sync-local
+   subscriptionName = rawls-groups-to-sync-local-sub
+   workerCount = 10
+   samTopicName = sam-group-sync-local
+  }
+
+  notifications.topicName=workbench-notifications-local
+
+  # custom iam roles
+  requesterPaysRole=organizations/{{ $orgId }}/roles/RequesterPays
+  terraBucketReaderRole=organizations/{{ $orgId }}/roles/terraBucketReader
+  terraBucketWriterRole=organizations/{{ $orgId }}/roles/terraBucketWriter
+  terraBillingProjectOwnerRole=organizations/{{ $orgId }}/roles/terra_billing_project_owner
+  terraWorkspaceCanComputeRole=organizations/{{ $orgId }}/roles/terra_workspace_can_compute
+  terraWorkspaceNextflowRole=organizations/{{ $orgId }}/roles/terra_workspace_nextflow_role
+
+  servicePerimeters {
+    staticProjects = {{$staticPerimeterProjects | toJSON}}
+    pollInterval = 1s
+    pollTimeout = 50s
+  }
+
+  spendReporting {
+    maxDateRange = 90
+  }
+}
+
+azure {
   deletedBucketCheckSeconds = "21600"
   adminRegisterBillingAccountId = "billingAccounts/{{ (secret "secret/dsde/firecloud/local/rawls/gcs/admin-billing-account-id").Data.id }}"
   appName = "firecloud:rawls"

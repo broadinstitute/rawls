@@ -11,7 +11,7 @@ class DisabledHttpGooglePubSubDAO(implicit val executionContext: ExecutionContex
   override def deleteTopic(topicName: String): Future[Boolean] =
     throw new NotImplementedError("deleteTopic is not implemented for Azure.")
   override def getTopic(topicName: String)(implicit executionContext: ExecutionContext): Future[Option[Topic]] =
-    throw new NotImplementedError("getTopic is not implemented for Azure.")
+    Future.successful(None)
   override def createSubscription(topicName: String, subscriptionName: String, ackDeadlineSeconds: Option[Int] = None) =
     throw new NotImplementedError("createSubscription is not implemented for Azure.")
   override def deleteSubscription(subscriptionName: String): Future[Boolean] =
