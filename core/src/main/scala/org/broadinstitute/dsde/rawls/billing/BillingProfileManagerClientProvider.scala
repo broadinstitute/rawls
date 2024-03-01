@@ -31,6 +31,9 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
   def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
+    // By default, the client uses the `HttpUrlConnectorProvider` which relies on a workaround for
+    // PATCH endpoints that is incompatible with Java 17. Specifying a different ConnectorProvider
+    // allows us to call PATCH endpoints in BPM.
     val clientConfig = new ClientConfig()
     clientConfig.connectorProvider(new JavaNetHttpConnectorProvider())
     client.setHttpClient(ClientBuilder.newClient(clientConfig))
