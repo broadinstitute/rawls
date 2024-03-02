@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport => RawlsErrorReport,
-  RawlsBillingProjectName,
   RawlsRequestContext
 }
 
@@ -184,7 +183,7 @@ class AzureBillingProjectLifecycle(
     *  starts a landing zone deletion job
     *  does not ensure that the landing zone deletion completes successfully.
     */
-  private def cleanupLandingZone(
+  def cleanupLandingZone(
     landingZoneId: UUID,
     ctx: RawlsRequestContext
   ): Option[DeleteAzureLandingZoneResult] = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
@@ -211,23 +210,4 @@ class AzureBillingProjectLifecycle(
         case None => Some(landingZoneResponse)
       }
   }
-
-  override def maybeCleanupResources(projectName: RawlsBillingProjectName,
-                                     maybeGoogleProject: Boolean,
-                                     ctx: RawlsRequestContext
-  )(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[UUID]] =
-    for {
-      jobControlId <- billingRepository.getLandingZoneId(projectName).map {
-        case Some(landingZoneId) =>
-          val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          result.map(_.getJobReport.getId).map(UUID.fromString)
-        case None =>
-          if (!maybeGoogleProject) {
-            logger.warn(s"Deleting billing project $projectName, but no associated landing zone to delete")
-          }
-          None
-      }
-    } yield jobControlId
 }

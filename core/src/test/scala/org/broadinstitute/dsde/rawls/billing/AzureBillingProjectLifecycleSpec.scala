@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -24,7 +25,6 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.mockito.ArgumentMatchers.{any, anyString, argThat}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -841,31 +841,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
-  behavior of "maybeCleanupResources"
-
-  it should "return None for the jobId if the landing zone does not exist" in {
-    val repo = mock[BillingRepository]
-    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
-    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
-
-    val bpm = mock[BillingProfileManagerDAO]
-    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
-    val bp =
-      new AzureBillingProjectLifecycle(mock[SamDAO],
-                                       repo,
-                                       bpm,
-                                       workspaceManagerDAO,
-                                       mock[WorkspaceManagerResourceMonitorRecordDao]
-      )
-
-    val jobId =
-      Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = true, testContext), Duration.Inf)
-
-    assert(jobId.isEmpty)
-
-    verify(workspaceManagerDAO, Mockito.never()).deleteLandingZone(ArgumentMatchers.any(), ArgumentMatchers.any())
-    verify(bpm, Mockito.never()).deleteBillingProfile(ArgumentMatchers.any[UUID], ArgumentMatchers.eq(testContext))
-  }
+  behavior of "cleanupLandingZone"
 
   it should "delete the landing zone if the id exists" in {
     val repo = mock[BillingRepository]
@@ -875,9 +851,11 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val jobReportId = UUID.randomUUID()
+    val deleteAzureLandingZoneResult =
+      new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(jobReportId.toString))
     when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
       .thenReturn(
-        Some(new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(jobReportId.toString)))
+        Some(deleteAzureLandingZoneResult)
       )
     val bp =
       new AzureBillingProjectLifecycle(mock[SamDAO],
@@ -887,12 +865,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                                        mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
-    Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = false, testContext),
-                 Duration.Inf
-    ) shouldBe (Some(
-      jobReportId
-    ))
-
+    bp.cleanupLandingZone(landingZoneId, testContext).shouldBe(Some(deleteAzureLandingZoneResult))
     verify(workspaceManagerDAO).deleteLandingZone(landingZoneId, testContext)
   }
 
@@ -913,11 +886,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
                                        workspaceManagerDAO,
                                        mock[WorkspaceManagerResourceMonitorRecordDao]
       )
-
-    Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = false, testContext),
-                 Duration.Inf
-    ) shouldBe None
-
+    bp.cleanupLandingZone(landingZoneId, testContext).shouldBe(None)
     verify(workspaceManagerDAO).deleteLandingZone(landingZoneId, testContext)
   }
 
@@ -960,7 +929,7 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
 
     val e = intercept[RawlsExceptionWithErrorReport](
-      Await.result(bp.maybeCleanupResources(billingProjectName, maybeGoogleProject = false, testContext), Duration.Inf)
+      bp.cleanupLandingZone(landingZoneId, testContext)
     )
 
     assert(e.errorReport.statusCode.get == StatusCode.int2StatusCode(500))

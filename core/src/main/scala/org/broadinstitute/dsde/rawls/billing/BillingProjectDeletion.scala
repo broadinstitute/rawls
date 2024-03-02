@@ -19,32 +19,15 @@ class BillingProjectDeletion(
     *
     * @param projectName            the Rawls billing project name
     * @param ctx                    the Rawls request context
-    * @param billingProfileExpected true if it is expected that a billing profile exists for this type of billing
-    *                               project. Once all GCP billing projects have been backfilled with profiles (WOR-866),
-    *                               this argument can be removed.
     */
-  def finalizeDelete(projectName: RawlsBillingProjectName,
-                     ctx: RawlsRequestContext,
-                     billingProfileExpected: Boolean = true
-  )(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit] = deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected, ctx)
-
-  def deleteBillingProfileAndUnregisterBillingProject(projectName: RawlsBillingProjectName,
-                                                      billingProfileExpected: Boolean,
-                                                      ctx: RawlsRequestContext
-  )(implicit
+  def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit] = for {
     billingProfileId <- billingRepository.getBillingProfileId(projectName)
-    _ <- (billingProfileId, billingProfileExpected) match {
-      case (Some(id), _) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
-      case (None, true) =>
-        logger.warn(
-          s"Deleting billing project $projectName that was expected to have a billing profile, but no associated billing profile record to delete"
-        )
-        Future.successful()
-      case (None, false) =>
+    _ <- billingProfileId match {
+      case Some(id) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
+      case None     =>
+        // Can change to a warning once all billing projects have billing profile IDs (WOR-866)
         logger.info(
           s"Deleting billing project $projectName, but no associated billing profile record to delete (could be a legacy project)"
         )

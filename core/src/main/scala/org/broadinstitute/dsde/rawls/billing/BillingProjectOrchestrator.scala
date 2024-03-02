@@ -3,13 +3,12 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.ServerError
 import bio.terra.profile.client.{ApiException => BpmApiException}
-import bio.terra.profile.model.CloudPlatform
 import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -27,6 +26,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourcePolicyName,
   SamResourceTypeNames
 }
+import org.broadinstitute.dsde.rawls.user.UserService.deleteGoogleProjectIfChild
 import org.broadinstitute.dsde.rawls.util.UserUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -49,10 +49,9 @@ import scala.concurrent.{ExecutionContext, Future}
 class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  val samDAO: SamDAO,
                                  notificationDAO: NotificationDAO,
-                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  billingRepository: BillingRepository,
-                                 googleBillingProjectLifecycle: BillingProjectLifecycle,
-                                 azureBillingProjectLifecycle: BillingProjectLifecycle,
+                                 googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
+                                 azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
                                  billingProjectDeletion: BillingProjectDeletion,
                                  config: MultiCloudWorkspaceConfig,
                                  resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
@@ -197,21 +196,11 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             )
           )
       }
-      billingProfileId <- billingRepository.getBillingProfileId(projectName)
+      // If backed by a Google project (v1 workspaces/billing projects), delete it.
+      _ = maybeDeleteGoogleProject(projectName, ctx)
 
-      maybeGoogleProject = billingProfileId match {
-        case Some(profileId) =>
-          val billingProfile = billingProfileManagerDAO.getBillingProfile(UUID.fromString(profileId), ctx)
-          val googleOrUnknownPlatform = billingProfile match {
-            case Some(profile) => profile.getCloudPlatform.equals(CloudPlatform.GCP)
-            case None          => true
-          }
-          googleOrUnknownPlatform
-        case None => true
-      }
-      _ = googleBillingProjectLifecycle.maybeCleanupResources(projectName, maybeGoogleProject, ctx)
-
-      jobControlId <- azureBillingProjectLifecycle.maybeCleanupResources(projectName, maybeGoogleProject, ctx)
+      // If the billing project has a landing zone, delete it.
+      jobControlId <- maybeDeleteLandingZone(projectName, ctx)
       _ <- jobControlId match {
         case Some(id) =>
           resourceMonitorRecordDao
@@ -225,9 +214,41 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             )
             .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
         case None =>
-          billingProjectDeletion.finalizeDelete(projectName, ctx, billingProfileId.nonEmpty)
+          billingProjectDeletion.finalizeDelete(projectName, ctx)
       }
     } yield ()
+
+  /**
+    * In a method for unit test mocking.
+    */
+  def maybeDeleteGoogleProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
+    executionContext: ExecutionContext
+  ): Future[Unit] =
+    deleteGoogleProjectIfChild(projectName, ctx.userInfo, googleBillingProjectLifecycle.gcsDAO, samDAO, ctx).map(_ =>
+      None
+    )
+
+  /**
+    * Initiates deletion of the billing project's landing zone, if the project has a landingZoneId.
+    *
+    * @param projectName        the Rawls billing project name
+    * @param ctx                the Rawls request context
+    * @return an id of an async job the final stages of deleting are waiting on, if applicable.
+    *         If None is returned, the project can be deleted immediately via finalizeDelete
+    */
+  def maybeDeleteLandingZone(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
+    executionContext: ExecutionContext
+  ): Future[Option[UUID]] =
+    for {
+      jobControlId <- billingRepository.getLandingZoneId(projectName).map {
+        case Some(landingZoneId) =>
+          val result = azureBillingProjectLifecycle.cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
+          result.map(_.getJobReport.getId).map(UUID.fromString)
+        case None =>
+          logger.debug(s"Deleting billing project $projectName, but no associated landing zone to delete")
+          None
+      }
+    } yield jobControlId
 
 }
 
@@ -235,7 +256,6 @@ object BillingProjectOrchestrator {
   def constructor(
     samDAO: SamDAO,
     notificationDAO: NotificationDAO,
-    billingProfileManagerDAO: BillingProfileManagerDAO,
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
     azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
@@ -247,7 +267,6 @@ object BillingProjectOrchestrator {
       ctx,
       samDAO,
       notificationDAO,
-      billingProfileManagerDAO,
       billingRepository,
       googleBillingProjectLifecycle,
       azureBillingProjectLifecycle,

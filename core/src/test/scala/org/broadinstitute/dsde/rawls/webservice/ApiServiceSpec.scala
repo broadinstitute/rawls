@@ -67,7 +67,6 @@ import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.jdk.DurationConverters.JavaDurationOps
@@ -224,7 +223,6 @@ trait ApiServiceSpec
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
-      billingProfileManagerDAO,
       billingRepository,
       googleBillingProjectLifecycle,
       azureBillingProjectLifecycle,

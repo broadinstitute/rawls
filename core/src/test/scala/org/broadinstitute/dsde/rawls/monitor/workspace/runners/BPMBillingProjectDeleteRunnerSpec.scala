@@ -435,7 +435,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     when(
       billingProjectDeletion.finalizeDelete(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.any(),
         ArgumentMatchers.any()
       )(ArgumentMatchers.any())
     ).thenReturn(Future.successful())
@@ -455,7 +454,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
 
     verify(billingProjectDeletion).finalizeDelete(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.any(),
       ArgumentMatchers.any()
     )(ArgumentMatchers.any())
   }
@@ -475,7 +473,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     when(
       billingProjectDeletion.finalizeDelete(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.any(),
         ArgumentMatchers.any()
       )(ArgumentMatchers.any())
     ).thenReturn(Future.successful())
@@ -500,7 +497,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
 
     verify(billingProjectDeletion).finalizeDelete(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.any(),
       ArgumentMatchers.any()
     )(ArgumentMatchers.any())
   }

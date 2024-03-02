@@ -8,14 +8,8 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  ErrorReport,
-  RawlsBillingProjectName,
-  RawlsRequestContext
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext}
 
-import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
 
 /**
@@ -45,24 +39,6 @@ trait BillingProjectLifecycle extends LazyLogging {
     billingProjectDeletion: BillingProjectDeletion,
     ctx: RawlsRequestContext
   ): Future[CreationStatus]
-
-  /**
-    * Initiates deletion of a billing project
-    *
-    * @param projectName the Rawls billing project name
-    * @param maybeGoogleProject true if we cannot guarantee that the project is an Azure billing project.
-    *                           For example, true if the billing profile is GCP Cloud Platform, and also
-    *                           true if the billing profile cannot be obtained at all.
-    * @param ctx the Rawls request context
-    * @return an id of an async job the final stages of deleting are waiting on, if applicable.
-    *         If None is returned, the project can be deleted immediately via finalizeDelete
-    */
-  def maybeCleanupResources(projectName: RawlsBillingProjectName,
-                            maybeGoogleProject: Boolean,
-                            ctx: RawlsRequestContext
-  )(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[UUID]]
 
   def createBillingProfile(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext)(
     implicit executionContext: ExecutionContext
