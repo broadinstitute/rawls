@@ -197,7 +197,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           )
       }
       // If backed by a Google project (v1 workspaces/billing projects), delete it.
-      _ = maybeDeleteGoogleProject(projectName, ctx)
+      _ <- maybeDeleteGoogleProject(projectName, ctx)
 
       // If the billing project has a landing zone, delete it.
       jobControlId <- maybeDeleteLandingZone(projectName, ctx)
@@ -224,9 +224,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
   def maybeDeleteGoogleProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit] =
-    deleteGoogleProjectIfChild(projectName, ctx.userInfo, googleBillingProjectLifecycle.gcsDAO, samDAO, ctx).map(_ =>
-      None
-    )
+    deleteGoogleProjectIfChild(projectName, ctx.userInfo, googleBillingProjectLifecycle.gcsDAO, samDAO, ctx)
 
   /**
     * Initiates deletion of the billing project's landing zone, if the project has a landingZoneId.
