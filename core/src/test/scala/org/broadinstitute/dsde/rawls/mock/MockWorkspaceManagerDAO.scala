@@ -50,6 +50,7 @@ class MockWorkspaceManagerDAO(
 
   override def createWorkspace(workspaceId: UUID,
                                workspaceType: WorkspaceType, // currently ignored by the mock
+                               policyInputs: Option[WsmPolicyInputs], // currently ignored by the mock
                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
@@ -123,6 +124,8 @@ class MockWorkspaceManagerDAO(
   ): CloneWorkspaceResult = MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.SUCCEEDED)
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
+
+  override def updateWorkspacePolicies(workspaceId: UUID, policyInputs: WsmPolicyInputs, ctx: RawlsRequestContext): WsmPolicyUpdateResult = ???
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,

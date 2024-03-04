@@ -74,13 +74,17 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def createWorkspace(workspaceId: UUID,
                                workspaceType: WorkspaceType,
+                               policyInputs: Option[WsmPolicyInputs],
                                ctx: RawlsRequestContext
   ): CreatedWorkspace = {
     val stage = workspaceType match {
       case WorkspaceType.RawlsWorkspace => WorkspaceStageModel.RAWLS_WORKSPACE
       case WorkspaceType.McWorkspace    => WorkspaceStageModel.MC_WORKSPACE
     }
-    getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).stage(stage))
+
+    val request = new CreateWorkspaceRequestBody().id(workspaceId).stage(stage)
+    policyInputs.map(request.policies)
+    getWorkspaceApi(ctx).createWorkspace(request)
   }
 
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
@@ -163,6 +167,15 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                           ctx: RawlsRequestContext
   ): JobResult =
     getWorkspaceApi(ctx).getDeleteWorkspaceV2Result(workspaceId, jobControlId)
+
+  override def updateWorkspacePolicies(workspaceId: UUID,
+                                       policyInputs: WsmPolicyInputs,
+                                       ctx: RawlsRequestContext
+  ): WsmPolicyUpdateResult = {
+    val request =
+      new WsmPolicyUpdateRequest().addAttributes(policyInputs).updateMode(WsmPolicyUpdateMode.FAIL_ON_CONFLICT)
+    getWorkspaceApi(ctx).updatePolicies(request, workspaceId)
+  }
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,
