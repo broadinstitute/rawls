@@ -39,7 +39,7 @@ object Dependencies {
     "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV,
     "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
     "com.fasterxml.jackson.module" % ("jackson-module-scala_" + scalaV) % jacksonV,
-    "ch.qos.logback" % "logback-classic" % "1.4.14",
+    "ch.qos.logback" % "logback-classic" % "1.5.3",
     "net.logstash.logback" % "logstash-logback-encoder" % "6.6",
     "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.22.0" excludeAll (
       ExclusionRule("com.google.guava", "guava-jdk5"),
