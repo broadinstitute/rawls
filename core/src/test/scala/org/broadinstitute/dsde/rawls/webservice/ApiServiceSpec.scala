@@ -9,13 +9,13 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKitBase
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
   AzureBillingProjectLifecycle,
   BillingProfileManagerDAO,
+  BillingProjectDeletion,
   BillingProjectOrchestrator,
   BillingRepository,
   GoogleBillingProjectLifecycle
@@ -62,12 +62,11 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
-import org.mockito.Mockito.RETURNS_SMART_NULLS
+import org.mockito.Mockito.{spy, RETURNS_SMART_NULLS}
 import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.jdk.DurationConverters.JavaDurationOps
@@ -217,14 +216,17 @@ trait ApiServiceSpec
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
-    val billingRepository = new BillingRepository(slickDataSource)
+    val billingRepository = spy(new BillingRepository(slickDataSource))
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
+    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
+    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      mock[AzureBillingProjectLifecycle],
+      azureBillingProjectLifecycle,
+      billingProjectDeletion,
       workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )

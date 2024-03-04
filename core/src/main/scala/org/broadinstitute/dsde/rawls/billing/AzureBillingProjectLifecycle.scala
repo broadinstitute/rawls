@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport => RawlsErrorReport,
-  RawlsBillingProjectName,
   RawlsRequestContext
 }
 
@@ -84,6 +83,7 @@ class AzureBillingProjectLifecycle(
     */
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
+                                 billingProjectDeletion: BillingProjectDeletion,
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
@@ -165,13 +165,14 @@ class AzureBillingProjectLifecycle(
           }
           .recoverWith { case t: Throwable =>
             logger.error("Billing project creation failed, cleaning up billing profile", t)
-            cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
-              // Log the exception that prevented cleanup from completing, but do not throw it so original
-              // cause of billing project failure is shown to user.
-              logger.warn(
-                s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
-                cleanupError
-              )
+            billingProjectDeletion.cleanupBillingProfile(profileModel.getId, projectName, ctx).recover {
+              case cleanupError: Throwable =>
+                // Log the exception that prevented cleanup from completing, but do not throw it so original
+                // cause of billing project failure is shown to user.
+                logger.warn(
+                  s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+                  cleanupError
+                )
             } >> Future.failed(t)
           }
       }
@@ -182,7 +183,7 @@ class AzureBillingProjectLifecycle(
     *  starts a landing zone deletion job
     *  does not ensure that the landing zone deletion completes successfully.
     */
-  private def cleanupLandingZone(
+  def cleanupLandingZone(
     landingZoneId: UUID,
     ctx: RawlsRequestContext
   ): Option[DeleteAzureLandingZoneResult] = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
@@ -209,22 +210,4 @@ class AzureBillingProjectLifecycle(
         case None => Some(landingZoneResponse)
       }
   }
-
-  override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[UUID]] =
-    for {
-      jobControlId <- billingRepository.getLandingZoneId(projectName).map {
-        case Some(landingZoneId) =>
-          val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          result.map(_.getJobReport.getId).map(UUID.fromString)
-        case None =>
-          logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
-          None
-      }
-    } yield jobControlId
-
-  override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit] = deleteBillingProfileAndUnregisterBillingProject(projectName, billingProfileExpected = true, ctx)
 }
