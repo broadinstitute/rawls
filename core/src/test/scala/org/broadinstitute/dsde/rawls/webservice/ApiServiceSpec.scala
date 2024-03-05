@@ -157,6 +157,8 @@ trait ApiServiceSpec
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
 
+
+
     val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
 
     val leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
