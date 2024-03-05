@@ -14,7 +14,11 @@ trait WorkspaceManagerDAO {
 
   def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
   def listWorkspaces(ctx: RawlsRequestContext, batchSize: Int = 100): List[WorkspaceDescription]
-  def createWorkspace(workspaceId: UUID, workspaceType: WorkspaceType, policyInputs: Option[WsmPolicyInputs], ctx: RawlsRequestContext): CreatedWorkspace
+  def createWorkspace(workspaceId: UUID,
+                      workspaceType: WorkspaceType,
+                      policyInputs: Option[WsmPolicyInputs],
+                      ctx: RawlsRequestContext
+  ): CreatedWorkspace
   def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                       displayName: String,
                                       spendProfileId: String,
@@ -27,7 +31,7 @@ trait WorkspaceManagerDAO {
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
                      displayName: String,
-                     spendProfile: ProfileModel,
+                     spendProfile: Option[ProfileModel],
                      billingProjectNamespace: String,
                      ctx: RawlsRequestContext,
                      location: Option[String] = None
@@ -49,7 +53,10 @@ trait WorkspaceManagerDAO {
 
   def getDeleteWorkspaceV2Result(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
 
-  def updateWorkspacePolicies(workspaceId: UUID, policyInputs: WsmPolicyInputs, ctx: RawlsRequestContext): WsmPolicyUpdateResult
+  def updateWorkspacePolicies(workspaceId: UUID,
+                              policyInputs: WsmPolicyInputs,
+                              ctx: RawlsRequestContext
+  ): WsmPolicyUpdateResult
 
   def createDataRepoSnapshotReference(workspaceId: UUID,
                                       snapshotId: UUID,

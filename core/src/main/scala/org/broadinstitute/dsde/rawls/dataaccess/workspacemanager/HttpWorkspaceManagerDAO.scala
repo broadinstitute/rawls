@@ -111,20 +111,24 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
-                              spendProfile: ProfileModel,
+                              spendProfile: Option[ProfileModel],
                               billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
-  ): CloneWorkspaceResult =
+  ): CloneWorkspaceResult = {
+    val request = new CloneWorkspaceRequest()
+      .destinationWorkspaceId(workspaceId)
+      .displayName(displayName)
+      .location(location.orNull)
+      .projectOwnerGroupId(billingProjectNamespace)
+
+    spendProfile.map(_.getId.toString).map(request.spendProfile)
+
     getWorkspaceApi(ctx).cloneWorkspace(
-      new CloneWorkspaceRequest()
-        .destinationWorkspaceId(workspaceId)
-        .displayName(displayName)
-        .spendProfile(spendProfile.getId.toString)
-        .location(location.orNull)
-        .projectOwnerGroupId(billingProjectNamespace),
+      request,
       sourceWorkspaceId
     )
+  }
 
   override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport =
     apiClientProvider.getJobsApi(ctx).retrieveJob(jobControlId)

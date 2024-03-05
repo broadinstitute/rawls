@@ -58,7 +58,7 @@ class MockWorkspaceManagerDAO(
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
-                              spendProfile: ProfileModel,
+                              spendProfile: Option[ProfileModel],
                               billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
@@ -125,7 +125,10 @@ class MockWorkspaceManagerDAO(
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
 
-  override def updateWorkspacePolicies(workspaceId: UUID, policyInputs: WsmPolicyInputs, ctx: RawlsRequestContext): WsmPolicyUpdateResult = ???
+  override def updateWorkspacePolicies(workspaceId: UUID,
+                                       policyInputs: WsmPolicyInputs,
+                                       ctx: RawlsRequestContext
+  ): WsmPolicyUpdateResult = ???
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,
