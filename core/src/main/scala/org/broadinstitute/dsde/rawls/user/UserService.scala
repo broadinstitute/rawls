@@ -8,7 +8,6 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -867,41 +866,12 @@ class UserService(
     billingAccount: Option[RawlsBillingAccountName]
   ): Future[Option[RawlsBillingProjectResponse]] = for {
     project <- updateBillingAccountInDatabase(projectName, billingAccount)
-    _ <- project
-      .collect { p =>
-        p.billingProfileId.collect { pf =>
-          updateBillingAccountInBillingProfile(pf, billingAccount)
-        }
-      }
-      .flatten
-      .sequence
     projectRoles <- samDAO
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
   } yield project.flatMap { p =>
-    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p, platform = CloudPlatform.GCP))
-    else None
+    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
   }
-
-  private def updateBillingAccountInBillingProfile(billingProfileId: String,
-                                                   billingAccount: Option[RawlsBillingAccountName]
-  ): Future[Unit] =
-    (billingAccount match {
-      case Some(newBillingAccount) =>
-        billingProfileManagerDAO
-          .updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
-          .flatMap(_ => Future.unit)
-      case None =>
-        billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
-    }).recover {
-      // Until BPM is the system of record for Terra billing information, Rawls will not throw an exception if BPM fails to update
-      case e: Exception =>
-        val message =
-          s"Failed to update billing account in BPM [billingProfile=$billingProfileId, billingAccount=${billingAccount
-              .map(_.value)}]"
-        logger.warn(message, e)
-        Sentry.captureException(new RawlsException(message, cause = e))
-    }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]
