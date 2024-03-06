@@ -99,6 +99,12 @@ case class UpdateImportStatus(importId: String,
 
 case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
+case class AvroUpsertAttributes(workspace: WorkspaceName,
+                                userEmail: RawlsUserEmail,
+                                importId: UUID,
+                                upsertFile: String,
+                                isUpsert: Boolean
+)
 class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
@@ -285,7 +291,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
   }
 
   private def importEntities(message: PubSubMessage) = {
-    val attributes = parseMessage(message)
+    val attributes = new AvroUpsertMonitorMessageParser(message).parse
 
     val importFuture = for {
       workspace <- dataSource.inTransaction { dataAccess =>
@@ -548,37 +554,6 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, scala.collection.immutable.Seq(ackId))
-  }
-
-  case class AvroUpsertAttributes(workspace: WorkspaceName,
-                                  userEmail: RawlsUserEmail,
-                                  importId: UUID,
-                                  upsertFile: String,
-                                  isUpsert: Boolean
-  )
-
-  private def parseMessage(message: PubSubMessage) = {
-    val workspaceNamespace = "workspaceNamespace"
-    val workspaceName = "workspaceName"
-    val userEmail = "userEmail"
-    val jobId = "jobId"
-    val upsertFile = "upsertFile"
-    val isUpsert = "isUpsert"
-
-    def attributeNotFoundException(attribute: String) = throw new Exception(
-      s"unable to parse message - attribute $attribute not found in ${message.attributes}"
-    )
-
-    AvroUpsertAttributes(
-      WorkspaceName(
-        message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
-        message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))
-      ),
-      RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
-      UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
-      message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
-      java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true"))
-    )
   }
 
   private def getUpsertStream(path: String) = {
