@@ -290,90 +290,89 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       self ! None
   }
 
-  private def importEntities(message: PubSubMessage) = {
-    val attributes = new AvroUpsertMonitorMessageParser(message).parse
-
-    val importFuture = for {
-      workspace <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.findByName(attributes.workspace).map {
-          case Some(workspace) => workspace
-          case None =>
-            throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
+  private def importEntities(message: PubSubMessage) =
+    new AvroUpsertMonitorMessageParser(message, dataSource).parse flatMap { attributes =>
+      val importFuture = for {
+        workspace <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.findByName(attributes.workspace).map {
+            case Some(workspace) => workspace
+            case None =>
+              throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
+          }
         }
-      }
-      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
-      importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
-      _ <- importStatus match {
-        // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
-        // end up with a race condition where multiple threads are attempting the same import / updating the status
-        // of the same import.
-        case Some(status) if status == ImportStatuses.ReadyForUpsert =>
-          publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(
-            initUpsert(attributes.upsertFile,
-                       attributes.importId,
-                       message.ackId,
-                       workspace,
-                       attributes.userEmail,
-                       attributes.isUpsert
-            )
-          ) map {
-            case Success(importUpsertResults) =>
-              val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
-              val baseMsg =
-                s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
-              if (importUpsertResults.failures.isEmpty)
-                publishMessageToUpdateImportStatus(attributes.importId,
-                                                   Option(status),
-                                                   ImportStatuses.Done,
-                                                   Option(baseMsg)
-                )
-              else {
-                val msg = baseMsg + s" First 100 failures are: $failureMessages"
+        petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
+        importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
+        _ <- importStatus match {
+          // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
+          // end up with a race condition where multiple threads are attempting the same import / updating the status
+          // of the same import.
+          case Some(status) if status == ImportStatuses.ReadyForUpsert =>
+            publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
+            toFutureTry(
+              initUpsert(attributes.upsertFile,
+                         attributes.importId,
+                         message.ackId,
+                         workspace,
+                         attributes.userEmail,
+                         attributes.isUpsert
+              )
+            ) map {
+              case Success(importUpsertResults) =>
+                val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
+                val baseMsg =
+                  s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+                if (importUpsertResults.failures.isEmpty)
+                  publishMessageToUpdateImportStatus(attributes.importId,
+                                                     Option(status),
+                                                     ImportStatuses.Done,
+                                                     Option(baseMsg)
+                  )
+                else {
+                  val msg = baseMsg + s" First 100 failures are: $failureMessages"
+                  publishMessageToUpdateImportStatus(attributes.importId,
+                                                     Option(status),
+                                                     ImportStatuses.Error,
+                                                     Option(msg)
+                  )
+                }
+              case Failure(t) =>
+                val errMsg = t match {
+                  case errRpt: RawlsExceptionWithErrorReport => errRpt.errorReport.message
+                  case x                                     => x.getMessage
+                }
                 publishMessageToUpdateImportStatus(attributes.importId,
                                                    Option(status),
                                                    ImportStatuses.Error,
-                                                   Option(msg)
+                                                   Option(errMsg)
                 )
-              }
-            case Failure(t) =>
-              val errMsg = t match {
-                case errRpt: RawlsExceptionWithErrorReport => errRpt.errorReport.message
-                case x                                     => x.getMessage
-              }
-              publishMessageToUpdateImportStatus(attributes.importId,
-                                                 Option(status),
-                                                 ImportStatuses.Error,
-                                                 Option(errMsg)
-              )
-          }
-        case Some(status) =>
-          logger.warn(
-            s"Received a double message delivery for import ID [${attributes.importId}] which is already in status [$status].  Acking message."
-          )
-          acknowledgeMessage(message.ackId)
-        case None =>
-          publishMessageToUpdateImportStatus(attributes.importId,
-                                             None,
-                                             ImportStatuses.Error,
-                                             Option("Import status not found")
-          )
-      }
-    } yield ()
+            }
+          case Some(status) =>
+            logger.warn(
+              s"Received a double message delivery for import ID [${attributes.importId}] which is already in status [$status].  Acking message."
+            )
+            acknowledgeMessage(message.ackId)
+          case None =>
+            publishMessageToUpdateImportStatus(attributes.importId,
+                                               None,
+                                               ImportStatuses.Error,
+                                               Option("Import status not found")
+            )
+        }
+      } yield ()
 
-    // Make sure message is acknowledged in the case of any failure while trying to construct importFuture
-    importFuture.map(_ => ImportComplete) recover { case t =>
-      logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
-      publishMessageToUpdateImportStatus(
-        attributes.importId,
-        None,
-        ImportStatuses.Error,
-        Option(s"Failed to import data. The underlying error message is: ${t.getMessage}")
-      )
-      acknowledgeMessage(message.ackId)
-    } pipeTo self
+      // Make sure message is acknowledged in the case of any failure while trying to construct importFuture
+      importFuture.map(_ => ImportComplete) recover { case t =>
+        logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
+        publishMessageToUpdateImportStatus(
+          attributes.importId,
+          None,
+          ImportStatuses.Error,
+          Option(s"Failed to import data. The underlying error message is: ${t.getMessage}")
+        )
+        acknowledgeMessage(message.ackId)
+      } pipeTo self
 
-  }
+    }
 
   private def publishMessageToUpdateImportStatus(importId: UUID,
                                                  currentImportStatus: Option[ImportStatus],
