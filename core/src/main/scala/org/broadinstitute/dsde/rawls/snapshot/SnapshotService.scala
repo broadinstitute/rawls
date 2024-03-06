@@ -75,9 +75,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
       val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
 
-      // prevent snapshots from disallowed platforms
-      snapshotValidator.validateSnapshotPlatform()
-
       // prevent disallowed access across workspace or dataset protection boundaries
       snapshotValidator.validateProtectedStatus()
 
@@ -112,7 +109,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
           // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
           // and then create a stub workspace
           snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
-          // todo: not sure what the benefit of exposing multiple createWorkspaces is. might be better to rename this as rawls stage and the other as mc stage to indicate the actual difference between the two
           workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, wsmPolicyInputs, ctx)
       }
 
