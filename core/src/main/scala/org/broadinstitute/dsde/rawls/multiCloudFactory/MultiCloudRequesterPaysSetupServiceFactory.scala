@@ -1,15 +1,10 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
+
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  BondApiDAO,
-  GoogleServicesDAO,
-  RequesterPaysSetup,
-  RequesterPaysSetupService,
-  SlickDataSource
-}
-import org.broadinstitute.dsde.rawls.disabled.DisabledRequesterPaysSetupService
 
 object MultiCloudRequesterPaysSetupServiceFactory {
   def createAccessContextManager(appConfigManager: MultiCloudAppConfigManager,
@@ -22,7 +17,7 @@ object MultiCloudRequesterPaysSetupServiceFactory {
       case "gcp" =>
         new RequesterPaysSetupService(dataSource, googleServicesDAO, bondApiDAO, requesterPaysRole)
       case "azure" =>
-        new DisabledRequesterPaysSetupService
+        newDisabledService[RequesterPaysSetup]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

@@ -18,7 +18,12 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
+import com.google.api.services.cloudbilling.model.{
+  BillingAccount,
+  ListBillingAccountsResponse,
+  ProjectBillingInfo,
+  TestIamPermissionsRequest
+}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -53,7 +58,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   traceNakedWithParent
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
-import org.broadinstitute.dsde.rawls.{ RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
@@ -91,14 +96,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             terraBucketWriterRole: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO,
                             resourceBufferJsonFile: String
-                           )(implicit
-                             val system: ActorSystem,
-                             val materializer: Materializer,
-                             implicit val executionContext: ExecutionContext,
-                             implicit val timer: Temporal[IO]
-                           ) extends GoogleServicesDAO(groupsPrefix)
-  with FutureSupport
-  with GoogleUtilities {
+)(implicit
+  val system: ActorSystem,
+  val materializer: Materializer,
+  implicit val executionContext: ExecutionContext,
+  implicit val timer: Temporal[IO]
+) extends GoogleServicesDAO
+    with FutureSupport
+    with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]

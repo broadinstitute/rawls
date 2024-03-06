@@ -28,7 +28,7 @@ import scala.util.Random
 class MockGoogleServicesDAO(groupsPrefix: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO =
                               new MockGoogleAccessContextManagerDAO
-) extends GoogleServicesDAO(groupsPrefix) {
+) extends GoogleServicesDAO {
 
   val billingEmail: String = "billing@test.firecloud.org"
   val billingGroupEmail: String = "terra-billing@test.firecloud.org"

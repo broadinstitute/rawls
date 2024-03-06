@@ -21,7 +21,7 @@ object GoogleServicesDAO {
   def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
 }
 
-abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
+trait GoogleServicesDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
 
   val accessContextManagerDAO: AccessContextManagerDAO
@@ -156,7 +156,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                             tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo]
 
-  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo]
+  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId,
+                                    tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo]
 
   def setBillingAccount(googleProjectId: GoogleProjectId,
                         billingAccountName: Option[RawlsBillingAccountName],

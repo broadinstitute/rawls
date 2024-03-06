@@ -4,12 +4,11 @@ import akka.actor.ActorSystem
 import cats.effect.IO
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.AppDependencies
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, HttpGoogleServicesDAO}
-import org.broadinstitute.dsde.rawls.disabled.DisabledHttpGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig.EnhancedScalaConfig
 
 import java.io.StringReader
@@ -48,10 +47,7 @@ object MultiCloudServicesDAOFactory {
           resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
         )
       case "azure" =>
-        new DisabledHttpGoogleServicesDAO(
-          appConfigManager.gcsConfig,
-          accessContextManagerDAO = accessContextManagerDAO
-        )
+        newDisabledService[GoogleServicesDAO]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

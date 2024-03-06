@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, DrsResolver, MarthaResolver}
-import org.broadinstitute.dsde.rawls.disabled.{DisabledDrsHubResolver, DisabledMarthaResolver}
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
 
@@ -32,7 +31,7 @@ object MultiCloudDrsResolverFactory {
           new MarthaResolver(marthaUrl)
         }
       case "azure" =>
-        new DisabledMarthaResolver
+        newDisabledService[DrsResolver]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

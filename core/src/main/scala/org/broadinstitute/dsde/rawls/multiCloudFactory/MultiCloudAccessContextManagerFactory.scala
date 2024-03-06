@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
+import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO}
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.disabled.DisabledHttpGoogleAccessContextManagerDAO
 
 object MultiCloudAccessContextManagerFactory {
   def createAccessContextManager(metricsPrefix: String, appConfigManager: MultiCloudAppConfigManager)(implicit
@@ -27,7 +27,7 @@ object MultiCloudAccessContextManagerFactory {
           metricsPrefix
         )
       case "azure" =>
-        new DisabledHttpGoogleAccessContextManagerDAO
+        newDisabledService[AccessContextManagerDAO]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

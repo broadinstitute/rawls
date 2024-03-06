@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkspaceName}
 import java.util.UUID
 import scala.concurrent.Future
 
-abstract class ImportServiceDAO {
+trait ImportServiceDAO {
 
   def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]]
 }

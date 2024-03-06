@@ -76,10 +76,10 @@ import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{
   GoogleCredentialModes,
+  GoogleIamDAO,
   HttpGoogleBigQueryDAO,
   HttpGoogleIamDAO,
-  HttpGoogleStorageDAO,
-  GoogleIamDAO
+  HttpGoogleStorageDAO
 }
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -173,57 +173,70 @@ object Boot extends IOApp with LazyLogging {
     val accessContextManagerDAO =
       MultiCloudAccessContextManagerFactory.createAccessContextManager(metricsPrefix, appConfigManager)
 
-    initAppDependencies[IO](appConfigManager, appConfigManager.conf, appConfigManager.gcsConfig.getString("appName"), metricsPrefix).use {
-      appDependencies =>
-        val gcsDAO = MultiCloudServicesDAOFactory.createHttpMultiCloudServicesDAO(
-          appConfigManager,
-          appDependencies,
-          metricsPrefix,
-          accessContextManagerDAO
-        )
+    initAppDependencies[IO](appConfigManager,
+                            appConfigManager.conf,
+                            appConfigManager.gcsConfig.getString("appName"),
+                            metricsPrefix
+    ).use { appDependencies =>
+      val gcsDAO = MultiCloudServicesDAOFactory.createHttpMultiCloudServicesDAO(
+        appConfigManager,
+        appDependencies,
+        metricsPrefix,
+        accessContextManagerDAO
+      )
 
-        val pubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
-          appConfigManager,
-          metricsPrefix,
-          appConfigManager.gcsConfig.getString("serviceProject")
-        )
+      val pubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
+        appConfigManager,
+        metricsPrefix,
+        appConfigManager.gcsConfig.getString("serviceProject")
+      )
 
-        // Import service uses a different project for its pubsub topic
-        val importServicePubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
-          appConfigManager,
-          metricsPrefix,
-          appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
-        )
+      // Import service uses a different project for its pubsub topic
+      val importServicePubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
+        appConfigManager,
+        metricsPrefix,
+        appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
+      )
 
-        val importServiceDAO = MultiCloudImportServiceDAOFactory.createMultiCloudImportServiceDAO(appConfigManager)
+      val importServiceDAO = MultiCloudImportServiceDAOFactory.createMultiCloudImportServiceDAO(appConfigManager)
 
-        val bqJsonCreds = MultiCloudBigQueryCredentialsManager.getMultiCloudBucketMigrationService(appConfigManager)
+      val bqJsonCreds = MultiCloudBigQueryCredentialsManager.getMultiCloudBucketMigrationService(appConfigManager)
 
-        val bigQueryDAO = MultiCloudBigQueryDAOFactory.createHttpMultiCloudBigQueryDAO(appConfigManager,
-                                                                                       Json(bqJsonCreds),
-                                                                                       metricsPrefix
-        )
+      val bigQueryDAO =
+        MultiCloudBigQueryDAOFactory.createHttpMultiCloudBigQueryDAO(appConfigManager, Json(bqJsonCreds), metricsPrefix)
 
-        val samConfig = appConfigManager.conf.getConfig("sam")
-        val samDAO = new HttpSamDAO(
-          samConfig.getString("server"),
-          gcsDAO.getBucketServiceAccountCredential,
-          toScalaDuration(samConfig.getDuration("timeout"))
-        )
+      val samDAO = SamDAOFactory.createSamDAO(appConfigManager, gcsDAO)
 
-        MultiCloudEnableServiceAccountFactory.createEnableServiceAccount(appConfigManager, gcsDAO, samDAO)
+      MultiCloudEnableServiceAccountFactory.createEnableServiceAccount(appConfigManager, gcsDAO, samDAO)
 
-        system.registerOnTermination {
-          slickDataSource.databaseConfig.db.shutdown
+      system.registerOnTermination {
+        slickDataSource.databaseConfig.db.shutdown
+      }
+
+      val executionServiceConfig = appConfigManager.conf.getConfig("executionservice")
+      val submissionTimeout = org.broadinstitute.dsde.rawls.util.toScalaDuration(
+        executionServiceConfig.getDuration("workflowSubmissionTimeout")
+      )
+
+      val executionServiceServers: Set[ClusterMember] = executionServiceConfig
+        .getObject("readServers")
+        .entrySet()
+        .asScala
+        .map { entry =>
+          val (strName, strHostname) = entry.toTuple
+          ClusterMember(
+            ExecutionServiceId(strName),
+            new HttpExecutionServiceDAO(
+              strHostname.unwrapped.toString,
+              metricsPrefix
+            )
+          )
         }
+        .toSet
 
-        val executionServiceConfig = appConfigManager.conf.getConfig("executionservice")
-        val submissionTimeout = org.broadinstitute.dsde.rawls.util.toScalaDuration(
-          executionServiceConfig.getDuration("workflowSubmissionTimeout")
-        )
-
-        val executionServiceServers: Set[ClusterMember] = executionServiceConfig
-          .getObject("readServers")
+      val executionServiceSubmitServers: Set[ClusterMember] =
+        executionServiceConfig
+          .getObject("submitServers")
           .entrySet()
           .asScala
           .map { entry =>
@@ -238,377 +251,358 @@ object Boot extends IOApp with LazyLogging {
           }
           .toSet
 
-        val executionServiceSubmitServers: Set[ClusterMember] =
-          executionServiceConfig
-            .getObject("submitServers")
-            .entrySet()
-            .asScala
-            .map { entry =>
-              val (strName, strHostname) = entry.toTuple
-              ClusterMember(
-                ExecutionServiceId(strName),
-                new HttpExecutionServiceDAO(
-                  strHostname.unwrapped.toString,
-                  metricsPrefix
-                )
-              )
-            }
-            .toSet
+      val cromiamDAO: ExecutionServiceDAO =
+        new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
+      val shardedExecutionServiceCluster: ExecutionServiceCluster =
+        new ShardedHttpExecutionServiceCluster(
+          executionServiceServers,
+          executionServiceSubmitServers,
+          slickDataSource
+        )
+      val requesterPaysRole = appConfigManager.gcsConfig.getString("requesterPaysRole")
 
-        val cromiamDAO: ExecutionServiceDAO =
-          new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
-        val shardedExecutionServiceCluster: ExecutionServiceCluster =
-          new ShardedHttpExecutionServiceCluster(
-            executionServiceServers,
-            executionServiceSubmitServers,
-            slickDataSource
+      val notificationPubSubDAO =
+        MultiCloudNotificationPubSubDAOFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
+                                                                                     workbenchMetricBaseName =
+                                                                                       metricsPrefix
+        )
+
+      val notificationDAO =
+        MultiCloudNotificationDAOFactory.createMultiCloudNotificationDAO(appConfigManager, notificationPubSubDAO)
+
+      val drsResolver = MultiCloudDrsResolverFactory.createMultiCloudDrsResolver(appConfigManager)
+
+      val servicePerimeterService =
+        MultiCloudServicePerimeterServiceFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
+                                                                                       slickDataSource,
+                                                                                       gcsDAO
+        )
+
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(appConfigManager.conf)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+        new HttpBillingProfileManagerClientProvider(
+          appConfigManager.conf.getStringOption("billingProfileManager.baseUrl")
+        ),
+        multiCloudWorkspaceConfig
+      )
+
+      val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest =
+        MultiCloudGenomicsServiceFactory.createMultiCloudGenomicsService(appConfigManager, slickDataSource, gcsDAO)
+
+      val submissionCostService =
+        MultiCloudSubmissionCostServiceFactory.createMultiCloudSubmissionCostService(appConfigManager, bigQueryDAO)
+
+      val methodRepoDAO =
+        MultiCloudMethodRepoDAOFactory.createMultiCloudMethodRepoDAO(appConfigManager, metricsPrefix)
+
+      val workspaceManagerDAO =
+        new HttpWorkspaceManagerDAO(
+          new HttpWorkspaceManagerClientProvider(appConfigManager.conf.getString("workspaceManager.baseUrl"))
+        )
+
+      val dataRepoDAO =
+        new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstanceName"),
+                            appConfigManager.conf.getString("dataRepo.terraInstance")
+        )
+
+      val userServiceConstructor: RawlsRequestContext => UserService =
+        UserService.constructor(
+          slickDataSource,
+          gcsDAO,
+          samDAO,
+          appDependencies.bigQueryServiceFactory,
+          bqJsonCreds,
+          requesterPaysRole,
+          servicePerimeterService,
+          RawlsBillingAccountName(appConfigManager.gcsConfig.getString("adminRegisterBillingAccountId")),
+          billingProfileManagerDAO,
+          workspaceManagerDAO,
+          notificationDAO
+        )
+
+      val maxActiveWorkflowsTotal =
+        appConfigManager.conf.getInt("executionservice.maxActiveWorkflowsPerServer")
+      val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / appConfigManager.conf.getInt(
+        "executionservice.activeWorkflowHogFactor"
+      )
+      val useWorkflowCollectionField =
+        appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionField")
+      val useWorkflowCollectionLabel =
+        appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionLabel")
+      val defaultNetworkCromwellBackend: CromwellBackend =
+        CromwellBackend(appConfigManager.conf.getString("executionservice.defaultNetworkBackend"))
+      val highSecurityNetworkCromwellBackend: CromwellBackend =
+        CromwellBackend(appConfigManager.conf.getString("executionservice.highSecurityNetworkBackend"))
+
+      val wdlParsingConfig = WDLParserConfig(appConfigManager.conf.getConfig("wdl-parsing"))
+      def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
+
+      def wdlParser: WDLParser =
+        if (wdlParsingConfig.useCache)
+          new CachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
+        else new NonCachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
+
+      val methodConfigResolver = new MethodConfigResolver(wdlParser)
+
+      val healthMonitor = system.actorOf(
+        HealthMonitorFactory
+          .createHealthMonitorProps(
+            appConfigManager,
+            slickDataSource,
+            gcsDAO,
+            pubSubDAO,
+            methodRepoDAO,
+            samDAO,
+            billingProfileManagerDAO,
+            workspaceManagerDAO,
+            executionServiceServers.map(c => c.key -> c.dao).toMap,
+            topicsToCheck = Seq(appConfigManager.gcsConfig.getString("notifications.topicName")),
+            bucketsToCheck = Seq.empty
           )
-        val requesterPaysRole = appConfigManager.gcsConfig.getString("requesterPaysRole")
+          .withDispatcher("health-monitor-dispatcher"),
+        "health-monitor"
+      )
+      logger.info("Starting health monitor...")
+      system.scheduler.schedule(
+        10 seconds,
+        1 minute,
+        healthMonitor,
+        HealthMonitor.CheckAll
+      )
 
-        val notificationPubSubDAO =
-          MultiCloudNotificationPubSubDAOFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
-                                                                                       workbenchMetricBaseName =
-                                                                                         metricsPrefix
-          )
+      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
 
-        val notificationDAO =
-          MultiCloudNotificationDAOFactory.createMultiCloudNotificationDAO(appConfigManager, notificationPubSubDAO)
+      val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager.conf)
 
-        val drsResolver = MultiCloudDrsResolverFactory.createMultiCloudDrsResolver(appConfigManager)
+      val bondApiDAO: BondApiDAO = MultiCloudBondApiDAOFactory.createMultiCloudBondApiDAO(appConfigManager)
 
-        val servicePerimeterService =
-          MultiCloudServicePerimeterServiceFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
-                                                                                         slickDataSource,
-                                                                                         gcsDAO
-          )
+      val requesterPaysSetupService: RequesterPaysSetup =
+        MultiCloudRequesterPaysSetupServiceFactory.createAccessContextManager(appConfigManager,
+                                                                              slickDataSource,
+                                                                              gcsDAO,
+                                                                              bondApiDAO,
+                                                                              requesterPaysRole
+        )
 
-        val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(appConfigManager.conf)
-        val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-          new HttpBillingProfileManagerClientProvider(
-            appConfigManager.conf.getStringOption("billingProfileManager.baseUrl")
+      val entityQueryTimeout = appConfigManager.conf.getDuration("entities.queryTimeout")
+
+      // create the entity manager.
+      val entityManager = EntityManager.defaultEntityManager(
+        slickDataSource,
+        workspaceManagerDAO,
+        dataRepoDAO,
+        samDAO,
+        appDependencies.bigQueryServiceFactory,
+        DataRepoEntityProviderConfig(appConfigManager.conf.getConfig("dataRepoEntityProvider")),
+        appConfigManager.conf.getBoolean("entityStatisticsCache.enabled"),
+        entityQueryTimeout,
+        metricsPrefix
+      )
+
+      val resourceBufferDAO: ResourceBufferDAO =
+        MultiCloudResourceBufferDAOFactory.createResourceBuffer(appConfigManager, gcsDAO)
+
+      val resourceBufferService =
+        MultiCloudResourceBufferServiceFactory.createResourceBufferService(appConfigManager, resourceBufferDAO)
+      val resourceBufferSaEmail =
+        MultiCloudResourceBufferEmailManager.getMultiCloudResourceBufferEmail(appConfigManager)
+
+      val leonardoConfig = LeonardoConfig(appConfigManager.conf.getConfig("leonardo"))
+      val leonardoDAO: LeonardoDAO =
+        new HttpLeonardoDAO(leonardoConfig);
+
+      val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
+        MultiCloudWorkspaceService.constructor(
+          slickDataSource,
+          workspaceManagerDAO,
+          billingProfileManagerDAO,
+          samDAO,
+          multiCloudWorkspaceConfig,
+          leonardoDAO,
+          metricsPrefix
+        )
+
+      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass =
+        MultiCloudFastPassServiceConstructorFactory.createCloudFastPassService(
+          appConfigManager,
+          appDependencies,
+          gcsDAO,
+          samDAO
+        )
+
+      val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
+        slickDataSource,
+        methodRepoDAO,
+        cromiamDAO,
+        shardedExecutionServiceCluster,
+        appConfigManager.conf.getInt("executionservice.batchSize"),
+        workspaceManagerDAO,
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        notificationDAO,
+        userServiceConstructor,
+        genomicsServiceConstructor,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName = metricsPrefix,
+        submissionCostService,
+        workspaceServiceConfig,
+        requesterPaysSetupService,
+        entityManager,
+        resourceBufferService,
+        resourceBufferSaEmail,
+        servicePerimeterService,
+        googleIamDao = appDependencies.httpGoogleIamDAO,
+        terraBillingProjectOwnerRole = appConfigManager.gcsConfig.getString("terraBillingProjectOwnerRole"),
+        terraWorkspaceCanComputeRole = appConfigManager.gcsConfig.getString("terraWorkspaceCanComputeRole"),
+        terraWorkspaceNextflowRole = appConfigManager.gcsConfig.getString("terraWorkspaceNextflowRole"),
+        terraBucketReaderRole = appConfigManager.gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = appConfigManager.gcsConfig.getString("terraBucketWriterRole"),
+        new RawlsWorkspaceAclManager(samDAO),
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
+        fastPassServiceConstructor
+      )
+
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit")
+      )
+
+      val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
+        slickDataSource,
+        samDAO,
+        workspaceManagerDAO,
+        appConfigManager.conf.getString("dataRepo.terraInstanceName"),
+        dataRepoDAO
+      )
+
+      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(
+        bqJsonCreds,
+        GoogleProject(appConfigManager.gcsConfig.getString("serviceProject"))
+      )
+
+      val spendReportingServiceConfig = SpendReportingServiceConfig(
+        appConfigManager.gcsConfig.getString("billingExportTableName"),
+        appConfigManager.gcsConfig.getString("billingExportTimePartitionColumn"),
+        appConfigManager.gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
+        metricsPrefix
+      )
+
+      val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
+      val billingRepository = new BillingRepository(slickDataSource)
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+      val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
+        BillingProjectOrchestrator.constructor(
+          samDAO,
+          notificationDAO,
+          billingRepository,
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
+          new BpmBillingProjectLifecycle(samDAO,
+                                         billingRepository,
+                                         billingProfileManagerDAO,
+                                         workspaceManagerDAO,
+                                         workspaceManagerResourceMonitorRecordDao
           ),
+          workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig
         )
 
-        val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest =
-          MultiCloudGenomicsServiceFactory.createMultiCloudGenomicsService(appConfigManager, slickDataSource, gcsDAO)
-
-        val submissionCostService =
-          MultiCloudSubmissionCostServiceFactory.createMultiCloudSubmissionCostService(appConfigManager, bigQueryDAO)
-
-        val methodRepoDAO =
-          MultiCloudMethodRepoDAOFactory.createMultiCloudMethodRepoDAO(appConfigManager, metricsPrefix)
-
-        val workspaceManagerDAO =
-          new HttpWorkspaceManagerDAO(
-            new HttpWorkspaceManagerClientProvider(appConfigManager.conf.getString("workspaceManager.baseUrl"))
-          )
-
-        val dataRepoDAO =
-          new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstanceName"),
-                              appConfigManager.conf.getString("dataRepo.terraInstance")
-          )
-
-        val userServiceConstructor: RawlsRequestContext => UserService =
-          UserService.constructor(
-            slickDataSource,
-            gcsDAO,
-            samDAO,
-            appDependencies.bigQueryServiceFactory,
-            bqJsonCreds,
-            requesterPaysRole,
-            servicePerimeterService,
-            RawlsBillingAccountName(appConfigManager.gcsConfig.getString("adminRegisterBillingAccountId")),
-            billingProfileManagerDAO,
-            workspaceManagerDAO,
-            notificationDAO
-          )
-
-        val maxActiveWorkflowsTotal =
-          appConfigManager.conf.getInt("executionservice.maxActiveWorkflowsPerServer")
-        val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / appConfigManager.conf.getInt(
-          "executionservice.activeWorkflowHogFactor"
-        )
-        val useWorkflowCollectionField =
-          appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionField")
-        val useWorkflowCollectionLabel =
-          appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-        val defaultNetworkCromwellBackend: CromwellBackend =
-          CromwellBackend(appConfigManager.conf.getString("executionservice.defaultNetworkBackend"))
-        val highSecurityNetworkCromwellBackend: CromwellBackend =
-          CromwellBackend(appConfigManager.conf.getString("executionservice.highSecurityNetworkBackend"))
-
-        val wdlParsingConfig = WDLParserConfig(appConfigManager.conf.getConfig("wdl-parsing"))
-        def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
-
-        def wdlParser: WDLParser =
-          if (wdlParsingConfig.useCache)
-            new CachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
-          else new NonCachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
-
-        val methodConfigResolver = new MethodConfigResolver(wdlParser)
-
-        val healthMonitor = system.actorOf(
-          HealthMonitor
-            .props(
-              slickDataSource,
-              gcsDAO,
-              pubSubDAO,
-              methodRepoDAO,
-              samDAO,
-              billingProfileManagerDAO,
-              workspaceManagerDAO,
-              executionServiceServers.map(c => c.key -> c.dao).toMap,
-              groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
-              topicsToCheck = Seq(appConfigManager.gcsConfig.getString("notifications.topicName")),
-              bucketsToCheck = Seq.empty
-            )
-            .withDispatcher("health-monitor-dispatcher"),
-          "health-monitor"
-        )
-        logger.info("Starting health monitor...")
-        system.scheduler.schedule(
-          10 seconds,
-          1 minute,
-          healthMonitor,
-          HealthMonitor.CheckAll
-        )
-
-        val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
-
-        val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager.conf)
-
-        val bondApiDAO: BondApiDAO = MultiCloudBondApiDAOFactory.createMultiCloudBondApiDAO(appConfigManager)
-
-        val requesterPaysSetupService: RequesterPaysSetup =
-          MultiCloudRequesterPaysSetupServiceFactory.createAccessContextManager(appConfigManager,
-                                                                                slickDataSource,
-                                                                                gcsDAO,
-                                                                                bondApiDAO,
-                                                                                requesterPaysRole
-          )
-
-        val entityQueryTimeout = appConfigManager.conf.getDuration("entities.queryTimeout")
-
-        // create the entity manager.
-        val entityManager = EntityManager.defaultEntityManager(
+      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
+        SpendReportingService.constructor(
           slickDataSource,
-          workspaceManagerDAO,
-          dataRepoDAO,
+          spendReportingBigQueryService,
+          billingRepository,
+          billingProfileManagerDAO,
           samDAO,
-          appDependencies.bigQueryServiceFactory,
-          DataRepoEntityProviderConfig(appConfigManager.conf.getConfig("dataRepoEntityProvider")),
-          appConfigManager.conf.getBoolean("entityStatisticsCache.enabled"),
-          entityQueryTimeout,
-          metricsPrefix
+          spendReportingServiceConfig
         )
 
-        val resourceBufferDAO: ResourceBufferDAO =
-          MultiCloudResourceBufferDAOFactory.createResourceBuffer(appConfigManager,
-                                                                  gcsDAO.getResourceBufferServiceAccountCredential
-          )
+      val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration =
+        MultiCloudBucketMigrationServiceFactory.createMultiCloudBucketMigrationService(appConfigManager,
+                                                                                       slickDataSource,
+                                                                                       samDAO,
+                                                                                       gcsDAO
+        )
 
-        val resourceBufferService =
-          MultiCloudResourceBufferServiceFactory.createResourceBufferService(appConfigManager, resourceBufferDAO)
-        val resourceBufferSaEmail =
-          MultiCloudResourceBufferEmailManager.getMultiCloudResourceBufferEmail(appConfigManager)
+      val service = new RawlsApiServiceImpl(
+        multiCloudWorkspaceServiceConstructor,
+        workspaceServiceConstructor,
+        entityServiceConstructor,
+        userServiceConstructor,
+        genomicsServiceConstructor,
+        snapshotServiceConstructor,
+        spendReportingServiceConstructor,
+        billingProjectOrchestratorConstructor,
+        bucketMigrationServiceConstructor,
+        statusServiceConstructor,
+        shardedExecutionServiceCluster,
+        ApplicationVersion(
+          appConfigManager.conf.getString("version.git.hash"),
+          appConfigManager.conf.getString("version.build.number"),
+          appConfigManager.conf.getString("version.version")
+        ),
+        submissionTimeout,
+        appConfigManager.conf.getLong("entityUpsert.maxContentSizeBytes"),
+        metricsPrefix,
+        samDAO,
+        appDependencies.oidcConfiguration
+      )
 
-        val leonardoConfig = LeonardoConfig(appConfigManager.conf.getConfig("leonardo"))
-        val leonardoDAO: LeonardoDAO =
-          new HttpLeonardoDAO(leonardoConfig);
+      if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
+        logger.info("This instance has been marked as BACK. Booting monitors...")
 
-        val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-          MultiCloudWorkspaceService.constructor(
-            slickDataSource,
-            workspaceManagerDAO,
-            billingProfileManagerDAO,
-            samDAO,
-            multiCloudWorkspaceConfig,
-            leonardoDAO,
-            metricsPrefix
-          )
-
-        val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass =
-          MultiCloudFastPassServiceConstructorFactory.createCloudFastPassService(
-            appConfigManager,
-            appDependencies,
-            gcsDAO,
-            samDAO
-          )
-
-        val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
+        BootMonitors.bootMonitors(
+          system,
+          appConfigManager.conf,
           slickDataSource,
-          methodRepoDAO,
-          cromiamDAO,
-          shardedExecutionServiceCluster,
-          appConfigManager.conf.getInt("executionservice.batchSize"),
-          workspaceManagerDAO,
-          methodConfigResolver,
           gcsDAO,
+          appDependencies.httpGoogleIamDAO,
+          appDependencies.httpGoogleStorageDAO,
           samDAO,
           notificationDAO,
-          userServiceConstructor,
-          genomicsServiceConstructor,
+          pubSubDAO,
+          importServicePubSubDAO,
+          importServiceDAO,
+          workspaceManagerDAO,
+          billingProfileManagerDAO,
+          leonardoDAO,
+          workspaceRepository,
+          appDependencies.googleStorageService,
+          appDependencies.googleStorageTransferService,
+          methodRepoDAO,
+          drsResolver,
+          entityServiceConstructor,
+          entityQueryTimeout.toScala,
+          workspaceServiceConstructor,
+          shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,
-          workbenchMetricBaseName = metricsPrefix,
-          submissionCostService,
-          workspaceServiceConfig,
-          requesterPaysSetupService,
-          entityManager,
-          resourceBufferService,
-          resourceBufferSaEmail,
-          servicePerimeterService,
-          googleIamDao = appDependencies.httpGoogleIamDAO,
-          terraBillingProjectOwnerRole = appConfigManager.gcsConfig.getString("terraBillingProjectOwnerRole"),
-          terraWorkspaceCanComputeRole = appConfigManager.gcsConfig.getString("terraWorkspaceCanComputeRole"),
-          terraWorkspaceNextflowRole = appConfigManager.gcsConfig.getString("terraWorkspaceNextflowRole"),
-          terraBucketReaderRole = appConfigManager.gcsConfig.getString("terraBucketReaderRole"),
-          terraBucketWriterRole = appConfigManager.gcsConfig.getString("terraBucketWriterRole"),
-          new RawlsWorkspaceAclManager(samDAO),
-          new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
-          fastPassServiceConstructor
-        )
-
-        val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
-          slickDataSource,
-          samDAO,
-          workbenchMetricBaseName = metricsPrefix,
-          entityManager,
-          appConfigManager.conf.getInt("entities.pageSizeLimit")
-        )
-
-        val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
-          slickDataSource,
-          samDAO,
-          workspaceManagerDAO,
-          appConfigManager.conf.getString("dataRepo.terraInstanceName"),
-          dataRepoDAO
-        )
-
-        val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(
-          bqJsonCreds,
-          GoogleProject(appConfigManager.gcsConfig.getString("serviceProject"))
-        )
-
-        val spendReportingServiceConfig = SpendReportingServiceConfig(
-          appConfigManager.gcsConfig.getString("billingExportTableName"),
-          appConfigManager.gcsConfig.getString("billingExportTimePartitionColumn"),
-          appConfigManager.gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
-          metricsPrefix
-        )
-
-        val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
-        val billingRepository = new BillingRepository(slickDataSource)
-        val workspaceRepository = new WorkspaceRepository(slickDataSource)
-        val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
-          BillingProjectOrchestrator.constructor(
-            samDAO,
-            notificationDAO,
-            billingRepository,
-            new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
-            new BpmBillingProjectLifecycle(samDAO,
-                                           billingRepository,
-                                           billingProfileManagerDAO,
-                                           workspaceManagerDAO,
-                                           workspaceManagerResourceMonitorRecordDao
-            ),
-            workspaceManagerResourceMonitorRecordDao,
-            multiCloudWorkspaceConfig
-          )
-
-        val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
-          SpendReportingService.constructor(
-            slickDataSource,
-            spendReportingBigQueryService,
-            billingRepository,
-            billingProfileManagerDAO,
-            samDAO,
-            spendReportingServiceConfig
-          )
-
-        val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration =
-          MultiCloudBucketMigrationServiceFactory.createMultiCloudBucketMigrationService(appConfigManager,
-                                                                                         slickDataSource,
-                                                                                         samDAO,
-                                                                                         gcsDAO
-          )
-
-        val service = new RawlsApiServiceImpl(
-          multiCloudWorkspaceServiceConstructor,
-          workspaceServiceConstructor,
-          entityServiceConstructor,
-          userServiceConstructor,
-          genomicsServiceConstructor,
-          snapshotServiceConstructor,
-          spendReportingServiceConstructor,
-          billingProjectOrchestratorConstructor,
-          bucketMigrationServiceConstructor,
-          statusServiceConstructor,
-          shardedExecutionServiceCluster,
-          ApplicationVersion(
-            appConfigManager.conf.getString("version.git.hash"),
-            appConfigManager.conf.getString("version.build.number"),
-            appConfigManager.conf.getString("version.version")
-          ),
-          submissionTimeout,
-          appConfigManager.conf.getLong("entityUpsert.maxContentSizeBytes"),
           metricsPrefix,
-          samDAO,
-          appDependencies.oidcConfiguration
+          requesterPaysRole,
+          useWorkflowCollectionField,
+          useWorkflowCollectionLabel,
+          defaultNetworkCromwellBackend,
+          highSecurityNetworkCromwellBackend,
+          methodConfigResolver
+        )
+      } else
+        logger.info(
+          "This instance has been marked as FRONT. Monitors will not be booted..."
         )
 
-        if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
-          logger.info("This instance has been marked as BACK. Booting monitors...")
-
-          BootMonitors.bootMonitors(
-            system,
-            appConfigManager.conf,
-            slickDataSource,
-            gcsDAO,
-            appDependencies.httpGoogleIamDAO,
-            appDependencies.httpGoogleStorageDAO,
-            samDAO,
-            notificationDAO,
-            pubSubDAO,
-            importServicePubSubDAO,
-            importServiceDAO,
-            workspaceManagerDAO,
-            billingProfileManagerDAO,
-            leonardoDAO,
-            workspaceRepository,
-            appDependencies.googleStorageService,
-            appDependencies.googleStorageTransferService,
-            methodRepoDAO,
-            drsResolver,
-            entityServiceConstructor,
-            entityQueryTimeout.toScala,
-            workspaceServiceConstructor,
-            shardedExecutionServiceCluster,
-            maxActiveWorkflowsTotal,
-            maxActiveWorkflowsPerUser,
-            metricsPrefix,
-            requesterPaysRole,
-            useWorkflowCollectionField,
-            useWorkflowCollectionLabel,
-            defaultNetworkCromwellBackend,
-            highSecurityNetworkCromwellBackend,
-            methodConfigResolver
-          )
-        } else
-          logger.info(
-            "This instance has been marked as FRONT. Monitors will not be booted..."
-          )
-
-        for {
-          binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
-            case t: Throwable =>
-              logger.error("FATAL - failure starting http server", t)
-              throw t
-          }
-          _ <- IO.fromFuture(IO(binding.whenTerminated))
-          _ <- IO(system.terminate())
-        } yield ()
+      for {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
+          case t: Throwable =>
+            logger.error("FATAL - failure starting http server", t)
+            throw t
+        }
+        _ <- IO.fromFuture(IO(binding.whenTerminated))
+        _ <- IO(system.terminate())
+      } yield ()
     }
   }
 
@@ -654,7 +648,11 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: Logger: Async](appConfigManager: MultiCloudAppConfigManager, config: Config, appName: String, metricsPrefix: String)(implicit
+  def initAppDependencies[F[_]: Logger: Async](appConfigManager: MultiCloudAppConfigManager,
+                                               config: Config,
+                                               appName: String,
+                                               metricsPrefix: String
+  )(implicit
     executionContext: ExecutionContext,
     system: ActorSystem
   ): cats.effect.Resource[F, AppDependencies[F]] = {
@@ -669,8 +667,8 @@ object Boot extends IOApp with LazyLogging {
       try jsonFileSource.mkString
       finally jsonFileSource.close()
 
-    //val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
-    //val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
+    // val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
+    // val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
     // This is for sending custom metrics to stackdriver. all custom metrics starts with `OpenCensus/rawls/`.
@@ -680,13 +678,24 @@ object Boot extends IOApp with LazyLogging {
 
     for {
       googleStorage <- MultiCloudGoogleStorageServiceFactory.createMultiCloudGoogleServiceHttp(appConfigManager)
-        //GoogleStorageService.resource[F](pathToCredentialJson, None, Option(serviceProject))
-      googleStorageTransferService <- MultiCloudStorageTransferService.createMultiCloudStorageTransferService(appConfigManager)
-      googleServiceHttp <- MultiCloudGoogleServiceHttpFactory.createMultiCloudGoogleServiceHttp(appConfigManager,executionContext)
+      // GoogleStorageService.resource[F](pathToCredentialJson, None, Option(serviceProject))
+      googleStorageTransferService <- MultiCloudStorageTransferService.createMultiCloudStorageTransferService(
+        appConfigManager
+      )
+      googleServiceHttp <- MultiCloudGoogleServiceHttpFactory.createMultiCloudGoogleServiceHttp(appConfigManager,
+                                                                                                executionContext
+      )
       topicAdmin <- MultiCloudGoogleTopicAdminFactory.createMultiCloudGoogleTopicAdmin(appConfigManager)
-      bqServiceFactory = MultiCloudGoogleBigQueryServiceFactory.createMultiGoogleBigQueryServiceFactory(appConfigManager)(executionContext)
-      httpGoogleIamDAO = MultiCloudGoogleIamDAOFactory.createMultiCloudGoogleIamDAO(appConfigManager, metricsPrefix)(executionContext, system)
-      httpGoogleStorageDAO = MultiCloudHttpGoogleStorageDAOFactory.createHttpGoogleStorageDAO(appConfigManager, metricsPrefix)(executionContext, system)
+      bqServiceFactory = MultiCloudGoogleBigQueryServiceFactory.createMultiGoogleBigQueryServiceFactory(
+        appConfigManager
+      )(executionContext)
+      httpGoogleIamDAO = MultiCloudGoogleIamDAOFactory.createMultiCloudGoogleIamDAO(appConfigManager, metricsPrefix)(
+        executionContext,
+        system
+      )
+      httpGoogleStorageDAO = MultiCloudHttpGoogleStorageDAOFactory.createHttpGoogleStorageDAO(appConfigManager,
+                                                                                              metricsPrefix
+      )(executionContext, system)
 
       openIdConnect <- cats.effect.Resource.eval(
         OpenIDConnectConfiguration[F](

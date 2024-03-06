@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.disabled.DisabledGoogleBigQueryDAO
-import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.{GoogleCredentialMode, Json}
-import org.broadinstitute.dsde.workbench.google.{AbstractHttpGoogleDAO, GoogleBigQueryDAO, HttpGoogleBigQueryDAO}
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.GoogleCredentialMode
+import org.broadinstitute.dsde.workbench.google.{GoogleBigQueryDAO, HttpGoogleBigQueryDAO}
 
 import scala.concurrent.ExecutionContext
 
@@ -22,7 +21,7 @@ object MultiCloudBigQueryDAOFactory {
           workbenchMetricBaseName = metricsPrefix
         )
       case "azure" =>
-        new DisabledGoogleBigQueryDAO
+        newDisabledService[GoogleBigQueryDAO]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{HttpImportServiceDAO, ImportServiceDAO}
-import org.broadinstitute.dsde.rawls.disabled.DisabledImportServiceDAO
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
 
@@ -16,7 +15,7 @@ object MultiCloudImportServiceDAOFactory {
       case "gcp" =>
         new HttpImportServiceDAO(appConfigManager.conf.getString("avroUpsertMonitor.server"))
       case "azure" =>
-        new DisabledImportServiceDAO
+        newDisabledService[ImportServiceDAO]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

@@ -22,9 +22,10 @@ class DisabledHttpGooglePubSubDAO(implicit val executionContext: ExecutionContex
     throw new NotImplementedError("acknowledgeMessages is not implemented for Azure.")
   override def acknowledgeMessagesById(subscriptionName: String, ackIds: scala.collection.immutable.Seq[String]) =
     throw new NotImplementedError("acknowledgeMessagesById is not implemented for Azure.")
-  override def pullMessages(subscriptionName: String, maxMessages: Int): Future[scala.collection.immutable.Seq[PubSubMessage]] =
+  override def pullMessages(subscriptionName: String,
+                            maxMessages: Int
+  ): Future[scala.collection.immutable.Seq[PubSubMessage]] =
     throw new NotImplementedError("pullMessages is not implemented for Azure.")
   def getPubSubServiceAccountCredential: Credential =
     throw new NotImplementedError("getPubSubServiceAccountCredential is not implemented for Azure.")
 }
-

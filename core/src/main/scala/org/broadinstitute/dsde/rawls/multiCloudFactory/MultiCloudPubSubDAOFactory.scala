@@ -2,13 +2,16 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.google.{DisabledHttpGooglePubSubDAO, GooglePubSubDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
 
 object MultiCloudPubSubDAOFactory {
-  def createPubSubDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String, serviceProject: String
-                     )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO = {
+  def createPubSubDAO(appConfigManager: MultiCloudAppConfigManager,
+                      metricsPrefix: String,
+                      serviceProject: String
+  )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO =
     appConfigManager.cloudProvider match {
       case "gcp" =>
         val gcsConfig = appConfigManager.gcsConfig
@@ -23,8 +26,7 @@ object MultiCloudPubSubDAOFactory {
           workbenchMetricBaseName = metricsPrefix
         )
       case "azure" =>
-        new DisabledHttpGooglePubSubDAO
+        newDisabledService[GooglePubSubDAO]
       case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
-  }
 }

@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, UserInfo}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, UserInfo}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 

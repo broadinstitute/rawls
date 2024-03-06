@@ -307,7 +307,7 @@ class HealthMonitorSpec
                               mockExecutionServiceServers
   ): ActorRef =
     system.actorOf(
-      HealthMonitor.props(
+      HealthMonitor.propsInGoogleControlPlane(
         slickDataSource,
         googleServicesDAO,
         googlePubSubDAO,
@@ -316,7 +316,6 @@ class HealthMonitorSpec
         billingProfileManagerDAO,
         workspaceManagerDAO,
         executionServiceServers,
-        Seq("group1", "group2"),
         Seq("topic1", "topic2"),
         Seq("bucket1", "bucket2"),
         futureTimeout,

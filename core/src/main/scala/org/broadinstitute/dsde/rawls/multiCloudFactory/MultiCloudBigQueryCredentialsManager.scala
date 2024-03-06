@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 
 import scala.util.Using
