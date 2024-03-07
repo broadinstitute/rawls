@@ -40,6 +40,12 @@ class AvroUpsertMonitorMessageParser(message: PubSubMessage, dataSource: SlickDa
         dataAccess.workspaceQuery.findByIdOrFail(id) map { workspace =>
           WorkspaceName(workspace.namespace, workspace.name)
         }
+      } recover { _ =>
+        // if we couldn't find the workspaceId above, pass known-bad values.
+        // later validation within AvroUpsertMonitor will catch these and handle the missing workspace.
+        // the values used here don't pass our validation constraints so they will always be bad.
+        // this is a bit of a hack.
+        WorkspaceName("**!!error!!**", s"workspaceId:$id")
       }
     } else {
       Future.successful(
