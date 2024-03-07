@@ -6,7 +6,17 @@ import bio.terra.workspace.model.{WorkspaceDescription, WorkspaceStageModel}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, GoogleProjectId, RawlsRequestContext, Workspace, WorkspacePolicy, WorkspaceState, WorkspaceType, errorReportSource}
+import org.broadinstitute.dsde.rawls.model.{
+  errorReportSource,
+  AzureManagedAppCoordinates,
+  ErrorReport,
+  GoogleProjectId,
+  RawlsRequestContext,
+  Workspace,
+  WorkspacePolicy,
+  WorkspaceState,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils
 
 import java.util.UUID
@@ -33,7 +43,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     * @param ctx Rawls request and tracing context.
     *
     */
-  def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] = {
+  def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] =
     TracingUtils.traceNakedWithParent("listWorkspacesFromWorkspaceManager", ctx.toTracingContext) { _ =>
       val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx).groupBy(_.getId)
       workspaces.map(workspace =>
@@ -64,7 +74,6 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
         }
       )
     }
-  }
 
   /**
    * Given a workspace, aggregates any available workspace information from workspace manager (WSM).
@@ -79,7 +88,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
    * @throws WorkspaceAggregationException       when an error is encountered pulling data from aggregating upstream systems
    * @throws InvalidCloudContextException        when an aggregated workspace does not have info for exactly one cloud context
    */
-  def fetchAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace = {
+  def fetchAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace =
     TracingUtils.traceNakedWithParent("getWorkspaceFromWorkspaceManager", ctx.toTracingContext) { _ =>
       try {
         val wsmInfo = workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)
@@ -93,7 +102,6 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
           }
       }
     }
-  }
 
   /**
    * Optimized version of [[fetchAggregatedWorkspace]]
@@ -114,7 +122,11 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   ): AggregatedWorkspace =
     (wsmInfo.getStage, Option(wsmInfo.getGcpContext), Option(wsmInfo.getAzureContext), workspace.state) match {
       case (WorkspaceStageModel.RAWLS_WORKSPACE, _, _, _) =>
-        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
+        AggregatedWorkspace(workspace,
+                            Some(workspace.googleProjectId),
+                            azureCloudContext = None,
+                            convertPolicies(wsmInfo)
+        )
       case (WorkspaceStageModel.MC_WORKSPACE, None, Some(azureContext), _) =>
         AggregatedWorkspace(
           workspace,
