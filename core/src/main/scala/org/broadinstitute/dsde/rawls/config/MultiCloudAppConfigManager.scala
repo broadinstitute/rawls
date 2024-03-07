@@ -1,25 +1,20 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.{Config, ConfigFactory}
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Gcp, WorkspaceCloudPlatform}
 
 class MultiCloudAppConfigManager {
   val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
   val cloudProvider = getCloudProvider(conf)
-  val gcsConfig = getStorageConfiguration(conf, cloudProvider)
-  private def getCloudProvider(config: Config): String =
+  val gcsConfig = getStorageConfiguration(conf)
+
+  private def getCloudProvider(config: Config): WorkspaceCloudPlatform =
     if (config.hasPath("cloudProvider")) {
-      config.getString("cloudProvider") match {
-        case "azure" =>
-          "azure"
-        case "gcp" =>
-          "gcp"
-        case _ => throw new IllegalArgumentException("Invalid cloud provider")
-      }
+      WorkspaceCloudPlatform.withName(config.getString("cloudProvider"))
+    } else {
+      Gcp
     }
-    // This can be removed once the variable has been added to config file
-    else {
-      "gcp"
-    }
-  private def getStorageConfiguration(config: Config, cloudProvider: String): Config =
+  private def getStorageConfiguration(config: Config): Config =
     config.getConfig("gcs")
 }

@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.{MultiCloudAppConfigManager, ResourceBufferConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
@@ -14,12 +15,11 @@ object MultiCloudResourceBufferDAOFactory {
     executionContext: ExecutionContext
   ): ResourceBufferDAO =
     appConfigManager.cloudProvider match {
-      case "gcp" =>
+      case Gcp =>
         new HttpResourceBufferDAO(ResourceBufferConfig(appConfigManager.conf.getConfig("resourceBuffer")),
                                   gcsDAO.getResourceBufferServiceAccountCredential
         )
-      case "azure" =>
+      case Azure =>
         newDisabledService[ResourceBufferDAO]
-      case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }

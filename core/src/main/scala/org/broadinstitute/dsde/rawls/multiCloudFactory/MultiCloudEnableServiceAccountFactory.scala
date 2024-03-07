@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, UserInfo}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -10,11 +11,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 object MultiCloudEnableServiceAccountFactory extends LazyLogging{
   def createEnableServiceAccount(appConfigManager: MultiCloudAppConfigManager,gcsDAO: GoogleServicesDAO, samDAO: SamDAO): Unit = {
     appConfigManager.cloudProvider match {
-      case "gcp" =>
+      case Gcp =>
         enableServiceAccount(gcsDAO, samDAO)
-      case "azure" =>
+      case Azure =>
         //Need Azure specific implementation
-      case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
   }
   private def enableServiceAccount(httpGoogleServicesDAO: GoogleServicesDAO, samDAO: SamDAO): Unit = {

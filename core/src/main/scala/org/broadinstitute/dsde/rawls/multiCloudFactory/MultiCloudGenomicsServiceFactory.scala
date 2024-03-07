@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
@@ -14,10 +15,9 @@ object MultiCloudGenomicsServiceFactory {
                                       gcsDAO: GoogleServicesDAO
   )(implicit executionContext: ExecutionContext): RawlsRequestContext => GenomicsServiceRequest =
     appConfigManager.cloudProvider match {
-      case "gcp" =>
+      case Gcp =>
         GenomicsService.constructor(dataSource, gcsDAO)
-      case "azure" =>
+      case Azure =>
         _ => newDisabledService[GenomicsServiceRequest]
-      case _ => throw new IllegalArgumentException("Invalid cloud provider")
     }
 }
