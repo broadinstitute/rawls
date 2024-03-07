@@ -21,9 +21,11 @@ import org.broadinstitute.dsde.rawls.model.{
   ImportStatuses,
   RawlsRequestContext,
   RawlsUserEmail,
+  UserInfo,
   Workspace,
   WorkspaceName
 }
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorMessageParser.workspaceId
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{
   updateImportStatusFormat,
   AvroUpsertMonitorConfig,
@@ -302,7 +304,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
           }
         }
         petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
-        importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
+        importStatus <- getImportStatus(attributes, workspace, petUserInfo)
         _ <- importStatus match {
           // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
           // end up with a race condition where multiple threads are attempting the same import / updating the status
@@ -373,6 +375,16 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         acknowledgeMessage(message.ackId)
       } pipeTo self
 
+    }
+
+  private def getImportStatus(attributes: AvroUpsertAttributes,
+                              workspace: Workspace,
+                              petUserInfo: UserInfo
+  ): Future[Option[ImportStatus]] =
+    if (attributes.isCwds) {
+      importServiceDAO.getCwdsStatus(attributes.importId, workspace.workspaceIdAsUUID, petUserInfo)
+    } else {
+      importServiceDAO.getImportStatus(attributes.importId, workspace.toWorkspaceName, petUserInfo)
     }
 
   private def publishMessageToUpdateImportStatus(importId: UUID,
