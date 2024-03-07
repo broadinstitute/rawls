@@ -2700,6 +2700,102 @@ class WorkspaceServiceSpec
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
+  it should "clone the WSM stub workspace if it exists" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      any[UUID],
+      any[String],
+      ArgumentMatchers.eq(None),
+      any[String],
+      any[RawlsRequestContext],
+      any[Option[String]]
+    )
+  }
+
+  it should "not fail if the source workspace doesn't have a WSM stub workspace" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    when(
+      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
+        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+        any[UUID],
+        any[String],
+        ArgumentMatchers.eq(None),
+        any[String],
+        any[RawlsRequestContext],
+        any[Option[String]]
+      )
+    ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      any[UUID],
+      any[String],
+      ArgumentMatchers.eq(None),
+      any[String],
+      any[RawlsRequestContext],
+      any[Option[String]]
+    )
+  }
+
+  it should "fail if cloning the WSM stub workspace fails" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    when(
+      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
+        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+        any[UUID],
+        any[String],
+        ArgumentMatchers.eq(None),
+        any[String],
+        any[RawlsRequestContext],
+        any[Option[String]]
+      )
+    ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
+
+    val thrown = intercept[ApiException] {
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      any[UUID],
+      any[String],
+      ArgumentMatchers.eq(None),
+      any[String],
+      any[RawlsRequestContext],
+      any[Option[String]]
+    )
+    thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "cloning a Workspace into a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {

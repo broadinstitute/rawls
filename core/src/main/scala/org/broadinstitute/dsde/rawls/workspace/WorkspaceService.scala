@@ -1181,7 +1181,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           logger.warn(
             s"Unexpected failure cloning workspace (while cloning in Workspace Manager) [sourceWorkspaceId=${sourceWorkspaceContext.workspaceId}, destWorkspaceId=${destWorkspaceContext.workspaceId}]. Received ${e.getCode}: [${e.getResponseBody}]"
           )
-          Future.successful()
+          throw e
         } else {
           // 404 == workspace manager does not know about this workspace, move on
           Future.successful()

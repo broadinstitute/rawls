@@ -55,6 +55,7 @@ class MockWorkspaceManagerDAO(
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
+  @throws[ApiException]
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
