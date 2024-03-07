@@ -6,12 +6,10 @@ import akka.stream.ActorMaterializer
 import cats.effect._
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
-import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.opentelemetry.trace.{TraceConfiguration, TraceExporter}
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
-import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
+import com.typesafe.config.{Config, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.OpenTelemetry
 import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator
@@ -22,42 +20,33 @@ import io.opentelemetry.instrumentation.resources.{ContainerResource, HostResour
 import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
-import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
 import io.opentelemetry.sdk.trace.samplers.Sampler
+import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
 import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigration
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
   HttpWorkspaceManagerClientProvider,
   HttpWorkspaceManagerDAO
 }
-import org.broadinstitute.dsde.workbench.google.GoogleStorageDAO
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.{FastPass, FastPassService}
-import org.broadinstitute.dsde.rawls.multiCloudFactory._
-import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
-import org.broadinstitute.dsde.rawls.google.{
-  AccessContextManagerDAO,
-  HttpGoogleAccessContextManagerDAO,
-  HttpGooglePubSubDAO
-}
+import org.broadinstitute.dsde.rawls.fastpass.FastPass
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceRequest
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.multiCloudFactory._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -65,37 +54,20 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceRepository,
-  WorkspaceService
-}
-import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
+import org.broadinstitute.dsde.rawls.workspace._
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.{
-  GoogleCredentialModes,
-  GoogleIamDAO,
-  HttpGoogleBigQueryDAO,
-  HttpGoogleIamDAO,
-  HttpGoogleStorageDAO
-}
+import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
-import org.http4s.Uri
-import org.http4s.blaze.client.BlazeClientBuilder
 
-import java.io.{ByteArrayInputStream, FileInputStream, StringReader}
 import java.net.InetAddress
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
@@ -124,7 +96,9 @@ object Boot extends IOApp with LazyLogging {
     val liquibaseChangeLog = liquibaseConf.getString("changelog")
     val initWithLiquibase = liquibaseConf.getBoolean("initWithLiquibase")
 
-    val changelogParams = Map("gcs:appsDomain" -> appConfigManager.gcsConfig.getString("appsDomain"))
+    val changelogParams = Map(
+      "gcs:appsDomain" -> appConfigManager.gcsConfig.map(_.getString("appsDomain")).getOrElse("")
+    )
 
     if (initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
@@ -173,11 +147,7 @@ object Boot extends IOApp with LazyLogging {
     val accessContextManagerDAO =
       MultiCloudAccessContextManagerFactory.createAccessContextManager(metricsPrefix, appConfigManager)
 
-    initAppDependencies[IO](appConfigManager,
-                            appConfigManager.conf,
-                            appConfigManager.gcsConfig.getString("appName"),
-                            metricsPrefix
-    ).use { appDependencies =>
+    initAppDependencies[IO](appConfigManager, appConfigManager.conf, metricsPrefix).use { appDependencies =>
       val gcsDAO = MultiCloudServicesDAOFactory.createHttpMultiCloudServicesDAO(
         appConfigManager,
         appDependencies,
@@ -187,20 +157,18 @@ object Boot extends IOApp with LazyLogging {
 
       val pubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
         appConfigManager,
-        metricsPrefix,
-        appConfigManager.gcsConfig.getString("serviceProject")
+        metricsPrefix
       )
 
       // Import service uses a different project for its pubsub topic
-      val importServicePubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
+      val importServicePubSubDAO = MultiCloudPubSubDAOFactory.createAvroUpsertMonitorPubSubDAO(
         appConfigManager,
-        metricsPrefix,
-        appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
+        metricsPrefix
       )
 
       val importServiceDAO = MultiCloudImportServiceDAOFactory.createMultiCloudImportServiceDAO(appConfigManager)
 
-      val bqJsonCreds = MultiCloudBigQueryCredentialsManager.getMultiCloudBucketMigrationService(appConfigManager)
+      val bqJsonCreds = MultiCloudBigQueryCredentialsManager.getBigQueryCredentials(appConfigManager)
 
       val bigQueryDAO =
         MultiCloudBigQueryDAOFactory.createHttpMultiCloudBigQueryDAO(appConfigManager, Json(bqJsonCreds), metricsPrefix)
@@ -259,7 +227,8 @@ object Boot extends IOApp with LazyLogging {
           executionServiceSubmitServers,
           slickDataSource
         )
-      val requesterPaysRole = appConfigManager.gcsConfig.getString("requesterPaysRole")
+      val requesterPaysRole =
+        appConfigManager.gcsConfig.map(_.getString("requesterPaysRolrequesterPaysRole")).getOrElse("")
 
       val notificationPubSubDAO =
         MultiCloudNotificationPubSubDAOFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
@@ -312,9 +281,7 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           appDependencies.bigQueryServiceFactory,
           bqJsonCreds,
-          requesterPaysRole,
           servicePerimeterService,
-          RawlsBillingAccountName(appConfigManager.gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO,
           workspaceManagerDAO,
           notificationDAO
@@ -355,9 +322,7 @@ object Boot extends IOApp with LazyLogging {
             samDAO,
             billingProfileManagerDAO,
             workspaceManagerDAO,
-            executionServiceServers.map(c => c.key -> c.dao).toMap,
-            topicsToCheck = Seq(appConfigManager.gcsConfig.getString("notifications.topicName")),
-            bucketsToCheck = Seq.empty
+            executionServiceServers.map(c => c.key -> c.dao).toMap
           )
           .withDispatcher("health-monitor-dispatcher"),
         "health-monitor"
@@ -454,11 +419,16 @@ object Boot extends IOApp with LazyLogging {
         resourceBufferSaEmail,
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
-        terraBillingProjectOwnerRole = appConfigManager.gcsConfig.getString("terraBillingProjectOwnerRole"),
-        terraWorkspaceCanComputeRole = appConfigManager.gcsConfig.getString("terraWorkspaceCanComputeRole"),
-        terraWorkspaceNextflowRole = appConfigManager.gcsConfig.getString("terraWorkspaceNextflowRole"),
-        terraBucketReaderRole = appConfigManager.gcsConfig.getString("terraBucketReaderRole"),
-        terraBucketWriterRole = appConfigManager.gcsConfig.getString("terraBucketWriterRole"),
+        terraBillingProjectOwnerRole =
+          appConfigManager.gcsConfig.map(_.getString("terraBillingProjectOwnerRole")).getOrElse("unsupported"),
+        terraWorkspaceCanComputeRole =
+          appConfigManager.gcsConfig.map(_.getString("terraWorkspaceCanComputeRole")).getOrElse("unsupported"),
+        terraWorkspaceNextflowRole =
+          appConfigManager.gcsConfig.map(_.getString("terraWorkspaceNextflowRole")).getOrElse("unsupported"),
+        terraBucketReaderRole =
+          appConfigManager.gcsConfig.map(_.getString("terraBucketReaderRole")).getOrElse("unsupported"),
+        terraBucketWriterRole =
+          appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor
@@ -482,13 +452,13 @@ object Boot extends IOApp with LazyLogging {
 
       val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(
         bqJsonCreds,
-        GoogleProject(appConfigManager.gcsConfig.getString("serviceProject"))
+        GoogleProject(appConfigManager.gcsConfig.map(_.getString("serviceProject")).getOrElse("unsupported"))
       )
 
       val spendReportingServiceConfig = SpendReportingServiceConfig(
-        appConfigManager.gcsConfig.getString("billingExportTableName"),
-        appConfigManager.gcsConfig.getString("billingExportTimePartitionColumn"),
-        appConfigManager.gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
+        appConfigManager.gcsConfig.map(_.getString("billingExportTableName")).getOrElse("unsupported"),
+        appConfigManager.gcsConfig.map(_.getString("billingExportTimePartitionColumn")).getOrElse("unsupported"),
+        appConfigManager.gcsConfig.map(_.getConfig("spendReporting").getInt("maxDateRange")).getOrElse(90),
         metricsPrefix
       )
 
@@ -650,7 +620,6 @@ object Boot extends IOApp with LazyLogging {
 
   def initAppDependencies[F[_]: Logger: Async](appConfigManager: MultiCloudAppConfigManager,
                                                config: Config,
-                                               appName: String,
                                                metricsPrefix: String
   )(implicit
     executionContext: ExecutionContext,

@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.AppDependencies
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, HttpGoogleServicesDAO}
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig.EnhancedScalaConfig
 
@@ -21,9 +20,8 @@ object MultiCloudServicesDAOFactory {
                                       metricsPrefix: String,
                                       accessContextManagerDAO: AccessContextManagerDAO
   )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleServicesDAO =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
-        val gcsConfig = appConfigManager.gcsConfig
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
         val jsonFactory = GsonFactory.getDefaultInstance
         val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
         new HttpGoogleServicesDAO(
@@ -47,7 +45,7 @@ object MultiCloudServicesDAOFactory {
           accessContextManagerDAO = accessContextManagerDAO,
           resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
         )
-      case Azure =>
+      case None =>
         newDisabledService[GoogleServicesDAO]
     }
 }

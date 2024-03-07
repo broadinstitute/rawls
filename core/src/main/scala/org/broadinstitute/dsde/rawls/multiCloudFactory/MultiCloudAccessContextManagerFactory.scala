@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO}
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
@@ -13,9 +12,8 @@ object MultiCloudAccessContextManagerFactory {
     system: ActorSystem,
     executionContext: ExecutionContext
   ): AccessContextManagerDAO =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
-        val gcsConfig = appConfigManager.gcsConfig
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
         val clientEmail = gcsConfig.getString("serviceClientEmail")
         val serviceProject = gcsConfig.getString("serviceProject")
         val appName = gcsConfig.getString("appName")
@@ -27,7 +25,7 @@ object MultiCloudAccessContextManagerFactory {
           serviceProject,
           metricsPrefix
         )
-      case Azure =>
+      case None =>
         newDisabledService[AccessContextManagerDAO]
     }
 }

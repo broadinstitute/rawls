@@ -4,7 +4,6 @@ import cats.effect.{IO, Resource}
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryFactoryService, GoogleBigQueryServiceFactory}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -15,11 +14,11 @@ object MultiCloudGoogleBigQueryServiceFactory {
   def createMultiGoogleBigQueryServiceFactory(
     appConfigManager: MultiCloudAppConfigManager
   )(implicit executionContext: ExecutionContext): GoogleBigQueryFactoryService =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
-        val pathToCredentialJson = appConfigManager.gcsConfig.getString("pathToCredentialJson")
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
+        val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
         new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
-      case Azure =>
+      case None =>
         new GoogleBigQueryFactoryService {
 
           override def getServiceForPet(petKey: String,

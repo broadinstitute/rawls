@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.config.{FastPassConfig, MultiCloudAppConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPass, FastPassService}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
@@ -20,9 +19,8 @@ object MultiCloudFastPassServiceConstructorFactory {
   )(implicit
     executionContext: ExecutionContext
   ): (RawlsRequestContext, SlickDataSource) => FastPass =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
-        val gcsConfig = appConfigManager.gcsConfig
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
         val fastPassConfig = FastPassConfig.apply(appConfigManager.conf)
         FastPassService.constructor(
           fastPassConfig,
@@ -36,7 +34,7 @@ object MultiCloudFastPassServiceConstructorFactory {
           terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
           terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
         )
-      case Azure =>
+      case None =>
         (_, _) => newDisabledService[FastPass]
     }
 }

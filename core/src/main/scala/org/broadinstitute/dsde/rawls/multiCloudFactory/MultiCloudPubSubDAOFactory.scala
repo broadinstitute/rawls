@@ -1,32 +1,52 @@
 package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
+import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
 
 object MultiCloudPubSubDAOFactory {
-  def createPubSubDAO(appConfigManager: MultiCloudAppConfigManager,
-                      metricsPrefix: String,
-                      serviceProject: String
-  )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
-        val gcsConfig = appConfigManager.gcsConfig
-        val clientEmail = gcsConfig.getString("serviceClientEmail")
-        val appName = gcsConfig.getString("appName")
-        val pathToPem = gcsConfig.getString("pathToPem")
-        new HttpGooglePubSubDAO(
-          clientEmail,
-          pathToPem,
-          appName,
-          serviceProject,
-          workbenchMetricBaseName = metricsPrefix
-        )
-      case Azure =>
+  def createPubSubDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): GooglePubSubDAO =
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
+        createPubSubDAOForProject(metricsPrefix, gcsConfig, gcsConfig.getString("serviceProject"))
+      case None =>
         newDisabledService[GooglePubSubDAO]
     }
+
+  def createAvroUpsertMonitorPubSubDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): GooglePubSubDAO =
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
+        createPubSubDAOForProject(metricsPrefix,
+                                  gcsConfig,
+                                  appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
+        )
+      case None =>
+        newDisabledService[GooglePubSubDAO]
+    }
+
+  private def createPubSubDAOForProject(metricsPrefix: String, gcsConfig: Config, project: String)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): GooglePubSubDAO = {
+    val clientEmail = gcsConfig.getString("serviceClientEmail")
+    val appName = gcsConfig.getString("appName")
+    val pathToPem = gcsConfig.getString("pathToPem")
+    new HttpGooglePubSubDAO(
+      clientEmail,
+      pathToPem,
+      appName,
+      project,
+      workbenchMetricBaseName = metricsPrefix
+    )
+  }
 }

@@ -7,7 +7,10 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Gcp, Workspac
 class MultiCloudAppConfigManager {
   val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
   val cloudProvider = getCloudProvider(conf)
-  val gcsConfig = conf.getConfig("gcs")
+  val gcsConfig = cloudProvider match {
+    case Gcp => Option(conf.getConfig("gcs"))
+    case _   => None
+  }
 
   private def getCloudProvider(config: Config): WorkspaceCloudPlatform =
     if (config.hasPath("cloudProvider")) {

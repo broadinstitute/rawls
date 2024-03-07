@@ -45,26 +45,6 @@ trait AdminApiService extends UserInfoDirectives {
           }
         }
       } ~
-        path("admin" / "project" / "registration") {
-          post {
-            entity(as[RawlsBillingProjectTransfer]) { xfer =>
-              complete {
-                userServiceConstructor(ctx).adminRegisterBillingProject(xfer).map(_ => StatusCodes.Created)
-              }
-            }
-          }
-        } ~
-        path("admin" / "project" / "registration" / Segment) { projectName =>
-          delete {
-            entity(as[Map[String, String]]) { ownerInfo =>
-              complete {
-                userServiceConstructor(ctx)
-                  .adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo)
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
-        } ~
         path("admin" / "submissions") {
           get {
             complete {

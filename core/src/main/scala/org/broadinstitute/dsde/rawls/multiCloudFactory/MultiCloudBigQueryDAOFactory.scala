@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.multiCloudFactory
 
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.multiCloudFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.GoogleCredentialMode
 import org.broadinstitute.dsde.workbench.google.{GoogleBigQueryDAO, HttpGoogleBigQueryDAO}
@@ -14,14 +13,14 @@ object MultiCloudBigQueryDAOFactory {
                                       googleCredentialMode: GoogleCredentialMode,
                                       metricsPrefix: String
   )(implicit system: ActorSystem, executionContext: ExecutionContext): GoogleBigQueryDAO =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
         new HttpGoogleBigQueryDAO(
-          appConfigManager.gcsConfig.getString("appName"),
+          gcsConfig.getString("appName"),
           googleCredentialMode,
           workbenchMetricBaseName = metricsPrefix
         )
-      case Azure =>
+      case None =>
         newDisabledService[GoogleBigQueryDAO]
     }
 }

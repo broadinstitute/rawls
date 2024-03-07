@@ -173,9 +173,7 @@ class FastPassMonitorSpec
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
-      "requesterPaysRole",
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
