@@ -103,7 +103,8 @@ case class AvroUpsertAttributes(workspace: WorkspaceName,
                                 userEmail: RawlsUserEmail,
                                 importId: UUID,
                                 upsertFile: String,
-                                isUpsert: Boolean
+                                isUpsert: Boolean,
+                                isCwds: Boolean
 )
 class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,

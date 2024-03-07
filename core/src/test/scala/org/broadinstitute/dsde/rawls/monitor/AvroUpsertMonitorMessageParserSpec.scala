@@ -32,6 +32,7 @@ class AvroUpsertMonitorMessageParserSpec
   /* parsing works when all keys are supplied */
   it should "parse a valid message from Import Service" in {
     val jobId = UUID.randomUUID()
+    // note the "isCWDS" key is missing
     val attributes = Map(
       "workspaceNamespace" -> "my workspaceNamespace",
       "workspaceName" -> "my workspaceName",
@@ -47,7 +48,8 @@ class AvroUpsertMonitorMessageParserSpec
       userEmail = RawlsUserEmail("my userEmail"),
       importId = jobId,
       upsertFile = "my upsertFile",
-      isUpsert = true
+      isUpsert = true,
+      isCwds = false
     )
 
     parser.parse.futureValue shouldBe expected
@@ -60,7 +62,8 @@ class AvroUpsertMonitorMessageParserSpec
       "userEmail" -> "my userEmail",
       "jobId" -> jobId.toString,
       "upsertFile" -> "my upsertFile",
-      "isUpsert" -> "true"
+      "isUpsert" -> "true",
+      "isCWDS" -> "true"
     )
     val parser = parserFor(attributes)
 
@@ -69,7 +72,8 @@ class AvroUpsertMonitorMessageParserSpec
       userEmail = RawlsUserEmail("my userEmail"),
       importId = jobId,
       upsertFile = "my upsertFile",
-      isUpsert = true
+      isUpsert = true,
+      isCwds = true
     )
 
     parser.parse.futureValue shouldBe expected
