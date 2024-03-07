@@ -21,7 +21,7 @@ object ImportServiceJsonSupport {
   implicit val importServiceResponseFormat: RootJsonFormat[ImportServiceResponse] = jsonFormat2(ImportServiceResponse)
 }
 
-class HttpImportServiceDAO(url: String)(implicit
+class HttpImportServiceDAO(importServiceUrl: String, cwdsUrl: String)(implicit
   val system: ActorSystem,
   val materializer: Materializer,
   val executionContext: ExecutionContext
@@ -39,7 +39,8 @@ class HttpImportServiceDAO(url: String)(implicit
     import ImportServiceJsonSupport._
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
-    val requestUrl = Uri(url).withPath(Path(s"/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"))
+    val requestUrl =
+      Uri(importServiceUrl).withPath(Path(s"/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"))
 
     val importStatusResponse: Future[Option[ImportServiceResponse]] = retry[Option[ImportServiceResponse]](when5xx) {
       () =>
@@ -54,6 +55,7 @@ class HttpImportServiceDAO(url: String)(implicit
     }
   }
 
+  override def getCwdsStatus(importId: UUID, workspaceId: UUID, userInfo: UserInfo): Future[Option[ImportStatus]] = ???
 }
 
 case class ImportServiceResponse(jobId: String, status: String)

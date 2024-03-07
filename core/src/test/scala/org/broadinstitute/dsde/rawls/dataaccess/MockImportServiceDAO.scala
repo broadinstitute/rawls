@@ -14,4 +14,5 @@ class MockImportServiceDAO extends ImportServiceDAO {
   def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]] =
     Future.successful(imports.get(importId))
 
+  override def getCwdsStatus(importId: UUID, workspaceId: UUID, userInfo: UserInfo): Future[Option[ImportStatus]] = ???
 }
