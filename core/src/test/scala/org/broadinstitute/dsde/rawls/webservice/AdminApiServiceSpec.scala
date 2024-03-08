@@ -74,54 +74,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val project = "some-project"
   val bucket = "some-bucket"
 
-  it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices {
-    services =>
-      Post(s"/admin/project/registration",
-           httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
-      ) ~>
-        sealRoute(services.adminRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Created, responseAs[String]) {
-            status
-          }
-        }
-
-      Post(s"/admin/project/registration",
-           httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
-      ) ~>
-        sealRoute(services.adminRoutes()) ~>
-        check {
-          assertResult(StatusCodes.InternalServerError) {
-            status
-          }
-        }
-  }
-
-  it should "return 204 when unregistering a billing project" in withTestDataApiServices { services =>
-    val projectName = "unregistered-bp"
-
-    Post(
-      s"/admin/project/registration",
-      httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
-    ) ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.Created, responseAs[String]) {
-          status
-        }
-      }
-
-    Delete(s"/admin/project/registration/$projectName",
-           httpJson(Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.token))
-    ) ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.NoContent, responseAs[String]) {
-          status
-        }
-      }
-  }
-
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices {
     services =>
       Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>

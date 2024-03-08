@@ -14,11 +14,11 @@ object MultiCloudServicePerimeterServiceFactory {
                                             slickDataSource: SlickDataSource,
                                             gcsDAO: GoogleServicesDAO
   )(implicit system: ActorSystem, executionContext: ExecutionContext): ServicePerimeter =
-    appConfigManager.cloudProvider match {
-      case Gcp =>
-        val servicePerimeterConfig = ServicePerimeterServiceConfig(appConfigManager.conf)
+    appConfigManager.gcsConfig match {
+      case Some(gcsConfig) =>
+        val servicePerimeterConfig = ServicePerimeterServiceConfig(gcsConfig)
         new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
-      case Azure =>
+      case None =>
         newDisabledService[ServicePerimeter]
     }
 }

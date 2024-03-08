@@ -214,7 +214,7 @@ trait ApiServiceSpec
 
     val drsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
 
-    val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
+    val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]

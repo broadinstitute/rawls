@@ -337,7 +337,7 @@ object Boot extends IOApp with LazyLogging {
 
       val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
 
-      val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager.conf)
+      val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager)
 
       val bondApiDAO: BondApiDAO = MultiCloudBondApiDAOFactory.createMultiCloudBondApiDAO(appConfigManager)
 
@@ -625,29 +625,11 @@ object Boot extends IOApp with LazyLogging {
     executionContext: ExecutionContext,
     system: ActorSystem
   ): cats.effect.Resource[F, AppDependencies[F]] = {
-    val gcsConfig = config.getConfig("gcs")
-    val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val oidcConfig = config.getConfig("oidc")
 
-    // todo: load these credentials once [CA-1806]
-    val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
-    val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
-    val jsonCreds =
-      try jsonFileSource.mkString
-      finally jsonFileSource.close()
-
-    // val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
-    // val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
-
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
-    // This is for sending custom metrics to stackdriver. all custom metrics starts with `OpenCensus/rawls/`.
-    // Typing in `rawls` in metrics explorer will show all rawls custom metrics.
-    // As best practice, we should have all related metrics under same prefix separated by `/`
-    val prometheusConfig = PrometheusConfig.apply(config)
-
     for {
       googleStorage <- MultiCloudGoogleStorageServiceFactory.createMultiCloudGoogleServiceHttp(appConfigManager)
-      // GoogleStorageService.resource[F](pathToCredentialJson, None, Option(serviceProject))
       googleStorageTransferService <- MultiCloudStorageTransferService.createMultiCloudStorageTransferService(
         appConfigManager
       )

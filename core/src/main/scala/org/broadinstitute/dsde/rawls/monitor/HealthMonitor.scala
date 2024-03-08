@@ -151,7 +151,7 @@ class HealthMonitor private (subsystemChecks: List[(Subsystem, ExecutionContext 
     */
   private var data: Map[Subsystem, (SubsystemStatus, Long)] = {
     val now = System.currentTimeMillis
-    AllSubsystems.map(_ -> (UnknownStatus, now)).toMap
+    subsystemChecks.map { case (subsystem, _) => subsystem -> (UnknownStatus, now) }.toMap
   }
 
   override def receive: Receive = {
