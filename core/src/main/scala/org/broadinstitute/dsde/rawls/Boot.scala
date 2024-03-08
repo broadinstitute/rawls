@@ -219,7 +219,8 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix
       )
 
-      val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
+      val importServiceDAO =
+        new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"), conf.getString("avroUpsertMonitor.cwds"))
 
       val pathToBqJson = gcsConfig.getString("pathToBigQueryJson")
       val bqJsonFileSource = scala.io.Source.fromFile(pathToBqJson)

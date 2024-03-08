@@ -9,4 +9,6 @@ import scala.concurrent.Future
 abstract class ImportServiceDAO {
 
   def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]]
+
+  def getCwdsStatus(importId: UUID, workspaceId: UUID, userInfo: UserInfo): Future[Option[ImportStatus]]
 }

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
+import org.broadinstitute.dsde.rawls.model.ImportStatuses
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeFormat,
@@ -91,6 +93,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   }
 
   val workspaceName = testData.workspace.toWorkspaceName
+  val workspaceId = testData.workspace.workspaceIdAsUUID
   val importStatusFailingWorkspace = testData.workspaceNoSubmissions.toWorkspaceName
   val googleStorage = FakeGoogleStorageInterpreter
   val importReadPubSubTopic = "request-topic"
@@ -102,9 +105,17 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   val entityType = "test-type"
   val failImportStatusUUID = UUID.randomUUID()
 
-  def testAttributes(importId: UUID) = Map(
+  def testImportServiceAttributes(importId: UUID): Map[String, String] = Map(
     "workspaceName" -> workspaceName.name,
     "workspaceNamespace" -> workspaceName.namespace,
+    "userEmail" -> userInfo.userEmail.toString,
+    "upsertFile" -> s"$bucketName/${importId.toString}",
+    "jobId" -> importId.toString
+  )
+
+  def testAttributes(importId: UUID): Map[String, String] = Map(
+    "isCWDS" -> "true",
+    "workspaceId" -> workspaceId.toString,
     "userEmail" -> userInfo.userEmail.toString,
     "upsertFile" -> s"$bucketName/${importId.toString}",
     "jobId" -> importId.toString
@@ -264,56 +275,65 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     makeOpsJsonString(opsList)
   }
 
-  List(1, 2, 20, 250, 2345, 12345) foreach { upsertQuantity =>
-    it should s"upsert $upsertQuantity entities" in withTestDataApiServices { services =>
-      val timeout = 120000 milliseconds
-      val interval = 500 milliseconds
-      val importId1 = UUID.randomUUID()
+  List("Import Service", "cWDS") foreach { origin =>
+    List(1, 2, 20, 250, 2345, 12345) foreach { upsertQuantity =>
+      it should s"upsert $upsertQuantity entities when origin is $origin" in withTestDataApiServices { services =>
+        val timeout = 120000 milliseconds
+        val interval = 500 milliseconds
+        val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
-
-      // create upsert json file
-      val contents = makeOpsJsonString(upsertQuantity)
-
-      // Store upsert json file
-      Await.result(
-        googleStorage
-          .createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes())
-          .compile
-          .drain
-          .unsafeToFuture(),
-        Duration.apply(10, TimeUnit.SECONDS)
-      )
-
-      Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(),
-                   Duration.apply(10, TimeUnit.SECONDS)
-      )
-
-      // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
-      )
-
-      // check if correct message was posted on request topic
-      eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
-      }
-      // Check in db if entities are there
-      withWorkspaceContext(testData.workspace) { context =>
-        eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
-          assertResult(upsertQuantity)(entitiesOfType.size)
-          upsertRange(upsertQuantity) foreach { idx =>
-            val name = s"avro-entity-$idx"
-            val entity =
-              Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
-            val actual = entitiesOfType.find(_.name == name)
-            assertResult(Some(entity))(actual)
-          }
+        // generate the inbound pubsub message, which depends on origin
+        val originMessageAttributes = if (origin.equals("Import Service")) {
+          testImportServiceAttributes(importId1)
+        } else {
+          testAttributes(importId1)
         }
 
+        // add the imports and their statuses to the mock importserviceDAO
+        val mockImportServiceDAO = setUp(services)
+        mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+        // create upsert json file
+        val contents = makeOpsJsonString(upsertQuantity)
+
+        // Store upsert json file
+        Await.result(
+          googleStorage
+            .createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes())
+            .compile
+            .drain
+            .unsafeToFuture(),
+          Duration.apply(10, TimeUnit.SECONDS)
+        )
+
+        Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(),
+                     Duration.apply(10, TimeUnit.SECONDS)
+        )
+
+        // Publish message on the request topic
+        services.gpsDAO.publishMessages(importReadPubSubTopic,
+                                        List(MessageRequest(importId1.toString, originMessageAttributes))
+        )
+
+        // check if correct message was posted on request topic
+        eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+          assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
+        }
+        // Check in db if entities are there
+        withWorkspaceContext(testData.workspace) { context =>
+          eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+            val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
+            assertResult(upsertQuantity)(entitiesOfType.size)
+            upsertRange(upsertQuantity) foreach { idx =>
+              val name = s"avro-entity-$idx"
+              val entity =
+                Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
+              val actual = entitiesOfType.find(_.name == name)
+              assertResult(Some(entity))(actual)
+            }
+          }
+
+        }
       }
     }
   }
@@ -717,7 +737,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
 
     // Publish message on the request topic with a nonexistent workspace
-    val messageAttributes = testAttributes(importId1) ++ Map("workspaceName" -> "does_not_exist")
+    val messageAttributes = testAttributes(importId1) ++ Map("workspaceId" -> UUID.randomUUID().toString)
     services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, messageAttributes)))
 
     // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -897,7 +917,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic with a nonexistent workspace
-      val messageAttributes = testAttributes(importId1) ++ Map("workspaceName" -> "does_not_exist")
+      val messageAttributes = testAttributes(importId1) ++ Map("workspaceId" -> UUID.randomUUID().toString)
       services.gpsDAO.publishMessages(importReadPubSubTopic,
                                       List(MessageRequest(importId1.toString, messageAttributes))
       )
@@ -1096,6 +1116,31 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
           any[Option[DataReferenceName]],
           any[Option[GoogleProjectId]]
         )
+      }
+    }
+  }
+
+  behavior of "ImportStatuses.fromCwdsStatus"
+
+  private val testCases = Map(
+    "running" -> ImportStatuses.ReadyForUpsert,
+    "RUNNING" -> ImportStatuses.ReadyForUpsert,
+    "succeeded" -> ImportStatuses.Done,
+    "SUCCEEDED" -> ImportStatuses.Done,
+    "error" -> ImportStatuses.Error,
+    "ERROR" -> ImportStatuses.Error
+  )
+  testCases foreach { case (input, expected) =>
+    it should s"translate $input to $expected" in {
+      ImportStatuses.fromCwdsStatus(input) shouldBe expected
+    }
+  }
+
+  private val errorCases = List("CREATED", "QUEUED", "CANCELLED", "UNKNOWN", "something-else")
+  errorCases foreach { input =>
+    it should s"throw error trying to translate $input" in {
+      intercept[RawlsException] {
+        ImportStatuses.fromCwdsStatus(input)
       }
     }
   }
