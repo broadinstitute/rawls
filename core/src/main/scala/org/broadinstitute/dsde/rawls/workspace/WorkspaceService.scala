@@ -56,7 +56,7 @@ import spray.json._
 
 import java.io.IOException
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
