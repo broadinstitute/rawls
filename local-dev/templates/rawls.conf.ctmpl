@@ -165,6 +165,7 @@ avroUpsertMonitor {
   pubSubProject = "broad-dsde-dev"
 
   server = "https://terra-importservice-dev.appspot.com"
+  cwds = "https://cwds.dsde-dev.broadinstitute.org"
   bucketName = "import-service-batchupsert-dev"
 
   importRequestPubSubTopic = "rawls-async-import-topic-local"

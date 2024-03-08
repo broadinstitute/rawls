@@ -1,19 +1,13 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
 
-class AvroUpsertMonitorMessageParserSpec
-    extends TestDriverComponent
-    with AnyFlatSpecLike
-    with Matchers
-    with ScalaFutures {
+class AvroUpsertMonitorMessageParserSpec extends AnyFlatSpecLike with Matchers {
 
   behavior of "AvroUpsertMonitorMessageParser"
 
@@ -25,7 +19,7 @@ class AvroUpsertMonitorMessageParserSpec
     val parser = parserFor(attributes)
 
     assertThrows[Exception] {
-      parser.parse.futureValue
+      parser.parse
     }
   }
 
@@ -43,7 +37,7 @@ class AvroUpsertMonitorMessageParserSpec
     )
     val parser = parserFor(attributes)
 
-    val expected = AvroUpsertAttributes(
+    val expected = ImportServiceUpsertAttributes(
       workspace = WorkspaceName("my workspaceNamespace", "my workspaceName"),
       userEmail = RawlsUserEmail("my userEmail"),
       importId = jobId,
@@ -52,13 +46,14 @@ class AvroUpsertMonitorMessageParserSpec
       isCwds = false
     )
 
-    parser.parse.futureValue shouldBe expected
+    parser.parse shouldBe expected
   }
 
-  it should "parse a valid message from cWDS and retrieve the workspace namespace/name" in withConstantTestDatabase {
+  it should "parse a valid message from cWDS and retrieve the workspace namespace/name" in {
     val jobId = UUID.randomUUID()
+    val workspaceId = UUID.randomUUID()
     val attributes = Map(
-      "workspaceId" -> constantData.workspace.workspaceId,
+      "workspaceId" -> workspaceId.toString,
       "userEmail" -> "my userEmail",
       "jobId" -> jobId.toString,
       "upsertFile" -> "my upsertFile",
@@ -67,8 +62,8 @@ class AvroUpsertMonitorMessageParserSpec
     )
     val parser = parserFor(attributes)
 
-    val expected = AvroUpsertAttributes(
-      workspace = constantData.workspace.toWorkspaceName,
+    val expected = CwdsUpsertAttributes(
+      workspaceId = workspaceId,
       userEmail = RawlsUserEmail("my userEmail"),
       importId = jobId,
       upsertFile = "my upsertFile",
@@ -76,7 +71,7 @@ class AvroUpsertMonitorMessageParserSpec
       isCwds = true
     )
 
-    parser.parse.futureValue shouldBe expected
+    parser.parse shouldBe expected
   }
 
   /* helper to create a AvroUpsertMonitorMessageParser for a PubSubMessage with the given attributes */
@@ -85,7 +80,7 @@ class AvroUpsertMonitorMessageParserSpec
     val contents = "message content"
     val input = PubSubMessage(ackId, contents, attributes)
 
-    new AvroUpsertMonitorMessageParser(input, slickDataSource)
+    new AvroUpsertMonitorMessageParser(input)
   }
 
 }
