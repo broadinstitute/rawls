@@ -1,58 +1,53 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorMessageParser._
 
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
 
-class AvroUpsertMonitorMessageParser(message: PubSubMessage, dataSource: SlickDataSource)(implicit
-  executionContext: ExecutionContext
-) {
+object AvroUpsertMonitorMessageParser {
+  val workspaceNamespace = "workspaceNamespace"
+  val workspaceName = "workspaceName"
+  val userEmail = "userEmail"
+  val jobId = "jobId"
+  val upsertFile = "upsertFile"
+  val isUpsert = "isUpsert"
+  val isCWDS = "isCWDS"
+  val workspaceId = "workspaceId"
+}
 
-  def parse: Future[AvroUpsertAttributes] = {
-    val workspaceNamespace = "workspaceNamespace"
-    val workspaceName = "workspaceName"
-    val userEmail = "userEmail"
-    val jobId = "jobId"
-    val upsertFile = "upsertFile"
-    val isUpsert = "isUpsert"
+class AvroUpsertMonitorMessageParser(message: PubSubMessage) {
 
-    val workspaceId = "workspaceId"
+  def parse: AvroUpsertAttributes = {
 
     def attributeNotFoundException(attribute: String): Nothing = throw new Exception(
       s"unable to parse message - attribute $attribute not found in ${message.attributes}"
     )
 
-    // does this message contain a workspaceId? This indicates a message from cWDS instead of a message
-    // from Import Service.
-    val isWdsMessage = message.attributes.contains(workspaceId)
+    // is this message from cWDS or Import Service?
+    val isWdsMessage = java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isCWDS, "false"))
 
-    val workspaceNameFuture: Future[WorkspaceName] = if (isWdsMessage) {
-      // translate the workspaceId into a namespace/name
-      val id = message.attributes.getOrElse(workspaceId, attributeNotFoundException(workspaceId))
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.findByIdOrFail(id) map { workspace =>
-          WorkspaceName(workspace.namespace, workspace.name)
-        }
-      }
-    } else {
-      Future.successful(
-        WorkspaceName(
-          message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
-          message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))
-        )
-      )
-    }
-
-    workspaceNameFuture map { workspaceName =>
-      AvroUpsertAttributes(
-        workspaceName,
+    if (isWdsMessage) {
+      CwdsUpsertAttributes(
+        UUID.fromString(message.attributes.getOrElse(workspaceId, attributeNotFoundException(workspaceId))),
         RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
         UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
         message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
-        java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true"))
+        java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true")),
+        isCwds = true
+      )
+    } else {
+      ImportServiceUpsertAttributes(
+        WorkspaceName(
+          message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
+          message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))
+        ),
+        RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
+        UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
+        message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
+        java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true")),
+        isCwds = false
       )
     }
   }
