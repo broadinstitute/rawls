@@ -229,7 +229,7 @@ object Boot extends IOApp with LazyLogging {
           slickDataSource
         )
       val requesterPaysRole =
-        appConfigManager.gcsConfig.map(_.getString("requesterPaysRolrequesterPaysRole")).getOrElse("")
+        appConfigManager.gcsConfig.map(_.getString("requesterPaysRole")).getOrElse("")
 
       val notificationPubSubDAO =
         NotificationPubSubDAOFactory.createNotificationPubSubDAO(appConfigManager, metricsPrefix)
