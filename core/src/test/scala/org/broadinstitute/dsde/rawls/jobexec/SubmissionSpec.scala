@@ -450,7 +450,7 @@ class SubmissionSpec(_system: ActorSystem)
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
-      val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf)
+      val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
 
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(

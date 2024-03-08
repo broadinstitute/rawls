@@ -47,7 +47,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
-import org.broadinstitute.dsde.rawls.multiCloudFactory._
+import org.broadinstitute.dsde.rawls.serviceFactory._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -146,37 +146,37 @@ object Boot extends IOApp with LazyLogging {
     val jsonFactory = GsonFactory.getDefaultInstance
 
     val accessContextManagerDAO =
-      MultiCloudAccessContextManagerFactory.createAccessContextManager(metricsPrefix, appConfigManager)
+      AccessContextManagerFactory.createAccessContextManager(metricsPrefix, appConfigManager)
 
     initAppDependencies[IO](appConfigManager, appConfigManager.conf, metricsPrefix).use { appDependencies =>
-      val gcsDAO = MultiCloudServicesDAOFactory.createHttpMultiCloudServicesDAO(
+      val gcsDAO = GoogleServicesDAOFactory.createGoogleServicesDAO(
         appConfigManager,
         appDependencies,
         metricsPrefix,
         accessContextManagerDAO
       )
 
-      val pubSubDAO = MultiCloudPubSubDAOFactory.createPubSubDAO(
+      val pubSubDAO = PubSubDAOFactory.createPubSubDAO(
         appConfigManager,
         metricsPrefix
       )
 
       // Import service uses a different project for its pubsub topic
-      val importServicePubSubDAO = MultiCloudPubSubDAOFactory.createAvroUpsertMonitorPubSubDAO(
+      val importServicePubSubDAO = PubSubDAOFactory.createAvroUpsertMonitorPubSubDAO(
         appConfigManager,
         metricsPrefix
       )
 
-      val importServiceDAO = MultiCloudImportServiceDAOFactory.createMultiCloudImportServiceDAO(appConfigManager)
+      val importServiceDAO = ImportServiceDAOFactory.createImportServiceDAO(appConfigManager)
 
-      val bqJsonCreds = MultiCloudBigQueryCredentialsManager.getBigQueryCredentials(appConfigManager)
+      val bqJsonCreds = BigQueryCredentialsManager.getBigQueryCredentials(appConfigManager)
 
       val bigQueryDAO =
-        MultiCloudBigQueryDAOFactory.createHttpMultiCloudBigQueryDAO(appConfigManager, Json(bqJsonCreds), metricsPrefix)
+        BigQueryDAOFactory.createBigQueryDAO(appConfigManager, Json(bqJsonCreds), metricsPrefix)
 
       val samDAO = SamDAOFactory.createSamDAO(appConfigManager, gcsDAO)
 
-      MultiCloudEnableServiceAccountFactory.createEnableServiceAccount(appConfigManager, gcsDAO, samDAO)
+      EnableServiceAccountFactory.createEnableServiceAccount(appConfigManager, gcsDAO, samDAO)
 
       system.registerOnTermination {
         slickDataSource.databaseConfig.db.shutdown
@@ -232,21 +232,15 @@ object Boot extends IOApp with LazyLogging {
         appConfigManager.gcsConfig.map(_.getString("requesterPaysRolrequesterPaysRole")).getOrElse("")
 
       val notificationPubSubDAO =
-        MultiCloudNotificationPubSubDAOFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
-                                                                                     workbenchMetricBaseName =
-                                                                                       metricsPrefix
-        )
+        NotificationPubSubDAOFactory.createNotificationPubSubDAO(appConfigManager, metricsPrefix)
 
       val notificationDAO =
-        MultiCloudNotificationDAOFactory.createMultiCloudNotificationDAO(appConfigManager, notificationPubSubDAO)
+        NotificationDAOFactory.createNotificationDAO(appConfigManager, notificationPubSubDAO)
 
-      val drsResolver = MultiCloudDrsResolverFactory.createMultiCloudDrsResolver(appConfigManager)
+      val drsResolver = DrsResolverFactory.createDrsResolver(appConfigManager)
 
       val servicePerimeterService =
-        MultiCloudServicePerimeterServiceFactory.createMultiCloudNotificationPubSubDAO(appConfigManager,
-                                                                                       slickDataSource,
-                                                                                       gcsDAO
-        )
+        ServicePerimeterServiceFactory.createServicePerimeter(appConfigManager, slickDataSource, gcsDAO)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(appConfigManager.conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
@@ -257,13 +251,13 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest =
-        MultiCloudGenomicsServiceFactory.createMultiCloudGenomicsService(appConfigManager, slickDataSource, gcsDAO)
+        GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
 
       val submissionCostService =
-        MultiCloudSubmissionCostServiceFactory.createMultiCloudSubmissionCostService(appConfigManager, bigQueryDAO)
+        SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, bigQueryDAO)
 
       val methodRepoDAO =
-        MultiCloudMethodRepoDAOFactory.createMultiCloudMethodRepoDAO(appConfigManager, metricsPrefix)
+        MethodRepoDAOFactory.createMethodRepoDAO(appConfigManager, metricsPrefix)
 
       val workspaceManagerDAO =
         new HttpWorkspaceManagerDAO(
@@ -340,14 +334,14 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager)
 
-      val bondApiDAO: BondApiDAO = MultiCloudBondApiDAOFactory.createMultiCloudBondApiDAO(appConfigManager)
+      val bondApiDAO: BondApiDAO = BondApiDAOFactory.createBondApiDAO(appConfigManager)
 
       val requesterPaysSetupService: RequesterPaysSetup =
-        MultiCloudRequesterPaysSetupServiceFactory.createAccessContextManager(appConfigManager,
-                                                                              slickDataSource,
-                                                                              gcsDAO,
-                                                                              bondApiDAO,
-                                                                              requesterPaysRole
+        RequesterPaysSetupServiceFactory.createRequesterPaysSetup(appConfigManager,
+                                                                  slickDataSource,
+                                                                  gcsDAO,
+                                                                  bondApiDAO,
+                                                                  requesterPaysRole
         )
 
       val entityQueryTimeout = appConfigManager.conf.getDuration("entities.queryTimeout")
@@ -366,12 +360,12 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val resourceBufferDAO: ResourceBufferDAO =
-        MultiCloudResourceBufferDAOFactory.createResourceBuffer(appConfigManager, gcsDAO)
+        ResourceBufferDAOFactory.createResourceBuffer(appConfigManager, gcsDAO)
 
       val resourceBufferService =
-        MultiCloudResourceBufferServiceFactory.createResourceBufferService(appConfigManager, resourceBufferDAO)
+        ResourceBufferServiceFactory.createResourceBufferService(appConfigManager, resourceBufferDAO)
       val resourceBufferSaEmail =
-        MultiCloudResourceBufferEmailManager.getMultiCloudResourceBufferEmail(appConfigManager)
+        ResourceBufferEmailManager.getResourceBufferEmail(appConfigManager)
 
       val leonardoConfig = LeonardoConfig(appConfigManager.conf.getConfig("leonardo"))
       val leonardoDAO: LeonardoDAO =
@@ -389,7 +383,7 @@ object Boot extends IOApp with LazyLogging {
         )
 
       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass =
-        MultiCloudFastPassServiceConstructorFactory.createCloudFastPassService(
+        FastPassServiceConstructorFactory.createCloudFastPassService(
           appConfigManager,
           appDependencies,
           gcsDAO,
@@ -494,11 +488,7 @@ object Boot extends IOApp with LazyLogging {
         )
 
       val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration =
-        MultiCloudBucketMigrationServiceFactory.createMultiCloudBucketMigrationService(appConfigManager,
-                                                                                       slickDataSource,
-                                                                                       samDAO,
-                                                                                       gcsDAO
-        )
+        BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
@@ -631,24 +621,23 @@ object Boot extends IOApp with LazyLogging {
 
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
     for {
-      googleStorage <- MultiCloudGoogleStorageServiceFactory.createMultiCloudGoogleServiceHttp(appConfigManager)
-      googleStorageTransferService <- MultiCloudStorageTransferService.createMultiCloudStorageTransferService(
+      googleStorage <- GoogleStorageServiceFactory.createGoogleStorageService(appConfigManager)
+      googleStorageTransferService <- StorageTransferService.createStorageTransferService(
         appConfigManager
       )
-      googleServiceHttp <- MultiCloudGoogleServiceHttpFactory.createMultiCloudGoogleServiceHttp(appConfigManager,
-                                                                                                executionContext
-      )
-      topicAdmin <- MultiCloudGoogleTopicAdminFactory.createMultiCloudGoogleTopicAdmin(appConfigManager)
-      bqServiceFactory = MultiCloudGoogleBigQueryServiceFactory.createMultiGoogleBigQueryServiceFactory(
+      googleServiceHttp <- GoogleServiceHttpFactory.createGoogleServiceHttp(appConfigManager, executionContext)
+      topicAdmin <- GoogleTopicAdminFactory.createGoogleTopicAdmin(appConfigManager)
+      bqServiceFactory = GoogleBigQueryServiceFactory.createGoogleBigQueryServiceFactory(
         appConfigManager
       )(executionContext)
-      httpGoogleIamDAO = MultiCloudGoogleIamDAOFactory.createMultiCloudGoogleIamDAO(appConfigManager, metricsPrefix)(
+      httpGoogleIamDAO = GoogleIamDAOFactory.createGoogleIamDAO(appConfigManager, metricsPrefix)(
         executionContext,
         system
       )
-      httpGoogleStorageDAO = MultiCloudHttpGoogleStorageDAOFactory.createHttpGoogleStorageDAO(appConfigManager,
-                                                                                              metricsPrefix
-      )(executionContext, system)
+      httpGoogleStorageDAO = HttpGoogleStorageDAOFactory.createHttpGoogleStorageDAO(appConfigManager, metricsPrefix)(
+        executionContext,
+        system
+      )
 
       openIdConnect <- cats.effect.Resource.eval(
         OpenIDConnectConfiguration[F](
