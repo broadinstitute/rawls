@@ -1,5 +1,5 @@
-import sbt.Keys._
-import sbt._
+import sbt.*
+import sbt.Keys.*
 
 object Testing {
   lazy val validMySqlHost = taskKey[Unit]("Determine if mysql.host is provided.")
@@ -34,7 +34,7 @@ object Testing {
     validMySqlHostSetting,
     (Test / test) := ((Test / test) dependsOn validMySqlHost).value,
     (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated
-  ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
+  )
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project

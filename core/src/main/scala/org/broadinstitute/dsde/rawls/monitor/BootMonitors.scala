@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -32,10 +33,7 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
-  LeonardoResourceDeletionAction,
-  WsmDeletionAction
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
@@ -445,13 +443,13 @@ object BootMonitors extends LazyLogging {
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
-    val leoDeletionAction = new LeonardoResourceDeletionAction(leonardoDAO)(system)
+    val leoService = new LeonardoService(leonardoDAO)(system)
     val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
     val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
     val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
                                                               workspaceManagerDAO,
                                                               workspaceRepository,
-                                                              leoDeletionAction,
+                                                              leoService,
                                                               wsmDeletionAction,
                                                               gcsDAO,
                                                               monitorRecordDao

@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -37,7 +38,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeter, ServicePerimeterService}
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -54,7 +56,7 @@ import spray.json._
 
 import java.io.IOException
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -71,6 +73,7 @@ object WorkspaceService {
                   executionServiceCluster: ExecutionServiceCluster,
                   execServiceBatchSize: Int,
                   workspaceManagerDAO: WorkspaceManagerDAO,
+                  leonardoService: LeonardoService,
                   methodConfigResolver: MethodConfigResolver,
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
@@ -108,6 +111,7 @@ object WorkspaceService {
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
+      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,
@@ -183,6 +187,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        executionServiceCluster: ExecutionServiceCluster,
                        execServiceBatchSize: Int,
                        val workspaceManagerDAO: WorkspaceManagerDAO,
+                       val leonardoService: LeonardoService,
                        val methodConfigResolver: MethodConfigResolver,
                        protected val gcsDAO: GoogleServicesDAO,
                        val samDAO: SamDAO,
@@ -653,12 +658,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
-  ): Future[WorkspaceDeletionResult] =
-    for {
-      _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
-        assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
+  ): Future[WorkspaceDeletionResult] = {
+    if (isAzureMcWorkspace(maybeMcWorkspace)) {
+      return Future.failed(
+        new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "MC workspaces not supported"))
       )
+    }
 
+    for {
       _ <- traceFutureWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
         requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
@@ -699,20 +706,23 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
       )
 
+      // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
+      _ <- traceFutureWithParent("notifyLeonardo", parentContext)(_ =>
+        leonardoService.cleanupResources(workspaceContext.googleProjectId, workspaceContext.workspaceIdAsUUID, ctx)
+      )
+
       // Delete Google Project
       _ <- traceFutureWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
-        if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-          maybeDeleteGoogleProject(workspaceContext.googleProjectId,
-                                   workspaceContext.workspaceVersion,
-                                   ctx.userInfo
-          ) recoverWith { case t: Throwable =>
-            logger.error(
-              s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
-              t
-            )
-            Future.failed(t)
-          }
-        } else Future.successful()
+        maybeDeleteGoogleProject(workspaceContext.googleProjectId,
+                                 workspaceContext.workspaceVersion,
+                                 ctx.userInfo
+        ) recoverWith { case t: Throwable =>
+          logger.error(
+            s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
+            t
+          )
+          Future.failed(t)
+        }
       )
 
       _ <- traceFutureWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
@@ -775,11 +785,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           logger.info(s"failure aborting workflows while deleting workspace ${workspaceContext.toWorkspaceName}", t)
         case _ => /* ok */
       }
-
-      if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-        WorkspaceDeletionResult.fromGcpBucketName(workspaceContext.bucketName)
-      } else WorkspaceDeletionResult(None, None)
+      WorkspaceDeletionResult.fromGcpBucketName(workspaceContext.bucketName)
     }
+  }
 
   private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
     Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
@@ -3380,16 +3388,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           identity
         )
       )
-      // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
-      // Option, so we are being thorough
+
       billingAccount <- billingProject.billingAccount match {
-        case Some(ba) if !billingProject.invalidBillingAccount => DBIO.successful(ba)
+        case Some(ba) => DBIO.successful(ba)
         case _ =>
           DBIO.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          s"Billing Account is missing or invalid for Billing Project: ${billingProject}"
-              )
+              ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing: ${billingProject}")
             )
           )
       }

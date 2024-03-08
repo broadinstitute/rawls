@@ -7,6 +7,7 @@ import bio.terra.workspace.model.{AzureContext, GcpContext, IamRole, RoleBinding
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
@@ -73,6 +74,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
     execServiceBatchSize: Int = 1,
     workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+    leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
     methodConfigResolver: MethodConfigResolver = mock[MethodConfigResolver](RETURNS_SMART_NULLS),
     gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
     samDAO: SamDAO = mock[SamDAO],
@@ -108,6 +110,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
+      leonardoService,
       methodConfigResolver,
       gcsDAO,
       samDAO,

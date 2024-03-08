@@ -99,6 +99,12 @@ case class UpdateImportStatus(importId: String,
 
 case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
+case class AvroUpsertAttributes(workspace: WorkspaceName,
+                                userEmail: RawlsUserEmail,
+                                importId: UUID,
+                                upsertFile: String,
+                                isUpsert: Boolean
+)
 class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
@@ -284,90 +290,89 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       self ! None
   }
 
-  private def importEntities(message: PubSubMessage) = {
-    val attributes = parseMessage(message)
-
-    val importFuture = for {
-      workspace <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.findByName(attributes.workspace).map {
-          case Some(workspace) => workspace
-          case None =>
-            throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
+  private def importEntities(message: PubSubMessage) =
+    new AvroUpsertMonitorMessageParser(message, dataSource).parse flatMap { attributes =>
+      val importFuture = for {
+        workspace <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.findByName(attributes.workspace).map {
+            case Some(workspace) => workspace
+            case None =>
+              throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
+          }
         }
-      }
-      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
-      importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
-      _ <- importStatus match {
-        // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
-        // end up with a race condition where multiple threads are attempting the same import / updating the status
-        // of the same import.
-        case Some(status) if status == ImportStatuses.ReadyForUpsert =>
-          publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(
-            initUpsert(attributes.upsertFile,
-                       attributes.importId,
-                       message.ackId,
-                       workspace,
-                       attributes.userEmail,
-                       attributes.isUpsert
-            )
-          ) map {
-            case Success(importUpsertResults) =>
-              val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
-              val baseMsg =
-                s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
-              if (importUpsertResults.failures.isEmpty)
-                publishMessageToUpdateImportStatus(attributes.importId,
-                                                   Option(status),
-                                                   ImportStatuses.Done,
-                                                   Option(baseMsg)
-                )
-              else {
-                val msg = baseMsg + s" First 100 failures are: $failureMessages"
+        petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
+        importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
+        _ <- importStatus match {
+          // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
+          // end up with a race condition where multiple threads are attempting the same import / updating the status
+          // of the same import.
+          case Some(status) if status == ImportStatuses.ReadyForUpsert =>
+            publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
+            toFutureTry(
+              initUpsert(attributes.upsertFile,
+                         attributes.importId,
+                         message.ackId,
+                         workspace,
+                         attributes.userEmail,
+                         attributes.isUpsert
+              )
+            ) map {
+              case Success(importUpsertResults) =>
+                val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
+                val baseMsg =
+                  s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+                if (importUpsertResults.failures.isEmpty)
+                  publishMessageToUpdateImportStatus(attributes.importId,
+                                                     Option(status),
+                                                     ImportStatuses.Done,
+                                                     Option(baseMsg)
+                  )
+                else {
+                  val msg = baseMsg + s" First 100 failures are: $failureMessages"
+                  publishMessageToUpdateImportStatus(attributes.importId,
+                                                     Option(status),
+                                                     ImportStatuses.Error,
+                                                     Option(msg)
+                  )
+                }
+              case Failure(t) =>
+                val errMsg = t match {
+                  case errRpt: RawlsExceptionWithErrorReport => errRpt.errorReport.message
+                  case x                                     => x.getMessage
+                }
                 publishMessageToUpdateImportStatus(attributes.importId,
                                                    Option(status),
                                                    ImportStatuses.Error,
-                                                   Option(msg)
+                                                   Option(errMsg)
                 )
-              }
-            case Failure(t) =>
-              val errMsg = t match {
-                case errRpt: RawlsExceptionWithErrorReport => errRpt.errorReport.message
-                case x                                     => x.getMessage
-              }
-              publishMessageToUpdateImportStatus(attributes.importId,
-                                                 Option(status),
-                                                 ImportStatuses.Error,
-                                                 Option(errMsg)
-              )
-          }
-        case Some(status) =>
-          logger.warn(
-            s"Received a double message delivery for import ID [${attributes.importId}] which is already in status [$status].  Acking message."
-          )
-          acknowledgeMessage(message.ackId)
-        case None =>
-          publishMessageToUpdateImportStatus(attributes.importId,
-                                             None,
-                                             ImportStatuses.Error,
-                                             Option("Import status not found")
-          )
-      }
-    } yield ()
+            }
+          case Some(status) =>
+            logger.warn(
+              s"Received a double message delivery for import ID [${attributes.importId}] which is already in status [$status].  Acking message."
+            )
+            acknowledgeMessage(message.ackId)
+          case None =>
+            publishMessageToUpdateImportStatus(attributes.importId,
+                                               None,
+                                               ImportStatuses.Error,
+                                               Option("Import status not found")
+            )
+        }
+      } yield ()
 
-    // Make sure message is acknowledged in the case of any failure while trying to construct importFuture
-    importFuture.map(_ => ImportComplete) recover { case t =>
-      logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
-      publishMessageToUpdateImportStatus(
-        attributes.importId,
-        None,
-        ImportStatuses.Error,
-        Option(s"Failed to import data. The underlying error message is: ${t.getMessage}")
-      )
-      acknowledgeMessage(message.ackId)
-    } pipeTo self
+      // Make sure message is acknowledged in the case of any failure while trying to construct importFuture
+      importFuture.map(_ => ImportComplete) recover { case t =>
+        logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
+        publishMessageToUpdateImportStatus(
+          attributes.importId,
+          None,
+          ImportStatuses.Error,
+          Option(s"Failed to import data. The underlying error message is: ${t.getMessage}")
+        )
+        acknowledgeMessage(message.ackId)
+      } pipeTo self
 
-  }
+    }
 
   private def publishMessageToUpdateImportStatus(importId: UUID,
                                                  currentImportStatus: Option[ImportStatus],
@@ -548,37 +553,6 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, scala.collection.immutable.Seq(ackId))
-  }
-
-  case class AvroUpsertAttributes(workspace: WorkspaceName,
-                                  userEmail: RawlsUserEmail,
-                                  importId: UUID,
-                                  upsertFile: String,
-                                  isUpsert: Boolean
-  )
-
-  private def parseMessage(message: PubSubMessage) = {
-    val workspaceNamespace = "workspaceNamespace"
-    val workspaceName = "workspaceName"
-    val userEmail = "userEmail"
-    val jobId = "jobId"
-    val upsertFile = "upsertFile"
-    val isUpsert = "isUpsert"
-
-    def attributeNotFoundException(attribute: String) = throw new Exception(
-      s"unable to parse message - attribute $attribute not found in ${message.attributes}"
-    )
-
-    AvroUpsertAttributes(
-      WorkspaceName(
-        message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
-        message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))
-      ),
-      RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
-      UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
-      message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
-      java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true"))
-    )
   }
 
   private def getUpsertStream(path: String) = {
