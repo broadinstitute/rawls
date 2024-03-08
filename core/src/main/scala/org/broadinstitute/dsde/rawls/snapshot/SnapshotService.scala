@@ -75,6 +75,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
       val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
 
+      // prevent snapshots from disallowed platforms
+      snapshotValidator.validateSnapshotPlatform()
+
       // prevent disallowed access across workspace or dataset protection boundaries
       snapshotValidator.validateProtectedStatus()
 

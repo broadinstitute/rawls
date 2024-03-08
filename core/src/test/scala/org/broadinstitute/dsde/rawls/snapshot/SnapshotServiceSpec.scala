@@ -626,7 +626,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       )
     }
 
-    "create a snapshot reference of an Azure snapshot in a GCP workspace" in withDefaultTestDatabase {
+    "not create a snapshot reference of an Azure snapshot in a GCP workspace" in withDefaultTestDatabase {
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       // stub an Azure snapshot
       val mockDataRepoDAO = defaultDataRepoDao()
@@ -652,18 +652,23 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockDataRepoDAO
       )(testContext)
 
-      Await.result(
-        snapshotService.createSnapshot(
-          testData.workspace.toWorkspaceName, // unless otherwise specified testData workspaces are GCP
-          NamedDataRepoSnapshot(DataReferenceName("refname"),
-                                Option(DataReferenceDescriptionField("my reference description")),
-                                UUID.randomUUID()
-          )
-        ),
-        Duration.Inf
+      val thrown = intercept[RawlsException] {
+        Await.result(
+          snapshotService.createSnapshot(
+            testData.workspace.toWorkspaceName, // unless otherwise specified testData workspaces are GCP
+            NamedDataRepoSnapshot(DataReferenceName("refname"),
+              Option(DataReferenceDescriptionField("my reference description")),
+              UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+      }
+      assert(
+        thrown.getMessage === "Snapshots by reference are not supported for Azure datasets."
       )
 
-      verify(mockWorkspaceManagerDAO).createDataRepoSnapshotReference(
+      verify(mockWorkspaceManagerDAO, never()).createDataRepoSnapshotReference(
         any[UUID],
         any[UUID],
         any[DataReferenceName],
@@ -710,7 +715,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val snapRefName = DataReferenceName("refname")
       val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
 
-      val thrown = intercept[UnsupportedPlatformException] {
+      val thrown = intercept[RawlsException] {
         Await.result(
           snapshotService.createSnapshot(testData.azureWorkspace.toWorkspaceName,
                                          NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
@@ -720,7 +725,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       }
 
       assert(
-        thrown.getMessage === "Snapshots by reference are not supported for Azure workspaces."
+        thrown.getMessage === "Snapshots by reference are not supported across the given cloud boundaries (snapshot: gcp, workspace: Azure)."
       )
       verify(mockWorkspaceManagerDAO, never()).createDataRepoSnapshotReference(
         any[UUID],
@@ -844,7 +849,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       }
 
       assert(
-        thrown.getMessage === "Snapshots by reference are not supported for Azure workspaces."
+        thrown.getMessage === "Snapshots by reference are not supported for Azure datasets."
       )
       verify(mockWorkspaceManagerDAO, never()).createDataRepoSnapshotReference(
         any[UUID],

@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
+import bio.terra.datarepo.model.{CloudPlatform => SnapshotCloudPlatform}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceCloudPlatform}
@@ -30,15 +31,27 @@ class SnapshotReferenceCreationValidator(val workspaceContext: Workspace, val sn
   // unsupported platform boundary.
   @throws(classOf[PlatformBoundaryException])
   def validateWorkspacePlatformCompatibility(workspacePlatform: Option[WorkspaceCloudPlatform]): Unit =
-    workspacePlatform match {
-      case Some(WorkspaceCloudPlatform.Gcp) => // ok
-      case Some(WorkspaceCloudPlatform.Azure) =>
-        throw new UnsupportedPlatformException("Snapshots by reference are not supported for Azure workspaces.")
-      case None =>
+    // Defining all acceptable combinations is overkill when all we really need to do is prevent anything Azure, but
+    // this is here as a safeguard against us introducing support for Azure without deliberately addressing the issue of
+    // snapshots by ref across cloud platforms.
+    (snapshot.platform, workspacePlatform) match {
+      case (SnapshotCloudPlatform.GCP, Some(WorkspaceCloudPlatform.Gcp)) => // ok
+      case (_, None) =>
         throw new PlatformBoundaryException(
           "Snapshots by reference are not supported into a workspace with no cloud context (" +
             s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform})."
         )
+      case _ =>
+        throw new PlatformBoundaryException(
+          "Snapshots by reference are not supported across the given cloud boundaries (" +
+            s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform.get})."
+        )
+    }
+
+  @throws(classOf[UnsupportedPlatformException])
+  def validateSnapshotPlatform(): Unit =
+    if (snapshot.platform == SnapshotCloudPlatform.AZURE) {
+      throw new UnsupportedPlatformException("Snapshots by reference are not supported for Azure datasets.")
     }
 
   // TODO: get this information from a more authoritative source rather than relying on the hardcoded bucket prefix
