@@ -83,9 +83,6 @@ object Dependencies {
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "3.0.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.4.1"
-  val microsoftGraph: ModuleID = "com.microsoft.graph" % "microsoft-graph" % "5.10.0"
-
   val workbenchLibsHash = "8ccaa6d"
 
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
@@ -196,11 +193,6 @@ object Dependencies {
     googleGuava
   )
 
-  val azureDependencies = Seq(
-    azureIdentity,
-    microsoftGraph
-  )
-
   val google2Dependencies = Seq(
     workbenchGoogle2,
     workbenchGoogle2Tests,
@@ -232,7 +224,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ extraOpenTelemetryDependencies ++ azureDependencies++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ extraOpenTelemetryDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,

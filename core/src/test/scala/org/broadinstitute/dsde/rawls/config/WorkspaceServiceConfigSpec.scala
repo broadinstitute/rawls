@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 class WorkspaceServiceConfigSpec extends AnyFunSpec with Matchers {
   describe("apply") {
     describe("should correctly specify") {
-      val workspaceServiceConfig: WorkspaceServiceConfig = WorkspaceServiceConfig.apply(new MultiCloudAppConfigManager)
+      val workspaceServiceConfig: WorkspaceServiceConfig = WorkspaceServiceConfig.apply(new RawlsConfigManager)
 
       it("trackDetailedSubmissionMetrics") {
         workspaceServiceConfig.trackDetailedSubmissionMetrics shouldBe true

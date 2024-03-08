@@ -8,7 +8,7 @@ final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean,
 )
 
 case object WorkspaceServiceConfig {
-  def apply[T <: WorkspaceServiceConfig](appConfigManager: MultiCloudAppConfigManager): WorkspaceServiceConfig = {
+  def apply[T <: WorkspaceServiceConfig](appConfigManager: RawlsConfigManager): WorkspaceServiceConfig = {
 
     new WorkspaceServiceConfig(
       appConfigManager.conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),

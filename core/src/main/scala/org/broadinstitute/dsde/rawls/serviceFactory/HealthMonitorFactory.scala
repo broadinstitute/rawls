@@ -2,14 +2,14 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.Props
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 
 object HealthMonitorFactory {
-  def createHealthMonitorProps(appConfigManager: MultiCloudAppConfigManager,
+  def createHealthMonitorProps(appConfigManager: RawlsConfigManager,
                                slickDataSource: SlickDataSource,
                                gcsDAO: GoogleServicesDAO,
                                pubSubDAO: GooglePubSubDAO,

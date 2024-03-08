@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.config.{MultiCloudAppConfigManager, ServicePerimeterServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{RawlsConfigManager, ServicePerimeterServiceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeter, Service
 import scala.concurrent.ExecutionContext
 
 object ServicePerimeterServiceFactory {
-  def createServicePerimeter(appConfigManager: MultiCloudAppConfigManager,
+  def createServicePerimeter(appConfigManager: RawlsConfigManager,
                              slickDataSource: SlickDataSource,
                              gcsDAO: GoogleServicesDAO
   )(implicit system: ActorSystem, executionContext: ExecutionContext): ServicePerimeter =

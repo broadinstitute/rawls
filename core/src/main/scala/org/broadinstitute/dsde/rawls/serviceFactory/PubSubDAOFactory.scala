@@ -2,16 +2,16 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.ActorSystem
 import com.typesafe.config.Config
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
 
 object PubSubDAOFactory {
-  def createPubSubDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String)(implicit
-    system: ActorSystem,
-    executionContext: ExecutionContext
+  def createPubSubDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
+                                                                                   system: ActorSystem,
+                                                                                   executionContext: ExecutionContext
   ): GooglePubSubDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>
@@ -20,9 +20,9 @@ object PubSubDAOFactory {
         newDisabledService[GooglePubSubDAO]
     }
 
-  def createAvroUpsertMonitorPubSubDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String)(implicit
-    system: ActorSystem,
-    executionContext: ExecutionContext
+  def createAvroUpsertMonitorPubSubDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
+                                                                                                    system: ActorSystem,
+                                                                                                    executionContext: ExecutionContext
   ): GooglePubSubDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

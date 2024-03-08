@@ -1,16 +1,16 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, GoogleStorageDAO, HttpGoogleStorageDAO}
 
 import scala.concurrent.ExecutionContext
 
 object HttpGoogleStorageDAOFactory {
-  def createHttpGoogleStorageDAO(appConfigManager: MultiCloudAppConfigManager, metricsPrefix: String)(implicit
-    executionContext: ExecutionContext,
-    system: ActorSystem
+  def createHttpGoogleStorageDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
+                                                                                              executionContext: ExecutionContext,
+                                                                                              system: ActorSystem
   ): GoogleStorageDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

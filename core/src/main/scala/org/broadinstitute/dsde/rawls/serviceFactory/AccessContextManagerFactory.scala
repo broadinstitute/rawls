@@ -1,16 +1,16 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 
 import scala.concurrent.ExecutionContext
 
 object AccessContextManagerFactory {
-  def createAccessContextManager(metricsPrefix: String, appConfigManager: MultiCloudAppConfigManager)(implicit
-    system: ActorSystem,
-    executionContext: ExecutionContext
+  def createAccessContextManager(metricsPrefix: String, appConfigManager: RawlsConfigManager)(implicit
+                                                                                              system: ActorSystem,
+                                                                                              executionContext: ExecutionContext
   ): AccessContextManagerDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

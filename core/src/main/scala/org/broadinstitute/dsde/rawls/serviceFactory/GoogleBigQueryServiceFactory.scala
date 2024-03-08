@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
 import cats.effect.{IO, Resource}
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryFactoryService, GoogleBigQueryServiceFactory}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
@@ -12,7 +12,7 @@ import scala.concurrent.ExecutionContext
 
 object GoogleBigQueryServiceFactory {
   def createGoogleBigQueryServiceFactory(
-    appConfigManager: MultiCloudAppConfigManager
+    appConfigManager: RawlsConfigManager
   )(implicit executionContext: ExecutionContext): GoogleBigQueryFactoryService =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

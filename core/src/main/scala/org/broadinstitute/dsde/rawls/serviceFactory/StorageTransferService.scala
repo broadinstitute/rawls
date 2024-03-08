@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 
 import cats.effect.{Async, Resource, Sync, Temporal}
 import com.google.auth.oauth2.ServiceAccountCredentials
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService
 import org.typelevel.log4cats.StructuredLogger
@@ -11,9 +11,9 @@ import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 
 object StorageTransferService {
-  def createStorageTransferService[F[_]: Async](appConfigManager: MultiCloudAppConfigManager)(implicit
-    F: Sync[F] with Temporal[F],
-    logger: StructuredLogger[F]
+  def createStorageTransferService[F[_]: Async](appConfigManager: RawlsConfigManager)(implicit
+                                                                                      F: Sync[F] with Temporal[F],
+                                                                                      logger: StructuredLogger[F]
   ): Resource[F, GoogleStorageTransferService[F]] =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

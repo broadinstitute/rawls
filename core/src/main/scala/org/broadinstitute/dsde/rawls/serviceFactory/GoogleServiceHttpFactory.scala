@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
 import cats.effect.{Async, Resource, Sync, Temporal}
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google2.{GoogleServiceHttp, NotificationCreaterConfig}
 import org.http4s.Uri
@@ -11,7 +11,7 @@ import org.typelevel.log4cats.StructuredLogger
 import scala.concurrent.ExecutionContext
 
 object GoogleServiceHttpFactory {
-  def createGoogleServiceHttp[F[_]: Async](appConfigManager: MultiCloudAppConfigManager,
+  def createGoogleServiceHttp[F[_]: Async](appConfigManager: RawlsConfigManager,
                                            executionContext: ExecutionContext
   )(implicit
     F: Sync[F] with Temporal[F],

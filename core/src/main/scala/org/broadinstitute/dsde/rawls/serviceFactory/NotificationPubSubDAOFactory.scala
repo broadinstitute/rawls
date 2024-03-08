@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Pem
 import org.broadinstitute.dsde.workbench.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
@@ -11,7 +11,7 @@ import java.io.File
 import scala.concurrent.ExecutionContext
 
 object NotificationPubSubDAOFactory {
-  def createNotificationPubSubDAO(appConfigManager: MultiCloudAppConfigManager,
+  def createNotificationPubSubDAO(appConfigManager: RawlsConfigManager,
                                   workbenchMetricBaseName: String
   )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO =
     appConfigManager.gcsConfig match {

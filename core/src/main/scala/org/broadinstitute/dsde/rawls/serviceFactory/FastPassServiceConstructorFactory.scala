@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 
 import cats.effect.IO
 import org.broadinstitute.dsde.rawls.AppDependencies
-import org.broadinstitute.dsde.rawls.config.{FastPassConfig, MultiCloudAppConfigManager}
+import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPass, FastPassService}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -12,7 +12,7 @@ import scala.concurrent.ExecutionContext
 import scala.language.{higherKinds, postfixOps}
 
 object FastPassServiceConstructorFactory {
-  def createCloudFastPassService(appConfigManager: MultiCloudAppConfigManager,
+  def createCloudFastPassService(appConfigManager: RawlsConfigManager,
                                  appDependencies: AppDependencies[IO],
                                  gcsDAO: GoogleServicesDAO,
                                  samDAO: SamDAO

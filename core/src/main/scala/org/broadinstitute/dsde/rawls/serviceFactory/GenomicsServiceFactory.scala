@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
-import org.broadinstitute.dsde.rawls.config.MultiCloudAppConfigManager
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.genomics.{GenomicsService, GenomicsServiceRequest}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDi
 import scala.concurrent.ExecutionContext
 
 object GenomicsServiceFactory {
-  def createGenomicsService(appConfigManager: MultiCloudAppConfigManager,
+  def createGenomicsService(appConfigManager: RawlsConfigManager,
                             dataSource: SlickDataSource,
                             gcsDAO: GoogleServicesDAO
   )(implicit executionContext: ExecutionContext): RawlsRequestContext => GenomicsServiceRequest =
