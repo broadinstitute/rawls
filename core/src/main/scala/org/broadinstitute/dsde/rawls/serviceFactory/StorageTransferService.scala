@@ -12,8 +12,8 @@ import java.nio.charset.StandardCharsets
 
 object StorageTransferService {
   def createStorageTransferService[F[_]: Async](appConfigManager: RawlsConfigManager)(implicit
-                                                                                      F: Sync[F] with Temporal[F],
-                                                                                      logger: StructuredLogger[F]
+    F: Sync[F] with Temporal[F],
+    logger: StructuredLogger[F]
   ): Resource[F, GoogleStorageTransferService[F]] =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

@@ -11,9 +11,8 @@ import org.typelevel.log4cats.StructuredLogger
 import scala.concurrent.ExecutionContext
 
 object GoogleServiceHttpFactory {
-  def createGoogleServiceHttp[F[_]: Async](appConfigManager: RawlsConfigManager,
-                                           executionContext: ExecutionContext
-  )(implicit
+  def createGoogleServiceHttp[F[_]: Async](appConfigManager: RawlsConfigManager, executionContext: ExecutionContext)(
+    implicit
     F: Sync[F] with Temporal[F],
     logger: StructuredLogger[F]
   ): Resource[F, GoogleServiceHttp[F]] =

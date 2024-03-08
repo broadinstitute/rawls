@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 
 object SubmissionCostServiceFactory {
   def createSubmissionCostService(appConfigManager: RawlsConfigManager, bigQueryDAO: GoogleBigQueryDAO)(implicit
-                                                                                                        executionContext: ExecutionContext
+    executionContext: ExecutionContext
   ): SubmissionCost =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

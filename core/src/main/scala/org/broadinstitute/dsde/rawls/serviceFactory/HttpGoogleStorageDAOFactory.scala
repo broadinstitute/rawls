@@ -9,8 +9,8 @@ import scala.concurrent.ExecutionContext
 
 object HttpGoogleStorageDAOFactory {
   def createHttpGoogleStorageDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
-                                                                                              executionContext: ExecutionContext,
-                                                                                              system: ActorSystem
+    executionContext: ExecutionContext,
+    system: ActorSystem
   ): GoogleStorageDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

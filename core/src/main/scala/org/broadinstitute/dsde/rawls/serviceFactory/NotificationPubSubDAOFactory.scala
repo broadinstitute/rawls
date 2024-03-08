@@ -11,9 +11,10 @@ import java.io.File
 import scala.concurrent.ExecutionContext
 
 object NotificationPubSubDAOFactory {
-  def createNotificationPubSubDAO(appConfigManager: RawlsConfigManager,
-                                  workbenchMetricBaseName: String
-  )(implicit system: ActorSystem, executionContext: ExecutionContext): GooglePubSubDAO =
+  def createNotificationPubSubDAO(appConfigManager: RawlsConfigManager, workbenchMetricBaseName: String)(implicit
+    system: ActorSystem,
+    executionContext: ExecutionContext
+  ): GooglePubSubDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>
         val clientEmail = gcsConfig.getString("serviceClientEmail")

@@ -11,8 +11,8 @@ import scala.concurrent.ExecutionContext
 
 object MethodRepoDAOFactory {
   def createMethodRepoDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
-                                                                                       system: ActorSystem,
-                                                                                       executionContext: ExecutionContext
+    system: ActorSystem,
+    executionContext: ExecutionContext
   ): MethodRepoDAO =
     appConfigManager.cloudProvider match {
       case Gcp =>

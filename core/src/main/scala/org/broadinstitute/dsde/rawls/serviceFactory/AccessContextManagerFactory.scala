@@ -9,8 +9,8 @@ import scala.concurrent.ExecutionContext
 
 object AccessContextManagerFactory {
   def createAccessContextManager(metricsPrefix: String, appConfigManager: RawlsConfigManager)(implicit
-                                                                                              system: ActorSystem,
-                                                                                              executionContext: ExecutionContext
+    system: ActorSystem,
+    executionContext: ExecutionContext
   ): AccessContextManagerDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

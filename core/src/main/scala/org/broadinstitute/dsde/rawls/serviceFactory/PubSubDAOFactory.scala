@@ -10,8 +10,8 @@ import scala.concurrent.ExecutionContext
 
 object PubSubDAOFactory {
   def createPubSubDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
-                                                                                   system: ActorSystem,
-                                                                                   executionContext: ExecutionContext
+    system: ActorSystem,
+    executionContext: ExecutionContext
   ): GooglePubSubDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>
@@ -21,8 +21,8 @@ object PubSubDAOFactory {
     }
 
   def createAvroUpsertMonitorPubSubDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
-                                                                                                    system: ActorSystem,
-                                                                                                    executionContext: ExecutionContext
+    system: ActorSystem,
+    executionContext: ExecutionContext
   ): GooglePubSubDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

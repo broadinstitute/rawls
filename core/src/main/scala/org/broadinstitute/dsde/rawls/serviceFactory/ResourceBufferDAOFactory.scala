@@ -11,8 +11,8 @@ import scala.concurrent.ExecutionContext
 
 object ResourceBufferDAOFactory {
   def createResourceBuffer(appConfigManager: RawlsConfigManager, gcsDAO: GoogleServicesDAO)(implicit
-                                                                                            system: ActorSystem,
-                                                                                            executionContext: ExecutionContext
+    system: ActorSystem,
+    executionContext: ExecutionContext
   ): ResourceBufferDAO =
     appConfigManager.cloudProvider match {
       case Gcp =>

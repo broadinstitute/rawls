@@ -9,8 +9,8 @@ import scala.concurrent.ExecutionContext
 
 object GoogleIamDAOFactory {
   def createGoogleIamDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
-                                                                                      executionContext: ExecutionContext,
-                                                                                      system: ActorSystem
+    executionContext: ExecutionContext,
+    system: ActorSystem
   ): GoogleIamDAO =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>

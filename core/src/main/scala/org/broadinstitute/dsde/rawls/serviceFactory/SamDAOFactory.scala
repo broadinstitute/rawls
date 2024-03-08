@@ -10,8 +10,8 @@ import scala.concurrent.ExecutionContext
 
 object SamDAOFactory {
   def createSamDAO(appConfigManager: RawlsConfigManager, gcsDAO: GoogleServicesDAO)(implicit
-                                                                                    system: ActorSystem,
-                                                                                    executionContext: ExecutionContext
+    system: ActorSystem,
+    executionContext: ExecutionContext
   ): SamDAO = {
     val samConfig = appConfigManager.conf.getConfig("sam")
     appConfigManager.cloudProvider match {
