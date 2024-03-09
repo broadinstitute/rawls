@@ -518,7 +518,7 @@ object Boot extends IOApp with LazyLogging {
 
         BootMonitors.bootMonitors(
           system,
-          appConfigManager.conf,
+          appConfigManager,
           slickDataSource,
           gcsDAO,
           appDependencies.httpGoogleIamDAO,
