@@ -657,8 +657,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           snapshotService.createSnapshot(
             testData.workspace.toWorkspaceName, // unless otherwise specified testData workspaces are GCP
             NamedDataRepoSnapshot(DataReferenceName("refname"),
-              Option(DataReferenceDescriptionField("my reference description")),
-              UUID.randomUUID()
+                                  Option(DataReferenceDescriptionField("my reference description")),
+                                  UUID.randomUUID()
             )
           ),
           Duration.Inf
