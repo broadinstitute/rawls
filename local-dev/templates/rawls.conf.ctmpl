@@ -90,18 +90,8 @@ bond {
   baseUrl = "https://broad-bond-dev.appspot.com"
 }
 
-martha {
-  baseUrl = "https://us-central1-broad-dsde-dev.cloudfunctions.net"
-}
-
-drs {
-    martha {
-      baseUrl = "https://us-central1-broad-dsde-dev.cloudfunctions.net"
-    }
-    drshub {
-      baseUrl = "https://drshub.dsde-dev.broadinstitute.org"
-    }
-    resolver = "drshub"
+drshub {
+  baseUrl = "https://drshub.dsde-dev.broadinstitute.org"
 }
 
 billingProfileManager {

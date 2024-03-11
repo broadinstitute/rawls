@@ -41,7 +41,7 @@ import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
@@ -308,23 +308,9 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val drsResolver = if (conf.hasPath("drs")) {
-        val drsResolverName = conf.getString("drs.resolver")
-        drsResolverName match {
-          case "martha" =>
-            val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
-            val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-            new MarthaResolver(marthaUrl)
-          case "drshub" =>
-            val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
-            val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
-            new DrsHubResolver(drsHubUrl)
-        }
-      } else {
-        val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-        val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-        new MarthaResolver(marthaUrl)
-      }
+      val drsHubBaseUrl: String = conf.getString("drshub.baseUrl")
+      val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
+      val drsResolver = new DrsHubResolver(drsHubUrl)
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
