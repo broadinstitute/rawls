@@ -165,15 +165,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         throw new RawlsExceptionWithErrorReport(ErrorReport(other))
     }
 
-//  def enumerateSnapshotsByWorkspaceId(workspaceId: String,
-//                                      offset: Int,
-//                                      limit: Int,
-//                                      referencedSnapshotId: Option[UUID] = None
-//  ): Future[SnapshotListResponse] =
-//    getV2WorkspaceContextAndPermissions(workspaceId, SamWorkspaceActions.read).flatMap { workspaceContext =>
-//      enumerateSnapshots(workspaceContext, offset, limit, referencedSnapshotId)
-//    }
-
   def enumerateSnapshotsByWorkspaceName(workspaceName: WorkspaceName,
                                         offset: Int,
                                         limit: Int,
