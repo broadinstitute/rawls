@@ -708,7 +708,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
       )
 
-      // Delete Google Project but not the project's Sam record
+      // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
+      _ <- traceFutureWithParent("notifyLeonardo", parentContext)(_ =>
+        leonardoService.cleanupResources(workspaceContext.googleProjectId, workspaceContext.workspaceIdAsUUID, ctx)
+      )
+
+      // Delete Google Project
       _ <- traceFutureWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         maybeDeleteGoogleProject(workspaceContext.googleProjectId,
                                  workspaceContext.workspaceVersion,
@@ -716,24 +721,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         ) recoverWith { case t: Throwable =>
           logger.error(
             s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
-            t
-          )
-          Future.failed(t)
-        }
-      )
-
-      // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
-      // note this must take place _after_ google project deletion but _before_ the deletion of the project in sam
-      // to avoid orphaning any cloud resources
-      _ <- traceFutureWithParent("notifyLeonardo", parentContext)(_ =>
-        leonardoService.cleanupResources(workspaceContext.googleProjectId, workspaceContext.workspaceIdAsUUID, ctx)
-      )
-
-      // delete the google project's sam record
-      _ <- traceFutureWithParent("maybeDeleteGoogleProjectInSam", parentContext)(_ =>
-        deleteGoogleProjectInSam(workspaceContext.googleProjectId, ctx.userInfo) recoverWith { case t: Throwable =>
-          logger.error(
-            s"Unexpected failure deleting workspace (while deleting google project in Sam) for workspace `${workspaceContext.toWorkspaceName}`",
             t
           )
           Future.failed(t)
@@ -849,17 +836,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       _ <- deletePetsInProject(googleProjectId, userInfoForSam)
       _ <- gcsDAO.deleteGoogleProject(googleProjectId)
+      _ <- samDAO
+        .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
+        .recover {
+          case regrets: RawlsExceptionWithErrorReport
+              if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+            logger.info(
+              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+            )
+        }
     } yield ()
-
-  private def deleteGoogleProjectInSam(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
-    samDAO
-      .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
-      .recover {
-        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
-          logger.info(
-            s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-          )
-      }
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {

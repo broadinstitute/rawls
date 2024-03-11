@@ -427,6 +427,15 @@ object ImportStatuses {
     override def withName(name: String): ImportStatus = ImportStatuses.withName(name)
   }
 
+  // translates cWDS's status values into the values used by Import Service, for compatibility
+  // while both cWDS and Import Service are in use
+  def fromCwdsStatus(name: String): ImportStatus = name.toLowerCase match {
+    case "running"   => ReadyForUpsert
+    case "succeeded" => Done
+    case "error"     => Error
+    case _           => throw new RawlsException(s"invalid cWDS status [$name]")
+  }
+
   def withName(name: String): ImportStatus = name.toLowerCase match {
     case "readyforupsert" => ReadyForUpsert
     case "upserting"      => Upserting

@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ImportStatuses,
   RawlsRequestContext,
   RawlsUserEmail,
+  UserInfo,
   Workspace,
   WorkspaceName
 }
@@ -98,6 +99,33 @@ case class UpdateImportStatus(importId: String,
 )
 
 case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
+
+// base for CwdsUpsertAttributes and ImportServiceUpsertAttributes
+trait AvroUpsertAttributes {
+  def userEmail: RawlsUserEmail
+  def importId: UUID
+  def upsertFile: String
+  def isUpsert: Boolean
+  def isCwds: Boolean
+}
+
+// attributes expected from a cWDS pub/sub message
+case class CwdsUpsertAttributes(workspaceId: UUID,
+                                userEmail: RawlsUserEmail,
+                                importId: UUID,
+                                upsertFile: String,
+                                isUpsert: Boolean,
+                                isCwds: Boolean
+) extends AvroUpsertAttributes
+
+// attributes expected from an Import Service pub/sub message
+case class ImportServiceUpsertAttributes(workspace: WorkspaceName,
+                                         userEmail: RawlsUserEmail,
+                                         importId: UUID,
+                                         upsertFile: String,
+                                         isUpsert: Boolean,
+                                         isCwds: Boolean
+) extends AvroUpsertAttributes
 
 class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
@@ -285,18 +313,11 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
   }
 
   private def importEntities(message: PubSubMessage) = {
-    val attributes = parseMessage(message)
-
+    val attributes = new AvroUpsertMonitorMessageParser(message).parse
     val importFuture = for {
-      workspace <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.findByName(attributes.workspace).map {
-          case Some(workspace) => workspace
-          case None =>
-            throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
-        }
-      }
+      workspace <- lookupWorkspace(attributes)
       petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
-      importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
+      importStatus <- getImportStatus(attributes, workspace, petUserInfo)
       _ <- importStatus match {
         // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
         // end up with a race condition where multiple threads are attempting the same import / updating the status
@@ -368,6 +389,37 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     } pipeTo self
 
   }
+
+  private def lookupWorkspace(attributes: AvroUpsertAttributes): Future[Workspace] =
+    dataSource.inTransaction { dataAccess =>
+      // db query: the SQL to find the workspace in the db
+      // errorId: if the workspace is not found, what identifier do we put in the error message?
+      val (dbQuery, errorId) = attributes match {
+        case cwdsAttributes: CwdsUpsertAttributes =>
+          (dataAccess.workspaceQuery.findById(cwdsAttributes.workspaceId.toString), cwdsAttributes.workspaceId.toString)
+        case importServiceAttributes: ImportServiceUpsertAttributes =>
+          (dataAccess.workspaceQuery.findByName(importServiceAttributes.workspace),
+           importServiceAttributes.workspace.toString
+          )
+      }
+      dbQuery.map {
+        case Some(workspace) => workspace
+        case None =>
+          throw new RawlsException(
+            s"Workspace $errorId not found while importing entities"
+          )
+      }
+    }
+
+  private def getImportStatus(attributes: AvroUpsertAttributes,
+                              workspace: Workspace,
+                              petUserInfo: UserInfo
+  ): Future[Option[ImportStatus]] =
+    if (attributes.isCwds) {
+      importServiceDAO.getCwdsStatus(attributes.importId, workspace.workspaceIdAsUUID, petUserInfo)
+    } else {
+      importServiceDAO.getImportStatus(attributes.importId, workspace.toWorkspaceName, petUserInfo)
+    }
 
   private def publishMessageToUpdateImportStatus(importId: UUID,
                                                  currentImportStatus: Option[ImportStatus],
@@ -548,37 +600,6 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, scala.collection.immutable.Seq(ackId))
-  }
-
-  case class AvroUpsertAttributes(workspace: WorkspaceName,
-                                  userEmail: RawlsUserEmail,
-                                  importId: UUID,
-                                  upsertFile: String,
-                                  isUpsert: Boolean
-  )
-
-  private def parseMessage(message: PubSubMessage) = {
-    val workspaceNamespace = "workspaceNamespace"
-    val workspaceName = "workspaceName"
-    val userEmail = "userEmail"
-    val jobId = "jobId"
-    val upsertFile = "upsertFile"
-    val isUpsert = "isUpsert"
-
-    def attributeNotFoundException(attribute: String) = throw new Exception(
-      s"unable to parse message - attribute $attribute not found in ${message.attributes}"
-    )
-
-    AvroUpsertAttributes(
-      WorkspaceName(
-        message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
-        message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))
-      ),
-      RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
-      UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
-      message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
-      java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true"))
-    )
   }
 
   private def getUpsertStream(path: String) = {

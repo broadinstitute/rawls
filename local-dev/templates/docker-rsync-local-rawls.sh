@@ -178,10 +178,6 @@ fi
 #Configure a trap to enable proper cleanup if script exits prematurely.
 trap clean_up EXIT HUP INT QUIT PIPE TERM 0 20
 
-#ensure git secrets hooks in place
-cp -r ./hooks/ ./.git/hooks/
-chmod 755 ./.git/hooks/apply-git-secrets.sh
-
 echo "Creating shared volumes if they don't exist..."
 docker volume create --name rawls-shared-source
 docker volume create --name sbt-cache
