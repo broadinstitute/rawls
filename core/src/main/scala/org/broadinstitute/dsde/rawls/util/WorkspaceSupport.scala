@@ -182,6 +182,19 @@ trait WorkspaceSupport {
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
 
+  def getV2WorkspaceContextAndPermissions(workspaceId: String, requiredAction: SamResourceAction): Future[Workspace] =
+    for {
+      workspaceContext <- getV2WorkspaceContext(workspaceId)
+      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
+    } yield workspaceContext
+
+  def getV2WorkspaceContext(workspaceId: String): Future[Workspace] =
+    userEnabledCheck.flatMap { _ =>
+      dataSource.inTransaction { dataAccess =>
+        withV2WorkspaceContext(workspaceId, dataAccess)(DBIO.successful)
+      }
+    }
+
   def getV2WorkspaceContext(workspaceName: WorkspaceName,
                             attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
@@ -191,12 +204,20 @@ trait WorkspaceSupport {
       }
     }
 
+  // Finds workspace by workspaceName
   def withV2WorkspaceContext[T](workspaceName: WorkspaceName,
                                 dataAccess: DataAccess,
                                 attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   )(op: (Workspace) => ReadWriteAction[T]) =
     dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs) flatMap {
       case None            => throw NoSuchWorkspaceException(workspaceName)
+      case Some(workspace) => op(workspace)
+    }
+
+//Finds workspace by workspaceId
+  def withV2WorkspaceContext[T](workspaceId: String, dataAccess: DataAccess)(op: (Workspace) => ReadWriteAction[T]) =
+    dataAccess.workspaceQuery.findById(workspaceId) flatMap {
+      case None            => throw NoSuchWorkspaceException(workspaceId)
       case Some(workspace) => op(workspace)
     }
 
