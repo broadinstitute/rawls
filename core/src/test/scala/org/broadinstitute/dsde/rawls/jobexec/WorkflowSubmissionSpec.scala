@@ -781,7 +781,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       )
 
       // Verify
-      // since no SA was returned from Martha for JDR urls, requester pays role was never added to the polices. Hence it should be empty
+      // since no SA was returned from DRSHub for JDR urls, requester pays role was never added to the polices. Hence it should be empty
       mockGoogleServicesDAO.policies shouldBe TrieMap.empty[RawlsBillingProjectName, Map[String, Set[String]]]
     }
   }

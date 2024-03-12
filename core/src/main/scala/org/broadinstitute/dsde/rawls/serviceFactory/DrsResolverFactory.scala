@@ -14,23 +14,9 @@ object DrsResolverFactory {
   )(implicit system: ActorSystem, executionContext: ExecutionContext): DrsResolver =
     appConfigManager.cloudProvider match {
       case Gcp =>
-        if (appConfigManager.conf.hasPath("drs")) {
-          val drsResolverName = appConfigManager.conf.getString("drs.resolver")
-          drsResolverName match {
-            case "martha" =>
-              val marthaBaseUrl: String = appConfigManager.conf.getString("drs.martha.baseUrl")
-              val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-              new MarthaResolver(marthaUrl)
-            case "drshub" =>
-              val drsHubBaseUrl: String = appConfigManager.conf.getString("drs.drshub.baseUrl")
-              val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
-              new DrsHubResolver(drsHubUrl)
-          }
-        } else {
-          val marthaBaseUrl: String = appConfigManager.conf.getString("martha.baseUrl")
-          val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-          new MarthaResolver(marthaUrl)
-        }
+        val drsHubBaseUrl: String = appConfigManager.conf.getString("drshub.baseUrl")
+        val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
+        new DrsHubResolver(drsHubUrl)
       case Azure =>
         newDisabledService[DrsResolver]
     }
