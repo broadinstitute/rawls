@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
-import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, DrsResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, DrsResolver}
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 
