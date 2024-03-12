@@ -351,8 +351,10 @@ trait WorkspaceComponent {
     ): ReadAction[Option[Workspace]] =
       loadWorkspace(findV2WorkspaceByNameQuery(workspaceName), attributeSpecs)
 
-    def findById(workspaceId: String): ReadAction[Option[Workspace]] =
-      loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
+    def findById(workspaceId: String,
+                 attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
+      loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)), attributeSpecs)
 
     def findByIdOrFail(workspaceId: String): ReadAction[Workspace] = findById(workspaceId) map {
       _.getOrElse(throw new RawlsException(s"""No workspace found matching id "$workspaceId"."""))

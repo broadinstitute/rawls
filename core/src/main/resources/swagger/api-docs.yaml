@@ -4073,7 +4073,7 @@ paths:
         - snapshots_v2
       summary: List snapshots
       description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
-      operationId: enumerateDataRepoSnapshot_v2
+      operationId: enumerateDataRepoSnapshotByWorkspaceId
       parameters:
         - name: offset
           in: query
@@ -4116,7 +4116,7 @@ paths:
         - snapshots_v2
       summary: Create a snapshot
       description: Add a reference to a snapshot in the Terra Data Repo
-      operationId: createDataRepoSnapshot_v2
+      operationId: createDataRepoSnapshotByWorkspaceId
       requestBody:
         description: Reference to the Data Repo snapshot
         content:

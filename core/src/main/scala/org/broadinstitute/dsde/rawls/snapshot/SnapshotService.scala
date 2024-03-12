@@ -61,7 +61,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
   def createSnapshotByWorkspaceId(workspaceId: String,
                                   snapshotIdentifiers: NamedDataRepoSnapshot
   ): Future[DataRepoSnapshotResource] =
-    getV2WorkspaceContextAndPermissions(workspaceId, SamWorkspaceActions.write).flatMap { rawlsWorkspace =>
+    getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.write).flatMap { rawlsWorkspace =>
       createSnapshot(rawlsWorkspace, snapshotIdentifiers)
     }
 // Find a workspace using the workspaceName then calls the createSnapshot method
@@ -73,8 +73,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                                         Some(WorkspaceAttributeSpecs(all = false))
     ).flatMap(rawlsWorkspace => createSnapshot(rawlsWorkspace, snapshotIdentifiers))
 //Given a rawls workspace, creates a snapshot reference in workspace manager
-  def createSnapshot(rawlsWorkspace: Workspace,
-                     snapshotIdentifiers: NamedDataRepoSnapshot
+  private def createSnapshot(rawlsWorkspace: Workspace,
+                             snapshotIdentifiers: NamedDataRepoSnapshot
   ): Future[DataRepoSnapshotResource] = {
     val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
     val snapshot =
@@ -192,10 +192,12 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                          limit: Int,
                          referencedSnapshotId: Option[UUID] = None
   ): Future[SnapshotListResponse] =
-    Future.successful(referencedSnapshotId match {
-      case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
-      case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
-    })
+    getV2WorkspaceContextAndPermissionsById(workspaceId.toString, SamWorkspaceActions.read).map { workspaceContext =>
+      referencedSnapshotId match {
+        case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
+        case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
+      }
+    }
 
   /*
    * Returns all snapshot references from Workspace Manager that refer to a specified snapshotId.
