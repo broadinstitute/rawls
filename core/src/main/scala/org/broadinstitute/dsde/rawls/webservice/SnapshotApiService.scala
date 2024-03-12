@@ -114,10 +114,10 @@ trait SnapshotApiService extends UserInfoDirectives {
               parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
                 (offset, limit, referencedSnapshotId) =>
                   complete {
-                    snapshotServiceConstructor(ctx).enumerateSnapshots(UUID.fromString(workspaceId),
-                                                                       offset,
-                                                                       limit,
-                                                                       referencedSnapshotId
+                    snapshotServiceConstructor(ctx).enumerateSnapshotsById(workspaceId,
+                                                                           offset,
+                                                                           limit,
+                                                                           referencedSnapshotId
                     )
                   }
               }

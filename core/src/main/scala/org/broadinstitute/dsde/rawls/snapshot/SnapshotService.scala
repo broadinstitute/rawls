@@ -61,7 +61,10 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
   def createSnapshotByWorkspaceId(workspaceId: String,
                                   snapshotIdentifiers: NamedDataRepoSnapshot
   ): Future[DataRepoSnapshotResource] =
-    getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.write).flatMap { rawlsWorkspace =>
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.write,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).flatMap { rawlsWorkspace =>
       createSnapshot(rawlsWorkspace, snapshotIdentifiers)
     }
 // Find a workspace using the workspaceName then calls the createSnapshot method
@@ -177,6 +180,18 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
     )
 
+  def enumerateSnapshotsById(workspaceId: String,
+                             offset: Int,
+                             limit: Int,
+                             referencedSnapshotId: Option[UUID] = None
+  ): Future[SnapshotListResponse] =
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.read,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).flatMap(workspaceContext =>
+      enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
+    )
+
   /**
     * return a given page of snapshot references from Workspace Manager, optionally returning only those
     * snapshot references that refer to a supplied TDR snapshotId.
@@ -187,12 +202,12 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     * @param referencedSnapshotId the TDR snapshotId for which to return matching references
     * @return the list of snapshot references
     */
-  def enumerateSnapshots(workspaceId: UUID,
-                         offset: Int,
-                         limit: Int,
-                         referencedSnapshotId: Option[UUID] = None
+  private def enumerateSnapshots(workspaceId: UUID,
+                                 offset: Int,
+                                 limit: Int,
+                                 referencedSnapshotId: Option[UUID] = None
   ): Future[SnapshotListResponse] =
-    getV2WorkspaceContextAndPermissionsById(workspaceId.toString, SamWorkspaceActions.read).map { workspaceContext =>
+    Future.successful {
       referencedSnapshotId match {
         case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
         case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
