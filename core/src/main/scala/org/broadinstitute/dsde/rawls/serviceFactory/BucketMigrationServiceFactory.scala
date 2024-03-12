@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -14,11 +14,11 @@ object BucketMigrationServiceFactory {
                                    slickDataSource: SlickDataSource,
                                    samDAO: SamDAO,
                                    gcsDAO: GoogleServicesDAO
-  )(implicit executionContext: ExecutionContext): RawlsRequestContext => BucketMigration =
+  )(implicit executionContext: ExecutionContext): RawlsRequestContext => BucketMigrationService =
     appConfigManager.cloudProvider match {
       case Gcp =>
-        BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
+        BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)
       case Azure =>
-        _ => newDisabledService[BucketMigration]
+        _ => newDisabledService[BucketMigrationService]
     }
 }

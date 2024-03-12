@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 
 import cats.effect.{IO, Resource}
 import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryFactoryService, GoogleBigQueryServiceFactory}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, GoogleBigQueryServiceFactoryImpl}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
@@ -13,13 +13,13 @@ import scala.concurrent.ExecutionContext
 object GoogleBigQueryServiceFactory {
   def createGoogleBigQueryServiceFactory(
     appConfigManager: RawlsConfigManager
-  )(implicit executionContext: ExecutionContext): GoogleBigQueryFactoryService =
+  )(implicit executionContext: ExecutionContext): GoogleBigQueryServiceFactory =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>
         val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
-        new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
+        new GoogleBigQueryServiceFactoryImpl(pathToCredentialJson)(executionContext)
       case None =>
-        new GoogleBigQueryFactoryService {
+        new GoogleBigQueryServiceFactory {
 
           override def getServiceForPet(petKey: String,
                                         projectId: GoogleProject

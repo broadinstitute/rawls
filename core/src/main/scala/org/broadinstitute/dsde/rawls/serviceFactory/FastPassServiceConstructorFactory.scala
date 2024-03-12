@@ -4,7 +4,7 @@ import cats.effect.IO
 import org.broadinstitute.dsde.rawls.AppDependencies
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.fastpass.{FastPass, FastPassService}
+import org.broadinstitute.dsde.rawls.fastpass.{FastPassService, FastPassServiceImpl}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.serviceFactory.DisabledServiceFactory.newDisabledService
 
@@ -18,11 +18,11 @@ object FastPassServiceConstructorFactory {
                                  samDAO: SamDAO
   )(implicit
     executionContext: ExecutionContext
-  ): (RawlsRequestContext, SlickDataSource) => FastPass =
+  ): (RawlsRequestContext, SlickDataSource) => FastPassService =
     appConfigManager.gcsConfig match {
       case Some(gcsConfig) =>
         val fastPassConfig = FastPassConfig.apply(appConfigManager.conf)
-        FastPassService.constructor(
+        FastPassServiceImpl.constructor(
           fastPassConfig,
           appDependencies.httpGoogleIamDAO,
           appDependencies.httpGoogleStorageDAO,
@@ -35,6 +35,6 @@ object FastPassServiceConstructorFactory {
           terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
         )
       case None =>
-        (_, _) => newDisabledService[FastPass]
+        (_, _) => newDisabledService[FastPassService]
     }
 }

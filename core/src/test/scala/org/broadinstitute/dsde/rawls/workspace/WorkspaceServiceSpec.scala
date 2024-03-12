@@ -33,8 +33,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
@@ -45,8 +45,8 @@ import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
@@ -190,7 +190,7 @@ class WorkspaceServiceSpec
       1 second,
       5 seconds
     )
-    val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+    val servicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
@@ -208,7 +208,7 @@ class WorkspaceServiceSpec
       mock[NotificationDAO]
     ) _
 
-    val genomicsServiceConstructor = GenomicsService.constructor(
+    val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
       slickDataSource,
       gcsDAO
     ) _
@@ -244,9 +244,9 @@ class WorkspaceServiceSpec
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       workspaceManagerDAO,
@@ -261,7 +261,7 @@ class WorkspaceServiceSpec
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
+    val resourceBufferService = Mockito.spy(new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig))
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -275,7 +275,7 @@ class WorkspaceServiceSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassConfig = FastPassConfig.apply(testConf)
-    val fastPassServiceConstructor = FastPassService.constructor(
+    val fastPassServiceConstructor = FastPassServiceImpl.constructor(
       fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
@@ -314,7 +314,6 @@ class WorkspaceServiceSpec
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
       terraBillingProjectOwnerRole,

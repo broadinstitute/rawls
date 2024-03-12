@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
@@ -57,7 +57,8 @@ class UserServiceSpec
   )
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
-  val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+  val defaultMockServicePerimeterService: ServicePerimeterServiceImpl =
+    mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
   val defaultMockWsmDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
@@ -89,7 +90,7 @@ class UserServiceSpec
   def getUserService(dataSource: SlickDataSource = mock[SlickDataSource],
                      samDAO: SamDAO = defaultMockSamDAO,
                      gcsDAO: GoogleServicesDAO = defaultMockGcsDAO,
-                     servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService,
+                     servicePerimeterService: ServicePerimeterServiceImpl = defaultMockServicePerimeterService,
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName(
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
@@ -118,7 +119,7 @@ class UserServiceSpec
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+      val mockServicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
       when(
         mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName,
                                                                        dataSource.dataAccess
@@ -163,7 +164,7 @@ class UserServiceSpec
       when(mockGcsDAO.addProjectToFolder(project.googleProjectId, folderId)).thenReturn(Future.successful(()))
       when(mockGcsDAO.getGoogleProjectNumber(googleProject)).thenReturn(googleProjectNumber)
 
-      val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+      val mockServicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
       when(
         mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName,
                                                                        dataSource.dataAccess

@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeter, ServicePerimeterService}
+import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeterService, ServicePerimeterServiceImpl}
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserUtils, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -42,9 +42,9 @@ object UserService {
     dataSource: SlickDataSource,
     googleServicesDAO: GoogleServicesDAO,
     samDAO: SamDAO,
-    bqServiceFactory: GoogleBigQueryFactoryService,
+    bqServiceFactory: GoogleBigQueryServiceFactory,
     bigQueryCredentialJson: String,
-    servicePerimeterService: ServicePerimeter,
+    servicePerimeterService: ServicePerimeterService,
     billingProfileManagerDAO: BillingProfileManagerDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     notificationDAO: NotificationDAO
@@ -168,9 +168,9 @@ class UserService(
   val dataSource: SlickDataSource,
   protected val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
-  bqServiceFactory: GoogleBigQueryFactoryService,
+  bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
-  servicePerimeterService: ServicePerimeter,
+  servicePerimeterService: ServicePerimeterService,
   val workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
   val billingRepository: BillingRepository,

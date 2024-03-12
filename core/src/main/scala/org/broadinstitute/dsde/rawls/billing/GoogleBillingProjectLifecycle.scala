@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProjectName,
   RawlsRequestContext
 }
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService.{
   deleteGoogleProjectIfChild,
   syncBillingProjectOwnerPolicyToGoogleAndGetEmail
@@ -46,7 +46,7 @@ class GoogleBillingProjectLifecycle(
                                                      ctx: RawlsRequestContext
   ): Future[Unit] =
     for {
-      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, ctx)
+      _ <- ServicePerimeterServiceImpl.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, ctx)
       hasAccess <- gcsDAO.testTerraAndUserBillingAccountAccess(createProjectRequest.billingAccount.get, ctx.userInfo)
       _ = if (!hasAccess) {
         throw new GoogleBillingAccountAccessException(

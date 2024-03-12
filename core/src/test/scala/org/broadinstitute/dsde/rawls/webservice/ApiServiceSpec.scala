@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmBillingProjectLifecycle,
   GoogleBillingProjectLifecycle
 }
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -31,8 +31,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
@@ -46,8 +46,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUser
 }
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -186,7 +186,7 @@ trait ApiServiceSpec
 
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
@@ -223,7 +223,7 @@ trait ApiServiceSpec
     val drsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
-    val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+    val servicePerimeterService = new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val billingRepository = new BillingRepository(slickDataSource)
@@ -258,7 +258,7 @@ trait ApiServiceSpec
       dataRepoDAO
     )
 
-    override val genomicsServiceConstructor = GenomicsService.constructor(
+    override val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
       slickDataSource,
       gcsDAO
     ) _
@@ -275,8 +275,8 @@ trait ApiServiceSpec
       spendReportingServiceConfig
     )
 
-    override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration =
-      BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
+    override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
+      BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
@@ -313,7 +313,7 @@ trait ApiServiceSpec
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
@@ -329,7 +329,7 @@ trait ApiServiceSpec
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+    val resourceBufferService = new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig)
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -337,7 +337,7 @@ trait ApiServiceSpec
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassConfig = FastPassConfig.apply(testConf)
-    val fastPassServiceConstructor = FastPassService.constructor(
+    val fastPassServiceConstructor = FastPassServiceImpl.constructor(
       fastPassConfig,
       new MockGoogleIamDAO,
       new MockGoogleStorageDAO,
@@ -372,7 +372,6 @@ trait ApiServiceSpec
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",

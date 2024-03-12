@@ -10,13 +10,13 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{
@@ -80,18 +80,18 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     samDAO: SamDAO = mock[SamDAO],
     notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
     userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
-    genomicsServiceConstructor: RawlsRequestContext => GenomicsService = _ =>
-      mock[GenomicsService](RETURNS_SMART_NULLS),
+    genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceImpl = _ =>
+      mock[GenomicsServiceImpl](RETURNS_SMART_NULLS),
     maxActiveWorkflowsTotal: Int = 1,
     maxActiveWorkflowsPerUser: Int = 1,
     workbenchMetricBaseName: String = "",
-    submissionCostService: SubmissionCostService = mock[SubmissionCostService](RETURNS_SMART_NULLS),
+    submissionCostService: SubmissionCostServiceImpl = mock[SubmissionCostServiceImpl](RETURNS_SMART_NULLS),
     config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
-    requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS),
+    requesterPaysSetupService: RequesterPaysSetupServiceImpl = mock[RequesterPaysSetupServiceImpl](RETURNS_SMART_NULLS),
     entityManager: EntityManager = mock[EntityManager](RETURNS_SMART_NULLS),
-    resourceBufferService: ResourceBufferService = mock[ResourceBufferService](RETURNS_SMART_NULLS),
+    resourceBufferService: ResourceBufferServiceImpl = mock[ResourceBufferServiceImpl](RETURNS_SMART_NULLS),
     resourceBufferSaEmail: String = "",
-    servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS),
+    servicePerimeterService: ServicePerimeterServiceImpl = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS),
     googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
     terraBillingProjectOwnerRole: String = "",
     terraWorkspaceCanComputeRole: String = "",
@@ -100,8 +100,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     terraBucketWriterRole: String = "",
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-    fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService = (_, _) =>
-      mock[FastPassService](RETURNS_SMART_NULLS)
+    fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassServiceImpl = (_, _) =>
+      mock[FastPassServiceImpl](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(
       datasource,
@@ -125,7 +125,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao,
       terraBillingProjectOwnerRole,
@@ -549,10 +548,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceId = UUID.randomUUID()
     val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
 
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
+    val requesterPaysSetupService = mock[RequesterPaysSetupServiceImpl](RETURNS_SMART_NULLS)
     when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
 
-    val mockFastPassService = mock[FastPassService]
+    val mockFastPassService = mock[FastPassServiceImpl]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
       .thenReturn(Future.successful())
 
@@ -617,7 +616,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
 
-    val mockFastPassService = mock[FastPassService]
+    val mockFastPassService = mock[FastPassServiceImpl]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
       .thenReturn(
         Future.successful(

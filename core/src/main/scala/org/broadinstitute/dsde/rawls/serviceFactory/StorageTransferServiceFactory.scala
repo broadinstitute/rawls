@@ -10,7 +10,7 @@ import org.typelevel.log4cats.StructuredLogger
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 
-object StorageTransferService {
+object StorageTransferServiceFactory {
   def createStorageTransferService[F[_]: Async](appConfigManager: RawlsConfigManager)(implicit
     F: Sync[F] with Temporal[F],
     logger: StructuredLogger[F]

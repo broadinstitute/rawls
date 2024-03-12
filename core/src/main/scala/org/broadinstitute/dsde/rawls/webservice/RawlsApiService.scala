@@ -18,11 +18,11 @@ import io.opentelemetry.context.Context
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigration, BucketMigrationService}
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceRequest
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
@@ -111,7 +111,7 @@ trait RawlsApiService
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val userServiceConstructor: RawlsRequestContext => UserService
-  val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest
+  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator
@@ -126,20 +126,19 @@ trait RawlsApiService
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = (otelContext: Context) => {
+  val baseApiRoutes = (otelContext: Context) =>
     workspaceRoutesV2(otelContext) ~
-    workspaceRoutes(otelContext) ~
-    entityRoutes(otelContext) ~
-    methodConfigRoutes(otelContext) ~
-    submissionRoutes(otelContext) ~
-    adminRoutes(otelContext) ~
-    userRoutes(otelContext) ~
-    billingRoutesV2(otelContext) ~
-    billingRoutes(otelContext) ~
-    notificationsRoutes ~
-    servicePerimeterRoutes(otelContext) ~
-    snapshotRoutes(otelContext)
-  }
+      workspaceRoutes(otelContext) ~
+      entityRoutes(otelContext) ~
+      methodConfigRoutes(otelContext) ~
+      submissionRoutes(otelContext) ~
+      adminRoutes(otelContext) ~
+      userRoutes(otelContext) ~
+      billingRoutesV2(otelContext) ~
+      billingRoutes(otelContext) ~
+      notificationsRoutes ~
+      servicePerimeterRoutes(otelContext) ~
+      snapshotRoutes(otelContext)
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 
@@ -212,11 +211,11 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
                           val entityServiceConstructor: RawlsRequestContext => EntityService,
                           val userServiceConstructor: RawlsRequestContext => UserService,
-                          val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest,
+                          val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
                           val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
                           val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
                           val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
-                          val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration,
+                          val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,

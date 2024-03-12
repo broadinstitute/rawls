@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, GoogleSt
 
 import scala.concurrent.ExecutionContext
 
-object HttpGoogleStorageDAOFactory {
+object GoogleStorageDAOFactory {
   def createHttpGoogleStorageDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
     executionContext: ExecutionContext,
     system: ActorSystem

@@ -22,8 +22,8 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.fastpass.FastPass
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceRequest
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -38,8 +38,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeter, ServicePerimeterService}
+import org.broadinstitute.dsde.rawls.resourcebuffer.{ResourceBufferService, ResourceBufferServiceImpl}
+import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeterService, ServicePerimeterServiceImpl}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -79,17 +79,16 @@ object WorkspaceService {
                   samDAO: SamDAO,
                   notificationDAO: NotificationDAO,
                   userServiceConstructor: RawlsRequestContext => UserService,
-                  genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest,
+                  genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
                   maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int,
                   workbenchMetricBaseName: String,
-                  submissionCostService: SubmissionCost,
+                  submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig,
-                  requesterPaysSetupService: RequesterPaysSetup,
+                  requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager,
-                  resourceBufferService: ResourceBuffer,
-                  resourceBufferSaEmail: String,
-                  servicePerimeterService: ServicePerimeter,
+                  resourceBufferService: ResourceBufferService,
+                  servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO,
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
@@ -98,7 +97,7 @@ object WorkspaceService {
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass
+                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -125,7 +124,6 @@ object WorkspaceService {
       config,
       requesterPaysSetupService,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao,
       terraBillingProjectOwnerRole,
@@ -193,16 +191,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val samDAO: SamDAO,
                        notificationDAO: NotificationDAO,
                        userServiceConstructor: RawlsRequestContext => UserService,
-                       genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest,
+                       genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
                        maxActiveWorkflowsTotal: Int,
                        maxActiveWorkflowsPerUser: Int,
                        override val workbenchMetricBaseName: String,
-                       submissionCostService: SubmissionCost,
+                       submissionCostService: SubmissionCostService,
                        config: WorkspaceServiceConfig,
-                       requesterPaysSetupService: RequesterPaysSetup,
-                       resourceBufferService: ResourceBuffer,
-                       resourceBufferSaEmail: String,
-                       servicePerimeterService: ServicePerimeter,
+                       requesterPaysSetupService: RequesterPaysSetupService,
+                       resourceBufferService: ResourceBufferService,
+                       servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
                        val terraBillingProjectOwnerRole: String,
                        val terraWorkspaceCanComputeRole: String,
@@ -211,7 +208,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass
+                       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -3061,10 +3058,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
       _ <- traceFutureWithParent("remove RBS SA from owner policy", parentContext) { _ =>
-        gcsDAO.removePolicyBindings(googleProjectId,
-                                    Map(
-                                      "roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)
-                                    )
+        gcsDAO.removePolicyBindings(
+          googleProjectId,
+          Map(
+            "roles/owner" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail)
+          )
         )
       }
     } yield (googleProjectId, gcsDAO.getGoogleProjectNumber(googleProject))

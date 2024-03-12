@@ -13,11 +13,11 @@ object RequesterPaysSetupServiceFactory {
                                googleServicesDAO: GoogleServicesDAO,
                                bondApiDAO: BondApiDAO,
                                requesterPaysRole: String
-  )(implicit executionContext: ExecutionContext): RequesterPaysSetup =
+  )(implicit executionContext: ExecutionContext): RequesterPaysSetupService =
     appConfigManager.cloudProvider match {
       case Gcp =>
-        new RequesterPaysSetupService(dataSource, googleServicesDAO, bondApiDAO, requesterPaysRole)
+        new RequesterPaysSetupServiceImpl(dataSource, googleServicesDAO, bondApiDAO, requesterPaysRole)
       case Azure =>
-        newDisabledService[RequesterPaysSetup]
+        newDisabledService[RequesterPaysSetupService]
     }
 }

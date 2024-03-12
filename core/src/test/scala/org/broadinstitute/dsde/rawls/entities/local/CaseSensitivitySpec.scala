@@ -8,7 +8,7 @@ import com.typesafe.config.ConfigFactory
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactory,
+  GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
   SlickDataSource
 }
@@ -930,7 +930,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
     def actorRefFactory = ActorSystem()
     val samDAO = new MockSamDAO(dataSource)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val testConf = ConfigFactory.load()
 

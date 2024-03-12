@@ -26,7 +26,7 @@ import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigration
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
@@ -41,8 +41,8 @@ import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.FastPass
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceRequest
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
@@ -55,7 +55,13 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace._
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceRepository,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -249,7 +255,7 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
 
-      val genomicsServiceConstructor: RawlsRequestContext => GenomicsServiceRequest =
+      val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
 
       val submissionCostService =
@@ -335,7 +341,7 @@ object Boot extends IOApp with LazyLogging {
 
       val bondApiDAO: BondApiDAO = BondApiDAOFactory.createBondApiDAO(appConfigManager)
 
-      val requesterPaysSetupService: RequesterPaysSetup =
+      val requesterPaysSetupService: RequesterPaysSetupService =
         RequesterPaysSetupServiceFactory.createRequesterPaysSetup(appConfigManager,
                                                                   slickDataSource,
                                                                   gcsDAO,
@@ -363,8 +369,6 @@ object Boot extends IOApp with LazyLogging {
 
       val resourceBufferService =
         ResourceBufferServiceFactory.createResourceBufferService(appConfigManager, resourceBufferDAO)
-      val resourceBufferSaEmail =
-        ResourceBufferEmailManager.getResourceBufferEmail(appConfigManager)
 
       val leonardoConfig = LeonardoConfig(appConfigManager.conf.getConfig("leonardo"))
       val leonardoDAO: LeonardoDAO =
@@ -381,7 +385,7 @@ object Boot extends IOApp with LazyLogging {
           metricsPrefix
         )
 
-      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPass =
+      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService =
         FastPassServiceConstructorFactory.createCloudFastPassService(
           appConfigManager,
           appDependencies,
@@ -411,7 +415,6 @@ object Boot extends IOApp with LazyLogging {
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
-        resourceBufferSaEmail,
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole =
@@ -486,7 +489,7 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
-      val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigration =
+      val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
         BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
 
       val service = new RawlsApiServiceImpl(
@@ -621,7 +624,7 @@ object Boot extends IOApp with LazyLogging {
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
     for {
       googleStorage <- GoogleStorageServiceFactory.createGoogleStorageService(appConfigManager)
-      googleStorageTransferService <- StorageTransferService.createStorageTransferService(
+      googleStorageTransferService <- StorageTransferServiceFactory.createStorageTransferService(
         appConfigManager
       )
       googleServiceHttp <- GoogleServiceHttpFactory.createGoogleServiceHttp(appConfigManager, executionContext)
@@ -633,7 +636,7 @@ object Boot extends IOApp with LazyLogging {
         executionContext,
         system
       )
-      httpGoogleStorageDAO = HttpGoogleStorageDAOFactory.createHttpGoogleStorageDAO(appConfigManager, metricsPrefix)(
+      httpGoogleStorageDAO = GoogleStorageDAOFactory.createHttpGoogleStorageDAO(appConfigManager, metricsPrefix)(
         executionContext,
         system
       )
@@ -714,7 +717,7 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        googleStorageTransferService: GoogleStorageTransferService[F],
                                        googleServiceHttp: GoogleServiceHttp[F],
                                        topicAdmin: GoogleTopicAdmin[F],
-                                       bigQueryServiceFactory: GoogleBigQueryFactoryService,
+                                       bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: GoogleIamDAO,
                                        httpGoogleStorageDAO: GoogleStorageDAO,
                                        oidcConfiguration: OpenIDConnectConfiguration
