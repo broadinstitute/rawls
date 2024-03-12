@@ -6,7 +6,6 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
-import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -16,20 +15,21 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object GoogleServicesDAO {
   def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
 }
 
-abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
+trait GoogleServicesDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
 
   val accessContextManagerDAO: AccessContextManagerDAO
 
   val billingEmail: String
   val billingGroupEmail: String
+  def adminGroupName: String
+  def curatorGroupName: String
 
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
@@ -156,7 +156,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                             tracingContext: RawlsTracingContext
   ): Future[ProjectBillingInfo]
 
-  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo]
+  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId,
+                                    tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo]
 
   def setBillingAccount(googleProjectId: GoogleProjectId,
                         billingAccountName: Option[RawlsBillingAccountName],

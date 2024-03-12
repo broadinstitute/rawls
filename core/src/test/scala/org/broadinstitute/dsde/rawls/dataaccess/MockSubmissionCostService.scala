@@ -12,11 +12,11 @@ class MockSubmissionCostService(defaultTableName: String,
                                 billingSearchWindowDays: Int,
                                 bigQueryDAO: GoogleBigQueryDAO
 )(implicit executionContext: ExecutionContext)
-    extends SubmissionCostService(defaultTableName,
-                                  defaultDatePartitionColumn,
-                                  serviceProject,
-                                  billingSearchWindowDays,
-                                  bigQueryDAO
+    extends SubmissionCostServiceImpl(defaultTableName,
+                                      defaultDatePartitionColumn,
+                                      serviceProject,
+                                      billingSearchWindowDays,
+                                      bigQueryDAO
     ) {
 
   val fixedCost = 1.23f

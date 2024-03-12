@@ -21,14 +21,14 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
@@ -413,7 +413,7 @@ class SubmissionSpec(_system: ActorSystem)
                             withDataOp: (SlickDataSource => T) => T,
                             executionServiceDAO: ExecutionServiceDAO =
                               new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
-                            bigQueryServiceFactory: GoogleBigQueryServiceFactory =
+                            bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl =
                               MockBigQueryServiceFactory.ioFactory(),
                             dataRepoDAO: DataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
   ): T = {
@@ -450,8 +450,9 @@ class SubmissionSpec(_system: ActorSystem)
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
-      val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf)
-      val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
+      val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
+      val servicePerimeterService =
+        new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
 
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         mock[BillingProfileManagerClientProvider],
@@ -464,15 +465,13 @@ class SubmissionSpec(_system: ActorSystem)
         samDAO,
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),
-        "requesterPaysRole",
         servicePerimeterService,
-        RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
         billingProfileManagerDAO,
         mock[WorkspaceManagerDAO],
         mock[NotificationDAO]
       ) _
 
-      val genomicsServiceConstructor = GenomicsService.constructor(
+      val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
         slickDataSource,
         gcsDAO
       ) _
@@ -488,7 +487,7 @@ class SubmissionSpec(_system: ActorSystem)
 
       val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
       val requesterPaysSetupService =
-        new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+        new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
@@ -506,11 +505,11 @@ class SubmissionSpec(_system: ActorSystem)
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+      val resourceBufferService = new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
       val fastPassConfig = FastPassConfig.apply(testConf)
-      val fastPassServiceConstructor = FastPassService.constructor(
+      val fastPassServiceConstructor = FastPassServiceImpl.constructor(
         fastPassConfig,
         new MockGoogleIamDAO,
         new MockGoogleStorageDAO,
@@ -549,7 +548,6 @@ class SubmissionSpec(_system: ActorSystem)
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
-        resourceBufferSaEmail,
         servicePerimeterService,
         googleIamDao = new MockGoogleIamDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",

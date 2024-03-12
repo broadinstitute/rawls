@@ -28,7 +28,7 @@ import scala.util.Random
 class MockGoogleServicesDAO(groupsPrefix: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO =
                               new MockGoogleAccessContextManagerDAO
-) extends GoogleServicesDAO(groupsPrefix) {
+) extends GoogleServicesDAO {
 
   val billingEmail: String = "billing@test.firecloud.org"
   val billingGroupEmail: String = "terra-billing@test.firecloud.org"
@@ -200,6 +200,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 
+  def adminGroupName: String = s"$groupsPrefix-ADMINS@dev.firecloud.org"
+  def curatorGroupName: String = s"$groupsPrefix-CURATORS@dev.firecloud.org"
+
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(
     UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000"))
   )
@@ -260,7 +263,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   ): Future[ProjectBillingInfo] =
     Future.successful(new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true))
 
-  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext): Future[ProjectBillingInfo] =
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId,
+                                             tracingContext: RawlsTracingContext
+  ): Future[ProjectBillingInfo] =
     Future.successful(new ProjectBillingInfo().setBillingEnabled(false))
 
   override def getBillingInfoForGoogleProject(

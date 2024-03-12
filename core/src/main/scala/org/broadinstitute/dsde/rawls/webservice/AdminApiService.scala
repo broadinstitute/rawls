@@ -9,7 +9,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -45,26 +45,6 @@ trait AdminApiService extends UserInfoDirectives {
           }
         }
       } ~
-        path("admin" / "project" / "registration") {
-          post {
-            entity(as[RawlsBillingProjectTransfer]) { xfer =>
-              complete {
-                userServiceConstructor(ctx).adminRegisterBillingProject(xfer).map(_ => StatusCodes.Created)
-              }
-            }
-          }
-        } ~
-        path("admin" / "project" / "registration" / Segment) { projectName =>
-          delete {
-            entity(as[Map[String, String]]) { ownerInfo =>
-              complete {
-                userServiceConstructor(ctx)
-                  .adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo)
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
-        } ~
         path("admin" / "submissions") {
           get {
             complete {

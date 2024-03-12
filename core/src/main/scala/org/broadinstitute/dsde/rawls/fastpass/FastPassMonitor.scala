@@ -68,7 +68,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
                                    groupedFastPassGrants: Seq[FastPassGrant]
   ): Future[Unit] =
     dataSource.inTransaction { dataAccess =>
-      FastPassService
+      FastPassServiceImpl
         .removeFastPassGrantsInWorkspaceProject(groupedFastPassGrants,
                                                 googleProjectId,
                                                 dataAccess,

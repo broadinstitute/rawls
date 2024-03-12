@@ -101,7 +101,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val materializer: Materializer,
   implicit val executionContext: ExecutionContext,
   implicit val timer: Temporal[IO]
-) extends GoogleServicesDAO(groupsPrefix)
+) extends GoogleServicesDAO
     with FutureSupport
     with GoogleUtilities {
   val http = Http(system)
@@ -130,7 +130,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val SingleRegionLocationType: String = "region"
 
   val REQUESTER_PAYS_ERROR_SUBSTRINGS = Seq("requester pays", "UserProjectMissing")
-
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
