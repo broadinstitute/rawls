@@ -25,8 +25,8 @@ class HttpGooglePubSubDAO(clientEmail: String,
                           appName: String,
                           serviceProject: String,
                           override val workbenchMetricBaseName: String
-                         )(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
-  extends FutureSupport
+)(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
+    extends FutureSupport
     with GoogleUtilities
     with GooglePubSubDAO {
 

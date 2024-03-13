@@ -24,8 +24,7 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String,
 )(implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
     extends FutureSupport
     with GoogleUtilities
-    with AccessContextManagerDAO
-{
+    with AccessContextManagerDAO {
 
   val httpTransport: NetHttpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance
