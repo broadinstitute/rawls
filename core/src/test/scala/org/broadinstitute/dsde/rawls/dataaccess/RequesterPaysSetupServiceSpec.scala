@@ -21,10 +21,10 @@ class RequesterPaysSetupServiceSpec
   private def setupServices(dataSource: SlickDataSource) = {
     val mockBondApiDAO = mock[BondApiDAO](RETURNS_SMART_NULLS)
     val gcsDAO = new MockGoogleServicesDAO("foo")
-    new RequesterPaysSetupService(dataSource, gcsDAO, mockBondApiDAO, "rp/role")
+    new RequesterPaysSetupServiceImpl(dataSource, gcsDAO, mockBondApiDAO, "rp/role")
   }
 
-  private def withMinimalTestDatabaseAndServices[T](testCode: RequesterPaysSetupService => T): T =
+  private def withMinimalTestDatabaseAndServices[T](testCode: RequesterPaysSetupServiceImpl => T): T =
     withMinimalTestDatabase { dataSource =>
       testCode(setupServices(dataSource))
     }

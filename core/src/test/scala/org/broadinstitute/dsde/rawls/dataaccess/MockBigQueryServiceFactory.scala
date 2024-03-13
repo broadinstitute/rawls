@@ -116,7 +116,7 @@ object MockBigQueryServiceFactory {
 
 class MockBigQueryServiceFactory(credentialPath: String, queryResponse: Either[Throwable, TableResult])(implicit
   val executionContext: ExecutionContext
-) extends GoogleBigQueryServiceFactory(credentialPath: String)(executionContext: ExecutionContext) {
+) extends GoogleBigQueryServiceFactoryImpl(credentialPath: String)(executionContext: ExecutionContext) {
 
   override def getServiceForPet(petKey: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] =
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))

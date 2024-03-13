@@ -27,7 +27,8 @@ import scala.util.{Try, Using}
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, timeout: FiniteDuration)(implicit
+class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Credential], timeout: FiniteDuration)(
+  implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -564,13 +565,16 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
       callback.future.map(WorkbenchEmail)
     }
 
-  private def getServiceAccountAccessToken = {
-    val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
-    if (expiresInSeconds < 60 * 5) {
-      serviceAccountCreds.refreshToken()
-    }
-    serviceAccountCreds.getAccessToken
-  }
+  private def getServiceAccountAccessToken =
+    maybeServiceAccountCreds
+      .map { serviceAccountCreds =>
+        val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
+        if (expiresInSeconds < 60 * 5) {
+          serviceAccountCreds.refreshToken()
+        }
+        serviceAccountCreds.getAccessToken
+      }
+      .getOrElse(throw new UnsupportedOperationException("Service account credentials not provided"))
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String,
@@ -689,9 +693,8 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
 }
 
 class OtelContextSettingInterceptor(otelContext: Context) extends Interceptor {
-  override def intercept(chain: Interceptor.Chain): Response = {
+  override def intercept(chain: Interceptor.Chain): Response =
     Using(otelContext.makeCurrent()) { _ =>
       chain.proceed(chain.request())
     }.get
-  }
 }

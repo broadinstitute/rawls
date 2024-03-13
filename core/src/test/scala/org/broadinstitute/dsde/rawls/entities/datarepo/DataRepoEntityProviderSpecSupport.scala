@@ -6,7 +6,7 @@ import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactory,
+  GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
   SamDAO,
   SlickDataSource
@@ -63,7 +63,7 @@ trait DataRepoEntityProviderSpecSupport {
   def createTestProvider(
     snapshotModel: SnapshotModel = createSnapshotModel(),
     samDAO: SamDAO = new MockSamDAO(slickDataSource),
-    bqFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
+    bqFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
     entityRequestArguments: EntityRequestArguments =
       EntityRequestArguments(workspace, RawlsRequestContext(userInfo), Some(DataReferenceName("referenceName"))),
     config: DataRepoEntityProviderConfig =
@@ -76,7 +76,7 @@ trait DataRepoEntityProviderSpecSupport {
     workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource())),
     dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
     samDAO: SamDAO = new MockSamDAO(slickDataSource),
-    bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
+    bqServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
     config: DataRepoEntityProviderConfig =
       DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
   ): DataRepoEntityProviderBuilder =

@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
@@ -57,7 +57,8 @@ class UserServiceSpec
   )
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
-  val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+  val defaultMockServicePerimeterService: ServicePerimeterServiceImpl =
+    mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
   val defaultMockWsmDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
@@ -89,7 +90,7 @@ class UserServiceSpec
   def getUserService(dataSource: SlickDataSource = mock[SlickDataSource],
                      samDAO: SamDAO = defaultMockSamDAO,
                      gcsDAO: GoogleServicesDAO = defaultMockGcsDAO,
-                     servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService,
+                     servicePerimeterService: ServicePerimeterServiceImpl = defaultMockServicePerimeterService,
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName(
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
@@ -105,13 +106,10 @@ class UserServiceSpec
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
-      "",
       servicePerimeterService,
-      adminRegisterBillingAccountId: RawlsBillingAccountName,
       workspaceManagerDao,
       bpmDAO,
       billingRepository.getOrElse(new BillingRepository(dataSource)),
-      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource)),
       mock[NotificationDAO]
     )
 
@@ -121,7 +119,7 @@ class UserServiceSpec
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+      val mockServicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
       when(
         mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName,
                                                                        dataSource.dataAccess
@@ -166,7 +164,7 @@ class UserServiceSpec
       when(mockGcsDAO.addProjectToFolder(project.googleProjectId, folderId)).thenReturn(Future.successful(()))
       when(mockGcsDAO.getGoogleProjectNumber(googleProject)).thenReturn(googleProjectNumber)
 
-      val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+      val mockServicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
       when(
         mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName,
                                                                        dataSource.dataAccess
@@ -454,80 +452,6 @@ class UserServiceSpec
         Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf)
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
-    }
-  }
-
-  it should "not delete the Google project when unregistering a Billing project" in {
-    withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val project = defaultBillingProject
-      val ownerInfoMap = Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.value)
-      val ownerIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
-      val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfoMap("newOwnerEmail")),
-                                   OAuth2BearerToken(ownerInfoMap("newOwnerToken")),
-                                   3600,
-                                   RawlsUserSubjectId("0")
-      )
-      val petSAJson = "petJson"
-      runAndWait(rawlsBillingProjectQuery.create(project))
-
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(
-        mockSamDAO.listResourceChildren(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                        ArgumentMatchers.eq(project.projectName.value),
-                                        any[RawlsRequestContext]
-        )
-      ).thenReturn(
-        Future.successful(
-          Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
-        )
-      )
-      when(
-        mockSamDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                            ArgumentMatchers.eq(project.projectName.value),
-                                            any[RawlsRequestContext]
-        )
-      ).thenReturn(Future.successful(Set(ownerIdInfo)))
-      when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, ownerUserInfo.userEmail))
-        .thenReturn(Future.successful(petSAJson))
-      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext.copy(userInfo = ownerUserInfo)))
-        .thenReturn(Future.successful())
-      when(
-        mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-                                  ArgumentMatchers.eq(project.googleProjectId.value),
-                                  any[RawlsRequestContext]
-        )
-      ).thenReturn(Future.successful())
-      when(
-        mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                  ArgumentMatchers.eq(project.projectName.value),
-                                  any[RawlsRequestContext]
-        )
-      ).thenReturn(Future.successful())
-
-      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.isAdmin(any[String])).thenReturn(Future.successful(true))
-      when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(ownerUserInfo))
-      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project()))
-      when(mockGcsDAO.deleteV1Project(project.googleProjectId)).thenReturn(Future.successful())
-
-      val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
-      val actual = userService.adminUnregisterBillingProjectWithOwnerInfo(project.projectName, ownerInfoMap).futureValue
-
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId,
-                                                     testContext.copy(userInfo = ownerUserInfo)
-      )
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject,
-                                        project.projectName.value,
-                                        RawlsRequestContext(ownerUserInfo)
-      )
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject,
-                                        project.googleProjectId.value,
-                                        RawlsRequestContext(ownerUserInfo)
-      )
-      verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
-
-      runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual ()
     }
   }
 

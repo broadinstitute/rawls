@@ -94,37 +94,6 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     }
   }
 
-  // Ignored due to PROD-791, which stubs groups status checks to always return ok
-  it should "return 500 for non-ok status for critical subsystem" ignore withConstantCriticalErrorTestDataApiServices {
-    services =>
-      eventually {
-        withStatsD {
-          Get("/status") ~>
-            services.sealedInstrumentedRoutes ~>
-            check {
-              assertResult(StatusCodes.InternalServerError, responseAs[StatusCheckResponse]) {
-                status
-              }
-              assertResult(
-                StatusCheckResponse(
-                  false,
-                  AllSubsystems.map {
-                    case GoogleGroups =>
-                      GoogleGroups -> SubsystemStatus(false, Some(List("Could not find group: my-favorite-group")))
-                    case other => other -> HealthMonitor.OkStatus
-                  }.toMap
-                )
-              ) {
-                responseAs[StatusCheckResponse]
-              }
-            }
-        } { capturedMetrics =>
-          val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
-          assertSubsetOf(expected, capturedMetrics)
-        }
-      }
-  }
-
   it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices {
     services =>
       eventually {
