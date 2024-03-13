@@ -3995,6 +3995,80 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceId}/snapshots/v2:
+    parameters:
+      - $ref: '#/components/parameters/workspaceIdPathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
+      operationId: enumerateDataRepoSnapshotByWorkspaceId
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+        - name: referencedSnapshotId
+          in: query
+          description: Optional; UUID of the Data Repo snapshot being referenced
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SnapshotListResponse'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - snapshots_v2
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshotByWorkspaceId
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -6755,6 +6829,13 @@ components:
       name: workspaceName
       in: path
       description: The workspace name
+      required: true
+      schema:
+        type: string
+    workspaceIdPathParam:
+      name: workspaceId
+      in: path
+      description: The workspace id
       required: true
       schema:
         type: string

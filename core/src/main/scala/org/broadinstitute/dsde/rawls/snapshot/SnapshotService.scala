@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   SnapshotListResponse,
+  Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceCloudPlatform,
   WorkspaceName
@@ -56,49 +57,64 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     with WorkspaceSupport
     with LazyLogging {
 
-  def createSnapshot(workspaceName: WorkspaceName,
-                     snapshotIdentifiers: NamedDataRepoSnapshot
+  // Finds a workspace using the workspaceId then calls the createSnapshot method
+  def createSnapshotByWorkspaceId(workspaceId: String,
+                                  snapshotIdentifiers: NamedDataRepoSnapshot
+  ): Future[DataRepoSnapshotResource] =
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.write,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).flatMap { rawlsWorkspace =>
+      createSnapshot(rawlsWorkspace, snapshotIdentifiers)
+    }
+// Find a workspace using the workspaceName then calls the createSnapshot method
+  def createSnapshotByWorkspaceName(workspaceName: WorkspaceName,
+                                    snapshotIdentifiers: NamedDataRepoSnapshot
   ): Future[DataRepoSnapshotResource] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap { rawlsWorkspace =>
-      val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
-      val snapshot =
-        new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
-      val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
+    ).flatMap(rawlsWorkspace => createSnapshot(rawlsWorkspace, snapshotIdentifiers))
+//Given a rawls workspace, creates a snapshot reference in workspace manager
+  private def createSnapshot(rawlsWorkspace: Workspace,
+                             snapshotIdentifiers: NamedDataRepoSnapshot
+  ): Future[DataRepoSnapshotResource] = {
+    val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
+    val snapshot =
+      new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
+    val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
 
-      // prevent snapshots from disallowed platforms
-      snapshotValidator.validateSnapshotPlatform()
+    // prevent snapshots from disallowed platforms
+    snapshotValidator.validateSnapshotPlatform()
 
-      // prevent disallowed access across workspace or dataset protection boundaries
-      snapshotValidator.validateProtectedStatus()
+    // prevent disallowed access across workspace or dataset protection boundaries
+    snapshotValidator.validateProtectedStatus()
 
-      try {
-        // if there's an existing WSM workspace, make sure its platform is compatible
-        // with that of the snapshot's dataset.
-        val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
-        snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
-      } catch {
-        case _: AggregateWorkspaceNotFoundException =>
-          // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
-          // and then create a stub workspace
-          snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
-          workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
-      }
-
-      // create the requested snapshot reference
-      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(
-        wsid,
-        snapshotIdentifiers.snapshotId,
-        snapshotIdentifiers.name,
-        snapshotIdentifiers.description,
-        terraDataRepoInstanceName,
-        CloningInstructionsEnum.NOTHING,
-        ctx
-      )
-      Future.successful(snapshotRef)
+    try {
+      // if there's an existing WSM workspace, make sure its platform is compatible
+      // with that of the snapshot's dataset.
+      val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
+      snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
+    } catch {
+      case _: AggregateWorkspaceNotFoundException =>
+        // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
+        // and then create a stub workspace
+        snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
+        workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
     }
+
+    // create the requested snapshot reference
+    val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(
+      wsid,
+      snapshotIdentifiers.snapshotId,
+      snapshotIdentifiers.name,
+      snapshotIdentifiers.description,
+      terraDataRepoInstanceName,
+      CloningInstructionsEnum.NOTHING,
+      ctx
+    )
+    Future.successful(snapshotRef)
+  }
 
   def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
     val referenceUuid = validateSnapshotId(referenceId)
@@ -152,29 +168,48 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         throw new RawlsExceptionWithErrorReport(ErrorReport(other))
     }
 
+  def enumerateSnapshotsByWorkspaceName(workspaceName: WorkspaceName,
+                                        offset: Int,
+                                        limit: Int,
+                                        referencedSnapshotId: Option[UUID] = None
+  ): Future[SnapshotListResponse] =
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
+    ).map(workspaceContext =>
+      enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
+    )
+
+  def enumerateSnapshotsById(workspaceId: String,
+                             offset: Int,
+                             limit: Int,
+                             referencedSnapshotId: Option[UUID] = None
+  ): Future[SnapshotListResponse] =
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.read,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).map(workspaceContext =>
+      enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
+    )
+
   /**
     * return a given page of snapshot references from Workspace Manager, optionally returning only those
     * snapshot references that refer to a supplied TDR snapshotId.
     *
-    * @param workspaceName the workspace owning the snapshot references
+    * @param workspaceId the id of the workspace owning the snapshot references
     * @param offset pagination offset for the list
     * @param limit pagination limit for the list
     * @param referencedSnapshotId the TDR snapshotId for which to return matching references
     * @return the list of snapshot references
     */
-  def enumerateSnapshots(workspaceName: WorkspaceName,
-                         offset: Int,
-                         limit: Int,
-                         referencedSnapshotId: Option[UUID] = None
-  ): Future[SnapshotListResponse] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.read,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ).map { workspaceContext =>
-      referencedSnapshotId match {
-        case None     => retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
-        case Some(id) => findBySnapshotId(workspaceContext.workspaceIdAsUUID, id, offset, limit)
-      }
+  private def enumerateSnapshots(workspaceId: UUID,
+                                 offset: Int,
+                                 limit: Int,
+                                 referencedSnapshotId: Option[UUID] = None
+  ): SnapshotListResponse =
+    referencedSnapshotId match {
+      case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
+      case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
     }
 
   /*

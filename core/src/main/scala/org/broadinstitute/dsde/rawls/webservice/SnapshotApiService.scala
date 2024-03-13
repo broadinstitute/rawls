@@ -7,9 +7,18 @@ import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, RawlsRequestContext, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  NamedDataRepoSnapshot,
+  RawlsRequestContext,
+  UserInfo,
+  Workspace,
+  WorkspaceFieldSpecs,
+  WorkspaceName,
+  WorkspaceResponse
+}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -20,7 +29,7 @@ trait SnapshotApiService extends UserInfoDirectives {
 
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService
 
-  def snapshotRoutes(otelContext: Context = Context.root()): server.Route = {
+  def snapshotRoutes(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
@@ -28,7 +37,7 @@ trait SnapshotApiService extends UserInfoDirectives {
           entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
             complete {
               snapshotServiceConstructor(ctx)
-                .createSnapshot(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
+                .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
                 .map(StatusCodes.Created -> _)
             }
           }
@@ -39,10 +48,12 @@ trait SnapshotApiService extends UserInfoDirectives {
             parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
               (offset, limit, referencedSnapshotId) =>
                 complete {
-                  snapshotServiceConstructor(ctx).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                     offset,
-                                                                     limit,
-                                                                     referencedSnapshotId
+                  snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
+                                                                                                  workspaceName
+                                                                                    ),
+                                                                                    offset,
+                                                                                    limit,
+                                                                                    referencedSnapshotId
                   )
                 }
             }
@@ -86,7 +97,31 @@ trait SnapshotApiService extends UserInfoDirectives {
                 )
               }
             }
+        } ~
+        path("workspaces" / Segment / "snapshots" / "v2") { workspaceId =>
+          post {
+            entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+              complete {
+                snapshotServiceConstructor(ctx)
+                  .createSnapshotByWorkspaceId(workspaceId, namedDataRepoSnapshot)
+                  .map(StatusCodes.Created -> _)
+              }
+            }
+          } ~
+            get {
+              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+              // that method provides a 400 Bad Request response and nice error message
+              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+                (offset, limit, referencedSnapshotId) =>
+                  complete {
+                    snapshotServiceConstructor(ctx).enumerateSnapshotsById(workspaceId,
+                                                                           offset,
+                                                                           limit,
+                                                                           referencedSnapshotId
+                    )
+                  }
+              }
+            }
         }
     }
-  }
 }
