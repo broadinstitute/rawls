@@ -176,7 +176,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.read,
                                         Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap(workspaceContext =>
+    ).map(workspaceContext =>
       enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
     )
 
@@ -188,7 +188,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     getV2WorkspaceContextAndPermissionsById(workspaceId,
                                             SamWorkspaceActions.read,
                                             Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap(workspaceContext =>
+    ).map(workspaceContext =>
       enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
     )
 
@@ -206,12 +206,10 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                                  offset: Int,
                                  limit: Int,
                                  referencedSnapshotId: Option[UUID] = None
-  ): Future[SnapshotListResponse] =
-    Future.successful {
-      referencedSnapshotId match {
-        case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
-        case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
-      }
+  ): SnapshotListResponse =
+    referencedSnapshotId match {
+      case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
+      case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
     }
 
   /*
