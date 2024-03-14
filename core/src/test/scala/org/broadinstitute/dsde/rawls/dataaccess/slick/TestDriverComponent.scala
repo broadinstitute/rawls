@@ -2023,10 +2023,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   class MinimalTestData() extends TestData {
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"),
-                                             CreationStatuses.Ready,
-                                             Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
-                                             None
+    val billingProject = RawlsBillingProject(
+      RawlsBillingProjectName("myNamespace"),
+      CreationStatuses.Ready,
+      Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
+      None,
+      billingProfileId = Some(UUID.randomUUID().toString)
     )
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
