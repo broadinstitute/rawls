@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeterService, ServicePerimeterServiceImpl}
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserUtils, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -44,9 +44,7 @@ object UserService {
     samDAO: SamDAO,
     bqServiceFactory: GoogleBigQueryServiceFactory,
     bigQueryCredentialJson: String,
-    requesterPaysRole: String,
     servicePerimeterService: ServicePerimeterService,
-    adminRegisterBillingAccountId: RawlsBillingAccountName,
     billingProfileManagerDAO: BillingProfileManagerDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     notificationDAO: NotificationDAO
@@ -58,13 +56,10 @@ object UserService {
       samDAO,
       bqServiceFactory,
       bigQueryCredentialJson,
-      requesterPaysRole,
       servicePerimeterService,
-      adminRegisterBillingAccountId,
       workspaceManagerDAO,
       billingProfileManagerDAO,
       new BillingRepository(dataSource),
-      WorkspaceManagerResourceMonitorRecordDao(dataSource),
       notificationDAO
     )
 
@@ -175,13 +170,10 @@ class UserService(
   val samDAO: SamDAO,
   bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
-  requesterPaysRole: String,
   servicePerimeterService: ServicePerimeterService,
-  adminRegisterBillingAccountId: RawlsBillingAccountName,
   val workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
   val billingRepository: BillingRepository,
-  workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao,
   notificationDAO: NotificationDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
@@ -421,37 +413,6 @@ class UserService(
       }
 
   /**
-    * Unregisters a billing project with OwnerInfo provided in the request body.
-    *
-    * The admin unregister endpoint does not delete the Google project in Google when we unregister it. Project
-    * registration allows tests to use existing Google projects (like GPAlloc) as if Rawls had created it,
-    * so we should not delete those pre-existing Google projects when we unregister them.
-    *
-    * @param projectName The project name to be unregistered.
-    * @param ownerInfo   A map parsed from request body contains the project's owner info.
-    * */
-  def adminUnregisterBillingProjectWithOwnerInfo(projectName: RawlsBillingProjectName,
-                                                 ownerInfo: Map[String, String]
-  ): Future[Unit] =
-    asFCAdmin {
-      val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")),
-                                   OAuth2BearerToken(ownerInfo("newOwnerToken")),
-                                   3600,
-                                   RawlsUserSubjectId("0")
-      )
-      for {
-        _ <- deleteGoogleProjectIfChild(projectName,
-                                        ownerUserInfo,
-                                        gcsDAO,
-                                        samDAO,
-                                        ctx,
-                                        deleteGoogleProjectWithGoogle = false
-        )
-        result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
-      } yield result
-    }
-
-  /**
     * Unregisters a billing project with UserInfo provided in parameter
     *
     * @param projectName   The project name to be unregistered.
@@ -598,95 +559,6 @@ class UserService(
               ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found")
             )
         }
-      }
-    }
-
-  // very sad: have to pass the new owner's token in the POST body (oh no!)
-  // we could instead exploit the fact that Sam will let you create pets in projects you're not in (!!!),
-  // but that seems extremely shady
-  // We believe this is mostly used by gpalloc/only used by gpalloc, which is why the billing account
-  // is hard coded.
-  def adminRegisterBillingProject(xfer: RawlsBillingProjectTransfer): Future[Unit] =
-    asFCAdmin {
-      val billingProjectName = RawlsBillingProjectName(xfer.project)
-      val project =
-        RawlsBillingProject(billingProjectName, CreationStatuses.Ready, Option(adminRegisterBillingAccountId), None)
-      val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail),
-                                   OAuth2BearerToken(xfer.newOwnerToken),
-                                   3600,
-                                   RawlsUserSubjectId("0")
-      )
-
-      (for {
-        _ <- dataSource.inTransaction(dataAccess => dataAccess.rawlsBillingProjectQuery.create(project))
-
-        _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ctx)
-        _ <- samDAO.createResourceFull(
-          SamResourceTypeNames.googleProject,
-          project.projectName.value,
-          Map.empty,
-          Set.empty,
-          ctx.copy(userInfo = ownerUserInfo),
-          Option(SamFullyQualifiedResourceId(project.projectName.value, SamResourceTypeNames.billingProject.value))
-        )
-        _ <- samDAO.overwritePolicy(
-          SamResourceTypeNames.billingProject,
-          billingProjectName.value,
-          SamBillingProjectPolicyNames.workspaceCreator,
-          SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)),
-          ctx.copy(userInfo = ownerUserInfo)
-        )
-        _ <- samDAO.overwritePolicy(
-          SamResourceTypeNames.billingProject,
-          billingProjectName.value,
-          SamBillingProjectPolicyNames.canComputeUser,
-          SamPolicy(Set.empty,
-                    Set.empty,
-                    Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
-          ),
-          ctx.copy(userInfo = ownerUserInfo)
-        )
-        ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, project.projectName)
-        computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO, project.projectName)
-
-        policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
-
-        _ <- gcsDAO.addPolicyBindings(project.googleProjectId, policiesToAdd)
-        _ <- gcsDAO.grantReadAccess(xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
-      } yield {}).recoverWith { case t: Throwable =>
-        // attempt cleanup then rethrow
-        for {
-          _ <- samDAO
-            .deleteResource(SamResourceTypeNames.googleProject,
-                            project.projectName.value,
-                            ctx.copy(userInfo = ownerUserInfo)
-            )
-            .recover { case x =>
-              logger.debug(
-                s"failure deleting google project ${project.projectName.value} from sam during error recovery cleanup.",
-                x
-              )
-            }
-          _ <- samDAO
-            .deleteResource(SamResourceTypeNames.billingProject,
-                            project.projectName.value,
-                            ctx.copy(userInfo = ownerUserInfo)
-            )
-            .recover { case x =>
-              logger.debug(
-                s"failure deleting billing project ${project.projectName.value} from sam during error recovery cleanup.",
-                x
-              )
-            }
-          _ <- dataSource
-            .inTransaction(dataAccess => dataAccess.rawlsBillingProjectQuery.delete(project.projectName))
-            .recover { case x =>
-              logger.debug(
-                s"failure deleting billing project ${project.projectName.value} from rawls db during error recovery cleanup.",
-                x
-              )
-            }
-        } yield throw t
       }
     }
 

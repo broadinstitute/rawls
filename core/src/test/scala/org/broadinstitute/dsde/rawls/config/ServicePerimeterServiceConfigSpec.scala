@@ -11,7 +11,8 @@ class ServicePerimeterServiceConfigSpec extends AnyFunSpec with Matchers {
 
   describe("apply") {
     describe("should correctly specify") {
-      val servicePerimeterServiceConfig: ServicePerimeterServiceConfig = ServicePerimeterServiceConfig.apply(testConf)
+      val servicePerimeterServiceConfig: ServicePerimeterServiceConfig =
+        ServicePerimeterServiceConfig.apply(testConf.getConfig("gcs"))
 
       it("staticProjectsInPerimeters") {
         val expectedMap = Map(

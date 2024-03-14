@@ -714,76 +714,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/project/registration:
-    post:
-      tags:
-        - admin
-      summary: create a record of project ownership
-      operationId: recordProjectOwnership
-      requestBody:
-        description: create project request
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/RawlsBillingProjectTransfer'
-        required: true
-      responses:
-        201:
-          description: Successful project record creation
-          content: {}
-        403:
-          description: You must be an admin to call this endpoint.
-          content: {}
-        404:
-          description: Missing required parameter
-          content: {}
-        500:
-          description: Internal Server Error
-          content: {}
-      x-codegen-request-body-name: createProjectRequest
-  /api/admin/project/registration/{projectName}:
-    delete:
-      tags:
-        - admin
-      summary: remove the record for a billing project
-      operationId: unregisterBillingProject
-      parameters:
-        - name: projectName
-          in: path
-          description: name of the project
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          'application/json':
-            schema:
-              required:
-                - newOwnerEmail
-                - newOwnerToken
-              type: object
-              properties:
-                newOwnerEmail:
-                  type: string
-                  description: Email of the current owner
-                newOwnerToken:
-                  type: string
-                  description: OAuth2Token of the current owner
-        required: true
-      responses:
-        204:
-          description: Successful project record removal
-          content: {}
-        403:
-          description: You must be an admin to call this endpoint.
-          content: {}
-        404:
-          description: Missing required parameter
-          content: {}
-        500:
-          description: Internal Server Error
-          content: {}
-      x-codegen-request-body-name: ownerInfo
   /api/admin/submissions:
     get:
       tags:
@@ -4065,6 +3995,80 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceId}/snapshots/v2:
+    parameters:
+      - $ref: '#/components/parameters/workspaceIdPathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
+      operationId: enumerateDataRepoSnapshotByWorkspaceId
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+        - name: referencedSnapshotId
+          in: query
+          description: Optional; UUID of the Data Repo snapshot being referenced
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SnapshotListResponse'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - snapshots_v2
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshotByWorkspaceId
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -6825,6 +6829,13 @@ components:
       name: workspaceName
       in: path
       description: The workspace name
+      required: true
+      schema:
+        type: string
+    workspaceIdPathParam:
+      name: workspaceId
+      in: path
+      description: The workspace id
       required: true
       schema:
         type: string

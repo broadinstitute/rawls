@@ -53,7 +53,7 @@ class ServicePerimeterServiceSpec
     dataSource: SlickDataSource =>
       val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
       val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
-      val service = new ServicePerimeterService(dataSource, gcsDAO, defaultConfig)
+      val service = new ServicePerimeterServiceImpl(dataSource, gcsDAO, defaultConfig)
 
       val servicePerimeterName: ServicePerimeterName = defaultConfig.staticProjectsInPerimeters.keys.head
       val staticProjectNumbersInPerimeter: Set[String] =
@@ -149,7 +149,7 @@ class ServicePerimeterServiceSpec
       when(gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operationName)))
         .thenReturn(Future.successful(OperationStatus(done = true, Option("I'm bad at overwriting the perimeter"))))
 
-      val service = new ServicePerimeterService(dataSource, gcsDAO, defaultConfig)
+      val service = new ServicePerimeterServiceImpl(dataSource, gcsDAO, defaultConfig)
 
       val servicePerimeterName: ServicePerimeterName = defaultConfig.staticProjectsInPerimeters.keys.head
       val billingProject1 = testData.testProject1
@@ -204,9 +204,9 @@ class ServicePerimeterServiceSpec
     )
       .thenReturn(Future.successful(true))
 
-    Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO,
-                                                                     Some(ServicePerimeterName("fake_sp_name")),
-                                                                     testContext
+    Await.result(ServicePerimeterServiceImpl.checkServicePerimeterAccess(samDAO,
+                                                                         Some(ServicePerimeterName("fake_sp_name")),
+                                                                         testContext
                  ),
                  Duration.Inf
     )
@@ -225,9 +225,9 @@ class ServicePerimeterServiceSpec
       .thenReturn(Future.successful(false))
 
     intercept[ServicePerimeterAccessException] {
-      Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO,
-                                                                       Some(ServicePerimeterName("fake_sp_name")),
-                                                                       testContext
+      Await.result(ServicePerimeterServiceImpl.checkServicePerimeterAccess(samDAO,
+                                                                           Some(ServicePerimeterName("fake_sp_name")),
+                                                                           testContext
                    ),
                    Duration.Inf
       )
@@ -235,7 +235,7 @@ class ServicePerimeterServiceSpec
   }
 
   it should "return a successful result when no service perimeter name is provided" in {
-    Await.result(ServicePerimeterService.checkServicePerimeterAccess(mock[SamDAO], None, testContext), Duration.Inf)
+    Await.result(ServicePerimeterServiceImpl.checkServicePerimeterAccess(mock[SamDAO], None, testContext), Duration.Inf)
   }
 
 }

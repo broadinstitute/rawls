@@ -5,14 +5,14 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
-import spray.json.{JsObject, _}
+import spray.json._
 
 import scala.concurrent.ExecutionContext
 
@@ -23,7 +23,7 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
   val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
-  def workspaceRoutesV2(otelContext: Context = Context.root()): server.Route = {
+  def workspaceRoutesV2(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("workspaces" / "v2") {
@@ -103,5 +103,4 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
           }
       }
     }
-  }
 }

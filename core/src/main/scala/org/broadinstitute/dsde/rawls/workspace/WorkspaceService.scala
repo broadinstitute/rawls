@@ -10,7 +10,6 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
@@ -39,9 +38,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.{ResourceBufferService, ResourceBufferServiceImpl}
+import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeterService, ServicePerimeterServiceImpl}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -90,7 +88,6 @@ object WorkspaceService {
                   requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager,
                   resourceBufferService: ResourceBufferService,
-                  resourceBufferSaEmail: String,
                   servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO,
                   terraBillingProjectOwnerRole: String,
@@ -127,7 +124,6 @@ object WorkspaceService {
       config,
       requesterPaysSetupService,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao,
       terraBillingProjectOwnerRole,
@@ -203,7 +199,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        config: WorkspaceServiceConfig,
                        requesterPaysSetupService: RequesterPaysSetupService,
                        resourceBufferService: ResourceBufferService,
-                       resourceBufferSaEmail: String,
                        servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
                        val terraBillingProjectOwnerRole: String,
@@ -3086,10 +3081,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
       _ <- traceFutureWithParent("remove RBS SA from owner policy", parentContext) { _ =>
-        gcsDAO.removePolicyBindings(googleProjectId,
-                                    Map(
-                                      "roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)
-                                    )
+        gcsDAO.removePolicyBindings(
+          googleProjectId,
+          Map(
+            "roles/owner" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail)
+          )
         )
       }
     } yield (googleProjectId, gcsDAO.getGoogleProjectNumber(googleProject))

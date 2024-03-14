@@ -18,7 +18,7 @@ import io.opentelemetry.context.Context
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
@@ -126,20 +126,19 @@ trait RawlsApiService
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = (otelContext: Context) => {
+  val baseApiRoutes = (otelContext: Context) =>
     workspaceRoutesV2(otelContext) ~
-    workspaceRoutes(otelContext) ~
-    entityRoutes(otelContext) ~
-    methodConfigRoutes(otelContext) ~
-    submissionRoutes(otelContext) ~
-    adminRoutes(otelContext) ~
-    userRoutes(otelContext) ~
-    billingRoutesV2(otelContext) ~
-    billingRoutes(otelContext) ~
-    notificationsRoutes ~
-    servicePerimeterRoutes(otelContext) ~
-    snapshotRoutes(otelContext)
-  }
+      workspaceRoutes(otelContext) ~
+      entityRoutes(otelContext) ~
+      methodConfigRoutes(otelContext) ~
+      submissionRoutes(otelContext) ~
+      adminRoutes(otelContext) ~
+      userRoutes(otelContext) ~
+      billingRoutesV2(otelContext) ~
+      billingRoutes(otelContext) ~
+      notificationsRoutes ~
+      servicePerimeterRoutes(otelContext) ~
+      snapshotRoutes(otelContext)
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 

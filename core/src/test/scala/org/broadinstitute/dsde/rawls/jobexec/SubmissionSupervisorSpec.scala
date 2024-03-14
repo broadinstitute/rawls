@@ -52,7 +52,8 @@ class SubmissionSupervisorSpec
 
   val mockServer = RemoteServicesMockServer()
   val gcsDAO = new MockGoogleServicesDAO("test")
-  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getPreparedMockGoogleCredential(), 1 minute)
+  val mockSamDAO =
+    new HttpSamDAO(mockServer.mockServerBaseUrl, Option(gcsDAO.getPreparedMockGoogleCredential()), 1 minute)
   val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
   override def beforeAll(): Unit = {

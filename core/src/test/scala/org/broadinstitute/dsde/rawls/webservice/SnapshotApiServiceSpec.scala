@@ -18,6 +18,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   val v2BaseSnapshotsPath = s"${testData.wsName.path}/snapshots/v2"
+  val v2WorkspaceIdBaseSnapshotsPath = s"/workspaces/${testData.workspace.workspaceIdAsUUID}/snapshots/v2"
 
   val defaultNamedSnapshotJson = httpJson(
     NamedDataRepoSnapshot(
@@ -565,5 +566,16 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
           }
         }
   }
+
+  it should
+    "return 201 when creating a reference to a snapshot using workspaceId" in withTestDataApiServices { services =>
+      Post(v2WorkspaceIdBaseSnapshotsPath, defaultNamedSnapshotJson) ~>
+        sealRoute(services.snapshotRoutes()) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+    }
 
 }

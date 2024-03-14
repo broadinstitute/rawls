@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.accesscontextmanager.v1.model.{Operation, ServicePerimeter, ServicePerimeterConfig}
 import com.google.api.services.accesscontextmanager.v1.{AccessContextManager, AccessContextManagerScopes}
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.util.FutureSupport
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
+import com.typesafe.config.Config
 
 class HttpGoogleAccessContextManagerDAO(clientEmail: String,
                                         pemFile: String,
@@ -24,10 +26,9 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String,
     with GoogleUtilities
     with AccessContextManagerDAO {
 
-  val httpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory = GsonFactory.getDefaultInstance
-
-  val accessContextScopes = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
+  val httpTransport: NetHttpTransport = GoogleNetHttpTransport.newTrustedTransport
+  val jsonFactory: GsonFactory = GsonFactory.getDefaultInstance
+  val accessContextScopes: Seq[String] = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
 
   def getAccessContextManagerCredential: Credential =
     new GoogleCredential.Builder()

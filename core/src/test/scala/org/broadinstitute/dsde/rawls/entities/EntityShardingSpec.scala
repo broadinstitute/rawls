@@ -6,7 +6,7 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactory,
+  GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
   SlickDataSource
 }
@@ -59,7 +59,7 @@ class EntityShardingSpec
     def actorRefFactory = ActorSystem()
     val samDAO = new MockSamDAO(dataSource)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val testConf = ConfigFactory.load()
 

@@ -16,7 +16,7 @@ import scala.language.postfixOps
 class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
   implicit val actorSystem: ActorSystem = ActorSystem("SubmissionCostServiceSpec")
   val mockBigQueryDAO = new MockGoogleBigQueryDAO
-  val submissionCostService = SubmissionCostService.constructor(
+  val submissionCostService = SubmissionCostServiceImpl.constructor(
     "fakeTableName",
     "fakeDatePartitionColumn",
     "fakeServiceProject",

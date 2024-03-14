@@ -59,7 +59,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
   def mockBucketMigrationServiceForOwner(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
                                          mockGcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-  ): BucketMigrationService = {
+  ): BucketMigrationServiceImpl = {
     val ownerRequest = getRequestContext("owner@example.com")
     when(
       mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -92,12 +92,12 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     when(bucket.getLocation).thenReturn("US")
     when(mockGcsDAO.getBucket(any(), any())(any())).thenReturn(Future.successful(Right(bucket)))
 
-    BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(ownerRequest)
+    BucketMigrationServiceImpl.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(ownerRequest)
   }
 
   def mockBucketMigrationServiceForNonOwner(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
                                             mockGcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-  ): BucketMigrationService = {
+  ): BucketMigrationServiceImpl = {
     val userRequest = getRequestContext("user@example.com")
     when(
       mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -134,10 +134,10 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       )
     )
 
-    BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(userRequest)
+    BucketMigrationServiceImpl.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(userRequest)
   }
 
-  def mockOwnerEnforcementTest(): (BucketMigrationService, BucketMigrationService) = {
+  def mockOwnerEnforcementTest(): (BucketMigrationServiceImpl, BucketMigrationServiceImpl) = {
     val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
@@ -149,7 +149,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   def mockBucketMigrationServiceForAdminUser(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
                                              mockGcsDAO: GoogleServicesDAO =
                                                mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-  ): BucketMigrationService = {
+  ): BucketMigrationServiceImpl = {
     val adminUser = "admin@example.com"
     val adminCtx = getRequestContext(adminUser)
     when(mockGcsDAO.isAdmin(adminUser)).thenReturn(Future.successful(true))
@@ -160,20 +160,20 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     when(bucket.getLocation).thenReturn("US")
     when(mockGcsDAO.getBucket(any(), any())(any())).thenReturn(Future.successful(Right(bucket)))
 
-    BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(adminCtx)
+    BucketMigrationServiceImpl.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(adminCtx)
   }
 
   def mockBucketMigrationServiceForNonAdminUser(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
                                                 mockGcsDAO: GoogleServicesDAO =
                                                   mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-  ): BucketMigrationService = {
+  ): BucketMigrationServiceImpl = {
     val nonAdminUser = "user@example.com"
     val nonAdminCtx = getRequestContext(nonAdminUser)
     when(mockGcsDAO.isAdmin(nonAdminUser)).thenReturn(Future.successful(false))
-    BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(nonAdminCtx)
+    BucketMigrationServiceImpl.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(nonAdminCtx)
   }
 
-  def mockAdminEnforcementTest(): (BucketMigrationService, BucketMigrationService) = {
+  def mockAdminEnforcementTest(): (BucketMigrationServiceImpl, BucketMigrationServiceImpl) = {
     val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
@@ -1044,7 +1044,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       val gcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       val userCtx = getRequestContext("user@example.com")
-      val bucketMigrationService = BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)(userCtx)
+      val bucketMigrationService = BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)(userCtx)
 
       val nonOwnedWorkspace =
         makeWorkspace("nonOwnedWorkspace", "notThisUser@example.com")
