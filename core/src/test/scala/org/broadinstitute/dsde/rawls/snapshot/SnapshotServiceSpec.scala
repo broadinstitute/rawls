@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.model.{
   NamedDataRepoSnapshot,
   RawlsRequestContext,
   SamResourceAction,
+  SamResourceTypeName,
   SamResourceTypeNames,
   SamUserStatusResponse,
   WorkspaceType
@@ -43,7 +44,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
   // a test-fixture user info object
   private def defaultMockSamDao() = {
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-
+    when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+      .thenReturn(Future.successful(Seq.empty))
     when(
       mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                any[String],
@@ -200,6 +202,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO).createWorkspace(
         ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
         ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+        ArgumentMatchers.eq(None),
         any[RawlsRequestContext]
       )
     }
@@ -244,7 +247,198 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
           any[UUID],
           ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          any[Option[WsmPolicyInputs]],
           any[RawlsRequestContext]
+        )
+    }
+
+    "set a group-constraint policy on a new WSM workspace if workspace has an auth domain" in withMinimalTestDatabase {
+      _ =>
+        val authDomainGroup = "authDomainGroup"
+        val mockSamDAO = defaultMockSamDao()
+        when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+          .thenReturn(Future.successful(Seq(authDomainGroup)))
+
+        val expectedPolicyInputs = new WsmPolicyInputs().inputs(
+          List(
+            new WsmPolicyInput()
+              .namespace("terra")
+              .name("group-constraint")
+              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+          ).asJava
+        )
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+        when(
+          mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])
+        ).thenAnswer(_ => throw new ApiException(404, "Workspace does not exist"))
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service called WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO).createWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          ArgumentMatchers.eq(Some(expectedPolicyInputs)),
+          any[RawlsRequestContext]
+        )
+    }
+
+    "set a group-constraint policy on an existing WSM workspace if no such policy exists and the workspace has an auth domain" in withMinimalTestDatabase {
+      _ =>
+        val authDomainGroup = "authDomainGroup"
+        val mockSamDAO = defaultMockSamDao()
+        when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+          .thenReturn(Future.successful(Seq(authDomainGroup)))
+
+        val expectedPolicyInputs = new WsmPolicyInputs().inputs(
+          List(
+            new WsmPolicyInput()
+              .namespace("terra")
+              .name("group-constraint")
+              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+          ).asJava
+        )
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service DID NOT call WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
+          any[UUID],
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          any[Option[WsmPolicyInputs]],
+          any[RawlsRequestContext]
+        )
+
+        // assert that the group-constraint policy was backfilled on the existing WSM workspace
+        verify(mockWorkspaceManagerDAO).updateWorkspacePolicies(any[UUID],
+                                                                ArgumentMatchers.eq(expectedPolicyInputs),
+                                                                any[RawlsRequestContext]
+        )
+    }
+
+    "not set a group-constraint policy on an existing WSM workspace if there is already a group-constraint policy even if the workspace has an auth domain" in withMinimalTestDatabase {
+      _ =>
+        val authDomainGroup = "authDomainGroup"
+        val mockSamDAO = defaultMockSamDao()
+        when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+          .thenReturn(Future.successful(Seq(authDomainGroup)))
+
+        val existingPolicyInputs = new WsmPolicyInputs().inputs(
+          List(
+            new WsmPolicyInput()
+              .namespace("terra")
+              .name("group-constraint")
+              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+              .additionalData(List(new WsmPolicyPair().key("group").value("additionalPolicyGroup")).asJava)
+          ).asJava
+        )
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+        when(mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+          new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE).policies(existingPolicyInputs.getInputs)
+        )
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service DID NOT call WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
+          any[UUID],
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          any[Option[WsmPolicyInputs]],
+          any[RawlsRequestContext]
+        )
+
+        // assert that the workspace's existing policies were not updated
+        verify(mockWorkspaceManagerDAO, times(0)).updateWorkspacePolicies(any[UUID],
+                                                                          any[WsmPolicyInputs],
+                                                                          any[RawlsRequestContext]
         )
     }
 
@@ -264,6 +458,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
+      when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+        .thenReturn(Future.successful(Seq.empty))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
       when(
@@ -358,6 +554,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
+      when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+        .thenReturn(Future.successful(Seq.empty))
 
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       when(
@@ -439,6 +637,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     }
 
     "not create a snapshot reference of an Azure snapshot in a GCP workspace" in withDefaultTestDatabase {
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       // stub an Azure snapshot
       val mockDataRepoDAO = defaultDataRepoDao()
       val azureSnapshot = new SnapshotModel()
@@ -458,7 +657,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         defaultMockSamDao(),
-        defaultMockWorkspaceManagerDao(),
+        mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev",
         mockDataRepoDAO
       )(testContext)
@@ -479,7 +678,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         thrown.getMessage === "Snapshots by reference are not supported for Azure datasets."
       )
 
-      verify(defaultMockWorkspaceManagerDao(), never()).createDataRepoSnapshotReference(
+      verify(mockWorkspaceManagerDAO, never()).createDataRepoSnapshotReference(
         any[UUID],
         any[UUID],
         any[DataReferenceName],
@@ -612,6 +811,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // stub an Azure workspace
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       val azureWorkspaceDescription = new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
         .azureContext(
           new AzureContext()
             .tenantId(UUID.randomUUID().toString)
@@ -651,7 +851,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         "fake-terra-data-repo-dev",
         mockDataRepoDAO
       )(testContext)
-      val thrown = intercept[RawlsException] {
+      val thrown = intercept[UnsupportedPlatformException] {
         Await.result(
           snapshotService.createSnapshotByWorkspaceName(
             testData.azureWorkspace.toWorkspaceName,

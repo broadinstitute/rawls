@@ -74,13 +74,17 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def createWorkspace(workspaceId: UUID,
                                workspaceType: WorkspaceType,
+                               policyInputs: Option[WsmPolicyInputs],
                                ctx: RawlsRequestContext
   ): CreatedWorkspace = {
     val stage = workspaceType match {
       case WorkspaceType.RawlsWorkspace => WorkspaceStageModel.RAWLS_WORKSPACE
       case WorkspaceType.McWorkspace    => WorkspaceStageModel.MC_WORKSPACE
     }
-    getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).stage(stage))
+
+    val request = new CreateWorkspaceRequestBody().id(workspaceId).stage(stage)
+    policyInputs.map(request.policies)
+    getWorkspaceApi(ctx).createWorkspace(request)
   }
 
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
@@ -107,20 +111,24 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
-                              spendProfile: ProfileModel,
+                              spendProfile: Option[ProfileModel],
                               billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
-  ): CloneWorkspaceResult =
+  ): CloneWorkspaceResult = {
+    val request = new CloneWorkspaceRequest()
+      .destinationWorkspaceId(workspaceId)
+      .displayName(displayName)
+      .location(location.orNull)
+      .projectOwnerGroupId(billingProjectNamespace)
+
+    spendProfile.map(_.getId.toString).map(request.spendProfile)
+
     getWorkspaceApi(ctx).cloneWorkspace(
-      new CloneWorkspaceRequest()
-        .destinationWorkspaceId(workspaceId)
-        .displayName(displayName)
-        .spendProfile(spendProfile.getId.toString)
-        .location(location.orNull)
-        .projectOwnerGroupId(billingProjectNamespace),
+      request,
       sourceWorkspaceId
     )
+  }
 
   override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport =
     apiClientProvider.getJobsApi(ctx).retrieveJob(jobControlId)
@@ -163,6 +171,15 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                           ctx: RawlsRequestContext
   ): JobResult =
     getWorkspaceApi(ctx).getDeleteWorkspaceV2Result(workspaceId, jobControlId)
+
+  override def updateWorkspacePolicies(workspaceId: UUID,
+                                       policyInputs: WsmPolicyInputs,
+                                       ctx: RawlsRequestContext
+  ): WsmPolicyUpdateResult = {
+    val request =
+      new WsmPolicyUpdateRequest().addAttributes(policyInputs).updateMode(WsmPolicyUpdateMode.FAIL_ON_CONFLICT)
+    getWorkspaceApi(ctx).updatePolicies(request, workspaceId)
+  }
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,

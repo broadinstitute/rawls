@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   NamedDataRepoSnapshot,
   RawlsRequestContext,
+  SamResourceTypeNames,
   SamWorkspaceActions,
   SnapshotListResponse,
   Workspace,
@@ -78,43 +79,71 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
 //Given a rawls workspace, creates a snapshot reference in workspace manager
   private def createSnapshot(rawlsWorkspace: Workspace,
                              snapshotIdentifiers: NamedDataRepoSnapshot
-  ): Future[DataRepoSnapshotResource] = {
-    val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
-    val snapshot =
-      new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
-    val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
+  ): Future[DataRepoSnapshotResource] =
+    samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, rawlsWorkspace.workspaceId, ctx).map {
+      workspaceAuthDomain =>
+        val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
+        val snapshot =
+          new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
+        val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
 
-    // prevent snapshots from disallowed platforms
-    snapshotValidator.validateSnapshotPlatform()
+        // prevent snapshots from disallowed platforms
+        snapshotValidator.validateSnapshotPlatform()
 
-    // prevent disallowed access across workspace or dataset protection boundaries
-    snapshotValidator.validateProtectedStatus()
+        // prevent disallowed access across workspace or dataset protection boundaries
+        snapshotValidator.validateProtectedStatus()
 
-    try {
-      // if there's an existing WSM workspace, make sure its platform is compatible
-      // with that of the snapshot's dataset.
-      val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
-      snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
-    } catch {
-      case _: AggregateWorkspaceNotFoundException =>
-        // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
-        // and then create a stub workspace
-        snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
-        workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
+        val wsmPolicyInputs = workspaceAuthDomain.toList match {
+          case Nil => None
+          case authDomainGroups =>
+            Option(
+              new WsmPolicyInputs().inputs(
+                List(
+                  new WsmPolicyInput()
+                    .namespace("terra")
+                    .name("group-constraint")
+                    .additionalData(
+                      authDomainGroups.map(groupName => new WsmPolicyPair().key("group").value(groupName)).asJava
+                    )
+                ).asJava
+              )
+            )
+        }
+
+        try {
+          // if there's an existing WSM workspace, make sure its platform is compatible
+          // with that of the snapshot's dataset.
+          val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
+          snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
+
+          // if the existing WSM workspace doesn't have a group-constraint policy, but the Rawls workspace
+          // has an auth domain, backfill the group-constraint policy on the existing WSM workspace
+          if (
+            !wsmWorkspace.policies.exists(policy =>
+              policy.namespace.equals("terra") && policy.name.equals("group-constraint")
+            ) && wsmPolicyInputs.isDefined
+          ) {
+            workspaceManagerDAO.updateWorkspacePolicies(rawlsWorkspace.workspaceIdAsUUID, wsmPolicyInputs.get, ctx)
+          }
+        } catch {
+          case _: AggregateWorkspaceNotFoundException =>
+            // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
+            // and then create a stub workspace
+            snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
+            workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, wsmPolicyInputs, ctx)
+        }
+
+        // create the requested snapshot reference
+        workspaceManagerDAO.createDataRepoSnapshotReference(
+          wsid,
+          snapshotIdentifiers.snapshotId,
+          snapshotIdentifiers.name,
+          snapshotIdentifiers.description,
+          terraDataRepoInstanceName,
+          CloningInstructionsEnum.NOTHING,
+          ctx
+        )
     }
-
-    // create the requested snapshot reference
-    val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(
-      wsid,
-      snapshotIdentifiers.snapshotId,
-      snapshotIdentifiers.name,
-      snapshotIdentifiers.description,
-      terraDataRepoInstanceName,
-      CloningInstructionsEnum.NOTHING,
-      ctx
-    )
-    Future.successful(snapshotRef)
-  }
 
   def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
     val referenceUuid = validateSnapshotId(referenceId)

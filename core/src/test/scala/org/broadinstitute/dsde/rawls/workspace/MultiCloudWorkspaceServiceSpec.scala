@@ -945,14 +945,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
 
         when(
-          mcWorkspaceService.workspaceManagerDAO.cloneWorkspace(
-            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
-            any(),
-            equalTo("kifflom"),
-            any(),
-            equalTo(testData.azureWorkspace.namespace),
-            any(),
-            any()
+          mcWorkspaceService.workspaceManagerDAO.cloneWorkspace(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                                any(),
+                                                                equalTo("kifflom"),
+                                                                any(),
+                                                                equalTo(testData.azureWorkspace.namespace),
+                                                                any(),
+                                                                any()
           )
         ).thenAnswer((_: InvocationOnMock) =>
           throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.ImATeapot, "short and stout"))

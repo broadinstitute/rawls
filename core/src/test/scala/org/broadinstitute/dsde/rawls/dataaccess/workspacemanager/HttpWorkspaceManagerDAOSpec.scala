@@ -262,14 +262,13 @@ class HttpWorkspaceManagerDAOSpec
       .location("the-moon")
       .projectOwnerGroupId(billingProjectId);
 
-    wsmDao.cloneWorkspace(
-      testData.azureWorkspace.workspaceIdAsUUID,
-      workspaceId,
-      "my-workspace-clone",
-      testData.azureBillingProfile,
-      billingProjectId,
-      testContext,
-      Some("the-moon")
+    wsmDao.cloneWorkspace(testData.azureWorkspace.workspaceIdAsUUID,
+                          workspaceId,
+                          "my-workspace-clone",
+                          Option(testData.azureBillingProfile),
+                          billingProjectId,
+                          testContext,
+                          Some("the-moon")
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)

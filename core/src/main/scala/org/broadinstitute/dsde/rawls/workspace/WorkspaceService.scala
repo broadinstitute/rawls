@@ -1161,6 +1161,29 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         fastPassServiceConstructor(childContext, dataSource)
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
+
+      _ <- traceFutureWithParent("cloneWsmWorkspace", parentContext)(context =>
+        Future {
+          workspaceManagerDAO.cloneWorkspace(
+            sourceWorkspaceId = sourceWorkspaceContext.workspaceIdAsUUID,
+            workspaceId = destWorkspaceContext.workspaceIdAsUUID,
+            displayName = destWorkspaceContext.name,
+            spendProfile = None,
+            billingProjectNamespace = destWorkspaceContext.namespace,
+            context
+          )
+        }.recoverWith { case e: ApiException =>
+          if (e.getCode != StatusCodes.NotFound.intValue) {
+            logger.warn(
+              s"Unexpected failure cloning workspace (while cloning Rawls-stage workspace in Workspace Manager) [sourceWorkspaceId=${sourceWorkspaceContext.workspaceId}, destWorkspaceId=${destWorkspaceContext.workspaceId}]. Received ${e.getCode}: [${e.getResponseBody}]"
+            )
+            throw e
+          } else {
+            // 404 == workspace manager does not know about this workspace, move on
+            Future.successful()
+          }
+        }
+      )
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint

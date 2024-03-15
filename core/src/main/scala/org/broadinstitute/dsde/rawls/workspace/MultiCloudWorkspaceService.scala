@@ -366,7 +366,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
               workspaceId = workspaceId,
               displayName = request.name,
-              spendProfile = profile,
+              spendProfile = Option(profile),
               billingProjectNamespace = request.namespace,
               context
             )
