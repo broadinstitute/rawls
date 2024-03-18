@@ -24,6 +24,7 @@ class MethodConfigApiSpec
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
+  // testing that we can import from agora along with a lot of setup. contract test perhaps? and then maybe some additional unit tests
   "import method config" - {
     /*
      * This test does

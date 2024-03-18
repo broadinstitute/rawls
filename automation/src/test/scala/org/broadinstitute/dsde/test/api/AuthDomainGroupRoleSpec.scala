@@ -14,6 +14,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
 @AuthDomainsTest
+// this entire spec is just checking that sam calculates auth domain access correctly. not on Rawls to test. confirm with ID that Sam has sufficient tests here
 class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with GroupFixtures with Matchers {
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId

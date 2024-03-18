@@ -149,6 +149,7 @@ class RawlsApiSpec
     Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/submissions/queueStatus"))
 
   "Rawls" - {
+    // TBD
     "should retrieve sub-workflow metadata and outputs from Cromwell" taggedAs MethodsTest in {
       implicit val token: AuthToken = studentB.makeAuthToken()
 
@@ -264,6 +265,7 @@ class RawlsApiSpec
 
     // disabling this test until the latency issue in IAM propagation is resolved.
     // See https://broadworkbench.atlassian.net/browse/WM-1599 for more details.
+    // TBD (although it's ignored so do we really need it?)
     "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs MethodsTest ignore {
       implicit val token: AuthToken = studentB.makeAuthToken()
 
@@ -398,6 +400,7 @@ class RawlsApiSpec
 
     // disabling this test until the latency issue in IAM propagation is resolved.
     // See https://broadworkbench.atlassian.net/browse/WM-1599 for more details.
+    // TBD (although it's ignored so do we really need it?)
     "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs MethodsTest ignore {
       implicit val token: AuthToken = studentB.makeAuthToken()
 
@@ -534,115 +537,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-//    Disabling this test until we decide what to do with it. See AP-177
-
-    "should retrieve metadata with widely scattered sub-workflows in a short time" taggedAs MethodsTest ignore {
-      implicit val token: AuthToken = studentA.makeAuthToken()
-
-      val scatterWidth = 500
-
-      // this will run scatterCount^levels workflows, so be careful if increasing these values!
-      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
-
-      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-            projectName,
-            workspaceName,
-            topLevelMethod,
-            topLevelMethodConfiguration.configNamespace,
-            topLevelMethodConfiguration.configName,
-            topLevelMethodConfiguration.snapshotId,
-            topLevelMethodConfiguration.inputs(topLevelMethod),
-            topLevelMethodConfiguration.outputs(topLevelMethod),
-            topLevelMethodConfiguration.rootEntityType
-          )
-
-          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
-
-          // it currently takes ~ 5 min for google bucket read permissions to propagate.
-          // We can't launch a workflow until this happens.
-          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
-
-          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
-
-          val submissionId = Rawls.submissions.launchWorkflow(
-            projectName,
-            workspaceName,
-            topLevelMethodConfiguration.configNamespace,
-            topLevelMethodConfiguration.configName,
-            "participant",
-            SingleParticipant.entityId,
-            "this",
-            useCallCache = false,
-            deleteIntermediateOutputFiles = true,
-            useReferenceDisks = false,
-            memoryRetryMultiplier = 1.2,
-            ignoreEmptyOutputs = false
-          )
-
-          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
-
-          val submissionPatience =
-            PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
-          implicit val patienceConfig: PatienceConfig = submissionPatience
-
-          val firstWorkflowId = eventually {
-            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-
-            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              workflows should not be empty
-              workflows.head
-            }
-          }
-
-          // retrieve the workflow's metadata.
-          // Orchestration times out in 1 minute, so we want to be well below that
-
-          // we also need to check that it returns *at all* in under a minute
-          // `eventually` won't cover this if the call itself is slow and synchronous
-
-          val myTimeout = Timeout(scaled(Span(45, Seconds)))
-          val myInterval = Interval(scaled(Span(10, Seconds)))
-
-          implicit val ec: ExecutionContextExecutor = system.dispatcher
-
-          def cromwellMetadata(wfId: String) = Future {
-            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
-          }.futureValue(timeout = myTimeout)
-
-          val subworkflowIds = eventually(myTimeout, myInterval) {
-            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
-              subIds.size shouldBe scatterWidth
-            }
-            subIds
-          }
-
-          // can we also quickly retrieve metadata for a few of the subworkflows?
-
-          Random.shuffle(subworkflowIds.take(10)).foreach {
-            cromwellMetadata(_)
-          }
-
-          // clean up: Abort and wait for one minute or Aborted, whichever comes first
-          // Timeout is OK here: just make a best effort
-
-          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-
-          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
-            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
-              case (status, _) if status == "Aborted" => Future.successful(())
-              case (status, _)                        => Future.failed(new Exception(s"Expected Aborted, saw $status"))
-            }
-          }
-
-          // wait on the future's execution
-          abortOrGiveUp.futureValue
-        }
-      }(owner.makeAuthToken(billingScopes))
-    }
-
+    // unit testable
     "should label low security bucket" taggedAs WorkspacesTest in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentA.makeAuthToken()
@@ -657,6 +552,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
+    // unit testable
     "should label high security bucket" taggedAs WorkspacesTest in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentA.makeAuthToken()
@@ -688,6 +584,9 @@ class RawlsApiSpec
                                  "reader" -> "terraBucketReader"
     )
 
+    // this is testing that Sam makes the correct policies and that Rawls sets the correct IAM on the bucket in GCP
+    // Sam testing not needed as long as Sam has coverage
+    // Bucket IAM could mostly be covered by unit testing (eg Rawls issues the expected request to GCP) and maybe a red ring test (we can update iam on a bucket)
     "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" taggedAs WorkspacesTest in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = owner.makeAuthToken()
@@ -715,6 +614,9 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
+    // this is testing that Sam makes the correct policies and that Rawls sets the correct IAM on the bucket in GCP, but for auth domain constrained workspaces
+    // Sam testing not needed as long as Sam has coverage
+    // Bucket IAM could mostly be covered by unit testing (eg Rawls issues the expected request to GCP) and maybe a red ring test (we can update iam on a bucket)
     "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" taggedAs WorkspacesTest in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = owner.makeAuthToken()
@@ -741,6 +643,8 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
+    // this is basically testing the CloneWorkspaceFileTransferMonitor but really verifying that it's working in GCP too
+    // unit tests for the monitor + a red ring test that Rawls can write to a bucket? Is that sufficient?
     "should clone a workspace and only copy files in the specified path" taggedAs WorkspacesTest in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentA.makeAuthToken()
@@ -791,6 +695,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
+    // TBD (although it's ignored so do we really need it?)
     "should support running workflows with private docker images" taggedAs MethodsTest ignore {
       implicit val token: AuthToken = owner.makeAuthToken()
 
@@ -867,6 +772,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
+    // TBD (although it's ignored so do we really need it?)
     "should support running workflows with wdl structs" taggedAs MethodsTest ignore {
       implicit val token: AuthToken = owner.makeAuthToken()
 
@@ -1042,6 +948,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
+    // unit test(s) for the ExpressionValidator? there's some unit tests for the method that throws the expected error, but it doesn't seem like this particular failure mode is covered
     "should fail to launch a submission with a reserved output attribute" taggedAs MethodsTest in {
       implicit val token: AuthToken = owner.makeAuthToken()
 

@@ -68,6 +68,7 @@ class WorkspaceApiSpec
 
   "Rawls" - {
     // disabled, see WOR-1323
+    // unit test that Rawls will attempt to update the correct service perimeter when appropriate. red ring test that Rawls can update a service perimeter
     "should add workspace Google project to billing project's service perimeter" ignore {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
@@ -98,6 +99,7 @@ class WorkspaceApiSpec
       createdWorkspaceResponse.workspace.name should be(workspaceName)
     }
 
+    // unit test and maybe a red ring test that we can set labels on a Google project. labels may not be important enough to warrant a red ring test
     "should set labels on the underlying Google Project when creating a new Workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
@@ -141,6 +143,7 @@ class WorkspaceApiSpec
       Rawls.billingV2.deleteBillingProject(billingProjectName)
     }
 
+    // unit test + red ring test that we can set IAM on a google project
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken =
@@ -197,7 +200,9 @@ class WorkspaceApiSpec
       }
     }
 
+    // these tests and the reader/write specific ones are primarily testing Sam. You could argue that they're also testing Rawls's usage of Sam ie that the Sam resources that Rawls manages are configured correctly. Maybe we do need swat tests for this...
     "should allow project owners" - {
+      // testing Sam
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
 
@@ -223,6 +228,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // checks that Rawls can actually delete a Google project. unit test + red ring?
       "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
         val owner: Credentials = UserPool.chooseProjectOwner
         implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
@@ -261,6 +267,7 @@ class WorkspaceApiSpec
         }
       }
 
+
       "to get an error message when they try to create a workspace with a bucket region that is invalid" ignore {
         implicit val token: AuthToken = ownerAuthToken
         // Note that this invalid region passes the regexp in `withWorkspaceBucketRegionCheck`, so workspace creation is
@@ -288,6 +295,7 @@ class WorkspaceApiSpec
           .convertTo[String] should endWith regex (s" in Google project (.+) in region `${invalidRegion}`.".r)
       }
 
+      // testing sam
       "to add readers with can-share access" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("share-reader")) { workspaceName =>
@@ -317,6 +325,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // testing sam
       "to add readers without can-share access" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("no-share-reader")) { workspaceName =>
@@ -346,6 +355,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // testing sam
       "to add writers with can-compute access and then revoke can-compute" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("compute-writer")) { workspaceName =>
@@ -374,6 +384,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // testing sam
       "to change a writer's access level to reader" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("reader-to-writer")) { workspaceName =>
@@ -400,6 +411,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // testing sam
       "to change a writer's access level to no access" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("revoke-writer")) { workspaceName =>
@@ -420,6 +432,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // testing sam
       "to add an owner to a workspace, but not to change the new owner's permissions" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("two-owners")) { workspaceName =>
@@ -456,6 +469,7 @@ class WorkspaceApiSpec
         AttributeName(testAttributeNamespace, keyValuePairs._1) -> AttributeString(keyValuePairs._2)
       )
 
+      // unit test that workspace attrs can be updated. no need to worry about whether a project owner can as that's really a sam test
       "to add workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
         withTemporaryBillingProject(billingAccountId) { projectName =>
@@ -472,6 +486,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
       }
 
+      // unit test that workspace attrs can be removed. no need to worry about whether a project owner can as that's really a sam test
       "to remove workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
         withTemporaryBillingProject(billingAccountId) { projectName =>

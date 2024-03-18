@@ -38,6 +38,7 @@ class AuthDomainMultiGroupApiSpec
   "A workspace" - {
     "with multiple groups in its auth domain" - {
 
+      // unit testable
       "can be created" in {
 
         val user = UserPool.chooseAuthDomainUser
@@ -62,6 +63,7 @@ class AuthDomainMultiGroupApiSpec
         }
       }
 
+      // unit testable
       "can be cloned and retain the auth domain" in {
 
         val user = UserPool.chooseAuthDomainUser
@@ -95,6 +97,7 @@ class AuthDomainMultiGroupApiSpec
         }
       }
 
+      // unit testable
       "can be cloned and have a group added to the auth domain" in {
 
         val user = UserPool.chooseAuthDomainUser
@@ -133,6 +136,7 @@ class AuthDomainMultiGroupApiSpec
       }
 
       // no groups
+      // everything below is testing Sam and can be removed once ID confirms they have proper coverage
       "when the user is in none of the groups" - {
         "when shared with them" - {
           "can be seen but is not accessible" in {

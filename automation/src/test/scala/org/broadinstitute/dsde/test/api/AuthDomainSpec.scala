@@ -26,6 +26,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
+  // dupe and unit testable
   "AuthDomains" should "create and access a workspace with an auth domain" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
@@ -48,6 +49,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     }(groupOwnerToken)
   }
 
+  // unit testable / testing sam
   it should "not create a workspace with a multi-group auth domain if you're not in all groups" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
@@ -66,6 +68,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     }
   }
 
+  // testing sam
   it should "do the right security when auth domain membership changes" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
@@ -114,6 +117,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     }(groupOwnerToken)
   }
 
+  // testing sam
   it should "do the right security when access group membership changes and there is an access" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
@@ -172,6 +176,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     }(groupOwnerToken)
   }
 
+  // unit testable, sort of a dupe and testing sam
   it should "clone a workspace if the source has a multi-group auth domain and user is in all groups" in {
     val authToken = projectOwner.makeAuthToken()
 
@@ -213,6 +218,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     }(authToken)
   }
 
+  // unit test that you can add a new group to cloned ws auth domain
   it should "clone a workspace if the user added a group to the source authorization domain" in {
     val authToken = projectOwner.makeAuthToken()
 
@@ -244,6 +250,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     }(authToken)
   }
 
+  // unit test that cloning a workspace must include the source ws auth domain as subset of cloned ws auth domain
   it should "not allow changing a workspace's Realm if it exists" in {
     val authToken = projectOwner.makeAuthToken()
 

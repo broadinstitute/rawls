@@ -50,6 +50,7 @@ class MethodLaunchSpec
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
+  // unit test
   "launching a workflow with input not defined should throw exception" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
@@ -97,6 +98,7 @@ class MethodLaunchSpec
     }(user.makeAuthToken(billingScopes))
   }
 
+  // unit test that Rawls can abort a launched submission. contract test that Rawls and cromwell can actually abort the submission?
   "owner can abort a launched submission" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
@@ -221,6 +223,7 @@ class MethodLaunchSpec
     }(owner.makeAuthToken(billingScopes))
   }
 
+  // unit testable
   "launch workflow with wrong root entity" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
@@ -271,6 +274,7 @@ class MethodLaunchSpec
     }(user.makeAuthToken(billingScopes))
   }
 
+  // unit testable imo
   "launch workflow on set with incorrect expression" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()

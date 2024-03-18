@@ -13,6 +13,7 @@ import org.scalatest.matchers.should.Matchers
 class BillingApiSpec extends AnyFreeSpec with MethodFixtures with Matchers with TestReporterFixture with LazyLogging {
 
   "A user with a billing account" - {
+    // e2e test candidate, possibly with ws creation
     "can create a new billing project with v2 api" in {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)

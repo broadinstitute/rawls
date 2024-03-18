@@ -35,6 +35,7 @@ class AuthDomainGroupApiSpec
   "A workspace" - {
     "with one group in its auth domain" - {
 
+      // unit-testable
       "can be created" in {
         val user = UserPool.chooseAuthDomainUser
         implicit val authToken: AuthToken = defaultUserAuthToken
@@ -54,6 +55,7 @@ class AuthDomainGroupApiSpec
         }
       }
 
+      // unit-testable
       "can be cloned and retain the auth domain" in {
         val user = UserPool.chooseAuthDomainUser
         implicit val authToken: AuthToken = defaultUserAuthToken
@@ -88,6 +90,7 @@ class AuthDomainGroupApiSpec
       "when the user is not inside of the group" - {
 
         "when the workspace is shared with them" - {
+          // sam functionality
           "can be seen but is not accessible" in {
 
             val user = UserPool.chooseStudent
@@ -109,6 +112,7 @@ class AuthDomainGroupApiSpec
         }
 
         "when the workspace is not shared with them" - {
+          // sam functionality
           "cannot be seen and is not accessible" in {
 
             val user = UserPool.chooseStudent
@@ -129,6 +133,7 @@ class AuthDomainGroupApiSpec
       "when the user is inside of the group" - {
 
         "when the workspace is shared with them" - {
+          // sam functionality
           "can be seen and is accessible" in {
 
             val user = UserPool.chooseAuthDomainUser
@@ -152,6 +157,7 @@ class AuthDomainGroupApiSpec
         }
 
         "when the workspace is not shared with them" - {
+          // sam functionality
           "cannot be seen and is not accessible" in {
 
             val user = UserPool.chooseAuthDomainUser
