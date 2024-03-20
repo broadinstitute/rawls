@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.datarepo.client.ApiException
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -83,8 +84,16 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, rawlsWorkspace.workspaceId, ctx).map {
       workspaceAuthDomain =>
         val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
+
+        // try to parse the cloning instructions, if provided
+        val cloningInstructions: CloningInstructionsEnum = CloningInstructionsEnum
+          .fromValue(snapshotIdentifiers.cloningInstructions.getOrElse(CloningInstructionsEnum.NOTHING.toString))
+        if (cloningInstructions == null) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid cloning instructions"))
+        }
+
         val snapshot =
-          new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
+          new WrappedSnapshot(getSnapshotFromDataRepo(snapshotIdentifiers))
         val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
 
         // prevent snapshots from disallowed platforms
@@ -140,12 +149,27 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
           snapshotIdentifiers.name,
           snapshotIdentifiers.description,
           terraDataRepoInstanceName,
-          CloningInstructionsEnum.NOTHING,
+          cloningInstructions,
+          snapshotIdentifiers.properties,
           ctx
         )
     }
 
-  def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
+  private def getSnapshotFromDataRepo(snapshotIdentifiers: NamedDataRepoSnapshot) =
+    Try(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken)) match {
+      case Success(snapshot) => snapshot
+      case Failure(ex: ApiException) if ex.getCode == StatusCodes.NotFound.intValue =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Snapshot ${snapshotIdentifiers.snapshotId} not found.")
+        )
+      case Failure(other) =>
+        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}")
+        throw new RawlsExceptionWithErrorReport(ErrorReport(other))
+    }
+
+  def getSnapshotResourceFromWsm(workspaceName: WorkspaceName,
+                                 referenceId: String
+  ): Future[DataRepoSnapshotResource] = {
     val referenceUuid = validateSnapshotId(referenceId)
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.read,
