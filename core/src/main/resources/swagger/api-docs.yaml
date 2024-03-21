@@ -5757,7 +5757,7 @@ components:
         runningSubmissionsCount:
           type: integer
           description: Count of all the running submissions
-      description: Statistics about submissions in a workspace
+      description: Statistics about submissions in a workspace (only supported for GCP workspaces)
     WorkspaceRequest:
       required:
         - attributes
@@ -5988,7 +5988,7 @@ components:
         workspace:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
-          description: Statistics about submissions in the workspace, deprecated as part of the list response due to slow performance. This field will continue to be supported on individual workspace details.
+          description: GCP workspace submission statistics, deprecated as part of the list response due to slow performance. This field will continue to be supported on individual workspace details.
           deprecated: true
         policies:
           type: array
