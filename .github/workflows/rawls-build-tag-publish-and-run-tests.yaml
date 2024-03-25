@@ -125,6 +125,8 @@ jobs:
 
   rawls-swat-test-job:
     strategy:
+      # set fail-fast: false. We want all test jobs to complete, so we can see their results. If fail-fast were true,
+      # the first test jobs failure would cancel the other test jobs.
       fail-fast: false
       matrix:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
