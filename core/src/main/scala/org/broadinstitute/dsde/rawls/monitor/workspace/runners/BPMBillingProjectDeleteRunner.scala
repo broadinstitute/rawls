@@ -1,22 +1,22 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
-import bio.terra.workspace.client.ApiException
-import org.broadinstitute.dsde.rawls.billing.{BillingProjectLifecycle, BillingRepository}
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  WorkspaceManagerResourceJobRunner,
-  WorkspaceManagerResourceMonitorRecord
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProjectDeletion, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
   Incomplete,
   JobStatus
 }
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.{Deleting, DeletionFailed}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,7 +34,7 @@ class BPMBillingProjectDeleteRunner(
   val gcsDAO: GoogleServicesDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   billingRepository: BillingRepository,
-  billingLifecycle: BillingProjectLifecycle
+  billingProjectDeletion: BillingProjectDeletion
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
     with UserCtxCreator {
@@ -68,7 +68,7 @@ class BPMBillingProjectDeleteRunner(
         billingRepository.getLandingZoneId(projectName).flatMap {
           case Some(landingZoneId) =>
             handleLandingZoneDeletion(job.jobControlId, projectName, UUID.fromString(landingZoneId), userCtx)
-          case None => billingLifecycle.finalizeDelete(projectName, userCtx).map(_ => Complete)
+          case None => billingProjectDeletion.finalizeDelete(projectName, userCtx).map(_ => Complete)
         }
       case Failure(t) =>
         val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
@@ -107,7 +107,7 @@ class BPMBillingProjectDeleteRunner(
         Option(result.getJobReport).map(_.getStatus) match {
           case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)
           case Some(JobReport.StatusEnum.SUCCEEDED) =>
-            billingLifecycle.finalizeDelete(projectName, ctx).map(_ => Complete)
+            billingProjectDeletion.finalizeDelete(projectName, ctx).map(_ => Complete)
           case Some(JobReport.StatusEnum.FAILED) =>
             billingRepository
               .updateCreationStatus(projectName, DeletionFailed, Some(errorReportMessage(result)))
