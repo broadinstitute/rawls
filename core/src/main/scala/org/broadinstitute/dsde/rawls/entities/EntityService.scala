@@ -141,22 +141,27 @@ class EntityService(protected val ctx: RawlsRequestContext,
                      dataReference: Option[DataReferenceName],
                      billingProject: Option[GoogleProjectId]
   ): Future[Set[AttributeEntityReference]] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
+    // short-circuit: if caller requested to delete nothing, then we do nothing
+    if (entRefs.isEmpty) {
+      Future.successful(Set.empty)
+    } else {
+      getV2WorkspaceContextAndPermissions(workspaceName,
+                                          SamWorkspaceActions.write,
+                                          Some(WorkspaceAttributeSpecs(all = false))
+      ) flatMap { workspaceContext =>
+        val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
-      val deleteFuture = for {
-        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntities(entRefs)
-      } yield Set[AttributeEntityReference]()
+        val deleteFuture = for {
+          entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+          _ <- entityProvider.deleteEntities(entRefs)
+        } yield Set[AttributeEntityReference]()
 
-      deleteFuture
-        .recover { case delEx: DeleteEntitiesConflictException =>
-          delEx.referringEntities
-        }
-        .recover(bigQueryRecover)
+        deleteFuture
+          .recover { case delEx: DeleteEntitiesConflictException =>
+            delEx.referringEntities
+          }
+          .recover(bigQueryRecover)
+      }
     }
 
   def deleteEntitiesOfType(workspaceName: WorkspaceName,
