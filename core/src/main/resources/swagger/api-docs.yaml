@@ -4411,6 +4411,22 @@ components:
           type: string
           description: A description for the snapshot
           default: ""
+        properties:
+          type: object
+          description: A map of key-value pairs to associate with the snapshot. Optional, defaults to an empty map if not specified.
+          default: {}
+        cloningInstructions:
+          type: string
+          default: COPY_NOTHING
+          description: |
+            Cloning semantics for this snapshot. Optional, defaults to COPY_NOTHING if not specified.
+            COPY_NOTHING: Don't clone the snapshot.
+            COPY_REFERENCE: Create a new referenced snapshot that points to same cloud resource as the source snapshot.
+            COPY_LINK_REFERENCE: Create a new referenced snapshot that points to the same cloud resource as the source resource, AND link the source workspace policy to the destination workspace policy; changes in the source will propagate to the destination.
+          enum:
+            - COPY_NOTHING
+            - COPY_REFERENCE
+            - COPY_LINK_REFERENCE
       description: A Data Repo snapshot
     UpdateDataReferenceRequestBody:
       type: object
@@ -4439,6 +4455,8 @@ components:
           type: string
         cloningInstructions:
           type: string
+        properties:
+          type: object
     DataRepoSnapshotAttributes:
       type: object
       required: [ instanceName, snapshot ]

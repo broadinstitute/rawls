@@ -12,7 +12,9 @@ case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject
 case class NamedDataRepoSnapshot(name: DataReferenceName,
                                  description: Option[DataReferenceDescriptionField],
-                                 snapshotId: UUID
+                                 snapshotId: UUID,
+                                 cloningInstructions: Option[String] = None,
+                                 properties: Option[Map[String, String]] = None
 )
 case class SnapshotListResponse(gcpDataRepoSnapshots: Seq[DataRepoSnapshotResource])
 
@@ -31,16 +33,26 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     val RESOURCE_TYPE = "resourceType"
     val STEWARDSHIP_TYPE = "stewardshipType"
     val CLONING_INSTRUCTIONS = "cloningInstructions"
+    val PROPERTIES = "properties"
 
-    override def write(metadata: ResourceMetadata) = JsObject(
-      WORKSPACE_ID -> stringOrNull(metadata.getWorkspaceId),
-      RESOURCE_ID -> stringOrNull(metadata.getResourceId),
-      NAME -> stringOrNull(metadata.getName),
-      DESCRIPTION -> stringOrNull(metadata.getDescription),
-      RESOURCE_TYPE -> stringOrNull(metadata.getResourceType),
-      STEWARDSHIP_TYPE -> stringOrNull(metadata.getStewardshipType),
-      CLONING_INSTRUCTIONS -> stringOrNull(metadata.getCloningInstructions)
-    )
+    override def write(metadata: ResourceMetadata) = {
+      val properties = Option(metadata.getProperties)
+        .map { props =>
+          props.asScala.map(p => p.getKey -> stringOrNull(p.getValue)).toMap
+        }
+        .getOrElse(Map.empty)
+
+      JsObject(
+        WORKSPACE_ID -> stringOrNull(metadata.getWorkspaceId),
+        RESOURCE_ID -> stringOrNull(metadata.getResourceId),
+        NAME -> stringOrNull(metadata.getName),
+        DESCRIPTION -> stringOrNull(metadata.getDescription),
+        RESOURCE_TYPE -> stringOrNull(metadata.getResourceType),
+        STEWARDSHIP_TYPE -> stringOrNull(metadata.getStewardshipType),
+        CLONING_INSTRUCTIONS -> stringOrNull(metadata.getCloningInstructions),
+        PROPERTIES -> JsObject(properties)
+      )
+    }
 
     override def read(json: JsValue): ResourceMetadata =
       json.asJsObject.getFields(WORKSPACE_ID,
@@ -201,6 +213,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
   implicit val DataReferenceNameFormat: ValueObjectFormat[DataReferenceName] = ValueObjectFormat(DataReferenceName)
   implicit val dataReferenceDescriptionFieldFormat: ValueObjectFormat[DataReferenceDescriptionField] =
     ValueObjectFormat(DataReferenceDescriptionField)
-  implicit val NamedDataRepoSnapshotFormat: RootJsonFormat[NamedDataRepoSnapshot] = jsonFormat3(NamedDataRepoSnapshot)
+  implicit val NamedDataRepoSnapshotFormat: RootJsonFormat[NamedDataRepoSnapshot] = jsonFormat5(NamedDataRepoSnapshot)
   implicit val SnapshotListResponseFormat: RootJsonFormat[SnapshotListResponse] = jsonFormat1(SnapshotListResponse)
 }
