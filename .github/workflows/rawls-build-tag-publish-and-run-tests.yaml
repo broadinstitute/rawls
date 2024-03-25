@@ -125,13 +125,17 @@ jobs:
 
   rawls-swat-test-job:
     strategy:
+      fail-fast: false
       matrix:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
         testing-env: [ qa ] # what env resources to use, e.g. SA keys
         test-group: [
           { group_name: workspaces, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest -n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesTest" },
-          { group_name: analysis_journeys, tag: "-n org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest" },
           { group_name: workflows, tag: "-n org.broadinstitute.dsde.test.api.MethodsTest" }
+          # The Analysis Journeys swat tests (DataRepoSnapshotsTest) are all disabled, so the following matrix value
+          # will run zero tests. Instead of running a noop test job, skip it altogether. We are leaving this value
+          # here, commented out, to make it easy to re-instate if/when Analysis Journeys does have some tests to run.
+          # { group_name: analysis_journeys, tag: "-n org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest" }
         ] # Rawls test groups
     runs-on: ubuntu-latest
     needs:
