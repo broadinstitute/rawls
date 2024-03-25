@@ -649,7 +649,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // create a WDS application in Leo
       _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
-    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException) =>
+    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException | _: RawlsExceptionWithErrorReport) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
         _ <- deleteWorkspaceInWSM(workspaceId).recover { case e =>
