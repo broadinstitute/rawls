@@ -9,16 +9,11 @@ import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{
-  WorkspaceCloudPlatform,
-  WorkspaceListResponse,
-  WorkspaceResponse,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{WorkspaceCloudPlatform, WorkspaceListResponse, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, CancelAfterFailure}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -34,7 +29,7 @@ import org.broadinstitute.dsde.test.pipeline._
 import scala.util.{Failure, Try}
 
 @WorkspacesAzureTest
-class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
+class WorkspacesAzureApiSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp with CancelAfterFailure {
   // The values of the following vars are injected from the pipeline.
   var billingProject: String = _
   var ownerAuthToken: ProxyAuthToken = _

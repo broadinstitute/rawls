@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig,
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
+import org.scalatest.CancelAfterFailure
 import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -20,7 +21,8 @@ class AuthDomainMultiGroupApiSpec
     with Matchers
     with WorkspaceFixtures
     with GroupFixtures
-    with Eventually {
+    with Eventually
+    with CancelAfterFailure {
 
   implicit override val patienceConfig =
     PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(10, Seconds)))

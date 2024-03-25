@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Rawls, RestException, WorkspaceAccessLevel}
+import org.scalatest.CancelAfterFailure
 import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -25,7 +26,8 @@ class MethodLaunchSpec
     with Matchers
     with Eventually
     with WorkspaceFixtures
-    with MethodFixtures {
+    with MethodFixtures
+    with CancelAfterFailure {
 
   def createMethodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(

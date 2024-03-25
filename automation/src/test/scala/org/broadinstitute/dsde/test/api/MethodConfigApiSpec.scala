@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBi
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
+import org.scalatest.CancelAfterFailure
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsValue, JsonParser}
@@ -20,7 +21,8 @@ class MethodConfigApiSpec
     with RandomUtil
     with MethodFixtures
     with Matchers
-    with CleanUp {
+    with CleanUp
+      with CancelAfterFailure {
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
