@@ -626,38 +626,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail on invalid policy inputs and try to rollback workspace creation" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-    val leonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest(
-      "fake_ns",
-      "fake_name",
-      Map.empty,
-      policies = Option(
-        List(
-          WorkspacePolicy("group-constraint", "terra", List(Map("key" -> "group", "value" -> "invalidPolicyInputs")))
-        )
-      )
-    )
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
-    }
-
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
-  }
-
   it should "still delete from the database when cleaning up the workspace in WSM fails" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
       override def createAzureStorageContainer(workspaceId: UUID,
@@ -691,7 +659,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail with an improperly structured additional fields element on a policy" in {
+  it should "fail with an improperly structured additional fields element on a policy and rollback workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -725,6 +693,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
   it should "create a workspace with the requested policies" in {

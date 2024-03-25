@@ -660,11 +660,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             )
           }
           _ <- dataSource.inTransaction(_.workspaceQuery.delete(workspaceRequest.toWorkspaceName))
-        } yield throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError,
-                      s"Error creating workspace ${workspaceRequest.toWorkspaceName}. Please try again."
-          )
-        )
+        } yield e match {
+          case rawlsException: RawlsExceptionWithErrorReport => throw rawlsException
+          case _ =>
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError,
+                          s"Error creating workspace ${workspaceRequest.toWorkspaceName}. Please try again."
+              )
+            )
+        }
     }
   }
 
