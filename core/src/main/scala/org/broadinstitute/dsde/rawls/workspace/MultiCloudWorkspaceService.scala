@@ -649,21 +649,26 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // create a WDS application in Leo
       _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
-    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException) =>
-      logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
-      for {
-        _ <- deleteWorkspaceInWSM(workspaceId).recover { case e =>
-          logger.info(
-            s"Error cleaning up workspace ${workspaceRequest.toWorkspaceName} in WSM [workspaceId = ${workspaceId}",
-            e
-          )
+    } yield savedWorkspace).recoverWith {
+      case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException | _: RawlsExceptionWithErrorReport) =>
+        logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
+        for {
+          _ <- deleteWorkspaceInWSM(workspaceId).recover { case e =>
+            logger.info(
+              s"Error cleaning up workspace ${workspaceRequest.toWorkspaceName} in WSM [workspaceId = ${workspaceId}",
+              e
+            )
+          }
+          _ <- dataSource.inTransaction(_.workspaceQuery.delete(workspaceRequest.toWorkspaceName))
+        } yield e match {
+          case rawlsException: RawlsExceptionWithErrorReport => throw rawlsException
+          case _ =>
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError,
+                          s"Error creating workspace ${workspaceRequest.toWorkspaceName}. Please try again."
+              )
+            )
         }
-        _ <- dataSource.inTransaction(_.workspaceQuery.delete(workspaceRequest.toWorkspaceName))
-      } yield throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.InternalServerError,
-                    s"Error creating workspace ${workspaceRequest.toWorkspaceName}. Please try again."
-        )
-      )
     }
   }
 
