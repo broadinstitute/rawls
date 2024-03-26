@@ -5,6 +5,7 @@ import bio.terra.workspace.api.{
   ControlledAzureResourceApi,
   JobsApi,
   LandingZonesApi,
+  ReferencedGcpResourceApi,
   ResourceApi,
   UnauthenticatedApi,
   WorkspaceApi,
@@ -36,6 +37,8 @@ trait WorkspaceManagerApiClientProvider {
 
   def getResourceApi(ctx: RawlsRequestContext): ResourceApi
 
+  def getReferencedGcpResourceApi(ctx: RawlsRequestContext): ReferencedGcpResourceApi
+
   def getUnauthenticatedApi(): UnauthenticatedApi
 
 }
@@ -65,6 +68,9 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
 
   def getResourceApi(ctx: RawlsRequestContext): ResourceApi =
     new ResourceApi(getApiClient(ctx))
+
+  def getReferencedGcpResourceApi(ctx: RawlsRequestContext): ReferencedGcpResourceApi =
+    new ReferencedGcpResourceApi(getApiClient(ctx))
 
   override def getUnauthenticatedApi(): UnauthenticatedApi = {
     val client: ApiClient = new ApiClient()
