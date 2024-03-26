@@ -1,21 +1,16 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import bio.terra.profile.model.ProfileModel
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  ErrorReport,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamResourceTypeNames
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext}
 
-import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 /**
  * Handles provisioning and deleting billing projects with external providers. Implementors of this trait are not concerned
@@ -25,30 +20,13 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 trait BillingProjectLifecycle extends LazyLogging {
 
-  // It's probably reasonable to expect that the billing project lifecyle always includes these two resources
+  // Resources common to all implementations.
   val samDAO: SamDAO
   val billingRepository: BillingRepository
+  val billingProfileManagerDAO: BillingProfileManagerDAO
 
   // The type of WorkspaceManagerResourceMonitorRecord job that should be created to finalize deletion when necessary
   val deleteJobType: JobType
-
-  // This code also lives in UserService as unregisterBillingProjectWithUserInfo
-  // if this was scala 3.x, we could just use a parameterized trait and this would work basically everywhere
-  def unregisterBillingProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit] =
-    for {
-      _ <- billingRepository.deleteBillingProject(projectName)
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, projectName.value, ctx) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
-        case t: Throwable =>
-          logger.warn(
-            s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`",
-            t
-          )
-          throw t
-      }
-    } yield {}
 
   def validateBillingProjectCreationRequest(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
@@ -58,22 +36,44 @@ trait BillingProjectLifecycle extends LazyLogging {
   def postCreationSteps(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
     config: MultiCloudWorkspaceConfig,
+    billingProjectDeletion: BillingProjectDeletion,
     ctx: RawlsRequestContext
   ): Future[CreationStatus]
 
-  /**
-    * Initiates deletion of a billing project
-    * @return an id of an async job the final stages of deleting are waiting on, if applicable.
-    *         If None is returned, the project can be deleted immediately via finalizeDelete
-    */
-  def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[UUID]]
+  def createBillingProfile(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext)(
+    implicit executionContext: ExecutionContext
+  ): Future[ProfileModel] =
+    Future(blocking {
+      val policies: Map[String, List[(String, String)]] =
+        if (createProjectRequest.protectedData.getOrElse(false)) Map("protected-data" -> List[(String, String)]())
+        else Map.empty
+      val profileModel = billingProfileManagerDAO.createBillingProfile(
+        createProjectRequest.projectName.value,
+        createProjectRequest.billingInfo,
+        policies,
+        ctx
+      )
+      logger.info(
+        s"Creating BPM-backed billing project ${createProjectRequest.projectName.value}, created profile with ID ${profileModel.getId}."
+      )
+      profileModel
+    })(executionContext)
 
-  def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit]
-
+  def addMembersToBillingProfile(profileModel: ProfileModel,
+                                 createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                                 ctx: RawlsRequestContext
+  )(implicit executionContext: ExecutionContext): Future[Set[Unit]] = {
+    val members = createProjectRequest.members.getOrElse(Set.empty)
+    Future.traverse(members) { member =>
+      Future(blocking {
+        billingProfileManagerDAO.addProfilePolicyMember(profileModel.getId,
+                                                        ProfilePolicy.fromProjectRole(member.role),
+                                                        member.email,
+                                                        ctx
+        )
+      })
+    }
+  }
 }
 
 class DuplicateBillingProjectException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

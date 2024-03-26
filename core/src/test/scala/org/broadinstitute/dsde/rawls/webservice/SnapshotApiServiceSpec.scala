@@ -458,6 +458,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         Option(DataReferenceDescriptionField("description")),
         "foo",
         CloningInstructionsEnum.NOTHING,
+        None,
         testContext
       )
       .getMetadata
@@ -543,6 +544,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         Option(DataReferenceDescriptionField("description")),
         "foo",
         CloningInstructionsEnum.NOTHING,
+        None,
         testContext
       )
       .getMetadata

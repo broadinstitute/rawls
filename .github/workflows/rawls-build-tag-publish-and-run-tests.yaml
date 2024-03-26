@@ -24,10 +24,10 @@ jobs:
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
     steps:
-      - uses: 'actions/checkout@v3'
+      - uses: 'actions/checkout@v4'
 
       - name: Bump the tag to a new version
-        uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
+        uses: databiosphere/github-actions/actions/bumper@bumper-0.3.0
         id: tag
         env:
           DEFAULT_BUMP: patch
