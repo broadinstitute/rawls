@@ -35,13 +35,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     val CLONING_INSTRUCTIONS = "cloningInstructions"
     val PROPERTIES = "properties"
 
-    override def write(metadata: ResourceMetadata) = {
-      val properties = Option(metadata.getProperties)
-        .map { props =>
-          props.asScala.map(p => p.getKey -> stringOrNull(p.getValue)).toMap
-        }
-        .getOrElse(Map.empty)
-
+    override def write(metadata: ResourceMetadata) =
       JsObject(
         WORKSPACE_ID -> stringOrNull(metadata.getWorkspaceId),
         RESOURCE_ID -> stringOrNull(metadata.getResourceId),
@@ -50,9 +44,8 @@ object DataReferenceModelJsonSupport extends JsonSupport {
         RESOURCE_TYPE -> stringOrNull(metadata.getResourceType),
         STEWARDSHIP_TYPE -> stringOrNull(metadata.getStewardshipType),
         CLONING_INSTRUCTIONS -> stringOrNull(metadata.getCloningInstructions),
-        PROPERTIES -> JsObject(properties)
+        PROPERTIES -> PropertiesFormat.write(metadata.getProperties)
       )
-    }
 
     override def read(json: JsValue): ResourceMetadata =
       json.asJsObject.getFields(WORKSPACE_ID,
@@ -208,6 +201,43 @@ object DataReferenceModelJsonSupport extends JsonSupport {
           new ResourceList().resources(resources.map(_.convertTo[ResourceDescription]).asJava)
         case _ => throw DeserializationException("ResourceList expected")
       }
+  }
+
+  implicit object PropertiesFormat extends RootJsonFormat[Properties] {
+    override def write(props: Properties): JsValue =
+      if (Option(props).isEmpty) {
+        JsArray.empty
+      } else {
+        val fields: Vector[JsValue] = props.asScala.map(PropertyFormat.write).toVector
+        JsArray(fields)
+      }
+
+    override def read(json: JsValue): Properties =
+      json match {
+        case arr: JsArray =>
+          val props = new Properties()
+          arr.elements.foreach { element =>
+            props.add(PropertyFormat.read(element))
+          }
+          props
+        case _ => throw DeserializationException("Properties expected")
+      }
+  }
+
+  implicit object PropertyFormat extends RootJsonFormat[Property] {
+
+    override def write(prop: Property): JsValue =
+      new JsObject(Map("key" -> JsString(prop.getKey), "value" -> JsString(prop.getValue)))
+
+    override def read(json: JsValue): Property = {
+      val prop = new Property()
+      json.asJsObject.fields.foreach {
+        case ("key", mapval)   => prop.setKey(mapval.toString())
+        case ("value", mapval) => prop.setValue(mapval.toString())
+        case _                 => // ignore unknown keys
+      }
+      prop
+    }
   }
 
   implicit val DataReferenceNameFormat: ValueObjectFormat[DataReferenceName] = ValueObjectFormat(DataReferenceName)
