@@ -64,6 +64,7 @@ trait WorkspaceManagerDAO {
                                       description: Option[DataReferenceDescriptionField],
                                       instanceName: String,
                                       cloningInstructions: CloningInstructionsEnum,
+                                      properties: Option[Map[String, String]],
                                       ctx: RawlsRequestContext
   ): DataRepoSnapshotResource
   def updateDataRepoSnapshotReference(workspaceId: UUID,

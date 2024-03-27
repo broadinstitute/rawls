@@ -6,7 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectDeletion, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -29,7 +29,6 @@ import org.broadinstitute.dsde.rawls.jobexec.{
   WorkflowSubmissionActor
 }
 import org.broadinstitute.dsde.rawls.model.{
-  CloudPlatform,
   CromwellBackend,
   RawlsRequestContext,
   WorkflowStatuses,
@@ -52,7 +51,6 @@ import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import spray.json._
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -491,12 +489,7 @@ object BootMonitors extends LazyLogging {
             gcsDAO,
             workspaceManagerDAO,
             billingRepo,
-            new BpmBillingProjectLifecycle(samDAO,
-                                           billingRepo,
-                                           billingProfileManagerDAO,
-                                           workspaceManagerDAO,
-                                           monitorRecordDao
-            )
+            new BillingProjectDeletion(samDAO, billingRepo, billingProfileManagerDAO)
           )
         )
       )
