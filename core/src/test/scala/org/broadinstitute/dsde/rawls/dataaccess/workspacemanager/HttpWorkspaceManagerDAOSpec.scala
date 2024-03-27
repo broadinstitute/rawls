@@ -5,7 +5,7 @@ import bio.terra.workspace.api._
 import bio.terra.workspace.client.{ApiClient, ApiException}
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.{any, anyInt}
@@ -33,7 +33,8 @@ class HttpWorkspaceManagerDAOSpec
                            controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
                            workspaceApi: WorkspaceApi = mock[WorkspaceApi],
                            landingZonesApi: LandingZonesApi = mock[LandingZonesApi],
-                           resourceApi: ResourceApi = mock[ResourceApi]
+                           resourceApi: ResourceApi = mock[ResourceApi],
+                           referencedGcpResourceApi: ReferencedGcpResourceApi = mock[ReferencedGcpResourceApi]
   ): WorkspaceManagerApiClientProvider = new WorkspaceManagerApiClientProvider {
     override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
 
@@ -53,6 +54,9 @@ class HttpWorkspaceManagerDAOSpec
     override def getJobsApi(ctx: RawlsRequestContext): JobsApi = ???
 
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
+
+    override def getReferencedGcpResourceApi(ctx: RawlsRequestContext): ReferencedGcpResourceApi =
+      referencedGcpResourceApi
   }
 
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
@@ -262,13 +266,14 @@ class HttpWorkspaceManagerDAOSpec
       .location("the-moon")
       .projectOwnerGroupId(billingProjectId);
 
-    wsmDao.cloneWorkspace(testData.azureWorkspace.workspaceIdAsUUID,
-                          workspaceId,
-                          "my-workspace-clone",
-                          Option(testData.azureBillingProfile),
-                          billingProjectId,
-                          testContext,
-                          Some("the-moon")
+    wsmDao.cloneWorkspace(
+      testData.azureWorkspace.workspaceIdAsUUID,
+      workspaceId,
+      "my-workspace-clone",
+      Option(testData.azureBillingProfile),
+      billingProjectId,
+      testContext,
+      Some("the-moon")
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
@@ -332,6 +337,41 @@ class HttpWorkspaceManagerDAOSpec
 
     verify(workspaceApi).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID),
                                                     ArgumentMatchers.eq("test_job_id")
+    )
+  }
+
+  behavior of "createDataRepoSnapshotReference"
+
+  it should "call the create data repo snapshot reference API" in {
+    val referencedGcpResourceApi = mock[ReferencedGcpResourceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(referencedGcpResourceApi = referencedGcpResourceApi))
+    val snapshotId = UUID.randomUUID()
+
+    wsmDao.createDataRepoSnapshotReference(
+      testData.workspace.workspaceIdAsUUID,
+      snapshotId,
+      DataReferenceName("name"),
+      Some(DataReferenceDescriptionField("description")),
+      "instance name",
+      CloningInstructionsEnum.REFERENCE,
+      Some(Map("k1" -> "v1")),
+      testContext
+    )
+
+    val props = new Properties()
+    props.add(new Property().key("k1").value("v1"))
+    val snapshotRequest = new CreateDataRepoSnapshotReferenceRequestBody()
+      .snapshot(new DataRepoSnapshotAttributes().instanceName("instance name").snapshot(snapshotId.toString))
+      .metadata(
+        new ReferenceResourceCommonFields()
+          .name("name")
+          .cloningInstructions(CloningInstructionsEnum.REFERENCE)
+          .description("description")
+          .properties(props)
+      )
+    verify(referencedGcpResourceApi).createDataRepoSnapshotReference(
+      ArgumentMatchers.eq(snapshotRequest),
+      ArgumentMatchers.eq(testData.workspace.workspaceIdAsUUID)
     )
   }
 

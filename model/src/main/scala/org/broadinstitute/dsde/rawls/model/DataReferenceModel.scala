@@ -12,7 +12,9 @@ case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject
 case class NamedDataRepoSnapshot(name: DataReferenceName,
                                  description: Option[DataReferenceDescriptionField],
-                                 snapshotId: UUID
+                                 snapshotId: UUID,
+                                 cloningInstructions: Option[String] = None,
+                                 properties: Option[Map[String, String]] = None
 )
 case class SnapshotListResponse(gcpDataRepoSnapshots: Seq[DataRepoSnapshotResource])
 
@@ -31,16 +33,19 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     val RESOURCE_TYPE = "resourceType"
     val STEWARDSHIP_TYPE = "stewardshipType"
     val CLONING_INSTRUCTIONS = "cloningInstructions"
+    val PROPERTIES = "properties"
 
-    override def write(metadata: ResourceMetadata) = JsObject(
-      WORKSPACE_ID -> stringOrNull(metadata.getWorkspaceId),
-      RESOURCE_ID -> stringOrNull(metadata.getResourceId),
-      NAME -> stringOrNull(metadata.getName),
-      DESCRIPTION -> stringOrNull(metadata.getDescription),
-      RESOURCE_TYPE -> stringOrNull(metadata.getResourceType),
-      STEWARDSHIP_TYPE -> stringOrNull(metadata.getStewardshipType),
-      CLONING_INSTRUCTIONS -> stringOrNull(metadata.getCloningInstructions)
-    )
+    override def write(metadata: ResourceMetadata) =
+      JsObject(
+        WORKSPACE_ID -> stringOrNull(metadata.getWorkspaceId),
+        RESOURCE_ID -> stringOrNull(metadata.getResourceId),
+        NAME -> stringOrNull(metadata.getName),
+        DESCRIPTION -> stringOrNull(metadata.getDescription),
+        RESOURCE_TYPE -> stringOrNull(metadata.getResourceType),
+        STEWARDSHIP_TYPE -> stringOrNull(metadata.getStewardshipType),
+        CLONING_INSTRUCTIONS -> stringOrNull(metadata.getCloningInstructions),
+        PROPERTIES -> PropertiesFormat.write(metadata.getProperties)
+      )
 
     override def read(json: JsValue): ResourceMetadata =
       json.asJsObject.getFields(WORKSPACE_ID,
@@ -198,9 +203,46 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       }
   }
 
+  implicit object PropertiesFormat extends RootJsonFormat[Properties] {
+    override def write(props: Properties): JsValue =
+      if (Option(props).isEmpty) {
+        JsArray.empty
+      } else {
+        val fields: Vector[JsValue] = props.asScala.map(PropertyFormat.write).toVector
+        JsArray(fields)
+      }
+
+    override def read(json: JsValue): Properties =
+      json match {
+        case arr: JsArray =>
+          val props = new Properties()
+          arr.elements.foreach { element =>
+            props.add(PropertyFormat.read(element))
+          }
+          props
+        case _ => throw DeserializationException("Properties expected")
+      }
+  }
+
+  implicit object PropertyFormat extends RootJsonFormat[Property] {
+
+    override def write(prop: Property): JsValue =
+      new JsObject(Map("key" -> JsString(prop.getKey), "value" -> JsString(prop.getValue)))
+
+    override def read(json: JsValue): Property = {
+      val prop = new Property()
+      json.asJsObject.fields.foreach {
+        case ("key", mapval)   => prop.setKey(mapval.toString())
+        case ("value", mapval) => prop.setValue(mapval.toString())
+        case _                 => // ignore unknown keys
+      }
+      prop
+    }
+  }
+
   implicit val DataReferenceNameFormat: ValueObjectFormat[DataReferenceName] = ValueObjectFormat(DataReferenceName)
   implicit val dataReferenceDescriptionFieldFormat: ValueObjectFormat[DataReferenceDescriptionField] =
     ValueObjectFormat(DataReferenceDescriptionField)
-  implicit val NamedDataRepoSnapshotFormat: RootJsonFormat[NamedDataRepoSnapshot] = jsonFormat3(NamedDataRepoSnapshot)
+  implicit val NamedDataRepoSnapshotFormat: RootJsonFormat[NamedDataRepoSnapshot] = jsonFormat5(NamedDataRepoSnapshot)
   implicit val SnapshotListResponseFormat: RootJsonFormat[SnapshotListResponse] = jsonFormat1(SnapshotListResponse)
 }

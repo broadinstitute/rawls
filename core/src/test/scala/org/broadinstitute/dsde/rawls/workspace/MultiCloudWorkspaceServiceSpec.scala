@@ -659,7 +659,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail with an improperly structured additional fields element on a policy" in {
+  it should "fail with an improperly structured additional fields element on a policy and rollback workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -693,6 +693,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
   it should "create a workspace with the requested policies" in {
