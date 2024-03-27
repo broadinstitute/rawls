@@ -44,11 +44,26 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
                   "description": "hello",
                   "resourceType": "DATA_REPO_SNAPSHOT",
                   "stewardshipType": "REFERENCED",
-                  "cloningInstructions": "COPY_NOTHING"
+                  "cloningInstructions": "COPY_NOTHING",
+                  "properties": [
+                    {
+                      "key": "key1",
+                      "value": "value1"
+                    },
+                    {
+                      "key": "key2",
+                      "value": "value2"
+                    }
+                  ]
                 }
              }
           """.parseJson
         } {
+          val properties = new Properties()
+          properties.addAll(
+            java.util.List.of(new Property().key("key1").value("value1"), new Property().key("key2").value("value2"))
+          )
+
           new DataRepoSnapshotResource()
             .metadata(
               new ResourceMetadata()
@@ -59,6 +74,7 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
                 .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
                 .stewardshipType(StewardshipType.REFERENCED)
                 .cloningInstructions(CloningInstructionsEnum.NOTHING)
+                .properties(properties)
             )
             .attributes(
               new DataRepoSnapshotAttributes()
@@ -86,7 +102,8 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
                      "resourceId":"$snapshotResourceId",
                      "resourceType":"DATA_REPO_SNAPSHOT",
                      "stewardshipType":"REFERENCED",
-                     "workspaceId":"$workspaceId"
+                     "workspaceId":"$workspaceId",
+                     "properties": []
                    },
                    "resourceAttributes": {
                      "gcpDataRepoSnapshot": {

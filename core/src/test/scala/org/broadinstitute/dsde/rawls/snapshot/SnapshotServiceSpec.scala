@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.datarepo.client
 import bio.terra.datarepo.model.{
   CloudPlatform => SnapshotCloudPlatform,
   DatasetSummaryModel,
@@ -9,7 +11,7 @@ import bio.terra.datarepo.model.{
 }
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -78,6 +80,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     )
@@ -136,14 +139,18 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val snapshotUuid = UUID.randomUUID()
       val snapRefName = DataReferenceName("refname")
       val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+      val properties = Map("foo" -> "bar", "baz" -> "baaz")
 
       // call createSnapshot on the service
       Await.result(
-        snapshotService.createSnapshotByWorkspaceName(workspace.toWorkspaceName,
-                                                      NamedDataRepoSnapshot(snapRefName,
-                                                                            snapRefDescription,
-                                                                            snapshotUuid
-                                                      )
+        snapshotService.createSnapshotByWorkspaceName(
+          workspace.toWorkspaceName,
+          NamedDataRepoSnapshot(snapRefName,
+                                snapRefDescription,
+                                snapshotUuid,
+                                Some(CloningInstructionsEnum.REFERENCE.toString),
+                                Some(properties)
+          )
         ),
         Duration.Inf
       )
@@ -155,9 +162,82 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         ArgumentMatchers.eq(snapRefName),
         ArgumentMatchers.eq(snapRefDescription),
         any[String],
-        any[CloningInstructionsEnum],
+        ArgumentMatchers.eq(CloningInstructionsEnum.REFERENCE),
+        ArgumentMatchers.eq(Some(properties)),
         any[RawlsRequestContext]
       )
+    }
+
+    "fail with a badrequest if the cloning instructions are invalid" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = defaultMockSamDao()
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      val mockDataRepoDAO = defaultDataRepoDao()
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      // call createSnapshot on the service
+      val ex = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(workspace.toWorkspaceName,
+                                                        NamedDataRepoSnapshot(snapRefName,
+                                                                              snapRefDescription,
+                                                                              snapshotUuid,
+                                                                              Some("COPY_INVALID_STRING")
+                                                        )
+          ),
+          Duration.Inf
+        )
+      }
+
+      assert(ex.errorReport.statusCode.get.intValue() == StatusCodes.BadRequest.intValue)
+    }
+
+    "fail with a badrequest if the snapshot does not exist in TDR" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = defaultMockSamDao()
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      val mockDataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
+      when(mockDataRepoDAO.getSnapshot(any[UUID], any())).thenAnswer(_ =>
+        throw new client.ApiException(StatusCodes.NotFound.intValue, "not found")
+      )
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      // call createSnapshot on the service
+      val ex = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(workspace.toWorkspaceName,
+                                                        NamedDataRepoSnapshot(snapRefName,
+                                                                              snapRefDescription,
+                                                                              snapshotUuid
+                                                        )
+          ),
+          Duration.Inf
+        )
+      }
+
+      assert(ex.errorReport.statusCode.get.intValue() == StatusCodes.BadRequest.intValue)
     }
 
     "create a WSM workspace if one doesn't exist when creating a snapshot reference" in withMinimalTestDatabase { _ =>
@@ -470,6 +550,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           any[Option[DataReferenceDescriptionField]],
           any[String],
           any[CloningInstructionsEnum],
+          any[Option[Map[String, String]]],
           any[RawlsRequestContext]
         )
       )
@@ -534,6 +615,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -566,6 +648,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           any[Option[DataReferenceDescriptionField]],
           any[String],
           any[CloningInstructionsEnum],
+          any[Option[Map[String, String]]],
           any[RawlsRequestContext]
         )
       )
@@ -632,6 +715,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -685,6 +769,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -747,6 +832,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -803,6 +889,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -874,6 +961,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -1242,6 +1330,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         ArgumentMatchers.eq(snapRefDescription),
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }

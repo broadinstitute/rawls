@@ -1395,6 +1395,7 @@ class SubmissionSpec(_system: ActorSystem)
           dataReferenceDescription,
           dataRepoDAO.getInstanceName,
           CloningInstructionsEnum.NOTHING,
+          None,
           testContext
         )
         runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
