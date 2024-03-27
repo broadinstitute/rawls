@@ -629,7 +629,6 @@ object Boot extends IOApp with LazyLogging {
       googleStorageTransferService <- StorageTransferServiceFactory.createStorageTransferService(
         appConfigManager
       )
-      googleServiceHttp <- GoogleServiceHttpFactory.createGoogleServiceHttp(appConfigManager, executionContext)
       topicAdmin <- GoogleTopicAdminFactory.createGoogleTopicAdmin(appConfigManager)
       bqServiceFactory = GoogleBigQueryServiceFactory.createGoogleBigQueryServiceFactory(
         appConfigManager
@@ -655,7 +654,6 @@ object Boot extends IOApp with LazyLogging {
     } yield AppDependencies[F](
       googleStorage,
       googleStorageTransferService,
-      googleServiceHttp,
       topicAdmin,
       bqServiceFactory,
       httpGoogleIamDAO,
@@ -717,7 +715,6 @@ object Boot extends IOApp with LazyLogging {
 // Any resources need clean up should be put in AppDependencies
 final case class AppDependencies[F[_]](googleStorageService: GoogleStorageService[F],
                                        googleStorageTransferService: GoogleStorageTransferService[F],
-                                       googleServiceHttp: GoogleServiceHttp[F],
                                        topicAdmin: GoogleTopicAdmin[F],
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: GoogleIamDAO,
