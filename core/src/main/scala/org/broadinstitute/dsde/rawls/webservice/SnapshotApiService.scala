@@ -63,8 +63,10 @@ trait SnapshotApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, snapshotId) =>
             get {
               complete {
-                snapshotServiceConstructor(ctx).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName),
-                                                            snapshotId
+                snapshotServiceConstructor(ctx).getSnapshotResourceFromWsm(WorkspaceName(workspaceNamespace,
+                                                                                         workspaceName
+                                                                           ),
+                                                                           snapshotId
                 )
               }
             } ~
