@@ -139,6 +139,7 @@ jobs:
           # here, commented out, to make it easy to re-instate if/when Analysis Journeys does have some tests to run.
           # { group_name: analysis_journeys, tag: "-n org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest" }
         ] # Rawls test groups
+    name: swat-tests-${{ matrix.test-group.group_name }}
     runs-on: ubuntu-latest
     needs:
       - create-bee-workflow
