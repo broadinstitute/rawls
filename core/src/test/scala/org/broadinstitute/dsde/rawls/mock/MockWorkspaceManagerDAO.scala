@@ -137,6 +137,7 @@ class MockWorkspaceManagerDAO(
                                                description: Option[DataReferenceDescriptionField],
                                                instanceName: String,
                                                cloningInstructions: CloningInstructionsEnum,
+                                               properties: Option[Map[String, String]],
                                                ctx: RawlsRequestContext
   ): DataRepoSnapshotResource =
     if (name.value.contains("fakesnapshot"))

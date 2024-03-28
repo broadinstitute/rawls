@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.consumer
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import au.com.dius.pact.consumer.dsl.LambdaDsl.newJsonBody
 import au.com.dius.pact.consumer.dsl._
@@ -12,19 +13,8 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.consumer.PactHelper.{
-  buildInteraction,
-  jsonRequestHeaders,
-  jsonRequestHeadersWithBody,
-  jsonResponseHeaders
-}
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.consumer.PactHelper.{buildInteraction, jsonRequestHeaders, jsonRequestHeadersWithBody, jsonResponseHeaders}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.joda.time.DateTime
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -37,6 +27,9 @@ import java.util.function.Consumer
 import scala.concurrent.ExecutionContext
 
 class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactForger {
+  implicit val executionContext: ExecutionContext = ExecutionContext.global
+  implicit val actor: ActorSystem = ActorSystem("BpmClientSpec")
+
   /*
     Define the folder that the pact contracts get written to upon completion of this test suite.
    */
@@ -105,6 +98,8 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.stringType("managedResourceGroupId")
     o.stringType("biller")
     o.stringType("displayName")
+    o.stringValue("billingAccountId", null)
+    o.stringValue("description", null)
     // It appears to be necessary to specify the value because the enum doesn't get translated to string automatically
     o.stringType("cloudPlatform", CloudPlatform.AZURE.toString)
     o.`object`("policies", po => po.array("inputs", arr => arr.getPactDslJsonArray))
