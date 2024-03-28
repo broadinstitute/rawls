@@ -45,10 +45,16 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
                   "resourceType": "DATA_REPO_SNAPSHOT",
                   "stewardshipType": "REFERENCED",
                   "cloningInstructions": "COPY_NOTHING",
-                  "properties": {
-                    "key1": "value1",
-                    "key2": "value2"
-                  }
+                  "properties": [
+                    {
+                      "key": "key1",
+                      "value": "value1"
+                    },
+                    {
+                      "key": "key2",
+                      "value": "value2"
+                    }
+                  ]
                 }
              }
           """.parseJson
@@ -97,7 +103,7 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
                      "resourceType":"DATA_REPO_SNAPSHOT",
                      "stewardshipType":"REFERENCED",
                      "workspaceId":"$workspaceId",
-                     "properties": {}
+                     "properties": []
                    },
                    "resourceAttributes": {
                      "gcpDataRepoSnapshot": {
