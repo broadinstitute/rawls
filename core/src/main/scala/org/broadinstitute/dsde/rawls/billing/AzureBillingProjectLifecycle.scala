@@ -4,11 +4,8 @@ import akka.http.scaladsl.model.StatusCodes.InternalServerError
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult}
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
-import org.apache.http.HttpStatus
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
@@ -22,7 +19,6 @@ import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport => RawlsErrorReport,
-  RawlsBillingProjectName,
   RawlsRequestContext
 }
 
@@ -34,10 +30,10 @@ import scala.util.{Failure, Success, Try}
   * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
   * billing profile manager service.
   */
-class BpmBillingProjectLifecycle(
+class AzureBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
-  billingProfileManagerDAO: BillingProfileManagerDAO,
+  val billingProfileManagerDAO: BillingProfileManagerDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
@@ -87,26 +83,10 @@ class BpmBillingProjectLifecycle(
     */
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
+                                 billingProjectDeletion: BillingProjectDeletion,
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
-
-    def createBillingProfile: Future[ProfileModel] =
-      Future(blocking {
-        val policies: Map[String, List[(String, String)]] =
-          if (createProjectRequest.protectedData.getOrElse(false)) Map("protected-data" -> List[(String, String)]())
-          else Map.empty
-        val profileModel = billingProfileManagerDAO.createBillingProfile(
-          projectName.value,
-          createProjectRequest.billingInfo,
-          policies,
-          ctx
-        )
-        logger.info(
-          s"Creating BPM-backed billing project ${projectName.value}, created profile with ID ${profileModel.getId}."
-        )
-        profileModel
-      })
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
@@ -140,21 +120,8 @@ class BpmBillingProjectLifecycle(
       })
     }
 
-    def addMembersToBillingProfile(profileModel: ProfileModel): Future[Set[Unit]] = {
-      val members = createProjectRequest.members.getOrElse(Set.empty)
-      Future.traverse(members) { member =>
-        Future(blocking {
-          billingProfileManagerDAO.addProfilePolicyMember(profileModel.getId,
-                                                          ProfilePolicy.fromProjectRole(member.role),
-                                                          member.email,
-                                                          ctx
-          )
-        })
-      }
-    }
-
-    createBillingProfile.flatMap { profileModel =>
-      addMembersToBillingProfile(profileModel).flatMap { _ =>
+    createBillingProfile(createProjectRequest, ctx).flatMap { profileModel =>
+      addMembersToBillingProfile(profileModel, createProjectRequest, ctx).flatMap { _ =>
         createLandingZone(profileModel)
           .flatMap { landingZone =>
             (for {
@@ -198,13 +165,14 @@ class BpmBillingProjectLifecycle(
           }
           .recoverWith { case t: Throwable =>
             logger.error("Billing project creation failed, cleaning up billing profile", t)
-            cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
-              // Log the exception that prevented cleanup from completing, but do not throw it so original
-              // cause of billing project failure is shown to user.
-              logger.warn(
-                s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
-                cleanupError
-              )
+            billingProjectDeletion.cleanupBillingProfile(profileModel.getId, projectName, ctx).recover {
+              case cleanupError: Throwable =>
+                // Log the exception that prevented cleanup from completing, but do not throw it so original
+                // cause of billing project failure is shown to user.
+                logger.warn(
+                  s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+                  cleanupError
+                )
             } >> Future.failed(t)
           }
       }
@@ -215,7 +183,7 @@ class BpmBillingProjectLifecycle(
     *  starts a landing zone deletion job
     *  does not ensure that the landing zone deletion completes successfully.
     */
-  private def cleanupLandingZone(
+  def cleanupLandingZone(
     landingZoneId: UUID,
     ctx: RawlsRequestContext
   ): Option[DeleteAzureLandingZoneResult] = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
@@ -242,60 +210,4 @@ class BpmBillingProjectLifecycle(
         case None => Some(landingZoneResponse)
       }
   }
-
-  /**
-    * Delete the billing profile if no other billing projects reference it. If an exception
-    * is failed during deletion, allow it to pass up so caller can choose to disallow deletion
-    * of parent billing project.
-    */
-  private def cleanupBillingProfile(profileModelId: UUID,
-                                    projectName: RawlsBillingProjectName,
-                                    ctx: RawlsRequestContext
-  ): Future[Unit] = {
-    val numOtherProjectsWithProfile = for {
-      allProjectsWithProfile <- billingRepository
-        .getBillingProjectsWithProfile(Some(profileModelId))
-      filtered = allProjectsWithProfile.filterNot(_.projectName == projectName)
-    } yield filtered.length
-    numOtherProjectsWithProfile map {
-      case 0 =>
-        logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
-        )
-        billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
-      case num =>
-        logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
-        )
-    }
-  }
-
-  override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[UUID]] =
-    for {
-      jobControlId <- billingRepository.getLandingZoneId(projectName).map {
-        case Some(landingZoneId) =>
-          val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          result.map(_.getJobReport.getId).map(UUID.fromString)
-        case None =>
-          logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
-          None
-      }
-    } yield jobControlId
-
-  override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Unit] = for {
-    billingProfileId <- billingRepository.getBillingProfileId(projectName)
-    _ <- billingProfileId match {
-      case Some(id) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
-      case None =>
-        logger.warn(
-          s"Deleting BPM-backed billing project $projectName, but no associated billing profile record to delete"
-        )
-        Future.successful()
-    }
-  } yield unregisterBillingProject(projectName, ctx)
-
 }

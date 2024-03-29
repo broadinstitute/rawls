@@ -7,10 +7,10 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.16.2"
 
-  val workbenchLibsHash = "a562dff"
-  val serviceTestV = s"4.2-${workbenchLibsHash}"
+  val workbenchLibsHash = "1c0cf92"
+  val serviceTestV = s"4.3-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.30-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.34-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.8-${workbenchLibsHash}"
 

@@ -13,13 +13,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
-  BillingProjectOrchestrator,
-  BillingRepository,
-  BpmBillingProjectLifecycle,
-  GoogleBillingProjectLifecycle
-}
+import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -65,7 +59,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
 import org.mockito.ArgumentMatcher
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
@@ -226,14 +220,17 @@ trait ApiServiceSpec
     val servicePerimeterService = new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
-    val billingRepository = new BillingRepository(slickDataSource)
+    val billingRepository = spy(new BillingRepository(slickDataSource))
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
+    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
+    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      mock[BpmBillingProjectLifecycle],
+      azureBillingProjectLifecycle,
+      billingProjectDeletion,
       workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
