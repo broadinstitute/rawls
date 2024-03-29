@@ -4456,7 +4456,9 @@ components:
         cloningInstructions:
           type: string
         properties:
-          type: object
+          type: array
+          items:
+            type: object
     DataRepoSnapshotAttributes:
       type: object
       required: [ instanceName, snapshot ]
