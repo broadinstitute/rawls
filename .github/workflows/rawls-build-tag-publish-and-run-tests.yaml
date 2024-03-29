@@ -36,7 +36,7 @@ jobs:
         env:
           DEFAULT_BUMP: patch
           GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
-          RELEASE_BRANCHES: main
+          RELEASE_BRANCHES: develop
           WITH_V: true
 
       - name: Extract branch
@@ -98,10 +98,20 @@ jobs:
             echo 'test-context=pr-test' >> $GITHUB_OUTPUT
           fi
 
+  auth-as-tools-sa:
+    runs-on: ubuntu-latest
+    steps:
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: 'projects/1038484894585/locations/global/workloadIdentityPools/github-wi-pool/providers/github-wi-provider'
+          service_account: 'dsp-tools-iap-access@dsp-tools-k8s.iam.gserviceaccount.com'
+
   # Tell Broad DevOps Sherlock about the build version we just created.
   report-to-sherlock:
     uses: broadinstitute/sherlock/.github/workflows/client-report-app-version.yaml@main
-    needs: rawls-build-tag-publish-job
+    needs: [rawls-build-tag-publish-job, auth-as-tools-sa]
     with:
       new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
       chart-name: 'rawls'
