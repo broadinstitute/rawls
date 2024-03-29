@@ -26,6 +26,7 @@ jobs:
       id-token: 'write'
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: 'actions/checkout@v4'
 
@@ -96,6 +97,31 @@ jobs:
           else
             echo 'test-context=pr-test' >> $GITHUB_OUTPUT
           fi
+
+  # Tell Broad DevOps Sherlock about the build version we just created.
+  report-to-sherlock:
+    uses: broadinstitute/sherlock/.github/workflows/client-report-app-version.yaml@main
+    needs: rawls-build-tag-publish-job
+    with:
+      new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
+      chart-name: 'rawls'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+  # Put new Rawls version in Broad dev environment
+  set-version-in-dev:
+    uses: broadinstitute/sherlock/.github/workflows/client-set-environment-app-version.yaml@main
+    needs: [rawls-build-tag-publish-job, report-to-sherlock]
+    if: ${{ github.ref_name == 'develop' }}
+    with:
+      new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
+      chart-name: 'rawls'
+      environment-name: 'dev'
+    secrets:
+      sync-git-token: ${{ secrets.BROADBOT_TOKEN }}
+    permissions:
+      id-token: 'write'
 
   # Create a BEE to be used by swat tests.
   create-bee-workflow:
