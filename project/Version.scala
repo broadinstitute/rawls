@@ -4,15 +4,11 @@ import sbt.Setting
 import scala.sys.process._
 
 object Version {
-  val baseModelVersion = "0.1"
-
   def getVersionString = {
     def getLastCommitHashFromGit = s"""git log -n 1 --pretty=format:%h""" !!
-    // jenkins builds will pass the last commit hash in as an env variable because we currently build rawls
-    // inside a docker container that doesn't know the code is a git repo.
-    // if building from the hseeberger/scala-sbt docker image use env var (since hseeberger/scala-sbt doesn't have git in it)
-    val gitHash = sys.env.getOrElse("GIT_HASH", getLastCommitHashFromGit).trim()
-    val version = baseModelVersion + "-" + gitHash
+
+    // the terra-github-workflows/rawls-build GHA workflow sets BUILD_NUMBER, GIT_COMMIT, and DOCKER_TAG environment variables
+    val version = sys.env.getOrElse("DOCKER_TAG", getLastCommitHashFromGit).trim()
 
     // The project isSnapshot string passed in via command line settings, if desired.
     val isSnapshot = sys.props.getOrElse("project.isSnapshot", "true").toBoolean

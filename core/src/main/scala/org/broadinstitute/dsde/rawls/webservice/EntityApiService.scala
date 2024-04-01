@@ -173,13 +173,19 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
             post {
               entity(as[Array[AttributeEntityReference]]) { entities =>
-                complete {
-                  entityServiceConstructor(ctx)
-                    .deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None)
-                    .map {
-                      case entities if entities.isEmpty => StatusCodes.NoContent -> None
-                      case entities                     => StatusCodes.Conflict -> Option(entities)
-                    }
+                if (entities.isEmpty) {
+                  complete(
+                    StatusCodes.BadRequest -> ErrorReport(StatusCodes.BadRequest, "No entities specified to delete")
+                  )
+                } else {
+                  complete {
+                    entityServiceConstructor(ctx)
+                      .deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None)
+                      .map {
+                        case entities if entities.isEmpty => StatusCodes.NoContent -> None
+                        case entities                     => StatusCodes.Conflict -> Option(entities)
+                      }
+                  }
                 }
               }
             }
