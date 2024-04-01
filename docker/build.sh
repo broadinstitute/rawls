@@ -130,7 +130,7 @@ function artifactory_push()
     ARTIFACTORY_USERNAME=dsdejenkins
     ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
     echo "Publishing to artifactory..."
-    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 /$PROJECT/core/src/bin/publishSnapshot.sh
+    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.9.9_2.13.13 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
 
 function docker_cmd()
