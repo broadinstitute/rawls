@@ -103,15 +103,12 @@ function make_jar()
         bash ./docker/run-mysql.sh start
     fi
 
-    # Get the last commit hash and set it as an environment variable
-    GIT_HASH=$(git log -n 1 --pretty=format:%h)
-
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
     DOCKER_RUN="docker run --rm"
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
     fi
-    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_HASH=$GIT_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 /working/docker/install.sh /working"
+    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e DOCKER_TAG=$DOCKER_TAG -e GIT_COMMIT=$GIT_COMMIT -e BUILD_NUMBER=$BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 /working/docker/install.sh /working"
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
