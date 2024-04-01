@@ -142,7 +142,7 @@ object Dependencies {
   var gcpOpenTelemetryExporterVersion = "0.27.0"
   var googleTraceExporter: ModuleID = "com.google.cloud.opentelemetry" % "exporter-trace" % gcpOpenTelemetryExporterVersion
 
-  val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
+  val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.3").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
   val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.20"
