@@ -20,7 +20,15 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, RawlsRequestContext, SnapshotListResponse, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  ApplicationVersion,
+  RawlsRequestContext,
+  SnapshotListResponse,
+  StatusCheckResponse,
+  SubsystemStatus,
+  Subsystems,
+  UserInfo
+}
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -29,7 +37,7 @@ import org.broadinstitute.dsde.rawls.webservice.RawlsApiServiceImpl
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
-import org.mockito.Mockito.{reset, when}
+import org.mockito.Mockito.when
 import org.mockito.stubbing.OngoingStubbing
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
@@ -48,9 +56,16 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.FiniteDuration
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+
+import java.io.File
+import scala.collection.immutable.Map
 
 object States {
   val oneSnapshot = "one snapshot in the given workspace"
+  val rawlsOK = "Rawls is ok"
 }
 
 class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVerifier {
@@ -60,29 +75,73 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   implicit val materializer: Materializer.type = Materializer
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
-  val mockMultiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-    _ => mock[MultiCloudWorkspaceService]
-  val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService =
-    _ => mock[WorkspaceService]
-  val mockEntityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService]
-  val mockUserServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService]
-  val mockGenomicsServiceConstructor: RawlsRequestContext => GenomicsService =
-    _ => mock[GenomicsService]
-  val mockSnapshotServiceConstructor: RawlsRequestContext => SnapshotService =
-    _ => mock[SnapshotService]
-  val mockSpendReportingConstructor: RawlsRequestContext => SpendReportingService =
-    _ => mock[SpendReportingService]
-  val mockBillingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
-    _ => mock[BillingProjectOrchestrator]
-  val mockBucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
-    _ => mock[BucketMigrationService]
-  val mockStatusServiceConstructor: () => StatusService = mock[() => StatusService]
+  val subsystemsStatusMap: Map[Subsystem, SubsystemStatus] =
+    Subsystems.CriticalSubsystems.map { subsystem =>
+      subsystem -> SubsystemStatus(ok = true, None)
+    }.toMap ++
+      Subsystems.GoogleSubsystems.map { subsystem =>
+        subsystem -> SubsystemStatus(ok = true, None)
+      }.toMap
+
+  private def mockSubsystemsStatus(healthy: Boolean): OngoingStubbing[Future[(StatusCode, StatusCheckResponse)]] =
+    when {
+      mockStatusServiceConstructor().getStatus
+    } thenReturn {
+      Future.successful(
+        StatusCodes.OK,
+        StatusCheckResponse(
+          ok = healthy,
+          systems = subsystemsStatusMap
+        )
+      )
+    }
+
+  val mockMultiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = {
+    lazy val mockMultiCloudWorkspaceService: MultiCloudWorkspaceService = mock[MultiCloudWorkspaceService]
+    _ => mockMultiCloudWorkspaceService
+  }
+  val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = {
+    lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
+    _ => mockWorkspaceService
+  }
+  val mockEntityServiceConstructor: RawlsRequestContext => EntityService = {
+    lazy val mockEntityService: EntityService = mock[EntityService]
+    _ => mockEntityService
+  }
+  val mockUserServiceConstructor: RawlsRequestContext => UserService = {
+    lazy val mockUserService: UserService = mock[UserService]
+    _ => mockUserService
+  }
+  val mockGenomicsServiceConstructor: RawlsRequestContext => GenomicsService = {
+    lazy val mockGenomicsService: GenomicsService = mock[GenomicsService]
+    _ => mockGenomicsService
+  }
+  lazy val mockSnapshotServiceConstructor: RawlsRequestContext => SnapshotService = {
+    lazy val mockSnapshotService: SnapshotService = mock[SnapshotService]
+    _ => mockSnapshotService
+  }
+  val mockSpendReportingConstructor: RawlsRequestContext => SpendReportingService = {
+    lazy val mockSpendReportingService: SpendReportingService = mock[SpendReportingService]
+    _ => mockSpendReportingService
+  }
+  val mockBillingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator = {
+    lazy val mockBillingProjectOrchestrator: BillingProjectOrchestrator = mock[BillingProjectOrchestrator]
+    _ => mockBillingProjectOrchestrator
+  }
+  val mockBucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService = {
+    lazy val mockBucketMigrationService: BucketMigrationService = mock[BucketMigrationService]
+    _ => mockBucketMigrationService
+  }
+  val mockStatusServiceConstructor: () => StatusService = {
+    lazy val mockStatusService: StatusService = mock[StatusService]
+    () => mockStatusService
+  }
   val mockExecutionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster]
   val mockAppVersion: ApplicationVersion = mock[ApplicationVersion]
   val mockSamDAO: SamDAO = mock[SamDAO]
   val mockOpenIDConnectConfiguration: OpenIDConnectConfiguration = mock[OpenIDConnectConfiguration]
   val mockUserInfo: UserInfo = mock[UserInfo]
-  val mockOtelContext: Option[Context] = mock[Option[Context]]
+  val mockOtelContext: Option[Context] = Some(mock[Context])
 
   val rawlsApiService = new RawlsApiServiceImpl(
     mockMultiCloudWorkspaceServiceConstructor,
@@ -102,7 +161,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     "test",
     mockSamDAO,
     mockOpenIDConnectConfiguration
-  )
+  ) with MockUserInfoDirectives
 
   // Create ResourceMetadata
   val resourceMetadata = new ResourceMetadata()
@@ -130,6 +189,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   private val mockedEnumerateSnapshotsResponse = SnapshotListResponse(dataRepoSnapshotResources)
 
   private val providerStatesHandler: StateManagementFunction = StateManagementFunction {
+    case ProviderState(States.rawlsOK, _) =>
+      mockSubsystemsStatus(true)
     case ProviderState(States.oneSnapshot, _) =>
       mockEnumerateSnapshots(
         mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext)),
@@ -174,19 +235,23 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   val provider: ProviderInfoBuilder =
     ProviderInfoBuilder(
       name = "rawls",
-      pactSource = PactSource
-        .PactBrokerWithSelectors(pactBrokerUrl)
-        .withAuth(BasicAuth(pactBrokerUser, pactBrokerPass))
-        .withPendingPactsEnabled(ProviderTags(providerBranch)) // TODO providerBranch or providerVer?
-        .withConsumerVersionSelectors(consumerVersionSelectors)
+//      pactSource = PactSource
+//        .PactBrokerWithSelectors(pactBrokerUrl)
+//        .withAuth(BasicAuth(pactBrokerUser, pactBrokerPass))
+//        .withPendingPactsEnabled(ProviderTags(providerBranch)) // TODO providerBranch or providerVer?
+//        .withConsumerVersionSelectors(consumerVersionSelectors)
+      pactSource = PactSource.FileSource(
+//        Map("wds" -> new File("pact4s/src/test/resources/wds-rawls.json"))
+        Map("wds" -> new File("pact4s/src/test/resources/wds-rawls4.json"))
+      )
     )
       .withStateManagementFunction(
         providerStatesHandler
 //          .withBeforeEach(() => resetMocks())
       )
       .withHost("localhost")
-      .withPort(9292)
-//      .withPort(8080)
+//      .withPort(9292)
+      .withPort(8080)
 
   override def beforeAll(): Unit = {
     startRawls.unsafeToFuture()
