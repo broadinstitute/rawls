@@ -63,7 +63,7 @@ jobs:
           run-name: "${{ env.RAWLS_BUILD_RUN_NAME }}"
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/da_AJ-1549_publishRawlsModel
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           inputs: '{
             "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
