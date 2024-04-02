@@ -16,6 +16,9 @@ env:
   BEE_DESTROY_RUN_NAME: 'bee-destroy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
 
 jobs:
+  # Attempt to bump the app version.
+  # Compile the Scala code to a jar.
+  # Build the docker image and push that image to GCR.
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
     permissions:
@@ -23,6 +26,7 @@ jobs:
       id-token: 'write'
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: 'actions/checkout@v4'
 
@@ -32,7 +36,7 @@ jobs:
         env:
           DEFAULT_BUMP: patch
           GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
-          RELEASE_BRANCHES: main
+          RELEASE_BRANCHES: develop
           WITH_V: true
 
       - name: Extract branch
@@ -76,6 +80,8 @@ jobs:
           echo "$GITHUB_CONTEXT"
           echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
+
+  # Set the test-context: is this a merge to `develop` or is this a PR?
   init-github-context:
     runs-on: ubuntu-latest
     outputs:
@@ -91,7 +97,33 @@ jobs:
           else
             echo 'test-context=pr-test' >> $GITHUB_OUTPUT
           fi
-          
+
+  # Tell Broad DevOps Sherlock about the build version we just created.
+  report-to-sherlock:
+    uses: broadinstitute/sherlock/.github/workflows/client-report-app-version.yaml@main
+    needs: rawls-build-tag-publish-job
+    with:
+      new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
+      chart-name: 'rawls'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+  # Put new Rawls version in Broad dev environment
+  set-version-in-dev:
+    uses: broadinstitute/sherlock/.github/workflows/client-set-environment-app-version.yaml@main
+    needs: [rawls-build-tag-publish-job, report-to-sherlock]
+    if: ${{ github.ref_name == 'develop' }}
+    with:
+      new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
+      chart-name: 'rawls'
+      environment-name: 'dev'
+    secrets:
+      sync-git-token: ${{ secrets.BROADBOT_TOKEN }}
+    permissions:
+      id-token: 'write'
+
+  # Create a BEE to be used by swat tests.
   create-bee-workflow:
     strategy:
       matrix:
@@ -123,6 +155,8 @@ jobs:
             "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
+  # Run swat tests. This kicks off two parallel jobs for Workflows and Workspaces tests, which both run against the BEE
+  # we just created.
   rawls-swat-test-job:
     strategy:
       # set fail-fast: false. We want all test jobs to complete, so we can see their results. If fail-fast were true,
@@ -139,6 +173,7 @@ jobs:
           # here, commented out, to make it easy to re-instate if/when Analysis Journeys does have some tests to run.
           # { group_name: analysis_journeys, tag: "-n org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest" }
         ] # Rawls test groups
+    name: ${{ matrix.test-group.group_name }}-owned tests
     runs-on: ubuntu-latest
     needs:
       - create-bee-workflow
@@ -169,6 +204,7 @@ jobs:
             "test-context": "${{ env.test-context }}"
           }'
 
+  # Delete the BEE, now that swat tests are done.
   destroy-bee-workflow:
     strategy:
       matrix:

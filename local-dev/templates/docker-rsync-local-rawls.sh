@@ -96,7 +96,7 @@ start_server () {
     -e JAVA_OPTS="$JAVA_OPTS" \
     -e GOOGLE_APPLICATION_CREDENTIALS='/etc/rawls-account.json' \
     -e GIT_HASH=$GIT_HASH \
-    hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 \
+    sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.9.9_2.13.13 \
     sbt clean \~reStart
 
     docker cp config/rawls-account.pem rawls-sbt:/etc/rawls-account.pem
