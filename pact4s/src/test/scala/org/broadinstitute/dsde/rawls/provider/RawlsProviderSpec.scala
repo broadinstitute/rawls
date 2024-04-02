@@ -70,6 +70,9 @@ object States {
 
 class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVerifier {
 
+  private val WORKSPACE_UUID = "facade00-0000-4000-a000-000000000000"
+  private val RESOURCE_UUID = "5ca1ab1e-0000-4000-a000-000000000000"
+
   implicit val loggerIO: StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
   implicit val system: ActorSystem = ActorSystem("rawlstests")
   implicit val materializer: Materializer.type = Materializer
@@ -165,8 +168,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
 
   // Create ResourceMetadata
   val resourceMetadata = new ResourceMetadata()
-    .workspaceId(UUID.randomUUID())
-    .resourceId(UUID.randomUUID())
+    .workspaceId(UUID.fromString(WORKSPACE_UUID))
+    .resourceId(UUID.fromString(RESOURCE_UUID))
     .name("testName")
     .description("testDescription")
     .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
