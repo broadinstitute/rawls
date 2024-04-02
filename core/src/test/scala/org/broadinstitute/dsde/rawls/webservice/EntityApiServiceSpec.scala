@@ -831,6 +831,30 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assertResult(activeAttributeCount1)(activeAttributeCount2)
   }
 
+  it should "return 400 on entity delete where caller specified nothing to delete" in withTestDataApiServices {
+    services =>
+      val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+      val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+      val request = EntityDeleteRequest()
+
+      Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
+        sealRoute(services.entityRoutes()) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+
+      val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+      val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+      assertResult(entityCount1)(entityCount2)
+      assertResult(attributeCount1)(attributeCount2)
+      assertResult(activeEntityCount1)(activeEntityCount2)
+      assertResult(activeAttributeCount1)(activeAttributeCount2)
+  }
+
   it should "return 204 when deleting an entity type that has no references to it" in withTestDataApiServices {
     services =>
       val entities = Seq.tabulate(100) { i =>

@@ -81,7 +81,7 @@ object Settings {
     Global / scalafmtFilter := "diff-ref=HEAD^"
   )
 
-  val scala213 = "2.13.12"
+  val scala213 = "2.13.13"
 
   // common settings for all sbt subprojects, without enforcing that a database is present (for tests)
   val commonSettingsWithoutDb =
@@ -133,9 +133,8 @@ object Settings {
   //thus commonSettings needs to be added first.
   val rawlsCoreSettings = commonSettings ++ List(
     name := "rawls-core",
-    version := "0.1",
     libraryDependencies ++= rawlsCoreDependencies
-  ) ++ antlr4CodeGenerationSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
+  ) ++ versionSettings ++ antlr4CodeGenerationSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //NOTE: rawlsCoreCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
@@ -144,8 +143,7 @@ object Settings {
   //thus commonSettings needs to be added first.
   val rootSettings = commonSettings ++ List(
     name := "rawls",
-    version := "0.1"
-  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
+  ) ++ versionSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //See immediately above NOTE.
 
   val pact4sSettings = commonSettingsWithoutDb ++ List(
