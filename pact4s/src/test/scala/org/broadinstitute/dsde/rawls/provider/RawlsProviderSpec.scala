@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model.{
   ApplicationVersion,
+  NamedDataRepoSnapshot,
   RawlsRequestContext,
   SnapshotListResponse,
   StatusCheckResponse,
@@ -66,6 +67,7 @@ import scala.collection.immutable.Map
 object States {
   val oneSnapshot = "one snapshot in the given workspace"
   val rawlsOK = "Rawls is ok"
+  val snapshotCreatePolicy = "policies allowing snapshot reference creation"
 }
 
 class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVerifier {
@@ -199,6 +201,11 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
         mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext)),
         mockedEnumerateSnapshotsResponse
       )
+    case ProviderState(States.snapshotCreatePolicy, _) =>
+      mockCreateSnapshot(
+        mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext)),
+        dataRepoSnapshotResource
+      )
     case _ =>
       loggerIO.debug("State not found")
   }
@@ -208,6 +215,15 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   ): OngoingStubbing[Future[SnapshotListResponse]] =
     when {
       mockSnapshotService.enumerateSnapshotsById(anyString(), anyInt(), anyInt(), any[Option[UUID]])
+    } thenReturn {
+      Future.successful(mockResponse)
+    }
+
+  private def mockCreateSnapshot(mockSnapshotService: SnapshotService,
+                                 mockResponse: DataRepoSnapshotResource
+  ): OngoingStubbing[Future[DataRepoSnapshotResource]] =
+    when {
+      mockSnapshotService.createSnapshotByWorkspaceId(anyString(), any[NamedDataRepoSnapshot])
     } thenReturn {
       Future.successful(mockResponse)
     }
@@ -244,8 +260,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
 //        .withPendingPactsEnabled(ProviderTags(providerBranch)) // TODO providerBranch or providerVer?
 //        .withConsumerVersionSelectors(consumerVersionSelectors)
       pactSource = PactSource.FileSource(
-//        Map("wds" -> new File("pact4s/src/test/resources/wds-rawls.json"))
-        Map("wds" -> new File("pact4s/src/test/resources/wds-rawls4.json"))
+        Map("wds" -> new File("../terra-workspace-data-service/service/build/pacts/wds-rawls.json"))
+//        Map("wds" -> new File("pact4s/src/test/resources/wds-rawls4.json"))
       )
     )
       .withStateManagementFunction(
