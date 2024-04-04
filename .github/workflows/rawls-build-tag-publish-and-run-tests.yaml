@@ -31,13 +31,15 @@ jobs:
       - uses: 'actions/checkout@v4'
 
       - name: Bump the tag to a new version
-        uses: databiosphere/github-actions/actions/bumper@bumper-0.3.0
+        uses: ./.github/workflows/tag.yml
+        with:
+          # The 'ref' parameter ensures that the provider version is postfixed with the HEAD commit of the PR branch,
+          # facilitating cross-referencing of a pact between Pact Broker and GitHub.
+          ref: ${{ github.head_ref || '' }}
         id: tag
-        env:
-          DEFAULT_BUMP: patch
-          GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
-          RELEASE_BRANCHES: develop
-          WITH_V: true
+        dry-run: true
+        release-branches: develop
+        secrets: inherit
 
       - name: Extract branch
         id: extract-branch
