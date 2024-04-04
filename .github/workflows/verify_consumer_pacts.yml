@@ -24,7 +24,7 @@ on:
       - develop
       - aj-1697-provider-contract
     paths-ignore:
-      - 'README.md'
+      - 'README.md'    
   workflow_dispatch:
     inputs:
       pb-event-type:
@@ -73,6 +73,10 @@ env:
   CAN_I_DEPLOY_RUN_NAME: 'can-i-deploy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   COURSIER_CACHE: $HOME/.cache
   SBT_CACHE: $HOME/.sbt
+  #Temporary for testing
+  PROVIDER_BRANCH: aj-1697-provider-contract
+  CONSUMER_BRANCH: aj-1697-rawls-contract
+  CONSUMER_NAME: wds
 
 jobs:
   # We only need a new version tag when this workflow is triggered by opening, updating a PR or PR merge.
@@ -153,11 +157,11 @@ jobs:
           echo "pact-url=${{ inputs.pact-url }}"
           
           # Save webhook event parameters as envvars
-          echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
-          echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
-          echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
-          echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
-          echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
+          # echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
+          # echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
+          # echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
+          # echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
+          # echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
 
       - name: Set PROVIDER_VERSION envvar
         run: |
