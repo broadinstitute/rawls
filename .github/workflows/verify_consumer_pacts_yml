@@ -20,8 +20,9 @@ on:
     paths-ignore:
     - 'README.md'
   push:
-    #branches:
-    #- develop
+    branches:
+    - develop
+    - aj-1697-provider-contract
     paths-ignore:
     - 'README.md'
   workflow_dispatch:
