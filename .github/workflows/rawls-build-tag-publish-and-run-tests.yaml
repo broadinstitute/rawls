@@ -31,6 +31,7 @@ jobs:
       - uses: 'actions/checkout@v4'
 
       - name: Bump the tag to a new version
+        id: tag
         uses: ./.github/workflows/tag.yml
         with:
           # The 'ref' parameter ensures that the provider version is postfixed with the HEAD commit of the PR branch,
@@ -38,8 +39,6 @@ jobs:
           ref: ${{ github.head_ref || '' }}
           dry-run: true
           release-branches: develop
-        secrets: inherit
-        id: tag
         
 
       - name: Extract branch
