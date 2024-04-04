@@ -20,8 +20,8 @@ on:
     paths-ignore:
     - 'README.md'
   push:
-    branches:
-    - develop
+    #branches:
+    #- develop
     paths-ignore:
     - 'README.md'
   workflow_dispatch:
