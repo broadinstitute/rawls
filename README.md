@@ -106,7 +106,6 @@ If you are writing Liquibase migrations or doing database work, it is mandatory 
 
 ## Developer quick links:
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
-* Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 
 ## Build Rawls docker image
 
@@ -128,8 +127,13 @@ Build Rawls jar and docker image
 
 Supported Scala versions: 2.13
 
-Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory. You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
-- [Jenkins runs `publishSnapshot.sh` on every dev build](https://fc-jenkins.dsp-techops.broadinstitute.org/job/rawls-build/), but that makes "unofficial" `-SNAP` versions.
+Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory.
+You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
+
+- The [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml)
+publishes these libraries, but it makes "unofficial" `-SNAP` versions. This action runs on every dev build as part of the
+[`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml).
+
 
 To publish a temporary or test version, use `publishSnapshot.sh` like so:
 
