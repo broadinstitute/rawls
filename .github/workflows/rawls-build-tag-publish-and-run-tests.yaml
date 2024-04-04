@@ -17,29 +17,25 @@ env:
 
 jobs:
   # Attempt to bump the app version.
+
+  tag-job:
+    uses: ./.github/workflows/tag.yml
+    with:
+      release-branches: develop
+    secrets: inherit
+  
   # Compile the Scala code to a jar.
   # Build the docker image and push that image to GCR.
-  rawls-build-tag-publish-job:
+  rawls-build-publish-job:
     runs-on: ubuntu-latest
+    needs: tag-job
     permissions:
       contents: 'read'
       id-token: 'write'
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
-      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: 'actions/checkout@v4'
-
-      - name: Bump the tag to a new version
-        id: tag
-        uses: ./.github/workflows/tag.yml
-        with:
-          # The 'ref' parameter ensures that the provider version is postfixed with the HEAD commit of the PR branch,
-          # facilitating cross-referencing of a pact between Pact Broker and GitHub.
-          ref: ${{ github.head_ref || '' }}
-          dry-run: true
-          release-branches: develop
-        
+      - uses: 'actions/checkout@v4'        
 
       - name: Extract branch
         id: extract-branch
@@ -71,7 +67,7 @@ jobs:
             "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
             "repository": "${{ github.event.repository.full_name }}",
             "ref": "${{ steps.extract-branch.outputs.ref }}",
-            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
+            "rawls-release-tag": "${{ needs.tag-job.outputs.tag }}"
           }'
 
       - name: Render Rawls version
@@ -80,7 +76,7 @@ jobs:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: |
           echo "$GITHUB_CONTEXT"
-          echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
+          echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ needs.tag-job.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
 
   # Set the test-context: is this a merge to `develop` or is this a PR?
@@ -103,9 +99,9 @@ jobs:
   # Tell Broad DevOps Sherlock about the build version we just created.
   report-to-sherlock:
     uses: broadinstitute/sherlock/.github/workflows/client-report-app-version.yaml@main
-    needs: rawls-build-tag-publish-job
+    needs: rawls-build-publish-job
     with:
-      new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
+      new-version: ${{ needs.rawls-build-publish-job.outputs.tag }}
       chart-name: 'rawls'
     permissions:
       contents: 'read'
@@ -114,10 +110,10 @@ jobs:
   # Put new Rawls version in Broad dev environment
   set-version-in-dev:
     uses: broadinstitute/sherlock/.github/workflows/client-set-environment-app-version.yaml@main
-    needs: [rawls-build-tag-publish-job, report-to-sherlock]
+    needs: [rawls-build-publish-job, report-to-sherlock]
     if: ${{ github.ref_name == 'develop' }}
     with:
-      new-version: ${{ needs.rawls-build-tag-publish-job.outputs.tag }}
+      new-version: ${{ needs.rawls-build-publish-job.outputs.tag }}
       chart-name: 'rawls'
       environment-name: 'dev'
     secrets:
@@ -132,14 +128,14 @@ jobs:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
     runs-on: ubuntu-latest
     needs:
-      - rawls-build-tag-publish-job
+      - rawls-build-publish-job
     permissions:
       contents: 'read'
       id-token: 'write'
     steps:
       - name: Echo Rawls version
         run: |
-          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+          echo '${{ needs.rawls-build-publish-job.outputs.custom-version-json }}'
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -154,7 +150,7 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}-${{ matrix.terra-env }}",
             "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
             "version-template": "${{ matrix.terra-env }}",
-            "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
+            "custom-version-json": "${{ needs.rawls-build-publish-job.outputs.custom-version-json }}"
           }'
 
   # Run swat tests. This kicks off two parallel jobs for Workflows and Workspaces tests, which both run against the BEE
