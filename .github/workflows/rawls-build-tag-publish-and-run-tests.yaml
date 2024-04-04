@@ -36,10 +36,11 @@ jobs:
           # The 'ref' parameter ensures that the provider version is postfixed with the HEAD commit of the PR branch,
           # facilitating cross-referencing of a pact between Pact Broker and GitHub.
           ref: ${{ github.head_ref || '' }}
-        id: tag
-        dry-run: true
-        release-branches: develop
+          dry-run: true
+          release-branches: develop
         secrets: inherit
+        id: tag
+        
 
       - name: Extract branch
         id: extract-branch
