@@ -345,21 +345,21 @@ jobs:
                         sbtscala/scala-sbt:openjdk-17.0.2_1.7.2_2.13.10 \
                         sbt "project pact4s" clean coverage "testOnly org.broadinstitute.dsde.rawls.provider.*"  coverageReport
 
-  can-i-deploy: # The can-i-deploy job will run as a result of a Rawls PR. It reports the pact verification statuses on all deployed environments.
-    runs-on: ubuntu-latest
-    if: ${{ inputs.pb-event-type == '' }}
-    needs: [ verify-consumer-pact ]
-    steps:
-    - name: Dispatch to terra-github-workflows
-      uses: broadinstitute/workflow-dispatch@v4.0.0
-      with:
-        run-name: "${{ env.CAN_I_DEPLOY_RUN_NAME }}"
-        workflow: .github/workflows/can-i-deploy.yaml
-        repo: broadinstitute/terra-github-workflows
-        ref: refs/heads/main
-        token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
-        inputs: '{
-            "run-name": "${{ env.CAN_I_DEPLOY_RUN_NAME }}",
-            "pacticipant": "rawls",
-            "version": "${{ needs.verify-consumer-pact.outputs.provider-version }}"
-          }'
+    can-i-deploy: # The can-i-deploy job will run as a result of a Rawls PR. It reports the pact verification statuses on all deployed environments.
+      runs-on: ubuntu-latest
+      if: ${{ inputs.pb-event-type == '' }}
+      needs: [ verify-consumer-pact ]
+      steps:
+      - name: Dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v4.0.0
+        with:
+          run-name: "${{ env.CAN_I_DEPLOY_RUN_NAME }}"
+          workflow: .github/workflows/can-i-deploy.yaml
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+          inputs: '{
+              "run-name": "${{ env.CAN_I_DEPLOY_RUN_NAME }}",
+              "pacticipant": "rawls",
+              "version": "${{ needs.verify-consumer-pact.outputs.provider-version }}"
+            }'
