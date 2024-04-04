@@ -38,7 +38,7 @@ import org.broadinstitute.dsde.rawls.webservice.RawlsApiServiceImpl
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{reset, when}
 import org.mockito.stubbing.OngoingStubbing
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
@@ -228,7 +228,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       Future.successful(mockResponse)
     }
 
-  lazy val pactBrokerUrl: String = sys.env.getOrElse("PACT_BROKER_URL", "http://localhost:9292")
+  lazy val pactBrokerUrl: String = sys.env.getOrElse("PACT_BROKER_URL", "")
   lazy val pactBrokerUser: String = sys.env.getOrElse("PACT_BROKER_USERNAME", "")
   lazy val pactBrokerPass: String = sys.env.getOrElse("PACT_BROKER_PASSWORD", "")
   // Provider branch, semver
@@ -236,8 +236,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   lazy val providerVer: String = sys.env.getOrElse("PROVIDER_VERSION", "")
   // Consumer name, branch, semver (used for webhook events only)
   lazy val consumerName: Option[String] = sys.env.get("CONSUMER_NAME")
-//  lazy val consumerBranch: Option[String] = sys.env.get("CONSUMER_BRANCH")
-  lazy val consumerBranch: Option[String] = Some("aj-1697-rawls-contract")
+  lazy val consumerBranch: Option[String] = sys.env.get("CONSUMER_BRANCH")
   // This matches the latest commit of the consumer branch that triggered the webhook event
   lazy val consumerVer: Option[String] = sys.env.get("CONSUMER_VERSION")
 
@@ -254,22 +253,17 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   val provider: ProviderInfoBuilder =
     ProviderInfoBuilder(
       name = "rawls",
-//      pactSource = PactSource
-//        .PactBrokerWithSelectors(pactBrokerUrl)
-//        .withAuth(BasicAuth(pactBrokerUser, pactBrokerPass))
-//        .withPendingPactsEnabled(ProviderTags(providerBranch)) // TODO providerBranch or providerVer?
-//        .withConsumerVersionSelectors(consumerVersionSelectors)
-      pactSource = PactSource.FileSource(
-        Map("wds" -> new File("../terra-workspace-data-service/service/build/pacts/wds-rawls.json"))
-//        Map("wds" -> new File("pact4s/src/test/resources/wds-rawls4.json"))
-      )
+      pactSource = PactSource
+        .PactBrokerWithSelectors(pactBrokerUrl)
+        .withAuth(BasicAuth(pactBrokerUser, pactBrokerPass))
+        .withPendingPactsEnabled(ProviderTags(providerBranch)) // TODO providerBranch or providerVer?
+        .withConsumerVersionSelectors(consumerVersionSelectors)
     )
       .withStateManagementFunction(
         providerStatesHandler
-//          .withBeforeEach(() => resetMocks())
+          .withBeforeEach(() => resetMocks())
       )
       .withHost("localhost")
-//      .withPort(9292)
       .withPort(8080)
 
   override def beforeAll(): Unit = {
@@ -290,22 +284,22 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       _ <- IO(system.terminate())
     } yield binding
 
-//  def resetMocks(): Unit = {
-//    reset(mockOpenIDConnectConfiguration)
-//    reset(mockMultiCloudWorkspaceServiceConstructor)
-//    reset(mockWorkspaceServiceConstructor)
-//    reset(mockEntityServiceConstructor)
-//    reset(mockUserServiceConstructor)
-//    reset(mockGenomicsServiceConstructor)
-//    reset(mockSnapshotServiceConstructor)
-//    reset(mockSpendReportingConstructor)
-//    reset(mockBillingProjectOrchestratorConstructor)
-//    reset(mockBucketMigrationServiceConstructor)
-//    reset(mockStatusServiceConstructor)
-//    reset(mockExecutionServiceCluster)
-//    reset(mockAppVersion)
-//    reset(mockSamDAO)
-//  }
+  def resetMocks(): Unit = {
+    reset(mockOpenIDConnectConfiguration)
+    reset(mockMultiCloudWorkspaceServiceConstructor)
+    reset(mockWorkspaceServiceConstructor)
+    reset(mockEntityServiceConstructor)
+    reset(mockUserServiceConstructor)
+    reset(mockGenomicsServiceConstructor)
+    reset(mockSnapshotServiceConstructor)
+    reset(mockSpendReportingConstructor)
+    reset(mockBillingProjectOrchestratorConstructor)
+    reset(mockBucketMigrationServiceConstructor)
+    reset(mockStatusServiceConstructor)
+    reset(mockExecutionServiceCluster)
+    reset(mockAppVersion)
+    reset(mockSamDAO)
+  }
 
   it should "Verify pacts" in {
     val publishResults = sys.env.getOrElse("PACT_PUBLISH_RESULTS", "false").toBoolean
