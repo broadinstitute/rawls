@@ -77,6 +77,7 @@ env:
   PROVIDER_BRANCH: aj-1697-provider-contract
   CONSUMER_BRANCH: aj-1697-rawls-contract
   CONSUMER_NAME: wds
+  CONSUMER_VERSION: 0.2.119-2c4b496
 
 jobs:
   # We only need a new version tag when this workflow is triggered by opening, updating a PR or PR merge.
