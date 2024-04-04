@@ -90,31 +90,31 @@ jobs:
   #     release-branches: develop
   #   secrets: inherit
 
- regulated-tag-job:
-   runs-on: ubuntu-latest
-   outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-
-   steps:
-    - name: Checkout current code
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ inputs.ref }}
-        token: ${{ secrets.BROADBOT_TOKEN }} # this allows the push to succeed later
-    - name: Bump the tag to a new version
-      # https://github.com/DataBiosphere/github-actions/tree/master/actions/bumper
-      uses: databiosphere/github-actions/actions/bumper@bumper-0.3.0
-      id: tag
-      env:
-        DEFAULT_BUMP: patch
-        GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
-        DRY_RUN: true
-        RELEASE_BRANCHES: develop
-        WITH_V: true
-    - name: Echo generated tag to console
-      if: ${{ inputs.print-tag == 'true' }}
-      run: |
-        echo "Newly created version tag: '${{ steps.tag.outputs.tag }}'"
+   regulated-tag-job:
+     runs-on: ubuntu-latest
+     outputs:
+        tag: ${{ steps.tag.outputs.tag }}
+  
+     steps:
+      - name: Checkout current code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.BROADBOT_TOKEN }} # this allows the push to succeed later
+      - name: Bump the tag to a new version
+        # https://github.com/DataBiosphere/github-actions/tree/master/actions/bumper
+        uses: databiosphere/github-actions/actions/bumper@bumper-0.3.0
+        id: tag
+        env:
+          DEFAULT_BUMP: patch
+          GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
+          DRY_RUN: true
+          RELEASE_BRANCHES: develop
+          WITH_V: true
+      - name: Echo generated tag to console
+        if: ${{ inputs.print-tag == 'true' }}
+        run: |
+          echo "Newly created version tag: '${{ steps.tag.outputs.tag }}'"
 
    verify-consumer-pact:
     runs-on: ubuntu-latest
