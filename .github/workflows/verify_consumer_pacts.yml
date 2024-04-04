@@ -131,53 +131,27 @@ jobs:
         if: '${{ inputs.pb-event-type != '''' }}'
         run: >
           echo "pb-event-type=${{ inputs.pb-event-type }}"
-
           echo "consumer-name=${{ inputs.consumer-name }}"
 
-
-          # The consumer-version-branch and consumer-version-number identify the
-          most recent
-
+          # The consumer-version-branch and consumer-version-number identify the most recent
           # consumer branch and version associated with the pact content.
+          echo "consumer-version-branch/consumer-version-number=${{inputs.consumer-version-branch }}/${{ inputs.consumer-version-number}}"
 
-          echo "consumer-version-branch/consumer-version-number=${{
-          inputs.consumer-version-branch }}/${{ inputs.consumer-version-number
-          }}"
-
-
-          # The provider-version-number represents the provider version number
-          in the webhook event payload.
-
-          # This corresponds to the GitHub release tag recorded by Sherlock for
-          the corresponding
-
+          # The provider-version-number represents the provider version number in the webhook event payload.
+          # This corresponds to the GitHub release tag recorded by Sherlock for the corresponding
           # deployment environment (dev, staging, and prod).        
-
-          echo "provider-version-branch/provider-version-number=${{
-          inputs.provider-version-branch }}/${{ inputs.provider-version-number
-          }}"
+          echo "provider-version-branch/provider-version-number=${{inputs.provider-version-branch }}/${{ inputs.provider-version-number}}"
             
-          # The pact-url is included here in case future pact4s client supports
-          it.
-
+          # The pact-url is included here in case future pact4s client supports it.
           echo "pact-url=${{ inputs.pact-url }}"
 
-
           # Save webhook event parameters as envvars
-
-          echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >>
-          $GITHUB_ENV
-
-          echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >>
-          $GITHUB_ENV
-
-          echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >>
-          $GITHUB_ENV
-
+          echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
+          echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
+          echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
           echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
+          echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
 
-          echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >>
-          $GITHUB_ENV
       - name: Set PROVIDER_VERSION envvar
         run: |
           # The PROVIDER_VERSION envvar is used to identify the provider version
@@ -193,41 +167,30 @@ jobs:
           echo "This workflow has been triggered by '${{ github.event_name }}'
           event."
 
-
           # If the PROVIDER_TAG envvar exists, switch to the corresponding tag.
-
-          # This condition is true when the workflow is triggered by a Pact
-          Broker webhook event.
+          # This condition is true when the workflow is triggered by a Pact Broker webhook event.
 
           if [[ -n "${{ env.PROVIDER_TAG }}" ]]; then
             echo "git checkout tags/${{ env.PROVIDER_TAG }}"
             git checkout tags/${{ env.PROVIDER_TAG }}
 
-          # Otherwise, switch to CURRENT_BRANCH if the workflow has been
-          triggered by a
-
+          # Otherwise, switch to CURRENT_BRANCH if the workflow has been triggered by a
           # PR commit or merge onto the main branch.
 
-          elif [[ "${{ github.event_name }}" == "pull_request" ]] || [[ "${{
-          github.event_name }}" == "push" ]]; then
+          elif [[ "${{ github.event_name }}" == "pull_request" ]] || [[ "${{github.event_name }}" == "push" ]]; then
             echo "git checkout ${{ env.CURRENT_BRANCH }}"
             git checkout ${{ env.CURRENT_BRANCH }}
           fi
 
-
-          # Echo the HEAD commit of the provider branch that has been switched
-          to.
-
+          # Echo the HEAD commit of the provider branch that has been switched to.
           echo "git rev-parse HEAD"
-
           git rev-parse HEAD
+          
       - name: Setup envvars for Pact Broker
         run: >
-          echo "PACT_BROKER_USERNAME=${{ secrets.PACT_BROKER_USERNAME }}" >>
-          $GITHUB_ENV
+          echo "PACT_BROKER_USERNAME=${{ secrets.PACT_BROKER_USERNAME }}" >> $GITHUB_ENV
+          echo "PACT_BROKER_PASSWORD=${{ secrets.PACT_BROKER_PASSWORD }}" >> $GITHUB_ENV
 
-          echo "PACT_BROKER_PASSWORD=${{ secrets.PACT_BROKER_PASSWORD }}" >>
-          $GITHUB_ENV
       - name: Coursier cache
         id: coursier-cache
         uses: actions/cache@v3
@@ -317,14 +280,9 @@ jobs:
 
 
           # Refer to https://github.com/sbt/docker-sbt on this Docker image
-
-          # Recent sbt versions use Coursier instead of Ivy for dependency
-          management.
-
+          # Recent sbt versions use Coursier instead of Ivy for dependency management.
           # On Linux, the location is
-
           #     sbt "show csrCacheDirectory"
-
           # with a default value of ~/.cache/coursier/v1
 
           docker run --rm -w /working \
@@ -344,7 +302,8 @@ jobs:
                           -e POSTGRES_USERNAME=rawls-test \
                           -e POSTGRES_PASSWORD=rawls-test \
                           sbtscala/scala-sbt:openjdk-17.0.2_1.7.2_2.13.10 \
-                          sbt "project pact4s" clean coverage "testOnly org.broadinstitute.dsde.rawls.provider.*"  coverageReport
+                          sbt -J-Xmx2g -J-XX:+UseG1GC \
+                          "project pact4s" clean coverage "testOnly org.broadinstitute.dsde.rawls.provider.*"  coverageReport
 
   can-i-deploy:
       runs-on: ubuntu-latest
