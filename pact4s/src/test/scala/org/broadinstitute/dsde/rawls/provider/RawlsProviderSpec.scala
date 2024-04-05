@@ -248,10 +248,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   // 2. For normal Rawls PR, verify all consumer pacts in Pact Broker labelled with a deployed environment (alpha, dev, prod, staging).
   consumerBranch match {
     case Some(s) if !s.isBlank => consumerVersionSelectors = consumerVersionSelectors.branch(s, consumerName)
-//    case _                     => consumerVersionSelectors = consumerVersionSelectors.deployedOrReleased.mainBranch
-    case _ =>
-      consumerVersionSelectors =
-        consumerVersionSelectors.deployedOrReleased.mainBranch.branch("aj-1697-rawls-contract", Some("wds"))
+    case _                     => consumerVersionSelectors = consumerVersionSelectors.deployedOrReleased.mainBranch
   }
 
   val provider: ProviderInfoBuilder =
@@ -260,7 +257,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       pactSource = PactSource
         .PactBrokerWithSelectors(pactBrokerUrl)
         .withAuth(BasicAuth(pactBrokerUser, pactBrokerPass))
-        .withPendingPactsEnabled(ProviderTags(providerBranch)) // TODO providerBranch or providerVer?
+        .withPendingPactsEnabled(ProviderTags(providerBranch))
         .withConsumerVersionSelectors(consumerVersionSelectors)
     )
       .withStateManagementFunction(
