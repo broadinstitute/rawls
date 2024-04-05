@@ -158,11 +158,11 @@ jobs:
           echo "pact-url=${{ inputs.pact-url }}"
           
           # Save webhook event parameters as envvars
-          # echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
-          # echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
-          # echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
-          # echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
-          # echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
+          echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
+          echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
+          echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
+          echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
+          echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
 
       - name: Set PROVIDER_VERSION envvar
         run: |
