@@ -228,7 +228,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       Future.successful(mockResponse)
     }
 
-  lazy val pactBrokerUrl: String = sys.env.getOrElse("PACT_BROKER_URL", "")
+  lazy val pactBrokerUrl: String =
+    sys.env.getOrElse("PACT_BROKER_URL", "")
   lazy val pactBrokerUser: String = sys.env.getOrElse("PACT_BROKER_USERNAME", "")
   lazy val pactBrokerPass: String = sys.env.getOrElse("PACT_BROKER_PASSWORD", "")
   // Provider branch, semver
@@ -244,7 +245,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   // consumerVersionSelectors = consumerVersionSelectors.mainBranch
   // The following match condition basically says
   // 1. If verification is triggered by consumer pact change, verify only the changed pact.
-  // 2. For normal Sam PR, verify all consumer pacts in Pact Broker labelled with a deployed environment (alpha, dev, prod, staging).
+  // 2. For normal Rawls PR, verify all consumer pacts in Pact Broker labelled with a deployed environment (alpha, dev, prod, staging).
   consumerBranch match {
     case Some(s) if !s.isBlank => consumerVersionSelectors = consumerVersionSelectors.branch(s, consumerName)
 //    case _                     => consumerVersionSelectors = consumerVersionSelectors.deployedOrReleased.mainBranch
@@ -264,13 +265,13 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     )
       .withStateManagementFunction(
         providerStatesHandler
-          .withBeforeEach(() => resetMocks())
+//          .withBeforeEach(() => resetMocks())
       )
       .withHost("localhost")
       .withPort(8080)
 
   override def beforeAll(): Unit = {
-    loggerIO.info("beforeAll")
+    println("beforeAll")
     startRawls.unsafeToFuture()
     startRawls.start
     sleep(5000)
@@ -278,7 +279,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   }
 
   private def startRawls: IO[Http.ServerBinding] = {
-    loggerIO.info("Starting Rawls")
+    println("Starting Rawls")
     for {
       binding <- IO
         .fromFuture(IO(Http().newServerAt("localhost", 8080).bind(rawlsApiService.route)))
@@ -308,9 +309,9 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   }
 
   it should "Verify pacts" in {
-    loggerIO.info("Verifying pacts")
-    loggerIO.info(s"Pact broker url: $pactBrokerUrl")
-    loggerIO.info(s"Pact broker user: $pactBrokerUser")
+    println("Verifying pacts")
+    println(s"Pact broker url: $pactBrokerUrl")
+    println(s"Pact broker user: $pactBrokerUser")
     val publishResults = sys.env.getOrElse("PACT_PUBLISH_RESULTS", "false").toBoolean
     verifyPacts(
       providerBranch = if (providerBranch.isEmpty) None else Some(Branch(providerBranch)),
