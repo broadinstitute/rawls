@@ -22,7 +22,6 @@ on:
   push:
     branches:
       - develop
-      - aj-1697-provider-contract
     paths-ignore:
       - 'README.md'    
   workflow_dispatch:
@@ -73,11 +72,6 @@ env:
   CAN_I_DEPLOY_RUN_NAME: 'can-i-deploy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
   COURSIER_CACHE: $HOME/.cache
   SBT_CACHE: $HOME/.sbt
-  #Temporary for testing
-  PROVIDER_BRANCH: aj-1697-provider-contract
-  CONSUMER_BRANCH: aj-1697-rawls-contract
-  CONSUMER_NAME: wds
-  CONSUMER_VERSION: 0.2.119-2c4b496
 
 jobs:
   # We only need a new version tag when this workflow is triggered by opening, updating a PR or PR merge.
@@ -322,7 +316,7 @@ jobs:
                           -v "$PWD":/working \
                           -v ${{ env.COURSIER_CACHE }}:/root/.cache \
                           -v ${{ env.SBT_CACHE }}:/root/.sbt \
-                          -e PACT_PUBLISH_RESULTS=false \
+                          -e PACT_PUBLISH_RESULTS=true \
                           -e PROVIDER_BRANCH=${{ env.PROVIDER_BRANCH }} \
                           -e PROVIDER_VERSION=${{ env.PROVIDER_VERSION }} \
                           -e CONSUMER_NAME=${{ env.CONSUMER_NAME }} \
