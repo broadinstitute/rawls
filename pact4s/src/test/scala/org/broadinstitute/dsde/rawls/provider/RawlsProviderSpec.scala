@@ -288,6 +288,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     } yield binding
 
   def resetMocks(): Unit = {
+    loggerIO.info(s"Pact broker url: $pactBrokerUrl")
+    loggerIO.info(s"Pact broker user: $pactBrokerUser")
     reset(mockOpenIDConnectConfiguration)
     reset(mockMultiCloudWorkspaceServiceConstructor)
     reset(mockWorkspaceServiceConstructor)
