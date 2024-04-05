@@ -271,15 +271,13 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       .withPort(8080)
 
   override def beforeAll(): Unit = {
-    println("beforeAll")
     startRawls.unsafeToFuture()
     startRawls.start
     sleep(5000)
 
   }
 
-  private def startRawls: IO[Http.ServerBinding] = {
-    println("Starting Rawls")
+  private def startRawls: IO[Http.ServerBinding] =
     for {
       binding <- IO
         .fromFuture(IO(Http().newServerAt("localhost", 8080).bind(rawlsApiService.route)))
@@ -289,7 +287,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       _ <- IO.fromFuture(IO(binding.whenTerminated))
       _ <- IO(system.terminate())
     } yield binding
-  }
 
   def resetMocks(): Unit = {
     reset(mockOpenIDConnectConfiguration)
@@ -309,9 +306,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   }
 
   it should "Verify pacts" in {
-    println("Verifying pacts")
-    println(s"Pact broker url: $pactBrokerUrl")
-    println(s"Pact broker user: $pactBrokerUser")
     val publishResults = sys.env.getOrElse("PACT_PUBLISH_RESULTS", "false").toBoolean
     verifyPacts(
       providerBranch = if (providerBranch.isEmpty) None else Some(Branch(providerBranch)),
