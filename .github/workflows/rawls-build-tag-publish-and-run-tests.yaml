@@ -99,9 +99,9 @@ jobs:
   # Tell Broad DevOps Sherlock about the build version we just created.
   report-to-sherlock:
     uses: broadinstitute/sherlock/.github/workflows/client-report-app-version.yaml@main
-    needs: rawls-build-publish-job
+    needs: [tag-job, rawls-build-publish-job]
     with:
-      new-version: ${{ needs.rawls-build-publish-job.outputs.tag }}
+      new-version: ${{ needs.tag-job.outputs.tag }}
       chart-name: 'rawls'
     permissions:
       contents: 'read'
@@ -110,10 +110,10 @@ jobs:
   # Put new Rawls version in Broad dev environment
   set-version-in-dev:
     uses: broadinstitute/sherlock/.github/workflows/client-set-environment-app-version.yaml@main
-    needs: [rawls-build-publish-job, report-to-sherlock]
+    needs: [tag-job, rawls-build-publish-job, report-to-sherlock]
     if: ${{ github.ref_name == 'develop' }}
     with:
-      new-version: ${{ needs.rawls-build-publish-job.outputs.tag }}
+      new-version: ${{ needs.tag-job.outputs.tag }}
       chart-name: 'rawls'
       environment-name: 'dev'
     secrets:
