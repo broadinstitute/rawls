@@ -352,7 +352,8 @@ jobs:
       - name: Verify provider version
         id: verify-version
         run: |
-          echo "provider-version=${{ needs.verify-consumer-pact.output.provider-version }}"
+          echo "provider-version-output=${{ needs.verify-consumer-pact.output.provider-version }}"
+          echo "provider-version-env=${{env.PROVIDER_VERSION}}"
       - name: Dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
