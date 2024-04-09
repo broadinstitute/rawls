@@ -361,5 +361,5 @@ jobs:
           inputs: '{
             "run-name": "${{ env.CAN_I_DEPLOY_RUN_NAME }}",
             "pacticipant": "rawls",
-            "version": "${{ needs.verify-consumer-pact..provider-version }}"
+            "version": "${{ needs.verify-consumer-pact.output.provider-version }}"
           }'
