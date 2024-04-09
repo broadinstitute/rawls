@@ -113,7 +113,7 @@ jobs:
 
     steps:
       - name: Checkout current code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -205,7 +205,7 @@ jobs:
       # Any changes to these files will result in a different cache key, triggering a cache update.
       - name: Coursier cache
         id: coursier-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cache
@@ -231,7 +231,7 @@ jobs:
       # Any changes to these files will result in a different cache key, triggering a cache update.
       - name: Cache .sbt directory
         id: sbt-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.sbt
@@ -261,7 +261,7 @@ jobs:
       # consistent and reproducible build outputs.
       - name: Cache sbt targets
         id: sbt-targets
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             **/target
@@ -283,7 +283,7 @@ jobs:
       # This is similar to sbt-targets cache but limited to pact4s targets.
       - name: Cache pact4s targets
         id: sbt-pact4s-targets
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             pact4s/**/target
