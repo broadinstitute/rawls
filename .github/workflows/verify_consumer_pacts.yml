@@ -117,7 +117,7 @@ jobs:
 
   verify-consumer-pact:
     runs-on: ubuntu-latest
-    needs: [ regulated-tag-job ]
+    needs: [ regulated--job ]
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -157,8 +157,8 @@ jobs:
           echo "consumer-version-branch/consumer-version-number=${{ inputs.consumer-version-branch }}/${{ inputs.consumer-version-number }}"
           
           # The provider-version-number represents the provider version number in the webhook event payload.
-          # This corresponds to the GitHub release tag recorded by Sherlock for the corresponding
-          # deployment environment (dev, staging, and prod).        
+          # This corresponds to the GitHub release  recorded by Sherlock for the corresponding
+          # deployment environment (dev, sing, and prod).        
           echo "provider-version-branch/provider-version-number=${{ inputs.provider-version-branch }}/${{ inputs.provider-version-number }}"
           
           # The pact-url is included here in case future pact4s client supports it.
@@ -166,7 +166,7 @@ jobs:
           
           # Save webhook event parameters as envvars
           echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
-          echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
+          echo "PROVIDER_=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
           echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
           echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
           echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
@@ -177,7 +177,7 @@ jobs:
           # for publishing the results of provider verification.
           if [[ -z "${{ inputs.pb-event-type }}" ]]; then
             echo "PROVIDER_BRANCH=${{ env.CURRENT_BRANCH }}" >> $GITHUB_ENV
-            echo "PROVIDER_VERSION=${{ needs.regulated-tag-job.outputs.new-tag }}" >> $GITHUB_ENV
+            echo "PROVIDER_VERSION=${{ needs.regulated-tag-job.outputs.tag }}" >> $GITHUB_ENV
           else
             echo "PROVIDER_VERSION=${{ env.PROVIDER_TAG }}" >> $GITHUB_ENV
           fi
@@ -361,5 +361,5 @@ jobs:
           inputs: '{
             "run-name": "${{ env.CAN_I_DEPLOY_RUN_NAME }}",
             "pacticipant": "rawls",
-            "version": "${{ needs.verify-consumer-pact.outputs.provider-version }}"
+            "version": "${{ needs.verify-consumer-pact..provider-version }}"
           }'
