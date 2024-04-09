@@ -111,7 +111,6 @@ jobs:
           RELEASE_BRANCHES: develop
           WITH_V: true
       - name: Echo generated tag to console
-        if: '${{ inputs.print-tag == ''true'' }}'
         run: |
           echo "Newly created version tag: '${{ steps.tag.outputs.tag }}'"
 
@@ -350,6 +349,10 @@ jobs:
     if: ${{ inputs.pb-event-type == '' }}
     needs: [ verify-consumer-pact ]
     steps:
+      - name: Verify provider version
+        id: verify-version
+        run: |
+          echo "provider-version=${{ needs.verify-consumer-pact.output.provider-version }}"
       - name: Dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
