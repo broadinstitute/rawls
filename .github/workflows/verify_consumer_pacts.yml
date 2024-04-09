@@ -166,7 +166,7 @@ jobs:
           
           # Save webhook event parameters as envvars
           echo "PROVIDER_BRANCH=${{ inputs.provider-version-branch }}" >> $GITHUB_ENV
-          echo "PROVIDER_=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
+          echo "PROVIDER_TAG=${{ inputs.provider-version-number }}" >> $GITHUB_ENV
           echo "CONSUMER_BRANCH=${{ inputs.consumer-version-branch }}" >> $GITHUB_ENV
           echo "CONSUMER_NAME=${{ inputs.consumer-name }}" >> $GITHUB_ENV
           echo "CONSUMER_VERSION=${{ inputs.consumer-version-number }}" >> $GITHUB_ENV
