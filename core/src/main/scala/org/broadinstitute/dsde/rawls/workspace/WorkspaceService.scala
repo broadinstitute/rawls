@@ -311,7 +311,19 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val wsmContext = wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx)
+            // some GCP workspaces, like those with linked snapshots, have a stub WSM workspace
+            val wsmContext =
+              try
+                wsmService.fetchAggregatedWorkspace(workspaceContext, ctx)
+              catch {
+                case _: Exception =>
+                  // return workspace with no WSM information
+                  AggregatedWorkspace(workspaceContext,
+                                      Some(workspaceContext.googleProjectId),
+                                      azureCloudContext = None,
+                                      policies = List.empty
+                  )
+              }
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
