@@ -27,16 +27,23 @@ on:
       tag:
         description: "The value of the latest tag after running this action"
         value: ${{ jobs.tag-job.outputs.tag }}
+      new-tag:
+        description: "The value of the newly created tag"
+        value: ${{ jobs.tag-job.outputs.new-tag }}
     secrets:
       BROADBOT_TOKEN:
         required: true
 
 jobs:
+  # On tag vs. new-tag.
+  # The new-tag is always the tag resulting from a bump to the original tag.
+  # However, the tag is by definition the value of the latest tag after running the action,
+  # which might not change if dry run is used, and remains same as the original tag.
   tag-job:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
-      
+      new-tag: ${{ steps.tag.outputs.new_tag }}
     steps:
     - name: Checkout current code
       uses: actions/checkout@v4
@@ -56,4 +63,4 @@ jobs:
     - name: Echo generated tag to console
       if: ${{ inputs.print-tag == 'true' }}
       run: |
-        echo "Newly created version tag: '${{ steps.tag.outputs.tag }}'"
+        echo "Newly created version tag: '${{ steps.tag.outputs.new-tag }}'"
