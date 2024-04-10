@@ -50,6 +50,31 @@ env:
   CAN_I_DEPLOY_RUN_NAME: 'can-i-deploy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
 
 jobs:
+  bump-check:
+    runs-on: ubuntu-latest
+    outputs:
+      is-bump: ${{ steps.skiptest.outputs.is-bump }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip version bump merges
+        id: skiptest
+        uses: ./.github/actions/bump-skip
+        with:
+          event-name: ${{ github.event_name }}
+
+  regulated-tag-job:
+      needs: [ bump-check ]
+      if: ${{ needs.bump-check.outputs.is-bump == 'no' }}
+      uses: ./.github/workflows/tag.yml
+      with:
+        # The 'ref' parameter ensures that the consumer version is postfixed with the HEAD commit of the PR branch,
+        # facilitating cross-referencing of a pact between Pact Broker and GitHub.
+        ref: ${{ github.head_ref || '' }}
+        # The 'dry-run' parameter prevents the new tag from being dispatched.
+        dry-run: true
+        release-branches: develop
+      secrets: inherit
+      
   init-github-context:
     runs-on: ubuntu-latest
     outputs:
