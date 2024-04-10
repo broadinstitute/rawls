@@ -150,8 +150,10 @@ jobs:
   # since access to secrets is not allowed.
   publish-contracts:
     runs-on: ubuntu-latest
-    if: ${{ needs.init-github-context.outputs.fork == 'false' }}
+    if: ${{ (needs.init-github-context.outputs.fork == 'false') && (needs.bump-check.outputs.is-bump == 'no') }}
     needs:
+      - bump-check
+      - regulated-tag-job
       - init-github-context
       - rawls-consumer-contract-tests
     steps:
