@@ -171,7 +171,7 @@ jobs:
             "repo-owner": "${{ github.repository_owner }}",
             "repo-name": "${{ github.event.repository.name }}",
             "repo-branch": "${{ needs.init-github-context.outputs.repo-branch }}",
-            "release-tag": "${{ needs.init-github-context.outputs.repo-version }}"
+            "release-tag": "${{ needs.regulated-tag-job.outputs.new-tag }}"
           }'
   can-i-deploy:
     runs-on: ubuntu-latest
