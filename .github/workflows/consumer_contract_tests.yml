@@ -137,7 +137,7 @@ jobs:
                           -v jar-cache:/root/.ivy2 \
                           -w /working \
                           sbtscala/scala-sbt:openjdk-17.0.2_1.7.2_2.13.10 \
-                          sbt "project pact4s" clean "testOnly org.broadinstitute.dsde.rawls.consumer.*"
+                          sbt -J-Xmx2g -J-XX:+UseG1GC "project pact4s" clean "testOnly org.broadinstitute.dsde.rawls.consumer.*"
 
       - name: Output consumer contract as non-breaking base64 string
         id: encode-pact
