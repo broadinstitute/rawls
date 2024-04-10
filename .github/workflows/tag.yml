@@ -63,4 +63,4 @@ jobs:
     - name: Echo generated tag to console
       if: ${{ inputs.print-tag == 'true' }}
       run: |
-        echo "Newly created version tag: '${{ steps.tag.outputs.new-tag }}'"
+        echo "Newly created version tag: '${{ steps.tag.outputs.new_tag }}'"
