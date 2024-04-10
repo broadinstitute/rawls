@@ -177,9 +177,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ bump-check, init-github-context, publish-contracts ]
     if: ${{ (needs.init-github-context.outputs.fork == 'false') && (needs.bump-check.outputs.is-bump == 'no') }}
-    needs:
-      - init-github-context
-      - publish-contracts
     steps:
       - name: Dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
