@@ -175,7 +175,7 @@ jobs:
           }'
   can-i-deploy:
     runs-on: ubuntu-latest
-    needs: [ bump-check, init-github-context, publish-contracts ]
+    needs: [ bump-check, regulated-tag-job, init-github-context, publish-contracts ]
     if: ${{ (needs.init-github-context.outputs.fork == 'false') && (needs.bump-check.outputs.is-bump == 'no') }}
     steps:
       - name: Dispatch to terra-github-workflows
