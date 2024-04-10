@@ -95,11 +95,12 @@ jobs:
     if: ${{ needs.bump-check.outputs.is-bump == 'no' }}
     outputs:
       tag: '${{ steps.tag.outputs.tag }}'
+      new-tag: '${{ steps.tag.outputs.new-tag }}'
     steps:
       - name: Checkout current code
         uses: actions/checkout@v4
         with:
-          ref: '${{ inputs.ref }}'
+          ref: ${{ github.head_ref || '' }}
           token: '${{ secrets.BROADBOT_TOKEN }}'
       - name: Bump the tag to a new version
         uses: databiosphere/github-actions/actions/bumper@bumper-0.3.0
@@ -113,6 +114,7 @@ jobs:
       - name: Echo generated tag to console
         run: |
           echo "Newly created version tag: '${{ steps.tag.outputs.tag }}'"
+          echo "Newly created version tag: '${{ steps.tag.outputs.new-tag }}'"
 
   verify-consumer-pact:
     runs-on: ubuntu-latest
@@ -176,7 +178,7 @@ jobs:
           # for publishing the results of provider verification.
           if [[ -z "${{ inputs.pb-event-type }}" ]]; then
             echo "PROVIDER_BRANCH=${{ env.CURRENT_BRANCH }}" >> $GITHUB_ENV
-            echo "PROVIDER_VERSION=${{ needs.regulated-tag-job.outputs.tag }}" >> $GITHUB_ENV
+            echo "PROVIDER_VERSION=${{ needs.regulated-tag-job.outputs.new-tag }}" >> $GITHUB_ENV
           else
             echo "PROVIDER_VERSION=${{ env.PROVIDER_TAG }}" >> $GITHUB_ENV
           fi
