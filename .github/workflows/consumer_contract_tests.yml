@@ -140,9 +140,9 @@ jobs:
             "pact-b64": "${{ needs.rawls-consumer-contract-tests.outputs.pact-b64 }}",
             "repo-owner": "${{ github.repository_owner }}",
             "repo-name": "${{ github.event.repository.name }}",
-            "repo-branch": "${{ needs.init-github-context.outputs.repo-branch }}"
+            "repo-branch": "${{ needs.init-github-context.outputs.repo-branch }}",
+            "release-tag": "${{ needs.init-github-context.outputs.repo-version }}"
           }'
-
   can-i-deploy:
     runs-on: ubuntu-latest
     if: ${{ needs.init-github-context.outputs.fork == 'false' }}
