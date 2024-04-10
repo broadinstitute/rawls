@@ -1,6 +1,6 @@
 # This action must be done after the checkout action
 name: 'bump-skip'
-description: 'Set skip-out when we are doing a version bump'
+description: 'Set is-bump when we are doing a version bump'
 inputs:
   event-name:
     description: 'github.event_name from the calling workflow'
