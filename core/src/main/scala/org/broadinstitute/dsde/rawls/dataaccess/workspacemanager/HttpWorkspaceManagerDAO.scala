@@ -142,23 +142,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   ): CloneWorkspaceResult =
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                                ctx: RawlsRequestContext
-  ): CreateCloudContextResult = {
-    val jobControlId = UUID.randomUUID().toString
-    getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
-                                              .cloudPlatform(CloudPlatform.AZURE)
-                                              .jobControl(new JobControl().id(jobControlId)),
-                                            workspaceId
-    )
-  }
-
-  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                                    jobControlId: String,
-                                                    ctx: RawlsRequestContext
-  ): CreateCloudContextResult =
-    getWorkspaceApi(ctx).getCreateCloudContextResult(workspaceId, jobControlId)
-
   override def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
     getWorkspaceApi(ctx).getCreateWorkspaceV2Result(jobControlId)
 

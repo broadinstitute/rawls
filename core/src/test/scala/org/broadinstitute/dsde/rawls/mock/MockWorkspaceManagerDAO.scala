@@ -34,7 +34,7 @@ class MockWorkspaceManagerDAO(
 
   def mockInitialCreateWorkspaceResult() =
     MockWorkspaceManagerDAO.getCreateWorkspaceResult(StatusEnum.RUNNING)
-  def mockCreateWorkspaceV2Response() = createWorkspaceResult
+  def mockCreateWorkspaceV2Result() = createWorkspaceResult
 
   def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.getOrElse(
     (workspaceId, referenceId),
@@ -227,15 +227,7 @@ class MockWorkspaceManagerDAO(
     mockInitialCreateWorkspaceResult()
 
   override def getCreateWorkspaceResult(workspaceId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
-    mockCreateWorkspaceV2Response()
-
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
-    ???
-
-  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                                    jobControlId: String,
-                                                    ctx: RawlsRequestContext
-  ): CreateCloudContextResult = ???
+    mockCreateWorkspaceV2Result()
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
