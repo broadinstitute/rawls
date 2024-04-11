@@ -29,6 +29,8 @@ trait WorkspaceManagerDAO {
                                       ctx: RawlsRequestContext
   ): CreateWorkspaceV2Result
 
+  def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result
+
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
                      displayName: String,
@@ -41,7 +43,7 @@ trait WorkspaceManagerDAO {
   def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport
 
   def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
-  def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result
+
   def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
 
   def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult

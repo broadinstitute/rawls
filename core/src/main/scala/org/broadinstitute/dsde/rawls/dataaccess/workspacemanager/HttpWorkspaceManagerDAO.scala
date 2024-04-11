@@ -111,6 +111,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getWorkspaceApi(ctx).createWorkspaceV2(request)
   }
 
+  override def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
+    getWorkspaceApi(ctx).getCreateWorkspaceV2Result(jobControlId)
+
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
@@ -141,9 +144,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                        ctx: RawlsRequestContext
   ): CloneWorkspaceResult =
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
-
-  override def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
-    getWorkspaceApi(ctx).getCreateWorkspaceV2Result(jobControlId)
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).deleteWorkspace(workspaceId)

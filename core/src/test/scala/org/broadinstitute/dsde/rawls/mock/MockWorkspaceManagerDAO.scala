@@ -32,7 +32,7 @@ class MockWorkspaceManagerDAO(
     new WorkspaceDescription().id(workspaceId).stage(WorkspaceStageModel.RAWLS_WORKSPACE)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId)
 
-  def mockInitialCreateWorkspaceResult() =
+  def mockInitialCreateWorkspaceV2Result() =
     MockWorkspaceManagerDAO.getCreateWorkspaceResult(StatusEnum.RUNNING)
   def mockCreateWorkspaceV2Result() = createWorkspaceResult
 
@@ -224,7 +224,7 @@ class MockWorkspaceManagerDAO(
                                                policyInputs: Option[WsmPolicyInputs],
                                                ctx: RawlsRequestContext
   ): CreateWorkspaceV2Result =
-    mockInitialCreateWorkspaceResult()
+    mockInitialCreateWorkspaceV2Result()
 
   override def getCreateWorkspaceResult(workspaceId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
     mockCreateWorkspaceV2Result()
