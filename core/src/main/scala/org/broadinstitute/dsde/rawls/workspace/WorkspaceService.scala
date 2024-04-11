@@ -316,13 +316,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               try
                 wsmService.fetchAggregatedWorkspace(workspaceContext, ctx)
               catch {
-                case _: Exception =>
-                  // return workspace with no WSM information
-                  AggregatedWorkspace(workspaceContext,
-                                      Some(workspaceContext.googleProjectId),
-                                      azureCloudContext = None,
-                                      policies = List.empty
-                  )
+                case e: AggregateWorkspaceNotFoundException =>
+                  // return workspace with no WSM information for gcp workspace
+                  if (workspaceContext.workspaceType == WorkspaceType.RawlsWorkspace) {
+                    AggregatedWorkspace(workspaceContext,
+                                        Some(workspaceContext.googleProjectId),
+                                        azureCloudContext = None,
+                                        policies = List.empty
+                    )
+                  } else {
+                    // bubble up an MC workspace exception
+                    throw e
+                  }
               }
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
