@@ -14,6 +14,6 @@ trait MockUserInfoDirectives extends UserInfoDirectives {
                                     RawlsUserSubjectId("123456789876543212345")
   )
 
-  def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
+  override def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
     provide(userInfo)
 }
