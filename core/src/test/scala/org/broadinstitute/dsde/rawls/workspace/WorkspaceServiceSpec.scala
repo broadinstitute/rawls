@@ -3044,7 +3044,8 @@ class WorkspaceServiceSpec
 
   private def createGcpWorkspaceStub(services: TestApiService,
                                      workspaceName: String,
-                                     policies: List[WsmPolicyInput] = List()
+                                     policies: List[WsmPolicyInput] = List(),
+                                     workspaceService: WorkspaceService
   ): Workspace = {
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
@@ -3058,7 +3059,7 @@ class WorkspaceServiceSpec
     )
 
     Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
       Duration.Inf
     )
   }
@@ -3185,7 +3186,7 @@ class WorkspaceServiceSpec
           new WsmPolicyPair().value("pair2Val").key("pair2Key")
         ).asJava
       )
-    val workspace = createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput))
+    val workspace = createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
     val readWorkspace = Await.result(services.workspaceService.getWorkspace(
                                        WorkspaceName(workspace.namespace, workspace.name),
                                        WorkspaceFieldSpecs()
