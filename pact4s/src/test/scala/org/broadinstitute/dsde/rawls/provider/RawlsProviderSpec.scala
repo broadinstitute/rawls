@@ -248,7 +248,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   // 2. For normal Rawls PR, verify all consumer pacts in Pact Broker labelled with a deployed environment (alpha, dev, prod, staging).
   consumerBranch match {
     case Some(s) if !s.isBlank => consumerVersionSelectors = consumerVersionSelectors.branch(s, consumerName)
-    case _                     => consumerVersionSelectors = consumerVersionSelectors.deployedOrReleased.mainBranch.branch("aj-1697-rawls-contract", Some("wds"))
+    case _                     => consumerVersionSelectors = consumerVersionSelectors.deployedOrReleased.mainBranch
   }
 
   val provider: ProviderInfoBuilder =
@@ -262,7 +262,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     )
       .withStateManagementFunction(
         providerStatesHandler
-//          .withBeforeEach(() => resetMocks())
       )
       .withHost("localhost")
       .withPort(8080)
@@ -284,23 +283,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       _ <- IO.fromFuture(IO(binding.whenTerminated))
       _ <- IO(system.terminate())
     } yield binding
-
-  def resetMocks(): Unit = {
-    reset(mockOpenIDConnectConfiguration)
-    reset(mockMultiCloudWorkspaceServiceConstructor)
-    reset(mockWorkspaceServiceConstructor)
-    reset(mockEntityServiceConstructor)
-    reset(mockUserServiceConstructor)
-    reset(mockGenomicsServiceConstructor)
-    reset(mockSnapshotServiceConstructor)
-    reset(mockSpendReportingConstructor)
-    reset(mockBillingProjectOrchestratorConstructor)
-    reset(mockBucketMigrationServiceConstructor)
-    reset(mockStatusServiceConstructor)
-    reset(mockExecutionServiceCluster)
-    reset(mockAppVersion)
-    reset(mockSamDAO)
-  }
 
   it should "Verify pacts" in {
     val publishResults = sys.env.getOrElse("PACT_PUBLISH_RESULTS", "false").toBoolean
