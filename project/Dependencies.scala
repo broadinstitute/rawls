@@ -272,7 +272,7 @@ object Dependencies {
     jerseyJnhConnector
   )
 
-  val pact4sV = "0.7.0"
+  val pact4sV = "0.10.0"
   val pact4sScalaTest = "io.github.jbwheatley" %% "pact4s-scalatest" % pact4sV % Test
   val pact4sCirce = "io.github.jbwheatley" %% "pact4s-circe" % pact4sV
 
