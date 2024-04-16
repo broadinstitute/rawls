@@ -65,7 +65,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.7"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.4.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.7.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.50"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
@@ -82,7 +82,7 @@ object Dependencies {
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "3.1.0"
-  val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.2"
+  val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.6"
 
   val workbenchLibsHash = "1c0cf92"
 
@@ -272,7 +272,7 @@ object Dependencies {
     jerseyJnhConnector
   )
 
-  val pact4sV = "0.7.0"
+  val pact4sV = "0.10.0"
   val pact4sScalaTest = "io.github.jbwheatley" %% "pact4s-scalatest" % pact4sV % Test
   val pact4sCirce = "io.github.jbwheatley" %% "pact4s-circe" % pact4sV
 
