@@ -103,20 +103,6 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
       }
     }
 
-  /**
-   * Optimized version of [[fetchAggregatedWorkspace]]
-   *
-   * If the provided workspace is not of type "MC", returns the provided "rawls" workspace with no WSM information, as
-   * it can be assumed to be GCP and does not need to call out to WSM for this.
-   */
-  def optimizedFetchAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace =
-    workspace.workspaceType match {
-      case WorkspaceType.RawlsWorkspace =>
-        AggregatedWorkspace(workspace, Some(workspace.googleProjectId), azureCloudContext = None, policies = List.empty)
-      case WorkspaceType.McWorkspace =>
-        fetchAggregatedWorkspace(workspace, ctx)
-    }
-
   private def aggregateMCWorkspaceWithWSMInfo(workspace: Workspace,
                                               wsmInfo: WorkspaceDescription
   ): AggregatedWorkspace =
