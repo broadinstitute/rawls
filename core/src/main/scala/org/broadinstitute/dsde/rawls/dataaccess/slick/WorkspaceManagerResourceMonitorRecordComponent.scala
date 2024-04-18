@@ -4,6 +4,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail}
 import slick.lifted.ProvenShape
+import spray.json._
+import DefaultJsonProtocol._
+import slick.ast.TypedType
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -108,7 +111,8 @@ final case class WorkspaceManagerResourceMonitorRecord(
   workspaceId: Option[UUID],
   billingProjectId: Option[String],
   userEmail: Option[String],
-  createdTime: Timestamp
+  createdTime: Timestamp,
+  args: Option[Map[String, String]] = None
 )
 
 trait WorkspaceManagerResourceMonitorRecordComponent {
@@ -118,6 +122,13 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
   class WorkspaceManagerResourceMonitorRecordTable(tag: Tag)
       extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
+
+    implicit val argsMapper: TypedType[Map[String, String]] = MappedColumnType.base[Map[String, String], String](
+      map => map.toJson.compactPrint,
+      str => str.parseJson.convertTo[Map[String, String]]
+    )
+
+
     def jobControlId: Rep[UUID] = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 
     def jobType: Rep[JobType] = column[JobType]("JOB_TYPE")
@@ -130,13 +141,16 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
     def createdTime: Rep[Timestamp] = column[Timestamp]("CREATED_TIME")
 
+    def args: Rep[Option[Map[String, String]]] = column[Option[Map[String, String]]]("ARGS")
+
     override def * : ProvenShape[WorkspaceManagerResourceMonitorRecord] = (
       jobControlId,
       jobType,
       workspaceId,
       billingProjectId,
       userEmail,
-      createdTime
+      createdTime,
+      args
     ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
   }
 
