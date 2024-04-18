@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobStatus
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{JobType, cloneJobTypes}
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail}
 import slick.lifted.ProvenShape
 import spray.json._
@@ -17,7 +17,6 @@ object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
-    val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
 
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
@@ -34,6 +33,16 @@ object WorkspaceManagerResourceMonitorRecord {
       JobType.WSMWorkspaceDeletionPoll
     )
 
+    val CloneWorkspaceInit: Value = Value("CloneWorkspaceInit")
+    val CreateWdsAppInClonedWorkspace: Value = Value("CreateWdsAppInClonedWorkspace")
+    val CloneWorkspaceContainerInit: Value = Value("CloneWorkspaceContainerInit")
+    val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
+    val cloneJobTypes: List[WorkspaceManagerResourceMonitorRecord.JobType.Value] = List(
+      JobType.CloneWorkspaceInit,
+      JobType.CreateWdsAppInClonedWorkspace,
+      JobType.CloneWorkspaceContainerInit,
+      JobType.CloneWorkspaceContainerResult
+    )
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -82,6 +91,30 @@ object WorkspaceManagerResourceMonitorRecord {
       Timestamp.from(Instant.now())
     )
 
+  def forCloneWorkspace(jobRecordId: UUID,
+                        workspaceId: UUID,
+                        userEmail: RawlsUserEmail,
+                        args: Option[Map[String, String]],
+                        jobType: JobType = JobType.CloneWorkspaceInit,
+                       ): WorkspaceManagerResourceMonitorRecord = {
+    if (!cloneJobTypes.contains(jobType)) {
+      throw new IllegalArgumentException(
+        s"Invalid JobType of $jobType for clone workspace job: Valid types are: ${cloneJobTypes.toString()}"
+      )
+    }
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      jobType,
+      workspaceId = Some(workspaceId),
+      billingProjectId = None,
+      userEmail = Some(userEmail.value),
+      Timestamp.from(Instant.now()),
+      args
+    )
+  }
+
+
+
   def forWorkspaceDeletion(jobRecordId: UUID,
                            workspaceId: UUID,
                            userEmail: RawlsUserEmail
@@ -92,7 +125,7 @@ object WorkspaceManagerResourceMonitorRecord {
       workspaceId = Some(workspaceId),
       billingProjectId = None,
       userEmail = Some(userEmail.value),
-      createdTime = Timestamp.from(Instant.now())
+      createdTime = Timestamp.from(Instant.now()),
     )
 }
 
