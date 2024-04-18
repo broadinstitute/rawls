@@ -13,14 +13,14 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 class CloneWorkspaceInitStep(
-                               workspaceManagerDAO: WorkspaceManagerDAO,
+                               val workspaceManagerDAO: WorkspaceManagerDAO,
                                workspaceRepository: WorkspaceRepository,
                                monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
                                workspaceId: UUID,
                                job: WorkspaceManagerResourceMonitorRecord
                             )
                             (implicit executionContext: ExecutionContext)
-  extends WorkspaceCloningStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job) {
+  extends WorkspaceCloningStep(workspaceRepository, monitorRecordDao, workspaceId, job) {
 
   override val jobType: JobType = JobType.CloneWorkspaceInit
 

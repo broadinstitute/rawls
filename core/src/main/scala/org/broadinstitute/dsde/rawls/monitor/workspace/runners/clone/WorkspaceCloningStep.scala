@@ -5,8 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{JobStatus, JobType}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail}
+import org.broadinstitute.dsde.rawls.model.RawlsUserEmail
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.CreateFailed
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
@@ -14,7 +13,6 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 abstract class WorkspaceCloningStep(
-                                     val workspaceManagerDAO: WorkspaceManagerDAO,
                                      val workspaceRepository: WorkspaceRepository,
                                      val monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
                                      val workspaceId: UUID,
