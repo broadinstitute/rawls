@@ -2,13 +2,17 @@ package org.broadinstitute.dsde.rawls.billing
 
 import bio.terra.common.tracing.JakartaTracingFilter
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi, UnauthenticatedApi}
-import bio.terra.profile.client.ApiClient
+import bio.terra.profile.client.{ApiClient, RFC3339DateFormat}
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper, SerializationFeature}
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import io.opencensus.trace.Tracing
 import io.opentelemetry.api.GlobalOpenTelemetry
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.{TracingUtils, WithOtelContextFilter}
 import org.glassfish.jersey.client.ClientConfig
+import org.glassfish.jersey.jackson.internal.jackson.jaxrs.json.JacksonJsonProvider
 import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
 /**
@@ -36,6 +40,7 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
     // allows us to call PATCH endpoints in BPM.
     val clientConfig = new ClientConfig()
     clientConfig.connectorProvider(new JavaNetHttpConnectorProvider())
+    clientConfig.register(client.getJSON)
     client.setHttpClient(ClientBuilder.newClient(clientConfig))
 
     TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
