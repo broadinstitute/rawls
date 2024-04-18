@@ -3042,6 +3042,28 @@ class WorkspaceServiceSpec
     )
   }
 
+  private def createGcpWorkspaceStub(services: TestApiService,
+                                     workspaceName: String,
+                                     policies: List[WsmPolicyInput] = List(),
+                                     workspaceService: WorkspaceService
+  ): Workspace = {
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      workspaceName,
+      Map.empty
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+      new WorkspaceDescription()
+        .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+        .policies(policies.asJava)
+    )
+
+    Await.result(
+      services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
+      Duration.Inf
+    )
+  }
+
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
     val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
     val workspace = createAzureWorkspace(services, managedAppCoordinates)
@@ -3136,6 +3158,47 @@ class WorkspaceServiceSpec
     )
 
     val response = readWorkspace.convertTo[WorkspaceResponse]
+    response.policies should not be empty
+    val policies: List[WorkspacePolicy] = response.policies.get
+    policies should not be empty
+    val policy: WorkspacePolicy = policies.head
+    policy.name shouldBe wsmPolicyInput.getName
+    policy.namespace shouldBe wsmPolicyInput.getNamespace
+    val additionalData = policy.additionalData
+    additionalData.length shouldEqual 2
+    additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
+    additionalData.tail.head.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
+  }
+
+  it should "return the policies of a GCP workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      workspaceName,
+      Map.empty
+    )
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("test_name")
+      .namespace("test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key"),
+          new WsmPolicyPair().value("pair2Val").key("pair2Key")
+        ).asJava
+      )
+    val workspace = createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
+    val readWorkspace = Await.result(services.workspaceService.getWorkspace(
+                                       WorkspaceName(workspace.namespace, workspace.name),
+                                       WorkspaceFieldSpecs()
+                                     ),
+                                     Duration.Inf
+    )
+
+    val response = readWorkspace.convertTo[WorkspaceResponse]
+
+    response.workspace.name shouldBe workspaceName
+    response.azureContext shouldEqual None
+    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     response.policies should not be empty
     val policies: List[WorkspacePolicy] = response.policies.get
     policies should not be empty
