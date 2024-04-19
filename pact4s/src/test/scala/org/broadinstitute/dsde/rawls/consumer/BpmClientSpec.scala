@@ -98,8 +98,6 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.stringType("managedResourceGroupId")
     o.stringType("biller")
     o.stringType("displayName")
-    o.stringValue("billingAccountId", null)
-    o.stringValue("description", null)
     // It appears to be necessary to specify the value because the enum doesn't get translated to string automatically
     o.stringType("cloudPlatform", CloudPlatform.AZURE.toString)
     o.`object`("policies", po => po.array("inputs", arr => arr.getPactDslJsonArray))
