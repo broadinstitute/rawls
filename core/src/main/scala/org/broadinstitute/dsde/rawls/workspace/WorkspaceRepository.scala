@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.Future
@@ -39,4 +40,9 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
+
+  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] = {
+    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+  }
+
 }

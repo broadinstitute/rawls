@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobStatus, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceState}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceManagerPollingOperationException, WorkspaceRepository}
 
 import java.util.UUID
@@ -24,10 +24,13 @@ class CloneWorkspaceInitStep(
 
   override val jobType: JobType = JobType.CloneWorkspaceInit
 
-  def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
+  override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
     val result = workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, job.jobControlId.toString, userCtx)
     result.getJobReport.getStatus match {
-      case StatusEnum.SUCCEEDED => scheduleNextJob(UUID.randomUUID()).map(_ => Complete)
+      case StatusEnum.SUCCEEDED =>
+        workspaceRepository.updateState(workspaceId, WorkspaceState.Cloning).flatMap { _ =>
+          scheduleNextJob(UUID.randomUUID()).map(_ => Complete)
+        }
       case StatusEnum.RUNNING => Future(Incomplete)
       case StatusEnum.FAILED =>
           fail("Initial Workspace Creation", result).map(_ => Complete)

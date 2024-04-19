@@ -27,7 +27,7 @@ class CloneWorkspaceStorageContainerInitStep(
   override val jobType: JobType = JobType.CloneWorkspaceContainerInit
 
 
-  def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
+  override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
     val sourceWorkspaceId = WorkspaceCloningRunner.getSourceWorkspaceId(job.args) match {
       case Some(id) => id
       case None => return fail("Clone Storage Container", "no source workspace specified").map(_ => Complete)

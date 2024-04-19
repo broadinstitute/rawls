@@ -26,7 +26,7 @@ class CloneWorkspaceCreateWDSAppStep(
 
   override val jobType: JobType = JobType.CreateWdsAppInClonedWorkspace
 
-  def runStep(userCtx: RawlsRequestContext): Future[JobStatus] =
+  override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] =
     if (WorkspaceCloningRunner.isAutomaticAppCreationDisabled(job.args)) Future(Complete)
     else Future(
       leonardoDAO.createWDSInstance(

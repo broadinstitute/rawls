@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{JobStatus, JobType}
-import org.broadinstitute.dsde.rawls.model.RawlsUserEmail
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.CreateFailed
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
@@ -22,6 +22,8 @@ abstract class WorkspaceCloningStep(
   val jobType: JobType.JobType
 
 
+  def runStep(userCtx: RawlsRequestContext): Future[JobStatus]
+
   def scheduleNextJob(nextJobId: UUID)(
     implicit executionContext: ExecutionContext): Future[Unit] = {
     val nextJobType = job.jobType match {
@@ -30,7 +32,7 @@ abstract class WorkspaceCloningStep(
       case JobType.CreateWdsAppInClonedWorkspace => Some(JobType.CloneWorkspaceContainerInit)
       case JobType.CloneWorkspaceContainerInit => Some(JobType.CloneWorkspaceContainerResult)
       case JobType.CloneWorkspaceContainerResult => None
-      // This should be caught earlier, but better to be explicit and fail fast
+      // This should be caught in the WorkspaceCloningRunner, but better to be explicit and fail fast
       case _ => throw new IllegalArgumentException(s"Invalid job type for clone job: ${job.jobType}")
     }
 

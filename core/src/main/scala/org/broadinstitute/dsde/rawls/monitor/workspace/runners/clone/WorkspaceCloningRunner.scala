@@ -46,6 +46,7 @@ object WorkspaceCloningRunner {
     args.flatMap(argsMap => argsMap.get(STORAGE_CONTAINER_CLONE_PREFIX_KEY))
 }
 
+
 class WorkspaceCloningRunner(
                               val samDAO: SamDAO,
                               val gcsDAO: GoogleServicesDAO,
@@ -73,10 +74,6 @@ class WorkspaceCloningRunner(
       }
     }
 
-    if (!JobType.cloneJobTypes.contains(job.jobType)) {
-      throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
-    }
-
     val workspaceId = job.workspaceId match {
       case Some(id) => id
       case None =>
@@ -97,28 +94,20 @@ class WorkspaceCloningRunner(
 
     for {
       userCtx <- getUserCtx(userEmail)
-      status <- runStep(job, workspaceId, userCtx)
+      step = job.jobType match {
+        case JobType.CloneWorkspaceInit =>
+          new CloneWorkspaceInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+        case JobType.CreateWdsAppInClonedWorkspace =>
+          new CloneWorkspaceCreateWDSAppStep(leonardoDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+        case JobType.CloneWorkspaceContainerInit =>
+          new CloneWorkspaceStorageContainerInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+        case JobType.CloneWorkspaceContainerResult =>
+          new CloneWorkspaceAwaitStorageContainerStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+        case _ =>
+          throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
+      }
+      status <- step.runStep(userCtx)
     } yield status
-  }
-
-  def runStep(
-               job: WorkspaceManagerResourceMonitorRecord,
-               workspaceId: UUID,
-               ctx: RawlsRequestContext
-             )(implicit executionContext: ExecutionContext): Future[WorkspaceManagerResourceMonitorRecord.JobStatus] = {
-    job.jobType match {
-      case JobType.CloneWorkspaceInit =>
-        new CloneWorkspaceInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-          .runStep(ctx)
-      case JobType.CreateWdsAppInClonedWorkspace =>
-        new CloneWorkspaceCreateWDSAppStep(leonardoDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-          .runStep(ctx)
-      case JobType.CloneWorkspaceContainerInit =>
-        new CloneWorkspaceStorageContainerInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-          .runStep(ctx)
-      case JobType.CloneWorkspaceContainerResult => Future(Complete)
-      case _ => Future(Complete)
-    }
   }
 
 

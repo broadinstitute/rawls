@@ -504,7 +504,8 @@ object WorkspaceState {
   def withName(name: String): WorkspaceState = name.toLowerCase match {
     case "creating"     => Creating
     case "createfailed" => CreateFailed
-    case "cloningresources" => CloningResources
+    case "cloning" => Cloning
+    case "cloningfailed" => CloningFailed
     case "ready"        => Ready
     case "updating"     => Updating
     case "updatefailed" => UpdateFailed
@@ -514,7 +515,8 @@ object WorkspaceState {
   }
   case object Creating extends WorkspaceState
   case object CreateFailed extends WorkspaceState
-  case object CloningResources extends WorkspaceState
+  case object Cloning extends WorkspaceState
+  case object CloningFailed extends WorkspaceState
   case object Ready extends WorkspaceState
   case object Updating extends WorkspaceState
   case object UpdateFailed extends WorkspaceState
