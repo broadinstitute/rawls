@@ -291,6 +291,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                          ): Future[Unit] =
     for {
       sourceWs <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ <- requireCreateWorkspaceAction(billingProject.projectName)
+      billingProfileOpt <- getBillingProfile(billingProject)
 
     } yield {
 
@@ -304,52 +307,48 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
     assertBillingProfileCreationDate(profile)
     val workspaceId = UUID.randomUUID()
-
-
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       newWorkspace <- createNewWorkspaceRecord(workspaceId, request, parentContext)
 
       _ <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
-        Future(blocking {
-          workspaceManagerDAO.cloneWorkspace(
+          Try(workspaceManagerDAO.cloneWorkspace(
             sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
             workspaceId = workspaceId,
             displayName = request.name,
             spendProfile = Option(profile),
             billingProjectNamespace = request.namespace,
             context
-          )
-        }).map(cloneResult => {
+          )) match {
+            case Success(cloneResult) =>
+              clonedMultiCloudWorkspaceCounter.inc()
+              logger.info(
+                "Created azure workspace " +
+                  s"[ workspaceId='${newWorkspace.workspaceId}'" +
+                  s", workspaceName='${newWorkspace.toWorkspaceName}'" +
+                  s"]"
+              )
+              // TODO: update state from creating to cloning
+              WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
+                WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
+                  UUID.fromString(cloneResult.getJobReport.getId),
+                  workspaceId,
+                  parentContext.userInfo.userEmail,
+                  Some(WorkspaceCloningRunner.buildCloningArgs(sourceWorkspace, request))
+                )
+              )
+            case Failure(t) =>
+              logger.warn(
+                "Clone workspace request to workspace manager failed for " +
+                  s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
+                  s", newWorkspaceName='${newWorkspace.toWorkspaceName}'" +
+                  s"], Rawls record being deleted.",
+                t
+              )
+              dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
+          }
 
-
-          clonedMultiCloudWorkspaceCounter.inc()
-          logger.info(
-            "Created azure workspace " +
-              s"[ workspaceId='${newWorkspace.workspaceId}'" +
-              s", workspaceName='${newWorkspace.toWorkspaceName}'" +
-              s"]"
-          )
-          // hand off monitoring the clone job to the resource monitor
-          WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
-            WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-              UUID.fromString(cloneResult.getJobReport.getId),
-              workspaceId,
-              parentContext.userInfo.userEmail,
-              Some(WorkspaceCloningRunner.buildCloningArgs(sourceWorkspace, request))
-            )
-          )
-        }).recoverWith { t: Throwable =>
-          logger.warn(
-            "Clone workspace request to workspace manager failed for " +
-              s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
-              s", newWorkspaceName='${newWorkspace.toWorkspaceName}'" +
-              s"], Rawls record being deleted.",
-            t
-          )
-          dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
-        }
       }
     } yield {
       newWorkspace
@@ -369,7 +368,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
-            cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
+            cloneAzureWorkspaceAsync(sourceWs, profile, destWorkspaceRequest, s)
+            //cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
           }
 
         case (RawlsWorkspace, profileOpt)
