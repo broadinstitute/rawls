@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobStatus
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{JobType, cloneJobTypes}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
+  cloneJobTypes,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail}
 import slick.lifted.ProvenShape
 import spray.json._
@@ -95,8 +98,8 @@ object WorkspaceManagerResourceMonitorRecord {
                         workspaceId: UUID,
                         userEmail: RawlsUserEmail,
                         args: Option[Map[String, String]],
-                        jobType: JobType = JobType.CloneWorkspaceInit,
-                       ): WorkspaceManagerResourceMonitorRecord = {
+                        jobType: JobType = JobType.CloneWorkspaceInit
+  ): WorkspaceManagerResourceMonitorRecord = {
     if (!cloneJobTypes.contains(jobType)) {
       throw new IllegalArgumentException(
         s"Invalid JobType of $jobType for clone workspace job: Valid types are: ${cloneJobTypes.toString()}"
@@ -113,8 +116,6 @@ object WorkspaceManagerResourceMonitorRecord {
     )
   }
 
-
-
   def forWorkspaceDeletion(jobRecordId: UUID,
                            workspaceId: UUID,
                            userEmail: RawlsUserEmail
@@ -125,7 +126,7 @@ object WorkspaceManagerResourceMonitorRecord {
       workspaceId = Some(workspaceId),
       billingProjectId = None,
       userEmail = Some(userEmail.value),
-      createdTime = Timestamp.from(Instant.now()),
+      createdTime = Timestamp.from(Instant.now())
     )
 }
 
@@ -160,7 +161,6 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
       map => map.toJson.compactPrint,
       str => str.parseJson.convertTo[Map[String, String]]
     )
-
 
     def jobControlId: Rep[UUID] = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 

@@ -12,13 +12,37 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  ReadWriteAction,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  LeonardoDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeString, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceDeletionResult, WorkspaceName, WorkspaceRequest, WorkspaceState, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeString,
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceDeletionResult,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceState,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
@@ -27,7 +51,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -284,26 +308,23 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       } yield profileModel
     }
 
-
   def cloneWorkspaceAsync(wsService: WorkspaceService,
                           sourceWorkspaceName: WorkspaceName,
                           destWorkspaceRequest: WorkspaceRequest
-                         ): Future[Unit] =
+  ): Future[Unit] =
     for {
       sourceWs <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       billingProfileOpt <- getBillingProfile(billingProject)
 
-    } yield {
-
-    }
+    } yield {}
 
   def cloneAzureWorkspaceAsync(sourceWorkspace: Workspace,
                                profile: ProfileModel,
                                request: WorkspaceRequest,
                                parentContext: RawlsRequestContext
-                              ): Future[Workspace] = {
+  ): Future[Workspace] = {
 
     assertBillingProfileCreationDate(profile)
     val workspaceId = UUID.randomUUID()
@@ -313,46 +334,46 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       newWorkspace <- createNewWorkspaceRecord(workspaceId, request, parentContext)
 
       _ <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
-          Try(workspaceManagerDAO.cloneWorkspace(
+        Try(
+          workspaceManagerDAO.cloneWorkspace(
             sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
             workspaceId = workspaceId,
             displayName = request.name,
             spendProfile = Option(profile),
             billingProjectNamespace = request.namespace,
             context
-          )) match {
-            case Success(cloneResult) =>
-              clonedMultiCloudWorkspaceCounter.inc()
-              logger.info(
-                "Created azure workspace " +
-                  s"[ workspaceId='${newWorkspace.workspaceId}'" +
-                  s", workspaceName='${newWorkspace.toWorkspaceName}'" +
-                  s"]"
+          )
+        ) match {
+          case Success(cloneResult) =>
+            clonedMultiCloudWorkspaceCounter.inc()
+            logger.info(
+              "Created azure workspace " +
+                s"[ workspaceId='${newWorkspace.workspaceId}'" +
+                s", workspaceName='${newWorkspace.toWorkspaceName}'" +
+                s"]"
+            )
+            // TODO: update state from creating to cloning
+            WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
+              WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
+                UUID.fromString(cloneResult.getJobReport.getId),
+                workspaceId,
+                parentContext.userInfo.userEmail,
+                Some(WorkspaceCloningRunner.buildCloningArgs(sourceWorkspace, request))
               )
-              // TODO: update state from creating to cloning
-              WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
-                WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-                  UUID.fromString(cloneResult.getJobReport.getId),
-                  workspaceId,
-                  parentContext.userInfo.userEmail,
-                  Some(WorkspaceCloningRunner.buildCloningArgs(sourceWorkspace, request))
-                )
-              )
-            case Failure(t) =>
-              logger.warn(
-                "Clone workspace request to workspace manager failed for " +
-                  s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
-                  s", newWorkspaceName='${newWorkspace.toWorkspaceName}'" +
-                  s"], Rawls record being deleted.",
-                t
-              )
-              dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
-          }
+            )
+          case Failure(t) =>
+            logger.warn(
+              "Clone workspace request to workspace manager failed for " +
+                s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
+                s", newWorkspaceName='${newWorkspace.toWorkspaceName}'" +
+                s"], Rawls record being deleted.",
+              t
+            )
+            dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
+        }
 
       }
-    } yield {
-      newWorkspace
-    }
+    } yield newWorkspace
   }
 
   def cloneMultiCloudWorkspace(wsService: WorkspaceService,
@@ -369,7 +390,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
             cloneAzureWorkspaceAsync(sourceWs, profile, destWorkspaceRequest, s)
-            //cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
+            // cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
           }
 
         case (RawlsWorkspace, profileOpt)
