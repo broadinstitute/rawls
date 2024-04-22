@@ -28,9 +28,9 @@ class CloneWorkspaceInitStep(
     val result = workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, job.jobControlId.toString, userCtx)
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED =>
-        workspaceRepository.updateState(workspaceId, WorkspaceState.Cloning).flatMap { _ =>
+       // workspaceRepository.updateState(workspaceId, WorkspaceState.Cloning).flatMap { _ =>
           scheduleNextJob(UUID.randomUUID()).map(_ => Complete)
-        }
+        //}
       case StatusEnum.RUNNING => Future(Incomplete)
       case StatusEnum.FAILED =>
           fail("Initial Workspace Creation", result).map(_ => Complete)

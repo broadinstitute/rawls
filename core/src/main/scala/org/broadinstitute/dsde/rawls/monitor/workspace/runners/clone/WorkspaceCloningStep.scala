@@ -56,13 +56,13 @@ abstract class WorkspaceCloningStep(
       .getOrElse("Error not specified in job")
     val jobId = result.getJobReport.getId
     val message = s"Workspace Clone Operation $operationName failed for jobId $jobId: $errorMessage"
-    // todo: log as well?
+    logger.error(message)
     workspaceRepository.setFailedState(workspaceId, CreateFailed, message)
   }
 
   def fail(operationName: String, errorMessage: String)(implicit executionContext: ExecutionContext): Future[Int] = {
     val message = s"Workspace Clone Operation $operationName failed: $errorMessage"
-    // todo: log?
+    logger.error(message)
     workspaceRepository.setFailedState(workspaceId, CreateFailed, message)
   }
 

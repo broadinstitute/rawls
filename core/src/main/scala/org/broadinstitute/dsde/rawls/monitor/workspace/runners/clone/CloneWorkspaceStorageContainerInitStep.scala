@@ -65,8 +65,8 @@ class CloneWorkspaceStorageContainerInitStep(
     }
     sharedAccessContainers.find(resource => resource.getMetadata.getName == expectedContainerName) match {
       case Some(container) =>
-          Try(
-          Some(workspaceManagerDAO.cloneAzureStorageContainer(
+          val result = Try(
+          Option(workspaceManagerDAO.cloneAzureStorageContainer(
             sourceWorkspaceId,
             destinationWorkspaceId,
             container.getMetadata.getResourceId,
@@ -80,6 +80,15 @@ class CloneWorkspaceStorageContainerInitStep(
               fail("Cloning Azure Storage Container", t.getMessage)
               None
           }.get
+        result match {
+          case Some(_) => result
+          case None =>
+            fail(
+              "Cloning Azure Storage Container",
+              s"No result returned from Workspace Manager"
+            )
+            None
+        }
       case None =>
         fail(
           "Cloning Azure Storage Container",
