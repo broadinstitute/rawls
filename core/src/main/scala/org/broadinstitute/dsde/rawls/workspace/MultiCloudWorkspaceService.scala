@@ -17,6 +17,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   ReadWriteAction,
   WorkspaceManagerResourceMonitorRecord
 }
+import java.util.Base64
+
+
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{
   LeonardoDAO,
@@ -353,9 +356,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 s"]"
             )
             // TODO: update state from creating to cloning
+            val jobIdString = Base64.getDecoder.decode(cloneResult.getJobReport.getId).toString
             WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
               WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-                UUID.fromString(cloneResult.getJobReport.getId),
+                UUID.fromString(jobIdString),
                 workspaceId,
                 parentContext.userInfo.userEmail,
                 Some(WorkspaceCloningRunner.buildCloningArgs(sourceWorkspace, request))
