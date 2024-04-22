@@ -6539,11 +6539,11 @@ components:
       required:
         - enterprise
       type: object
-      description: details about billing project's organization
+      description: Details about billing project's organization. Only present if billing project is backed by a billing profile.
       properties:
         enterprise:
           type: boolean
-          description: whether this billing project is part of an enterprise organization i.e. they have a signed BAA
+          description: whether this billing project is part of an enterprise organization i.e. they have a signed business associate agreement (BAA)
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
