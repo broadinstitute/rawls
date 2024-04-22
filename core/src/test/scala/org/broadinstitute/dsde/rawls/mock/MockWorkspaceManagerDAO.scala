@@ -22,8 +22,8 @@ import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 
 class MockWorkspaceManagerDAO(
-  val createCloudContextResult: CreateCloudContextResult =
-    MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED)
+  val createWorkspaceResult: CreateWorkspaceV2Result =
+    MockWorkspaceManagerDAO.getCreateWorkspaceResult(StatusEnum.SUCCEEDED)
 ) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
@@ -31,6 +31,11 @@ class MockWorkspaceManagerDAO(
   def mockGetWorkspaceResponse(workspaceId: UUID) =
     new WorkspaceDescription().id(workspaceId).stage(WorkspaceStageModel.RAWLS_WORKSPACE)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId)
+
+  def mockInitialCreateWorkspaceV2Result() =
+    MockWorkspaceManagerDAO.getCreateWorkspaceResult(StatusEnum.RUNNING)
+  def mockCreateWorkspaceV2Result() = createWorkspaceResult
+
   def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.getOrElse(
     (workspaceId, referenceId),
     throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))
@@ -38,9 +43,6 @@ class MockWorkspaceManagerDAO(
   def mockEnumerateReferenceResponse(workspaceId: UUID) = references.collect {
     case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
   }
-  def mockInitialCreateAzureCloudContextResult() =
-    MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
-  def mockCreateAzureCloudContextResult() = createCloudContextResult
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
 
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
@@ -218,18 +220,14 @@ class MockWorkspaceManagerDAO(
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
                                                applicationIds: Seq[String],
+                                               cloudPlatform: CloudPlatform,
                                                policyInputs: Option[WsmPolicyInputs],
                                                ctx: RawlsRequestContext
-  ): CreatedWorkspace =
-    mockCreateWorkspaceResponse(workspaceId)
+  ): CreateWorkspaceV2Result =
+    mockInitialCreateWorkspaceV2Result()
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
-    mockInitialCreateAzureCloudContextResult()
-
-  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                                    jobControlId: String,
-                                                    ctx: RawlsRequestContext
-  ): CreateCloudContextResult = mockCreateAzureCloudContextResult()
+  override def getCreateWorkspaceResult(workspaceId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
+    mockCreateWorkspaceV2Result()
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
@@ -278,14 +276,14 @@ class MockWorkspaceManagerDAO(
 }
 
 object MockWorkspaceManagerDAO {
-  def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult =
-    new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
+  def getCreateWorkspaceResult(status: StatusEnum): CreateWorkspaceV2Result =
+    new CreateWorkspaceV2Result().jobReport(new JobReport().id("fake_id").status(status))
 
   def getCloneWorkspaceResult(status: StatusEnum): CloneWorkspaceResult =
     new CloneWorkspaceResult().jobReport(new JobReport().id("fake_id").status(status))
 
-  def buildWithAsyncCloudContextResult(createCloudContextStatus: StatusEnum) =
+  def buildWithAsyncCreateWorkspaceResult(createWorkspaceStatus: StatusEnum) =
     new MockWorkspaceManagerDAO(
-      getCreateCloudContextResult(createCloudContextStatus)
+      getCreateWorkspaceResult(createWorkspaceStatus)
     )
 }

@@ -24,9 +24,12 @@ trait WorkspaceManagerDAO {
                                       spendProfileId: String,
                                       billingProjectNamespace: String,
                                       applicationIds: Seq[String],
+                                      cloudPlatform: CloudPlatform,
                                       policyInputs: Option[WsmPolicyInputs],
                                       ctx: RawlsRequestContext
-  ): CreatedWorkspace
+  ): CreateWorkspaceV2Result
+
+  def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result
 
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
@@ -41,12 +44,6 @@ trait WorkspaceManagerDAO {
 
   def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
 
-  def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
-
-  def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                           jobControlId: String,
-                                           ctx: RawlsRequestContext
-  ): CreateCloudContextResult
   def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
 
   def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
