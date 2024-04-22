@@ -26,7 +26,7 @@ class CloneWorkspaceInitStep(
   override val jobType: JobType = JobType.CloneWorkspaceInit
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
-    val jobId = Base64.getEncoder.encodeToString(job.jobControlId.toString.getBytes)
+    val jobId = Base64.getUrlEncoder.encodeToString(job.jobControlId.toString.getBytes)
     val result = workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, jobId, userCtx)
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED =>

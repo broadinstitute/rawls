@@ -356,7 +356,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 s"]"
             )
             // TODO: update state from creating to cloning
-            val jobIdString = Base64.getDecoder.decode(cloneResult.getJobReport.getId).toString
+            val jobIdString = Base64.getUrlDecoder.decode(cloneResult.getJobReport.getId).toString
             WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
               WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
                 UUID.fromString(jobIdString),
