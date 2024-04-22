@@ -170,8 +170,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         )
       // else, propagate by wrapping in an error report
       case Failure(other) =>
-        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}")
-        throw new RawlsExceptionWithErrorReport(ErrorReport(other))
+        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}", other)
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, other.getMessage))
     }
 
   def getSnapshotResourceFromWsm(workspaceName: WorkspaceName,
