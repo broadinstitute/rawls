@@ -8,8 +8,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceState}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceManagerPollingOperationException, WorkspaceRepository}
-import java.util.Base64
-
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -26,7 +24,11 @@ class CloneWorkspaceInitStep(
   override val jobType: JobType = JobType.CloneWorkspaceInit
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
-    val jobId = Base64.getUrlEncoder.encodeToString(job.jobControlId.toString.getBytes)
+    val jobId = WorkspaceCloningRunner.getInitialWSMJobId(job.args) match {
+      case None => return fail("Initial Workspace Creation", "No JobId for WSM cloning operation provided")
+        .map(_ => Complete)
+      case Some(id) => id
+    }
     val result = workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, jobId, userCtx)
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED =>
