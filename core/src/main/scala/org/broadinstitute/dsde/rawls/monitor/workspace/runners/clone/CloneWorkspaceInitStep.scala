@@ -25,7 +25,7 @@ class CloneWorkspaceInitStep(
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
     val jobId = WorkspaceCloningRunner.getInitialWSMJobId(job.args) match {
-      case None => return fail("Initial Workspace Creation", "No JobId for WSM cloning operation provided")
+      case None => return fail("Initial Workspace Clone", "No JobId for WSM cloning operation provided")
         .map(_ => Complete)
       case Some(id) => id
     }
@@ -37,7 +37,7 @@ class CloneWorkspaceInitStep(
         //}
       case StatusEnum.RUNNING => Future(Incomplete)
       case StatusEnum.FAILED =>
-          fail("Initial Workspace Creation", result).map(_ => Complete)
+          fail("Initial Workspace Clone", result).map(_ => Complete)
     }
   }
 

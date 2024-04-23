@@ -17,7 +17,7 @@ abstract class WorkspaceCloningStep(
                                      val monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
                                      val workspaceId: UUID,
                                      val job: WorkspaceManagerResourceMonitorRecord
-                                   ) extends LazyLogging {
+                                   )(implicit val executionContext: ExecutionContext) extends LazyLogging {
 
   val jobType: JobType.JobType
 
@@ -50,18 +50,18 @@ abstract class WorkspaceCloningStep(
   }
 
 
-  def fail(operationName: String, result: CloneWorkspaceResult)(implicit ex: ExecutionContext): Future[Int] = {
+  def fail(operationName: String, result: CloneWorkspaceResult): Future[Int] = {
     val errorMessage = Option(result.getErrorReport)
       .map(report => report.getMessage)
       .getOrElse("Error not specified in job")
     val jobId = result.getJobReport.getId
-    val message = s"Workspace Clone Operation $operationName failed for jobId $jobId: $errorMessage"
+    val message = s"Workspace Clone Operation [$operationName] failed for jobId [$jobId]: $errorMessage"
     logger.error(message)
     workspaceRepository.setFailedState(workspaceId, CreateFailed, message)
   }
 
-  def fail(operationName: String, errorMessage: String)(implicit executionContext: ExecutionContext): Future[Int] = {
-    val message = s"Workspace Clone Operation $operationName failed: $errorMessage"
+  def fail(operationName: String, errorMessage: String): Future[Int] = {
+    val message = s"Workspace Clone Operation [$operationName] failed for jobId [${job.jobControlId}]: $errorMessage"
     logger.error(message)
     workspaceRepository.setFailedState(workspaceId, CreateFailed, message)
   }

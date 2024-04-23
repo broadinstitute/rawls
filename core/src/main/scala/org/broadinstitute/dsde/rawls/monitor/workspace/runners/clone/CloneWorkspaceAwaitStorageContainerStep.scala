@@ -36,10 +36,9 @@ class CloneWorkspaceAwaitStorageContainerStep(
         e.getMessage
         e.getCode match {
           case 500 =>
-            //val msg = s"Clone Container operation with jobId ${job.jobControlId} failed: ${e.getMessage}"
             fail(operationName, e.getMessage).map(_ => Complete)
           case 404 =>
-            val msg = s"Unable to find jobId ${job.jobControlId} in WSM for clone container operation"
+            val msg = s"Unable to find job in WSM for clone container operation"
             fail(operationName, msg).map(_ => Complete)
           case 401 =>
             val msg = s"Unable to get job result, user is unauthed with jobId ${job.jobControlId}: ${e.getMessage}"
@@ -50,7 +49,6 @@ class CloneWorkspaceAwaitStorageContainerStep(
         }
       case Failure(t) =>
         val msg = s"API call to get clone result from workspace manager failed with: ${t.getMessage}"
-        //logFailure(msg, Some(t))
         fail(operationName, msg).map(_ => Incomplete)
     }
   }

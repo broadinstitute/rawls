@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, LeonardoDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
@@ -102,22 +103,26 @@ class WorkspaceCloningRunner(
 
     for {
       userCtx <- getUserCtx(userEmail)
-      step = job.jobType match {
-        case JobType.CloneWorkspaceInit =>
-          new CloneWorkspaceInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-        case JobType.CreateWdsAppInClonedWorkspace =>
-          new CloneWorkspaceCreateWDSAppStep(leonardoDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-        case JobType.CloneWorkspaceContainerInit =>
-          new CloneWorkspaceStorageContainerInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-        case JobType.CloneWorkspaceContainerResult =>
-          new CloneWorkspaceAwaitStorageContainerStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-        case _ =>
-          throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
-      }
+      step = getStep(job, workspaceId)
       status <- step.runStep(userCtx)
     } yield status
   }
 
+
+  def getStep(job: WorkspaceManagerResourceMonitorRecord, workspaceId: UUID)(implicit
+                                                                             executionContext: ExecutionContext
+  ): WorkspaceCloningStep = job.jobType match {
+    case JobType.CloneWorkspaceInit =>
+      new CloneWorkspaceInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+    case JobType.CreateWdsAppInClonedWorkspace =>
+      new CloneWorkspaceCreateWDSAppStep(leonardoDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+    case JobType.CloneWorkspaceContainerInit =>
+      new CloneWorkspaceStorageContainerInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+    case JobType.CloneWorkspaceContainerResult =>
+      new CloneWorkspaceAwaitStorageContainerStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
+    case _ =>
+      throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
+  }
 
 }
 
