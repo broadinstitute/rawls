@@ -8,7 +8,16 @@ info:
     url: http://opensource.org/licenses/BSD-3-Clause
   version: 1.0.0
 servers:
-  - url: /
+  - url: https://{environment}.broadinstitute.org:20443
+    variables:
+      environment:
+          default: local
+          description: The environment to use
+          enum:
+          - dev
+          - staging
+          - prod
+          - local
 tags:
   - name: admin
   - name: billing
@@ -223,11 +232,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - googleoauth:
+        - oidc_google_billing:
             - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
       x-codegen-request-body-name: createProjectRequest
   /api/billing/v2/{projectId}:
     get:
@@ -3823,11 +3829,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - googleoauth:
+        - oidc_google_billing:
             - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -6879,26 +6882,14 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
-    googleoauth:
-      type: oauth2
-      flows:
-        implicit:
-          authorizationUrl: https://accounts.google.com/o/oauth2/auth
-          scopes:
-            openid: open id authorization
-            email: email authorization
-            profile: profile authorization
-            https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
     oidc:
-      type: oauth2
-      flows:
-        authorizationCode:
-          authorizationUrl: /oauth2/authorize
-          tokenUrl: /oauth2/token
-          scopes:
-            openid: open id authorization
-            email: email authorization
-            profile: profile authorization
+      type: openIdConnect
+      openIdConnectUrl: https://oauth-proxy.dsp-eng-tools.broadinstitute.org/b2c/.well-known/openid-configuration?p=b2c_1a_signup_signin_dev
+      x-tokenName: id_token
+    oidc_google_billing:
+      type: openIdConnect
+      openIdConnectUrl: https://oauth-proxy.dsp-eng-tools.broadinstitute.org/b2c/.well-known/openid-configuration?p=b2c_1a_signup_signin_billing_dev&prompt=login
+      x-tokenName: id_token
+
 security:
-  - googleoauth: [openid, email, profile]
-  - oidc: [openid, email, profile]
+  - oidc: [openid]

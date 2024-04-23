@@ -66,7 +66,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
+import org.broadinstitute.dsde.workbench.oauth2.{ClientId, OpenIDConnectConfiguration}
 
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
@@ -647,8 +647,6 @@ object Boot extends IOApp with LazyLogging {
         OpenIDConnectConfiguration[F](
           oidcConfig.getString("authorityEndpoint"),
           ClientId(oidcConfig.getString("oidcClientId")),
-          oidcClientSecret = oidcConfig.getAs[String]("oidcClientSecret").map(ClientSecret),
-          extraGoogleClientId = oidcConfig.getAs[String]("legacyGoogleClientId").map(ClientId),
           extraAuthParams = Some("prompt=login")
         )
       )
