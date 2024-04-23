@@ -6515,6 +6515,8 @@ components:
         protectedData:
           type: boolean
           description: whether this billing project supports protected data (cloudPlatform AZURE only)
+        organization:
+          $ref: '#/components/schemas/RawlsBillingProjectOrganization'
     AzureManagedAppCoordinates:
       required:
         - tenantId
@@ -6533,6 +6535,15 @@ components:
         managedResourceGroupId:
           type: string
           description: ID of the Azure managed resource group for this managed application deployment.
+    RawlsBillingProjectOrganization:
+      required:
+        - enterprise
+      type: object
+      description: Details about billing project's organization. Only present if billing project is backed by a billing profile.
+      properties:
+        enterprise:
+          type: boolean
+          description: whether this billing project is part of an enterprise organization i.e. they have a signed business associate agreement (BAA)
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
