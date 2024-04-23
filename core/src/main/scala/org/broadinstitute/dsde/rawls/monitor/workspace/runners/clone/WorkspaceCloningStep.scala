@@ -36,6 +36,12 @@ abstract class WorkspaceCloningStep(
       case _ => throw new IllegalArgumentException(s"Invalid job type for clone job: ${job.jobType}")
     }
 
+    val nextJobMessage = nextJobType match {
+      case Some(next) => s"; scheduling next job of type [$next] with id: [$nextJobId]"
+      case None => ""
+    }
+    logger.debug(s"Clone Workspace Job [${job.jobControlId}], job type [${job.jobType}] Complete$nextJobMessage")
+
     nextJobType.map(jobType =>
       monitorRecordDao.create(
         WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
@@ -56,13 +62,13 @@ abstract class WorkspaceCloningStep(
       .getOrElse("Error not specified in job")
     val jobId = result.getJobReport.getId
     val message = s"Workspace Clone Operation [$operationName] failed for jobId [$jobId]: $errorMessage"
-    logger.error(message)
+    logger.error(s"${job.jobType} failure: $message")
     workspaceRepository.setFailedState(workspaceId, CreateFailed, message)
   }
 
   def fail(operationName: String, errorMessage: String): Future[Int] = {
     val message = s"Workspace Clone Operation [$operationName] failed for jobId [${job.jobControlId}]: $errorMessage"
-    logger.error(message)
+    logger.error(s"${job.jobType} failure: $message")
     workspaceRepository.setFailedState(workspaceId, CreateFailed, message)
   }
 

@@ -44,7 +44,7 @@ class CloneWorkspaceAwaitStorageContainerStep(
             val msg = s"Unable to get job result, user is unauthed with jobId ${job.jobControlId}: ${e.getMessage}"
             fail(operationName, msg).map(_ => Complete)
           case code =>
-            //logFailure(s"API call to get clone result failed with status code $code: ${e.getMessage}")
+            logger.error(s"API call to get clone result failed with status code $code: ${e.getMessage}")
             Future.successful(Incomplete)
         }
       case Failure(t) =>
@@ -76,6 +76,7 @@ class CloneWorkspaceAwaitStorageContainerStep(
   def cloneSuccess(wsId: UUID, finishTime: DateTime)(implicit
                                                      executionContext: ExecutionContext
   ): Future[Int] = {
+    logger.debug(s"Cloning complete for workspace $wsId")
     workspaceRepository.updateState(wsId, WorkspaceState.Ready)
     workspaceRepository.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime)
 
