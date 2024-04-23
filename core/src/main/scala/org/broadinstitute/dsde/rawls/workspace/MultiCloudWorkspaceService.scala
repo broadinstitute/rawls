@@ -830,7 +830,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           request.toWorkspaceName,
           request.attributes,
           access,
-          parentContext
+          parentContext,
+          state
         )
       } yield newWorkspace
     }
