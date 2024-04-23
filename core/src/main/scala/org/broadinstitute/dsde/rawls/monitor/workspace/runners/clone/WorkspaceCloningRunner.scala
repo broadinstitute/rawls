@@ -43,7 +43,7 @@ object WorkspaceCloningRunner {
   }
 
   def getInitialWSMJobId(args: Option[Map[String, String]]): Option[String] =
-    args.flatMap(argsMap => argsMap.get(STORAGE_CONTAINER_CLONE_PREFIX_KEY))
+    args.flatMap(argsMap => argsMap.get(WORKSPACE_INITIAL_CLONE_JOBID_KEY))
 
   def isAutomaticAppCreationDisabled(args: Option[Map[String, String]]): Boolean =
     args.flatMap(argsMap => argsMap.get(DISABLE_AUTOMATIC_APP_CREATION_KEY)).getOrElse("false") == "true"
