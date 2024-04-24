@@ -8,16 +8,7 @@ info:
     url: http://opensource.org/licenses/BSD-3-Clause
   version: 1.0.0
 servers:
-  - url: https://{environment}.broadinstitute.org:20443
-    variables:
-      environment:
-          default: local
-          description: The environment to use
-          enum:
-          - dev
-          - staging
-          - prod
-          - local
+  - url: /
 tags:
   - name: admin
   - name: billing
@@ -232,7 +223,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - oidc_google_billing:
+        - oidc_google_billing_scope:
             - openid
       x-codegen-request-body-name: createProjectRequest
   /api/billing/v2/{projectId}:
@@ -3829,7 +3820,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - oidc_google_billing:
+        - oidc_google_billing_scope:
             - openid
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
     parameters:
@@ -6884,11 +6875,11 @@ components:
   securitySchemes:
     oidc:
       type: openIdConnect
-      openIdConnectUrl: https://oauth-proxy.dsp-eng-tools.broadinstitute.org/b2c/.well-known/openid-configuration?p=b2c_1a_signup_signin_dev
+      openIdConnectUrl: OPEN_ID_CONNECT_URL
       x-tokenName: id_token
-    oidc_google_billing:
+    oidc_google_billing_scope:
       type: openIdConnect
-      openIdConnectUrl: https://oauth-proxy.dsp-eng-tools.broadinstitute.org/b2c/.well-known/openid-configuration?p=b2c_1a_signup_signin_billing_dev&prompt=login
+      openIdConnectUrl: OPEN_ID_CONNECT_URL_WITH_GOOGLE_BILLING_SCOPE
       x-tokenName: id_token
 
 security:
