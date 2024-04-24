@@ -342,7 +342,14 @@ class UserService(
           )
         case None => Option(false)
       }
-      RawlsBillingProjectResponse(roles, responseProject, platform, protectedData, region = maybeRegion)
+      RawlsBillingProjectResponse(
+        roles,
+        responseProject,
+        platform,
+        protectedData,
+        region = maybeRegion,
+        organization = Option(p.getOrganization).map(org => RawlsBillingProjectOrganization(org.isEnterprise))
+      )
     case (Some(id), None) =>
       val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
       RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
