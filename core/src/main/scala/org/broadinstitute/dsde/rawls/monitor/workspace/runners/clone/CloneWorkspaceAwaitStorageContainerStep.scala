@@ -60,8 +60,7 @@ class CloneWorkspaceAwaitStorageContainerStep(
     case JobReport.StatusEnum.RUNNING => Future.successful(Incomplete)
     case JobReport.StatusEnum.SUCCEEDED =>
       val completeTime = DateTime.parse(result.getCompleted)
-
-      cloneSuccess(workspaceId, completeTime).map(_ => scheduleNextJob(UUID.randomUUID())).map(_ => Complete)
+      cloneSuccess(workspaceId, completeTime).map(_ => Complete)
     // set the error, and indicate this runner is finished with the job
     case JobReport.StatusEnum.FAILED =>
       fail("Cloning Workspace Resource Container", "Cloning workspace resource container failed").map(_ => Complete)
