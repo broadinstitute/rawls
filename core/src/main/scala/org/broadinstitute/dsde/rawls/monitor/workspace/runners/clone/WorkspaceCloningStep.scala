@@ -40,7 +40,7 @@ abstract class WorkspaceCloningStep(
       case Some(next) => s"; scheduling next job of type [$next] with id: [$nextJobId]"
       case None => ""
     }
-    logger.info(s"Clone Workspace Job [${job.jobControlId}], job type [${job.jobType}] Complete$nextJobMessage")
+    logger.debug(s"Clone Workspace Job [${job.jobControlId}], job type [${job.jobType}] Complete$nextJobMessage")
 
     nextJobType.map(jobType =>
       monitorRecordDao.create(
