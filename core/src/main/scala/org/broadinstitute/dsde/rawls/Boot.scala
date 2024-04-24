@@ -648,7 +648,8 @@ object Boot extends IOApp with LazyLogging {
           oidcConfig.getString("authorityEndpoint"),
           ClientId(oidcConfig.getString("oidcClientId")),
           extraAuthParams = Some("prompt=login"),
-          authorityEndpointWithGoogleBillingScope = oidcConfig.getStringOption("authorityEndpointWithGoogleBillingScope")
+          authorityEndpointWithGoogleBillingScope =
+            oidcConfig.getStringOption("authorityEndpointWithGoogleBillingScope")
         )
       )
     } yield AppDependencies[F](
