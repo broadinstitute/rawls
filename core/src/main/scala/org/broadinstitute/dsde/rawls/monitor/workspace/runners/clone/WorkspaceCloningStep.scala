@@ -29,9 +29,9 @@ abstract class WorkspaceCloningStep(
     val nextJobType = job.jobType match {
       case JobType.CloneWorkspaceInit =>
         Some(JobType.CloneWorkspaceContainerInit)
-      case JobType.CreateWdsAppInClonedWorkspace => None
+      case JobType.CreateWdsAppInClonedWorkspace => Some(JobType.CloneWorkspaceContainerInit)
       case JobType.CloneWorkspaceContainerInit => Some(JobType.CloneWorkspaceContainerResult)
-      case JobType.CloneWorkspaceContainerResult => Some(JobType.CreateWdsAppInClonedWorkspace)
+      case JobType.CreateWdsAppInClonedWorkspace => None
       // This should be caught in the WorkspaceCloningRunner, but better to be explicit and fail fast
       case _ => throw new IllegalArgumentException(s"Invalid job type for clone job: ${job.jobType}")
     }
