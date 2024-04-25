@@ -69,7 +69,7 @@ object Dependencies {
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.50"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.3"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.6"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.17" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
@@ -125,10 +125,10 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1088-SNAPSHOT")
+  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1089-SNAPSHOT")
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.568.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
-  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.525-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.536-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-70fda75")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"

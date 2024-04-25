@@ -92,21 +92,27 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
                                                applicationIds: Seq[String],
+                                               cloudPlatform: CloudPlatform,
                                                policyInputs: Option[WsmPolicyInputs],
                                                ctx: RawlsRequestContext
-  ): CreatedWorkspace = {
-    val request = new CreateWorkspaceRequestBody()
+  ): CreateWorkspaceV2Result = {
+    val request = new CreateWorkspaceV2Request()
       .id(workspaceId)
       .displayName(displayName)
       .spendProfile(spendProfileId)
       .stage(WorkspaceStageModel.MC_WORKSPACE)
       .projectOwnerGroupId(billingProjectNamespace)
       .applicationIds(applicationIds.asJava)
+      .cloudPlatform(cloudPlatform)
+      .jobControl(new JobControl().id(UUID.randomUUID().toString))
 
     policyInputs.map(request.policies)
 
-    getWorkspaceApi(ctx).createWorkspace(request)
+    getWorkspaceApi(ctx).createWorkspaceV2(request)
   }
+
+  override def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
+    getWorkspaceApi(ctx).getCreateWorkspaceV2Result(jobControlId)
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
@@ -138,23 +144,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                        ctx: RawlsRequestContext
   ): CloneWorkspaceResult =
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
-
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                                ctx: RawlsRequestContext
-  ): CreateCloudContextResult = {
-    val jobControlId = UUID.randomUUID().toString
-    getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
-                                              .cloudPlatform(CloudPlatform.AZURE)
-                                              .jobControl(new JobControl().id(jobControlId)),
-                                            workspaceId
-    )
-  }
-
-  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                                    jobControlId: String,
-                                                    ctx: RawlsRequestContext
-  ): CreateCloudContextResult =
-    getWorkspaceApi(ctx).getCreateCloudContextResult(workspaceId, jobControlId)
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).deleteWorkspace(workspaceId)

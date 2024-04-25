@@ -398,13 +398,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         any(), // spend profile id
         ArgumentMatchers.eq(namespace),
         any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
         any[Option[WsmPolicyInputs]],
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -453,12 +448,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
-    Mockito
-      .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(testContext)
-      )
     Mockito
       .verify(leonardoDAO, never())
       .createWDSInstance(
@@ -509,12 +498,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
     Mockito
-      .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
       .verify(leonardoDAO)
       .createWDSInstance(
         ArgumentMatchers.eq("token"),
@@ -537,9 +520,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                    spendProfileId: String,
                                                    billingProjectNamespace: String,
                                                    applicationIds: Seq[String],
+                                                   cloudPlatform: CloudPlatform,
                                                    policyInputs: Option[WsmPolicyInputs],
                                                    ctx: RawlsRequestContext
-      ): CreatedWorkspace = throw new ApiException(500, "whoops")
+      ): CreateWorkspaceV2Result = throw new ApiException(500, "whoops")
 
       override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
         throw new ApiException(404, "i've never seen that workspace in my life")
@@ -567,9 +551,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail on cloud context creation failure and try to rollback workspace creation" in {
+  it should "fail on workspace creation failure and try to rollback workspace creation" in {
     val workspaceManagerDAO =
-      Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED))
+      Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCreateWorkspaceResult(StatusEnum.FAILED))
 
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
@@ -738,6 +722,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
         any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
         ArgumentMatchers.eq(
           Some(
             new WsmPolicyInputs()
@@ -771,6 +756,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any(),
         any(),
         ArgumentMatchers.eq(None),
         ArgumentMatchers.any()
@@ -815,6 +801,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
         any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
         ArgumentMatchers.eq(
           Some(
             new WsmPolicyInputs()
@@ -838,6 +825,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any(),
         any(),
         ArgumentMatchers.eq(None),
         ArgumentMatchers.any()

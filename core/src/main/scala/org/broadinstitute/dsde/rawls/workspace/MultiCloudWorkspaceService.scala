@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import cats.Apply
@@ -600,8 +601,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         createNewWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
       )
 
-      _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceFutureWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
+      _ = logger.info(s"Creating workspace with cloud context in WSM [workspaceId = ${workspaceId}]")
+      createWorkspaceResult <- traceFutureWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
         Future(
           workspaceManagerDAO.createWorkspaceWithSpendProfile(
             workspaceId,
@@ -609,27 +610,24 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             spendProfileId,
             workspaceRequest.namespace,
             Seq(wsmConfig.leonardoWsmApplicationId),
+            model.CloudPlatform.AZURE,
             buildPolicyInputs(workspaceRequest),
             ctx
           )
         )
       }
-      _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
-      cloudContextCreateResult <- traceFutureWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
-        Future(
-          workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
-        )
+      jobControlId = createWorkspaceResult.getJobReport.getId
+      _ = logger.info(
+        s"Polling on workspace creation in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]"
       )
-      jobControlId = cloudContextCreateResult.getJobReport.getId
-      _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
-      _ <- traceFutureWithParent("pollGetCloudContextCreationStatusInWSM", parentContext)(_ =>
+      _ <- traceFutureWithParent("pollWorkspaceCreationStatusInWSM", parentContext)(_ =>
         pollWMOperation(workspaceId,
-                        cloudContextCreateResult.getJobReport.getId,
+                        createWorkspaceResult.getJobReport.getId,
                         ctx,
                         2 seconds,
                         wsmConfig.pollTimeout,
-                        "Cloud context",
-                        getCloudContextCreationStatus
+                        "Workspace Creation",
+                        getWorkspaceCreationStatus
         )
       )
 
@@ -702,17 +700,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     merged
   }
 
-  private def getCloudContextCreationStatus(workspaceId: UUID,
-                                            jobControlId: String,
-                                            localCtx: RawlsRequestContext
-  ): Future[CreateCloudContextResult] = {
-    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(workspaceId, jobControlId, localCtx)
+  private def getWorkspaceCreationStatus(_workspaceId: UUID, // Unused, but polling helper method passes it.
+                                         jobControlId: String,
+                                         localCtx: RawlsRequestContext
+  ): Future[CreateWorkspaceV2Result] = {
+    val result = workspaceManagerDAO.getCreateWorkspaceResult(jobControlId, localCtx)
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED => Future.successful(result)
       case _ =>
         Future.failed(
           new WorkspaceManagerPollingOperationException(
-            s"Polling cloud context [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+            s"Polling workspace creation for [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
             result.getJobReport.getStatus
           )
         )
