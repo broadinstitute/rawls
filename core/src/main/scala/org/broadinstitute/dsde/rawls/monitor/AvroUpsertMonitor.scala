@@ -444,12 +444,12 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     }
     // publish two status-update messages: one to the deprecated Import Service topic, and a duplicate to the
     // new cWDS topic. When cWDS fully replaces Import Service, we'll return to publishing only one.
-    List(importStatusPubSubTopic, cwdsStatusPubSubTopic).foreach(topicName =>
+    Future.traverse(List(importStatusPubSubTopic, cwdsStatusPubSubTopic)) { topicName =>
       importServicePubSubDAO.publishMessages(
         topicName,
         scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
       )
-    )
+    }
   }
 
   private def initUpsert(upsertFile: String,
