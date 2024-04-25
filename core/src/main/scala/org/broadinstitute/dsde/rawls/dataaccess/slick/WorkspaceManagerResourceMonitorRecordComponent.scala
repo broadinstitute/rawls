@@ -20,6 +20,7 @@ object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
+    val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
 
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
     val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
@@ -39,12 +40,12 @@ object WorkspaceManagerResourceMonitorRecord {
     val CloneWorkspaceInit: Value = Value("CloneWorkspaceInit")
     val CreateWdsAppInClonedWorkspace: Value = Value("CreateWdsAppInClonedWorkspace")
     val CloneWorkspaceContainerInit: Value = Value("CloneWorkspaceContainerInit")
-    val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
+    val CloneWorkspaceAwaitContainerResult: Value = Value("CloneWorkspaceAwaitContainerResult")
     val cloneJobTypes: List[WorkspaceManagerResourceMonitorRecord.JobType.Value] = List(
       JobType.CloneWorkspaceInit,
       JobType.CreateWdsAppInClonedWorkspace,
       JobType.CloneWorkspaceContainerInit,
-      JobType.CloneWorkspaceContainerResult
+      JobType.CloneWorkspaceAwaitContainerResult
     )
   }
 

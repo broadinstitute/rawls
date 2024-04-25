@@ -491,8 +491,8 @@ object BootMonitors extends LazyLogging {
           JobType.WSMWorkspaceDeletionPoll -> workspaceDeletionRunner,
           JobType.AzureLandingZoneResult ->
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
-          // JobType.CloneWorkspaceContainerResult ->
-          //  new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
+          JobType.CloneWorkspaceContainerResult ->
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
           JobType.BpmBillingProjectDelete -> new BPMBillingProjectDeleteRunner(
             samDAO,
             gcsDAO,

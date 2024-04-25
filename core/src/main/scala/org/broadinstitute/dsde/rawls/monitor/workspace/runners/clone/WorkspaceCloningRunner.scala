@@ -118,7 +118,7 @@ class WorkspaceCloningRunner(
       new CloneWorkspaceCreateWDSAppStep(leonardoDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
     case JobType.CloneWorkspaceContainerInit =>
       new CloneWorkspaceStorageContainerInitStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
-    case JobType.CloneWorkspaceContainerResult =>
+    case JobType.CloneWorkspaceAwaitContainerResult =>
       new CloneWorkspaceAwaitStorageContainerStep(workspaceManagerDAO, workspaceRepository, monitorRecordDao, workspaceId, job)
     case _ =>
       throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
