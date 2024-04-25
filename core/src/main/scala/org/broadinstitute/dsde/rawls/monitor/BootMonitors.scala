@@ -182,6 +182,7 @@ object BootMonitors extends LazyLogging {
         appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
         appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
         appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
+        appConfigManager.conf.getString("avroUpsertMonitor.updateCwdsPubSubTopic"),
         appConfigManager.conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
         appConfigManager.conf.getInt("avroUpsertMonitor.batchSize"),
         appConfigManager.conf.getInt("avroUpsertMonitor.workerCount")

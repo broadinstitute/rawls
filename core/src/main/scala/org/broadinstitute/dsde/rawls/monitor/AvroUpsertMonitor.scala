@@ -59,6 +59,7 @@ object AvroUpsertMonitorSupervisor {
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
                                            updateImportStatusPubSubTopic: String,
+                                           updateCwdsStatusPubSubTopic: String,
                                            ackDeadlineSeconds: Int,
                                            batchSize: Int,
                                            workerCount: Int
@@ -173,6 +174,7 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
         importServicePubSubDAO,
         avroUpsertMonitorConfig.importRequestPubSubSubscription,
         avroUpsertMonitorConfig.updateImportStatusPubSubTopic,
+        avroUpsertMonitorConfig.updateCwdsStatusPubSubTopic,
         importServiceDAO,
         avroUpsertMonitorConfig.batchSize,
         dataSource
@@ -205,6 +207,7 @@ object AvroUpsertMonitor {
             importServicePubSubDAO: GooglePubSubDAO,
             pubSubSubscriptionName: String,
             importStatusPubSubTopic: String,
+            cwdsStatusPubSubTopic: String,
             importServiceDAO: ImportServiceDAO,
             batchSize: Int,
             dataSource: SlickDataSource
@@ -221,6 +224,7 @@ object AvroUpsertMonitor {
         importServicePubSubDAO,
         pubSubSubscriptionName,
         importStatusPubSubTopic,
+        cwdsStatusPubSubTopic,
         importServiceDAO,
         batchSize,
         dataSource
@@ -238,6 +242,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                              importServicePubSubDAO: GooglePubSubDAO,
                              pubSubSubscriptionName: String,
                              importStatusPubSubTopic: String,
+                             cwdsStatusPubSubTopic: String,
                              importServiceDAO: ImportServiceDAO,
                              batchSize: Int,
                              dataSource: SlickDataSource
@@ -437,9 +442,13 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
         (attName, usableValue)
     }
-    importServicePubSubDAO.publishMessages(
-      importStatusPubSubTopic,
-      scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
+    // publish two status-update messages: one to the deprecated Import Service topic, and a duplicate to the
+    // new cWDS topic. When cWDS fully replaces Import Service, we'll return to publishing only one.
+    List(importStatusPubSubTopic, cwdsStatusPubSubTopic).foreach(topicName =>
+      importServicePubSubDAO.publishMessages(
+        topicName,
+        scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
+      )
     )
   }
 
