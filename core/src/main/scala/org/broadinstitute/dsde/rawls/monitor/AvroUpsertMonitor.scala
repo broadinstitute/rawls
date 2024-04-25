@@ -455,11 +455,14 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
         (attName, usableValue)
     }
-    // publish the message to the appropriate cWDS or Import Service topic
-    importServicePubSubDAO.publishMessages(
-      targetTopic,
-      scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
-    )
+    // publish the message to the appropriate cWDS or Import Service topic. Each topic uses a different dao,
+    // since they are in different projects.
+    val message = scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
+    if (isCwds) {
+      pubSubDao.publishMessages(cwdsStatusPubSubTopic, message)
+    } else {
+      importServicePubSubDAO.publishMessages(importStatusPubSubTopic, message)
+    }
   }
 
   private def initUpsert(upsertFile: String,
