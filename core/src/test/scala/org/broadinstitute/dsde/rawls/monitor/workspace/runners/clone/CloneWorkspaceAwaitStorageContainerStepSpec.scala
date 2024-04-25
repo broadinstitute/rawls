@@ -1,11 +1,15 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
-
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  GoogleServicesDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -22,14 +26,16 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-
-class CloneWorkspaceAwaitStorageContainerStepSpec extends AnyFlatSpecLike with MockitoSugar with Matchers with ScalaFutures {
+class CloneWorkspaceAwaitStorageContainerStepSpec
+    extends AnyFlatSpecLike
+    with MockitoSugar
+    with Matchers
+    with ScalaFutures {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val userEmail: String = "user@email.com"
   val workspaceId: UUID = UUID.randomUUID()
   val wsCreatedDate: DateTime = DateTime.parse("2023-01-18T10:08:48.541-05:00")
-
 
   val workspace: Workspace = Workspace(
     "test-ws-namespace",
@@ -45,8 +51,6 @@ class CloneWorkspaceAwaitStorageContainerStepSpec extends AnyFlatSpecLike with M
 
   behavior of "initial setup and basic requirements updating workspace container cloning status monitoring"
 
-
-
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -59,7 +63,7 @@ class CloneWorkspaceAwaitStorageContainerStepSpec extends AnyFlatSpecLike with M
         workspaceId,
         RawlsUserEmail(userEmail),
         Some(Map.empty),
-        JobType.CloneWorkspaceContainerResult
+        JobType.CloneWorkspaceAwaitContainerResult
       )
 
     doAnswer(_ => throw apiException)
@@ -81,12 +85,11 @@ class CloneWorkspaceAwaitStorageContainerStepSpec extends AnyFlatSpecLike with M
       errorMessage should include(apiMessage)
       Future.successful(1)
     }.when(runner)
-      .fail( ArgumentMatchers.any(), ArgumentMatchers.any[String]())
+      .fail(ArgumentMatchers.any(), ArgumentMatchers.any[String]())
 
     whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(runner).fail(ArgumentMatchers.any(), ArgumentMatchers.any[String]())
   }
-
 
   it should "report an errors and a complete job for jobs failed with a 404" in {
     val ctx = mock[RawlsRequestContext]
@@ -94,14 +97,13 @@ class CloneWorkspaceAwaitStorageContainerStepSpec extends AnyFlatSpecLike with M
     val apiMessage = "some failure message"
     val apiException = new ApiException(404, apiMessage)
 
-
     val monitorRecord: WorkspaceManagerResourceMonitorRecord =
       WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
         UUID.randomUUID(),
         workspaceId,
         RawlsUserEmail(userEmail),
         Some(Map.empty),
-        JobType.CloneWorkspaceContainerResult
+        JobType.CloneWorkspaceAwaitContainerResult
       )
 
     doAnswer(_ => throw apiException)
@@ -124,7 +126,6 @@ class CloneWorkspaceAwaitStorageContainerStepSpec extends AnyFlatSpecLike with M
       Future.successful(1)
     }.when(runner)
       .fail(ArgumentMatchers.any(), ArgumentMatchers.any[String]())
-
 
     whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(runner).fail(ArgumentMatchers.any(), ArgumentMatchers.any[String]())
