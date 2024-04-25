@@ -1,9 +1,14 @@
 package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.client.ApiException
-import bio.terra.profile.model.{BpmApiPolicyInput, BpmApiPolicyInputs, CloudPlatform => BPMCloudPlatform, ProfileModel}
+import bio.terra.profile.model.{
+  BpmApiPolicyInput,
+  BpmApiPolicyInputs,
+  CloudPlatform => BPMCloudPlatform,
+  Organization,
+  ProfileModel
+}
 import bio.terra.workspace.model.AzureLandingZone
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -1276,7 +1281,10 @@ class UserServiceSpec
   }
 
   it should "map the azure data for a bpm project" in {
-    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val billingProfile = new ProfileModel()
+      .id(UUID.randomUUID())
+      .cloudPlatform(BPMCloudPlatform.AZURE)
+      .organization(new Organization().enterprise(true))
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val landingZoneId = UUID.randomUUID()
     val lzRegion = "dummy-region"
@@ -1313,7 +1321,8 @@ class UserServiceSpec
                                     project,
                                     CloudPlatform.AZURE,
                                     Option(false),
-                                    Option(lzRegion)
+                                    Option(lzRegion),
+                                    Option(RawlsBillingProjectOrganization(true))
         )
       )
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
@@ -1350,7 +1359,10 @@ class UserServiceSpec
   behavior of "listBillingProjectsV2"
 
   it should "map azure data for a BPM project" in {
-    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val billingProfile = new ProfileModel()
+      .id(UUID.randomUUID())
+      .cloudPlatform(BPMCloudPlatform.AZURE)
+      .organization(new Organization().enterprise(false))
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val landingZoneId = UUID.randomUUID()
     val lzRegion = "dummy-region"
@@ -1390,7 +1402,8 @@ class UserServiceSpec
         project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
         CloudPlatform.AZURE,
         Option(false),
-        Option(lzRegion)
+        Option(lzRegion),
+        Option(RawlsBillingProjectOrganization(false))
       )
     )
 
