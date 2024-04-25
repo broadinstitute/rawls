@@ -328,7 +328,12 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         // end up with a race condition where multiple threads are attempting the same import / updating the status
         // of the same import.
         case Some(status) if status == ImportStatuses.ReadyForUpsert =>
-          publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
+          publishMessageToUpdateImportStatus(attributes.importId,
+                                             attributes.isCwds,
+                                             Option(status),
+                                             ImportStatuses.Upserting,
+                                             None
+          )
           toFutureTry(
             initUpsert(attributes.upsertFile,
                        attributes.importId,
@@ -344,6 +349,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                 s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
               if (importUpsertResults.failures.isEmpty)
                 publishMessageToUpdateImportStatus(attributes.importId,
+                                                   attributes.isCwds,
                                                    Option(status),
                                                    ImportStatuses.Done,
                                                    Option(baseMsg)
@@ -351,6 +357,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
               else {
                 val msg = baseMsg + s" First 100 failures are: $failureMessages"
                 publishMessageToUpdateImportStatus(attributes.importId,
+                                                   attributes.isCwds,
                                                    Option(status),
                                                    ImportStatuses.Error,
                                                    Option(msg)
@@ -362,6 +369,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                 case x                                     => x.getMessage
               }
               publishMessageToUpdateImportStatus(attributes.importId,
+                                                 attributes.isCwds,
                                                  Option(status),
                                                  ImportStatuses.Error,
                                                  Option(errMsg)
@@ -374,6 +382,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
           acknowledgeMessage(message.ackId)
         case None =>
           publishMessageToUpdateImportStatus(attributes.importId,
+                                             attributes.isCwds,
                                              None,
                                              ImportStatuses.Error,
                                              Option("Import status not found")
@@ -386,6 +395,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
       publishMessageToUpdateImportStatus(
         attributes.importId,
+        attributes.isCwds,
         None,
         ImportStatuses.Error,
         Option(s"Failed to import data. The underlying error message is: ${t.getMessage}")
@@ -427,12 +437,15 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     }
 
   private def publishMessageToUpdateImportStatus(importId: UUID,
+                                                 isCwds: Boolean,
                                                  currentImportStatus: Option[ImportStatus],
                                                  newImportStatus: ImportStatus,
                                                  errorMessage: Option[String]
   ) = {
+    val targetTopic = if (isCwds) cwdsStatusPubSubTopic else importStatusPubSubTopic
     logger.info(
-      s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}"
+      s"asking to change import job $importId on topic $targetTopic from $currentImportStatus to $newImportStatus ${errorMessage
+          .getOrElse("")}"
     )
     val updateImportStatus =
       UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
@@ -442,14 +455,11 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
         (attName, usableValue)
     }
-    // publish two status-update messages: one to the deprecated Import Service topic, and a duplicate to the
-    // new cWDS topic. When cWDS fully replaces Import Service, we'll return to publishing only one.
-    Future.traverse(List(importStatusPubSubTopic, cwdsStatusPubSubTopic)) { topicName =>
-      importServicePubSubDAO.publishMessages(
-        topicName,
-        scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
-      )
-    }
+    // publish the message to the appropriate cWDS or Import Service topic
+    importServicePubSubDAO.publishMessages(
+      targetTopic,
+      scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
+    )
   }
 
   private def initUpsert(upsertFile: String,
