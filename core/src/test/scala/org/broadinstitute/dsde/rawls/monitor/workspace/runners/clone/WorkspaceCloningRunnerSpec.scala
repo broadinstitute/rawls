@@ -102,7 +102,7 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
     step shouldBe a[CloneWorkspaceStorageContainerInitStep]
   }
 
-  it should "return CloneWorkspaceAwaitStorageContainerStep for JobType of CloneWorkspaceContainerResult" in {
+  it should "return CloneWorkspaceAwaitStorageContainerStep for JobType of CloneWorkspaceAwaitContainerResult" in {
     val runner = new WorkspaceCloningRunner(
       mock[SamDAO],
       mock[GoogleServicesDAO],
@@ -111,7 +111,7 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
       mock[WorkspaceManagerResourceMonitorRecordDao],
       mock[WorkspaceRepository]
     )
-    val step = runner.getStep(cloneJobMonitorRecord(JobType.CloneWorkspaceContainerResult), workspaceId)
+    val step = runner.getStep(cloneJobMonitorRecord(JobType.CloneWorkspaceAwaitContainerResult), workspaceId)
     step shouldBe a[CloneWorkspaceAwaitStorageContainerStep]
   }
 
@@ -127,7 +127,7 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
     // We have to construct this manually to avoid the check in `WorkspaceManagerResourceMonitorRecord.forCloneWorkspace`
     val job = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureLandingZoneResult,
+      JobType.CloneWorkspaceContainerResult,
       workspaceId = Some(workspaceId),
       billingProjectId = None,
       userEmail = Some(userEmail),
