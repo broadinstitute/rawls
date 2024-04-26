@@ -23,7 +23,6 @@ import org.broadinstitute.dsde.rawls.model.{
   DataReferenceName,
   Entity,
   GoogleProjectId,
-  ImportStatuses,
   RawlsRequestContext,
   TypedAttributeListSerializer,
   UserInfo,
@@ -100,6 +99,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   val importReadSubscriptionName = "request-sub"
   val importWritePubSubTopic = "status-topic"
   val importWriteSubscriptionName = "status-sub"
+  val cwdsWritePubSubTopic = "cwds-status-topic"
+  val cwdsWriteSubscriptionName = "cwds-status-sub"
+
   val bucketName = GcsBucketName("fake-bucket")
   val entityName = "avro-entity"
   val entityType = "test-type"
@@ -128,6 +130,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     importReadPubSubTopic,
     importReadSubscriptionName,
     importWritePubSubTopic,
+    cwdsWritePubSubTopic,
     600,
     1000,
     1
@@ -141,11 +144,15 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         readTopicCreate <- services.gpsDAO.createTopic(importReadPubSubTopic)
         writeTopicCreate <- services.gpsDAO.createTopic(importWritePubSubTopic)
         subscriptionCreate <- services.gpsDAO.createSubscription(importWritePubSubTopic, importWriteSubscriptionName)
+        cwdsWriteTopicCreate <- services.gpsDAO.createTopic(cwdsWritePubSubTopic)
+        cwdsSubscriptionCreate <- services.gpsDAO.createSubscription(cwdsWritePubSubTopic, cwdsWriteSubscriptionName)
       } yield {
         assert(readTopicCreate, "did not create read topic")
         assert(writeTopicCreate, "did not create write topic")
         assert(subscriptionCreate, "did not create write subscription")
-        readTopicCreate && writeTopicCreate && subscriptionCreate
+        assert(cwdsWriteTopicCreate, "did not create cWDS write topic")
+        assert(cwdsSubscriptionCreate, "did not create cWDS write subscription")
+        readTopicCreate && writeTopicCreate && subscriptionCreate && cwdsWriteTopicCreate && cwdsSubscriptionCreate
       },
       Duration.apply(10, TimeUnit.SECONDS)
     )
@@ -332,8 +339,26 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
               assertResult(Some(entity))(actual)
             }
           }
-
         }
+        // check that a pubsub message was published to the appropriate topic to update the job status
+        val correctSub = if (origin.equals("Import Service")) importWriteSubscriptionName else cwdsWriteSubscriptionName
+
+        eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+          val statusMessages =
+            Await.result(services.gpsDAO.pullMessages(correctSub, 1), Duration.apply(10, TimeUnit.SECONDS))
+          assert(statusMessages.exists { msg =>
+            msg.attributes("importId").contains(importId1.toString) &&
+            msg.attributes("newStatus").contains("Done") &&
+            msg.attributes("action").contains("status")
+          })
+        }
+        // and check that no message was published to the other topic
+        val incorrectSub =
+          if (origin.equals("Import Service")) cwdsWriteSubscriptionName else importWriteSubscriptionName
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(incorrectSub, 1), Duration.apply(10, TimeUnit.SECONDS))
+        assert(!statusMessages.exists(msg => msg.attributes("importId").contains(importId1.toString)))
+
       }
     }
   }
@@ -406,7 +431,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     // upsert will fail; check that a pubsub message was published to set the import job to error.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages =
-        Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+        Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
 
       assert(statusMessages.exists { msg =>
         msg.attributes.get("importId").contains(importId1.toString) &&
@@ -455,9 +480,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
 
         assert(statusMessages.exists { msg =>
           msg.attributes.get("importId").contains(importId1.toString) &&
@@ -508,7 +532,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     // upsert will fail; check that a pubsub message was published to set the import job to error.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages =
-        Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+        Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
 
       assert(statusMessages.exists { msg =>
         msg.attributes.get("importId").contains(importId1.toString) &&
@@ -560,9 +584,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
         assert(statusMessages.exists { msg =>
           msg.attributes("importId").contains(importId1.toString) &&
           msg.attributes("newStatus").contains("Error") &&
@@ -572,7 +595,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
             .contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: Invalid input")
         })
       }
-
   }
 
   it should "bubble up useful error message if upserts result in partial failure" in withTestDataApiServices {
@@ -624,9 +646,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
         assert(statusMessages.exists { msg =>
           msg.attributes("importId").contains(importId1.toString) &&
           msg.attributes("newStatus").contains("Error") &&
@@ -688,9 +709,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       val errorMsg = eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
         assert(statusMessages.exists { msg =>
           msg.attributes("importId").contains(importId1.toString) &&
           msg.attributes("newStatus").contains("Error") &&
@@ -929,9 +949,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
         assert(statusMessages.exists { msg =>
           msg.attributes("importId").contains(importId1.toString) &&
           msg.attributes("newStatus").contains("Error") &&
@@ -980,9 +999,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
         assert(statusMessages.exists { msg =>
           msg.attributes("importId").contains(importId1.toString) &&
           msg.attributes("newStatus").contains("Error") &&
@@ -1037,16 +1055,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
       // upsert will fail; check that a pubsub message was published to set the import job to error.
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
-                                          Duration.apply(10, TimeUnit.SECONDS)
-        )
+        val statusMessages =
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
         assert(statusMessages.exists { msg =>
           msg.attributes("importId").contains(failImportStatusUUID.toString) &&
           msg.attributes("newStatus").contains("Error") &&
           msg.attributes("action").contains("status")
         })
       }
-
   }
 
   // test cases for upsert vs. update handling:

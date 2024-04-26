@@ -161,6 +161,7 @@ avroUpsertMonitor {
   importRequestPubSubSubscription = "rawls-async-import-topic-sub-local"
   updateImportStatusPubSubProject = "terra-importservice-dev"
   updateImportStatusPubSubTopic = "import-service-notify-local"
+  updateCwdsPubSubTopic = "cwds-notify-local"
 
   batchSize = 1000
   ackDeadlineSeconds = 600
