@@ -61,7 +61,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext
   ) extends ApiServices
-      with MockUserInfoDirectives
+      with MockUserInfoDirectives {
+    override val submissionMonitorsEnabled: Boolean = false
+  }
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
