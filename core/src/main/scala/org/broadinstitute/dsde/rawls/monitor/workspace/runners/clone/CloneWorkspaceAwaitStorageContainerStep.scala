@@ -5,7 +5,12 @@ import bio.terra.workspace.model.JobReport
 import bio.terra.workspace.model.JobReport.StatusEnum
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobStatus, JobType}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobStatus,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceState}
@@ -26,7 +31,6 @@ class CloneWorkspaceAwaitStorageContainerStep(
     extends WorkspaceCloningStep(workspaceRepository, monitorRecordDao, workspaceId, job) {
 
   override val jobType: JobType = JobType.CloneWorkspaceContainerInit
-
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
     val operationName = "Await Storage Container Clone"
@@ -53,10 +57,7 @@ class CloneWorkspaceAwaitStorageContainerStep(
     }
   }
 
-
-  def handleCloneResult(workspaceId: UUID, result: JobReport)(implicit
-                                                              executionContext: ExecutionContext
-  ): Future[JobStatus] = result.getStatus match {
+  def handleCloneResult(workspaceId: UUID, result: JobReport): Future[JobStatus] = result.getStatus match {
     case JobReport.StatusEnum.RUNNING => Future.successful(Incomplete)
     case JobReport.StatusEnum.SUCCEEDED =>
       val completeTime = DateTime.parse(result.getCompleted)
@@ -67,18 +68,16 @@ class CloneWorkspaceAwaitStorageContainerStep(
   }
 
   /**
-    * If the workspace still exists, updates the clone completed time on the workspace. Otherwise does nothing.
+    * Updates the state and clone completed time on the workspace.
     *
     * @param wsId       the ID of the workspace
     * @param finishTime the time cloning completed
     * @return the number of records updated, wrapped in a Future
     */
-  def cloneSuccess(wsId: UUID, finishTime: DateTime)(implicit
-                                                     executionContext: ExecutionContext
-  ): Future[Int] = {
+  def cloneSuccess(wsId: UUID, finishTime: DateTime): Future[Int] = {
     logger.debug(s"Cloning complete for workspace $wsId")
-    workspaceRepository.updateState(wsId, WorkspaceState.Ready)
-    workspaceRepository.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime)
-
+    workspaceRepository.updateState(wsId, WorkspaceState.Ready).flatMap { _ =>
+      workspaceRepository.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime)
+    }
   }
 }

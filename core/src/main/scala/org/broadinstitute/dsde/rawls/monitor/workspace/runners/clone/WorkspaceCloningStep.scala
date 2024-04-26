@@ -24,12 +24,12 @@ abstract class WorkspaceCloningStep(
 
   def runStep(userCtx: RawlsRequestContext): Future[JobStatus]
 
-  def scheduleNextJob(nextJobId: UUID)(implicit executionContext: ExecutionContext): Future[Unit] = {
+  def scheduleNextJob(nextJobId: UUID): Future[Unit] = {
     val nextJobType = job.jobType match {
       case JobType.CloneWorkspaceInit =>
         Some(JobType.CreateWdsAppInClonedWorkspace)
-      case JobType.CreateWdsAppInClonedWorkspace => Some(JobType.CloneWorkspaceContainerInit)
-      case JobType.CloneWorkspaceContainerInit   => Some(JobType.CloneWorkspaceAwaitContainerResult)
+      case JobType.CreateWdsAppInClonedWorkspace      => Some(JobType.CloneWorkspaceContainerInit)
+      case JobType.CloneWorkspaceContainerInit        => Some(JobType.CloneWorkspaceAwaitContainerResult)
       case JobType.CloneWorkspaceAwaitContainerResult => None
       // This should be caught in the WorkspaceCloningRunner, but better to be explicit and fail fast
       case _ => throw new IllegalArgumentException(s"Invalid job type for clone job: ${job.jobType}")
