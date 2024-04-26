@@ -27,16 +27,20 @@ class CloneWorkspaceCreateWDSAppStep(
   override val jobType: JobType = JobType.CreateWdsAppInClonedWorkspace
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] =
-    if (WorkspaceCloningRunner.isAutomaticAppCreationDisabled(job.args)) Future(Complete)
-    else Future(
-      leonardoDAO.createWDSInstance(
-        userCtx.userInfo.accessToken.token,
-        workspaceId,
-        WorkspaceCloningRunner.getSourceWorkspaceId(job.args)
-      )
-    ).recover { case t: Throwable =>
-      fail("Creating WDS Instance", t.getMessage)
-    }.map(_ => scheduleNextJob(UUID.randomUUID()))
-      .map(_ => Complete)
+    if (WorkspaceCloningRunner.isAutomaticAppCreationDisabled(job.args)) {
+      scheduleNextJob(UUID.randomUUID()).map(_ => Complete)
+    } else {
+      Future(
+        leonardoDAO.createWDSInstance(
+          userCtx.userInfo.accessToken.token,
+          workspaceId,
+          WorkspaceCloningRunner.getSourceWorkspaceId(job.args)
+        )
+      ).map(_ => scheduleNextJob(UUID.randomUUID()))
+        .recoverWith { case t: Throwable =>
+          fail("Creating WDS Instance", t.getMessage)
+        }
+        .map(_ => Complete)
+    }
 
 }
