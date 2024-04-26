@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, WorkspaceManagerRe
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.CloningFailed
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.joda.time.DateTime
@@ -21,10 +21,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-class CloneWorkspaceCreateWDSAppStepSpec extends AnyFlatSpecLike
-  with MockitoSugar
-  with Matchers
-  with ScalaFutures {
+class CloneWorkspaceCreateWDSAppStepSpec extends AnyFlatSpecLike with MockitoSugar with Matchers with ScalaFutures {
 
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
@@ -33,29 +30,17 @@ class CloneWorkspaceCreateWDSAppStepSpec extends AnyFlatSpecLike
   val sourceWorkspaceId = UUID.randomUUID()
   val wsCreatedDate: DateTime = DateTime.parse("2023-01-18T10:08:48.541-05:00")
 
-  val workspace: Workspace = Workspace(
-    "test-ws-namespace",
-    "test-ws-name",
-    workspaceId.toString,
-    "test-bucket",
-    None,
-    wsCreatedDate,
-    wsCreatedDate,
-    "a_user",
-    Map()
-  )
-
   behavior of "Creating a WDS instance in the cloned workspace"
 
   it should "complete without taking any actions if automatic app creation is disabled on the job" in {
     val monitorRecord = WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-        UUID.randomUUID(),
-        workspaceId,
-        RawlsUserEmail(userEmail),
-        Some(Map(WorkspaceCloningRunner.DISABLE_AUTOMATIC_APP_CREATION_KEY -> "true")),
-        JobType.CreateWdsAppInClonedWorkspace
-      )
-    val monitorRecordDao =  mock[WorkspaceManagerResourceMonitorRecordDao]
+      UUID.randomUUID(),
+      workspaceId,
+      RawlsUserEmail(userEmail),
+      Some(Map(WorkspaceCloningRunner.DISABLE_AUTOMATIC_APP_CREATION_KEY -> "true")),
+      JobType.CreateWdsAppInClonedWorkspace
+    )
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     doAnswer { a =>
       val job: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
       job.jobType shouldBe JobType.CloneWorkspaceContainerInit
@@ -69,14 +54,13 @@ class CloneWorkspaceCreateWDSAppStepSpec extends AnyFlatSpecLike
       workspaceId,
       monitorRecord
     )
-    whenReady(step.runStep( mock[RawlsRequestContext]))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    whenReady(step.runStep(mock[RawlsRequestContext]))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
     verify(monitorRecordDao).create(ArgumentMatchers.any())
   }
 
-
   it should "start WDS in Leo" in {
-    val args = Map(WorkspaceCloningRunner.SOURCE_WORKSPACE_KEY -> sourceWorkspaceId.toString )
+    val args = Map(WorkspaceCloningRunner.SOURCE_WORKSPACE_KEY -> sourceWorkspaceId.toString)
     val monitorRecord = WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
       UUID.randomUUID(),
       workspaceId,
@@ -135,10 +119,11 @@ class CloneWorkspaceCreateWDSAppStepSpec extends AnyFlatSpecLike
     }.when(leonardoDAO).createWDSInstance(token, workspaceId, Some(sourceWorkspaceId))
 
     val workspaceRepository = mock[WorkspaceRepository]
-    when(workspaceRepository.setFailedState(
-      ArgumentMatchers.eq(workspaceId),
-      ArgumentMatchers.eq(CloningFailed),
-      anyString())
+    when(
+      workspaceRepository.setFailedState(ArgumentMatchers.eq(workspaceId),
+                                         ArgumentMatchers.eq(CloningFailed),
+                                         anyString()
+      )
     ).thenReturn(Future(1))
     val step = new CloneWorkspaceCreateWDSAppStep(
       leonardoDAO,

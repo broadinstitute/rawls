@@ -31,18 +31,6 @@ class CloneWorkspaceAwaitStorageContainerStepSpec
   val workspaceId: UUID = UUID.randomUUID()
   val wsCreatedDate: DateTime = DateTime.parse("2023-01-18T10:08:48.541-05:00")
 
-  val workspace: Workspace = Workspace(
-    "test-ws-namespace",
-    "test-ws-name",
-    workspaceId.toString,
-    "test-bucket",
-    None,
-    wsCreatedDate,
-    wsCreatedDate,
-    "a_user",
-    Map()
-  )
-
   behavior of "retrieving the report for the container cloning job"
 
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
