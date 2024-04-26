@@ -92,22 +92,19 @@ class BPMBillingProjectDeleteRunner(
     executionContext: ExecutionContext
   ): Future[JobStatus] =
     Try(workspaceManagerDAO.getDeleteLandingZoneResult(jobId.toString, lzId, ctx)) match {
+      case Failure(e: ApiException) if e.getCode == StatusCodes.Forbidden.intValue =>
+        logger.info(
+          s"LZ deletion result status = ${e.getCode} for LZ ID ${lzId}, LZ record is gone. Proceeding with rawls billing project deletion"
+        )
+        billingProjectDeletion.finalizeDelete(projectName, ctx).map(_ => Complete)
       case Failure(e: ApiException) =>
-        if (e.getCode == StatusCodes.Forbidden.intValue) {
-          // WSM may give back a 403 during polling if the LZ is not present or already deleted.
-          logger.info(
-            s"LZ deletion result status = ${e.getCode} for LZ ID ${lzId}, LZ record is gone. Proceeding with rawls billing project deletion"
-          )
-          billingProjectDeletion.finalizeDelete(projectName, ctx).map(_ => Complete)
-        } else {
-          val msg =
-            s"API call to get Landing Zone deletion operation failed with status code ${e.getCode}: ${e.getMessage}"
-          e.getCode match {
-            case code if code >= 400 && code < 500 =>
-              billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
-            case _ =>
-              billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
-          }
+        val msg =
+          s"API call to get Landing Zone deletion operation failed with status code ${e.getCode}: ${e.getMessage}"
+        e.getCode match {
+          case code if code >= 400 && code < 500 =>
+            billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
+          case _ =>
+            billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
         }
       case Failure(e) =>
         val msg = s"Api call to get landing zone delete job $jobId from workspace manager failed: ${e.getMessage}"
