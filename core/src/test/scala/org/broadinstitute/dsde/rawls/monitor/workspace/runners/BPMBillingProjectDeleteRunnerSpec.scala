@@ -403,6 +403,58 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
 
+  it should "finalize the deletion using the billing project lifecycle when the landing zone delete job returns 403" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val landingZoneId = UUID.randomUUID()
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.BpmBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      Timestamp.from(Instant.now())
+    )
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(landingZoneId),
+        ArgumentMatchers.any()
+      )
+    ).thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(403, "forbidden"))
+
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId.toString)))
+
+    val billingProjectDeletion = mock[BillingProjectDeletion]
+    when(
+      billingProjectDeletion.finalizeDelete(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future.successful())
+
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        wsmDao,
+        billingRepository,
+        billingProjectDeletion
+      )
+    )
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+
+    verify(billingProjectDeletion).finalizeDelete(
+      ArgumentMatchers.eq(billingProjectName),
+      ArgumentMatchers.any()
+    )(ArgumentMatchers.any())
+  }
+
   it should "finalize the deletion using the billing project lifecycle when the landing zone delete job has completed" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
