@@ -195,25 +195,24 @@ trait ApiServiceSpec
 
     // if a test doesn't need the Cromwell monitor actors, it can override submissionMonitorsEnabled to false,
     // and we'll spin up a simple TestKit blackhole actor instead of the heavyweight Rawls actors.
-    def submissionSupervisor = if (submissionMonitorsEnabled) {
-      system.actorOf(
-        SubmissionSupervisor
-          .props(
-            executionServiceCluster,
-            new UncoordinatedDataSourceAccess(slickDataSource),
-            samDAO,
-            gcsDAO,
-            mockNotificationDAO,
-            gcsDAO.getBucketServiceAccountCredential,
-            config,
-            testConf.getDuration("entities.queryTimeout").toScala,
-            workbenchMetricBaseName
-          )
-          .withDispatcher("submission-monitor-dispatcher")
-      )
+    val submissionSupervisorProps = if (submissionMonitorsEnabled) {
+      SubmissionSupervisor
+        .props(
+          executionServiceCluster,
+          new UncoordinatedDataSourceAccess(slickDataSource),
+          samDAO,
+          gcsDAO,
+          mockNotificationDAO,
+          gcsDAO.getBucketServiceAccountCredential,
+          config,
+          testConf.getDuration("entities.queryTimeout").toScala,
+          workbenchMetricBaseName
+        )
+        .withDispatcher("submission-monitor-dispatcher")
     } else {
-      system.actorOf(TestActors.blackholeProps)
+      TestActors.blackholeProps
     }
+    val submissionSupervisor = system.actorOf(submissionSupervisorProps)
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
