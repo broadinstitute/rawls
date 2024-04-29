@@ -340,7 +340,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 StatusCodes.BadRequest,
                 s"Cloud platform mismatch: Cannot clone $wsType workspace '$sourceWorkspaceName' " +
                   s"into billing project '${billingProject.projectName}' " +
-                  s"(hosted on ${profileOpt.map(_.getCloudPlatform).getOrElse(CloudPlatform.GCP)})."
+                  s"(hosted on ${profileOpt.map(_.getCloudPlatform).getOrElse("Unknown")})."
               )
             )
           )
@@ -436,7 +436,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 StatusCodes.BadRequest,
                 s"Cloud platform mismatch: Cannot clone $wsType workspace '$sourceWorkspaceName' " +
                   s"into billing project '${billingProject.projectName}' " +
-                  s"(hosted on ${profileOpt.map(_.getCloudPlatform).getOrElse(CloudPlatform.GCP)})."
+                  s"(hosted on ${profileOpt.map(_.getCloudPlatform).getOrElse("Unknown")})."
               )
             )
           )

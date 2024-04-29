@@ -33,7 +33,7 @@ class CloneWorkspaceAwaitStorageContainerStepSpec
 
   behavior of "retrieving the report for the container cloning job"
 
-  it should "report errors from api response and complete the job for jobs failed with a 500" in {
+  it should "report errors from api response and return Incomplete for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
     val apiMessage = "some failure message"
@@ -52,25 +52,28 @@ class CloneWorkspaceAwaitStorageContainerStepSpec
       .when(wsmDao)
       .getJob(ArgumentMatchers.eq(monitorRecord.jobControlId.toString), ArgumentMatchers.any())
 
-    val runner = spy(
-      new CloneWorkspaceAwaitStorageContainerStep(
-        wsmDao,
-        mock[WorkspaceRepository],
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceId,
-        monitorRecord
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.setFailedState(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.contains(apiMessage)
       )
+    ).thenReturn(Future(1))
+
+    val runner = new CloneWorkspaceAwaitStorageContainerStep(
+      wsmDao,
+      workspaceRepository,
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceId,
+      monitorRecord
     )
-
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include(apiMessage)
-      Future.successful(1)
-    }.when(runner)
-      .fail(ArgumentMatchers.any(), ArgumentMatchers.any[String]())
-
-    whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
-    verify(runner).fail(ArgumentMatchers.any(), ArgumentMatchers.any[String]())
+    whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+    verify(workspaceRepository).setFailedState(
+      ArgumentMatchers.eq(workspaceId),
+      ArgumentMatchers.any(),
+      ArgumentMatchers.contains(apiMessage)
+    )
   }
 
   it should "report an errors and a complete job for jobs failed with a 404" in {

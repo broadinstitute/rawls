@@ -28,6 +28,7 @@ class CloneWorkspaceCreateWDSAppStep(
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] =
     if (WorkspaceCloningRunner.isAutomaticAppCreationDisabled(job.args)) {
+      logger.debug(s"Automatic app creation disabled clone operation for $workspaceId: Skipping WDS step")
       scheduleNextJob(UUID.randomUUID()).map(_ => Complete)
     } else {
       Future(

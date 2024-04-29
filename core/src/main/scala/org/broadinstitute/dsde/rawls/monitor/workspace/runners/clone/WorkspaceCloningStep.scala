@@ -60,15 +60,19 @@ abstract class WorkspaceCloningStep(
       .map(report => report.getMessage)
       .getOrElse("Error not specified in job")
     val jobId = result.getJobReport.getId
-    val message = s"Workspace Clone Operation [$operationName] failed for jobId [$jobId]: $errorMessage"
+    val message = s"${errorContextString(operationName)}, failed for jobId [$jobId]]: $errorMessage"
     logger.error(s"${job.jobType} failure: $message")
     workspaceRepository.setFailedState(workspaceId, CloningFailed, message)
   }
 
   def fail(operationName: String, errorMessage: String): Future[Int] = {
-    val message = s"Workspace Clone Operation [$operationName] failed for jobId [${job.jobControlId}]: $errorMessage"
+    val message = s"${errorContextString(operationName)} failed for jobId [${job.jobControlId}]: $errorMessage"
     logger.error(s"${job.jobType} failure: $message")
     workspaceRepository.setFailedState(workspaceId, CloningFailed, message)
   }
 
+  private def errorContextString(operationName: String): String = {
+    val sourceWorkspaceId = WorkspaceCloningRunner.getSourceWorkspaceId(job.args).map(_.toString).getOrElse("Unknown")
+    s"Workspace Clone Operation [$operationName], source workspace: [$sourceWorkspaceId], dest workspace [$workspaceId]"
+  }
 }

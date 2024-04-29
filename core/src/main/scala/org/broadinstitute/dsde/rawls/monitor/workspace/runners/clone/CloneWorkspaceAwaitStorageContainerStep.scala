@@ -37,19 +37,19 @@ class CloneWorkspaceAwaitStorageContainerStep(
     Try(workspaceManagerDAO.getJob(job.jobControlId.toString, userCtx)) match {
       case Success(result) => handleCloneResult(workspaceId, result)
       case Failure(e: ApiException) =>
-        e.getMessage
         e.getCode match {
-          case 500 =>
-            fail(operationName, e.getMessage).map(_ => Complete)
           case 404 =>
             val msg = s"Unable to find job in WSM for clone container operation"
             fail(operationName, msg).map(_ => Complete)
           case 401 =>
             val msg = s"Unable to get job result, user is unauthed with jobId ${job.jobControlId}: ${e.getMessage}"
             fail(operationName, msg).map(_ => Complete)
+          // Don't retry 4xx codes
+          case code if code < 500 => fail(operationName, e.getMessage).map(_ => Complete)
+          // Retry non-4xx
           case code =>
-            logger.error(s"API call to get clone result failed with status code $code: ${e.getMessage}")
-            Future.successful(Incomplete)
+            fail(operationName, s"API call to get clone result failed with status code $code: ${e.getMessage}")
+              .map(_ => Incomplete)
         }
       case Failure(t) =>
         val msg = s"API call to get clone result from workspace manager failed with: ${t.getMessage}"
