@@ -502,20 +502,22 @@ object WorkspaceState {
   }
 
   def withName(name: String): WorkspaceState = name.toLowerCase match {
-    case "creating"     => Creating
-    case "createfailed" => CreateFailed
-    case "cloning" => Cloning
-    case "cloningfailed" => CloningFailed
-    case "ready"        => Ready
-    case "updating"     => Updating
-    case "updatefailed" => UpdateFailed
-    case "deleting"     => Deleting
-    case "deletefailed" => DeleteFailed
-    case _              => throw new RawlsException(s"invalid WorkspaceState [$name]")
+    case "creating"         => Creating
+    case "createfailed"     => CreateFailed
+    case "cloning"          => Cloning
+    case "cloningcontainer" => CloningContainer
+    case "cloningfailed"    => CloningFailed
+    case "ready"            => Ready
+    case "updating"         => Updating
+    case "updatefailed"     => UpdateFailed
+    case "deleting"         => Deleting
+    case "deletefailed"     => DeleteFailed
+    case _                  => throw new RawlsException(s"invalid WorkspaceState [$name]")
   }
   case object Creating extends WorkspaceState
   case object CreateFailed extends WorkspaceState
   case object Cloning extends WorkspaceState
+  case object CloningContainer extends WorkspaceState
   case object CloningFailed extends WorkspaceState
   case object Ready extends WorkspaceState
   case object Updating extends WorkspaceState

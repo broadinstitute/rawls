@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.CloningFailed
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, WorkspaceState}
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceRepository}
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doAnswer, doReturn, spy, verify, when}
@@ -204,7 +204,7 @@ class CloneWorkspaceStorageContainerInitStepSpec
     }
   }
 
-  it should "complete the job and schedule the next job when the call is successful" in {
+  it should "complete the job, update the workspace state, and schedule the next job when the call is successful" in {
     val monitorRecord = WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
       UUID.randomUUID(),
       destWorkspaceId,
@@ -230,10 +230,13 @@ class CloneWorkspaceStorageContainerInitStepSpec
       record.jobControlId shouldBe cloneStorageContainerJobId
       Future.successful()
     }.when(recordDao).create(ArgumentMatchers.any())
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.updateState(destWorkspaceId, WorkspaceState.CloningContainer)).thenReturn(Future(1))
+
     val step = spy(
       new CloneWorkspaceStorageContainerInitStep(
         mock[WorkspaceManagerDAO],
-        mock[WorkspaceRepository],
+        workspaceRepository,
         recordDao,
         destWorkspaceId,
         monitorRecord
@@ -254,6 +257,7 @@ class CloneWorkspaceStorageContainerInitStepSpec
     }
 
     verify(recordDao).create(ArgumentMatchers.any())
+    verify(workspaceRepository).updateState(destWorkspaceId, WorkspaceState.CloningContainer)
   }
 
 }

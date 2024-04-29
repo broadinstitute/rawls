@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 }
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceState}
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceRepository}
 
 import java.util.UUID
@@ -54,7 +54,10 @@ class CloneWorkspaceStorageContainerInitStep(
           case None => Future(Complete)
           case Some(cloneResult) =>
             val cloneJobID = cloneResult.getJobReport.getId
-            scheduleNextJob(UUID.fromString(cloneJobID)).map(_ => Complete)
+            workspaceRepository
+              .updateState(workspaceId, WorkspaceState.CloningContainer)
+              .map(_ => scheduleNextJob(UUID.fromString(cloneJobID)))
+              .map(_ => Complete)
         }
     }
   }
