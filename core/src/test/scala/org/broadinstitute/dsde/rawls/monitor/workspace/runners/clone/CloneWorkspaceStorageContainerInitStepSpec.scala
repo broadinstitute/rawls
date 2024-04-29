@@ -2,7 +2,9 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
 import bio.terra.workspace.model.{
   AccessScope,
+  CloneControlledAzureStorageContainerResult,
   ControlledResourceMetadata,
+  JobReport,
   ResourceDescription,
   ResourceList,
   ResourceMetadata
@@ -16,7 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceState.CloningFailed
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail}
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceRepository}
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doReturn, spy, verify, when}
+import org.mockito.Mockito.{doAnswer, doReturn, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -200,6 +202,58 @@ class CloneWorkspaceStorageContainerInitStepSpec
     whenReady(step.runStep(ctx)) {
       _ shouldBe Complete
     }
+  }
+
+  it should "complete the job and schedule the next job when the call is successful" in {
+    val monitorRecord = WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
+      UUID.randomUUID(),
+      destWorkspaceId,
+      RawlsUserEmail(userEmail),
+      Some(Map(WorkspaceCloningRunner.SOURCE_WORKSPACE_KEY -> sourceWorkspaceId.toString)),
+      JobType.CloneWorkspaceContainerInit
+    )
+    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+
+    val container = new ResourceDescription()
+      .metadata(
+        new ResourceMetadata()
+          .name(expectedContainerName)
+          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+      )
+    val ctx = mock[RawlsRequestContext]
+    val cloneStorageContainerJobId = UUID.randomUUID()
+    val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    doAnswer { a =>
+      val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
+      record.workspaceId shouldBe Some(destWorkspaceId)
+      record.jobType shouldBe JobType.CloneWorkspaceAwaitContainerResult
+      record.jobControlId shouldBe cloneStorageContainerJobId
+      Future.successful()
+    }.when(recordDao).create(ArgumentMatchers.any())
+    val step = spy(
+      new CloneWorkspaceStorageContainerInitStep(
+        mock[WorkspaceManagerDAO],
+        mock[WorkspaceRepository],
+        recordDao,
+        destWorkspaceId,
+        monitorRecord
+      )
+    )
+    doReturn(Some(container))
+      .when(step)
+      .findSourceWorkspaceStorageContainer(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any())
+    doReturn(
+      Some(
+        new CloneControlledAzureStorageContainerResult()
+          .jobReport(new JobReport().id(cloneStorageContainerJobId.toString))
+      )
+    ).when(step).cloneWorkspaceStorageContainer(sourceWorkspaceId, destWorkspaceId, container, None, ctx)
+
+    whenReady(step.runStep(ctx)) {
+      _ shouldBe Complete
+    }
+
+    verify(recordDao).create(ArgumentMatchers.any())
   }
 
 }

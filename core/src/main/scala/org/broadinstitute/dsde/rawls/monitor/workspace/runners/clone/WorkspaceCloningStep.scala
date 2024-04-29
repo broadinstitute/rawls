@@ -26,8 +26,7 @@ abstract class WorkspaceCloningStep(
 
   def scheduleNextJob(nextJobId: UUID): Future[Unit] = {
     val nextJobType = job.jobType match {
-      case JobType.CloneWorkspaceInit =>
-        Some(JobType.CreateWdsAppInClonedWorkspace)
+      case JobType.CloneWorkspaceInit                 => Some(JobType.CreateWdsAppInClonedWorkspace)
       case JobType.CreateWdsAppInClonedWorkspace      => Some(JobType.CloneWorkspaceContainerInit)
       case JobType.CloneWorkspaceContainerInit        => Some(JobType.CloneWorkspaceAwaitContainerResult)
       case JobType.CloneWorkspaceAwaitContainerResult => None
