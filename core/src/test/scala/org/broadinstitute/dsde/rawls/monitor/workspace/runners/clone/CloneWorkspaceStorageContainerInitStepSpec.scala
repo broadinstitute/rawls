@@ -1,6 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
-import bio.terra.workspace.model.{AccessScope, ControlledResourceMetadata, ResourceDescription, ResourceList, ResourceMetadata}
+import bio.terra.workspace.model.{
+  AccessScope,
+  ControlledResourceMetadata,
+  ResourceDescription,
+  ResourceList,
+  ResourceMetadata
+}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -12,7 +18,7 @@ import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, Work
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doReturn, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.flatspec.{ AnyFlatSpecLike}
+import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -20,10 +26,11 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.SeqHasAsJava
 
-class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
-  with MockitoSugar
-  with Matchers
-  with ScalaFutures {
+class CloneWorkspaceStorageContainerInitStepSpec
+    extends AnyFlatSpecLike
+    with MockitoSugar
+    with Matchers
+    with ScalaFutures {
 
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
@@ -32,7 +39,6 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
   val destWorkspaceId: UUID = UUID.randomUUID()
 
   behavior of "retrieving the source workspace storage container"
-
 
   it should "retrieve the default storage container from the source workspace with a single shared access container" in {
     val ctx = mock[RawlsRequestContext]
@@ -46,25 +52,29 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
     val matchingContainer = new ResourceDescription()
-      .metadata(new ResourceMetadata()
-        .name(expectedContainerName)
-        .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
-      )
-    val resourceList = new ResourceList().resources(List(
-      matchingContainer,
-      // both of these should be filtered out, either because the name doesn't match or because the access is invalid
-      new ResourceDescription()
-        .metadata(new ResourceMetadata()
-          .name("some other name")
-          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
-        ),
-      new ResourceDescription()
-        .metadata(new ResourceMetadata()
+      .metadata(
+        new ResourceMetadata()
           .name(expectedContainerName)
-          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.PRIVATE_ACCESS))
-        )
-
-    ).asJava)
+          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+      )
+    val resourceList = new ResourceList().resources(
+      List(
+        matchingContainer,
+        // both of these should be filtered out, either because the name doesn't match or because the access is invalid
+        new ResourceDescription()
+          .metadata(
+            new ResourceMetadata()
+              .name("some other name")
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          ),
+        new ResourceDescription()
+          .metadata(
+            new ResourceMetadata()
+              .name(expectedContainerName)
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.PRIVATE_ACCESS))
+          )
+      ).asJava
+    )
     when(workspaceManagerDAO.enumerateStorageContainers(sourceWorkspaceId, 0, 200, ctx)).thenReturn(resourceList)
     val step = new CloneWorkspaceStorageContainerInitStep(
       workspaceManagerDAO,
@@ -74,9 +84,10 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
       monitorRecord
     )
 
-    step.findSourceWorkspaceStorageContainer(sourceWorkspaceId, expectedContainerName, ctx) shouldBe Some(matchingContainer)
+    step.findSourceWorkspaceStorageContainer(sourceWorkspaceId, expectedContainerName, ctx) shouldBe Some(
+      matchingContainer
+    )
   }
-
 
   it should "return None if no matching storage container is found" in {
     val ctx = mock[RawlsRequestContext]
@@ -89,19 +100,23 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
     )
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
-    val resourceList = new ResourceList().resources(List(
-      // both of these should be filtered out, either because the name doesn't match or because the access is invalid
-      new ResourceDescription()
-        .metadata(new ResourceMetadata()
-          .name("some other name")
-          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
-        ),
-      new ResourceDescription()
-        .metadata(new ResourceMetadata()
-          .name(expectedContainerName)
-          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.PRIVATE_ACCESS))
-        )
-    ).asJava)
+    val resourceList = new ResourceList().resources(
+      List(
+        // both of these should be filtered out, either because the name doesn't match or because the access is invalid
+        new ResourceDescription()
+          .metadata(
+            new ResourceMetadata()
+              .name("some other name")
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          ),
+        new ResourceDescription()
+          .metadata(
+            new ResourceMetadata()
+              .name(expectedContainerName)
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.PRIVATE_ACCESS))
+          )
+      ).asJava
+    )
     when(workspaceManagerDAO.enumerateStorageContainers(sourceWorkspaceId, 0, 200, ctx)).thenReturn(resourceList)
     val step = new CloneWorkspaceStorageContainerInitStep(
       workspaceManagerDAO,
@@ -113,8 +128,6 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
 
     step.findSourceWorkspaceStorageContainer(sourceWorkspaceId, expectedContainerName, ctx) shouldBe None
   }
-
-
 
   behavior of "the clone storage container init step"
 
@@ -133,20 +146,24 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
         ArgumentMatchers.eq(destWorkspaceId),
         ArgumentMatchers.eq(CloningFailed),
         ArgumentMatchers.any()
-      )).thenReturn(Future(1))
-    val step = spy(new CloneWorkspaceStorageContainerInitStep(
-      mock[WorkspaceManagerDAO],
-      workspaceRepository,
-      mock[WorkspaceManagerResourceMonitorRecordDao],
-      destWorkspaceId,
-      monitorRecord
-    ))
-    doReturn(None).when(step)
-      .findSourceWorkspaceStorageContainer(ArgumentMatchers.any(),ArgumentMatchers.any(),ArgumentMatchers.any())
+      )
+    ).thenReturn(Future(1))
+    val step = spy(
+      new CloneWorkspaceStorageContainerInitStep(
+        mock[WorkspaceManagerDAO],
+        workspaceRepository,
+        mock[WorkspaceManagerResourceMonitorRecordDao],
+        destWorkspaceId,
+        monitorRecord
+      )
+    )
+    doReturn(None)
+      .when(step)
+      .findSourceWorkspaceStorageContainer(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any())
 
-    whenReady(step.runStep(mock[RawlsRequestContext])) { _ shouldBe Complete }
+    whenReady(step.runStep(mock[RawlsRequestContext]))(_ shouldBe Complete)
     verify(step)
-      .findSourceWorkspaceStorageContainer(ArgumentMatchers.any(),ArgumentMatchers.any(),ArgumentMatchers.any())
+      .findSourceWorkspaceStorageContainer(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any())
   }
 
   it should "complete the job when no container clone result is returned" in {
@@ -160,26 +177,29 @@ class CloneWorkspaceStorageContainerInitStepSpec extends AnyFlatSpecLike
     val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
 
     val container = new ResourceDescription()
-      .metadata(new ResourceMetadata()
-        .name(expectedContainerName)
-        .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+      .metadata(
+        new ResourceMetadata()
+          .name(expectedContainerName)
+          .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
       )
     val ctx = mock[RawlsRequestContext]
-    val step = spy(new CloneWorkspaceStorageContainerInitStep(
-      mock[WorkspaceManagerDAO],
-      mock[WorkspaceRepository],
-      mock[WorkspaceManagerResourceMonitorRecordDao],
-      destWorkspaceId,
-      monitorRecord
-    ))
+    val step = spy(
+      new CloneWorkspaceStorageContainerInitStep(
+        mock[WorkspaceManagerDAO],
+        mock[WorkspaceRepository],
+        mock[WorkspaceManagerResourceMonitorRecordDao],
+        destWorkspaceId,
+        monitorRecord
+      )
+    )
 
-    doReturn(Some(container)).when(step)
+    doReturn(Some(container))
+      .when(step)
       .findSourceWorkspaceStorageContainer(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any())
     doReturn(None).when(step).cloneWorkspaceStorageContainer(sourceWorkspaceId, destWorkspaceId, container, None, ctx)
     whenReady(step.runStep(ctx)) {
       _ shouldBe Complete
     }
   }
-
 
 }
