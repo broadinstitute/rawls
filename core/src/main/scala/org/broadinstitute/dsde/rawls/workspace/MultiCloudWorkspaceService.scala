@@ -323,7 +323,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
-            cloneAzureWorkspaceAsync(sourceWs, profile, destWorkspaceRequest, s)
+            cloneAzureWorkspaceAsync(sourceWs, profile, destWorkspaceRequest, s, new WorkspaceRepository(dataSource))
           }
 
         case (RawlsWorkspace, profileOpt)
@@ -350,7 +350,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def cloneAzureWorkspaceAsync(sourceWorkspace: Workspace,
                                profile: ProfileModel,
                                request: WorkspaceRequest,
-                               parentContext: RawlsRequestContext
+                               parentContext: RawlsRequestContext,
+                                 workspaceRepository: WorkspaceRepository
   ): Future[Workspace] = {
 
     assertBillingProfileCreationDate(profile)
@@ -399,7 +400,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 s"], Rawls record being deleted.",
               t
             )
-            dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
+            workspaceRepository.deleteWorkspaceRecord(newWorkspace) >> Future.failed(t)
         }
 
       }
@@ -864,6 +865,29 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
+
+  private def createNewWorkspaceRecord(workspaceId: UUID,
+                                       request: WorkspaceRequest,
+                                       parentContext: RawlsRequestContext,
+                                       state: WorkspaceState,
+                                       workspaceRepository: WorkspaceRepository
+                                      ): Future[Workspace] = {
+    val currentDate = DateTime.now
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = request.namespace,
+      name = request.name,
+      workspaceId = workspaceId.toString,
+      createdDate = currentDate,
+      lastModified = currentDate,
+      createdBy = ctx.userInfo.userEmail.value,
+      attributes = request.attributes,
+      state
+    )
+    traceFutureWithParent("saveMultiCloudWorkspace", parentContext)(_ =>
+      workspaceRepository.createWorkspace(workspace)
+    )
+
+  }
 
   private def createNewWorkspaceRecord(workspaceId: UUID,
                                        request: WorkspaceRequest,
