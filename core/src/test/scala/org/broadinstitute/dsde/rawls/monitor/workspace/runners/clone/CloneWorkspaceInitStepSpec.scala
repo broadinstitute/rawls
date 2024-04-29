@@ -4,7 +4,11 @@ import bio.terra.workspace.model.{CloneWorkspaceResult, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobType}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.CloningFailed
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail}
@@ -19,15 +23,11 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike
-  with MockitoSugar
-  with Matchers
-  with ScalaFutures {
+class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike with MockitoSugar with Matchers with ScalaFutures {
 
   val userEmail: String = "user@email.com"
   val workspaceId: UUID = UUID.randomUUID()
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
-
 
   behavior of "waiting for the initial cloning job to complete in CloneWorkspaceInitStepSpec"
 
@@ -53,7 +53,7 @@ class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike
       monitorRecord
     )
 
-    whenReady(step.runStep(ctx)) { _ shouldBe Incomplete }
+    whenReady(step.runStep(ctx))(_ shouldBe Incomplete)
   }
 
   it should "complete and update the workspace when the job report status is FAILED" in {
@@ -71,11 +71,13 @@ class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike
     when(workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, cloneJobId, ctx))
       .thenReturn(new CloneWorkspaceResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED)))
     val workspaceRepository = mock[WorkspaceRepository]
-    when(workspaceRepository.setFailedState(
-      ArgumentMatchers.eq(workspaceId),
-      ArgumentMatchers.eq(CloningFailed),
-      ArgumentMatchers.anyString()
-    )).thenReturn(Future(1))
+    when(
+      workspaceRepository.setFailedState(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(CloningFailed),
+        ArgumentMatchers.anyString()
+      )
+    ).thenReturn(Future(1))
     val step = new CloneWorkspaceInitStep(
       workspaceManagerDAO,
       workspaceRepository,
@@ -94,7 +96,6 @@ class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike
     )
   }
 
-
   it should "complete and schedule the next job when the job report status is SUCCEEDED" in {
     val jobId = UUID.randomUUID()
     val cloneJobId = "not-a-real-uuid"
@@ -111,12 +112,12 @@ class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike
       .thenReturn(new CloneWorkspaceResult().jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED)))
     val workspaceRepository = mock[WorkspaceRepository]
     val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    doAnswer(a => {
+    doAnswer { a =>
       val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
       record.workspaceId shouldBe Some(workspaceId)
       record.jobType shouldBe JobType.CreateWdsAppInClonedWorkspace
       Future.successful()
-    }).when(recordDao).create(ArgumentMatchers.any())
+    }.when(recordDao).create(ArgumentMatchers.any())
     val step = new CloneWorkspaceInitStep(
       workspaceManagerDAO,
       workspaceRepository,
@@ -130,6 +131,5 @@ class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike
     }
     verify(recordDao).create(ArgumentMatchers.any())
   }
-
 
 }
