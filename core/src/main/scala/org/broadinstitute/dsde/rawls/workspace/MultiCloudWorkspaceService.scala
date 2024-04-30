@@ -51,7 +51,8 @@ object MultiCloudWorkspaceService {
       leonardoDAO,
       workbenchMetricBaseName,
       new WorkspaceRepository(dataSource),
-      WorkspaceManagerResourceMonitorRecordDao(dataSource)
+      WorkspaceManagerResourceMonitorRecordDao(dataSource),
+      dataSource
     )
 
   def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
@@ -69,8 +70,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  val leonardoDAO: LeonardoDAO,
                                  override val workbenchMetricBaseName: String,
                                  val workspaceRepository: WorkspaceRepository,
-                                 val workspaceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
-
+                                 val workspaceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
+                                 override val dataSource: SlickDataSource
 )(implicit override val executionContext: ExecutionContext, val system: ActorSystem)
     extends LazyLogging
     with RawlsInstrumented
