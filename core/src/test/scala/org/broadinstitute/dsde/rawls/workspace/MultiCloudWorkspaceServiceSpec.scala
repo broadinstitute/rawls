@@ -268,10 +268,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "createMultiCloudWorkspace"
 
-  it should "throw an exception if a workspace with the same name already exists" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+  it should "throw an exception if a workspace with the same name already exists and not delete the original workspace" in {
+    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val samDAO = new MockSamDAO(slickDataSource)
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val namespace = "fake"
+    val workspaceName = s"fake-name-${UUID.randomUUID().toString}"
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
@@ -282,8 +284,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
-      "fake",
-      s"fake-name-${UUID.randomUUID().toString}",
+      namespace,
+      workspaceName,
       Map.empty
     )
     val billingProfileId = UUID.randomUUID()
@@ -298,6 +300,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+
+    // Make sure that the pre-existing workspace was not deleted.
+    verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
+    Await.result(slickDataSource.inTransaction(_.workspaceQuery.findByName(WorkspaceName(namespace, workspaceName))), Duration.Inf).get.name shouldBe workspaceName
   }
 
   it should "throw an exception if the billing profile was created before 9/12/2023" in {
