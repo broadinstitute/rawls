@@ -747,6 +747,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
     } yield savedWorkspace).recoverWith {
+      case r: RawlsExceptionWithErrorReport if r.errorReport.statusCode.contains(StatusCodes.Conflict) =>
+        // Workspace already exists with this name/namespace, and we don't want to delete it.
+        Future.failed(r)
       case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException | _: RawlsExceptionWithErrorReport) =>
         logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
         for {
