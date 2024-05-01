@@ -303,7 +303,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     // Make sure that the pre-existing workspace was not deleted.
     verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
-    Await.result(slickDataSource.inTransaction(_.workspaceQuery.findByName(WorkspaceName(namespace, workspaceName))), Duration.Inf).get.name shouldBe workspaceName
+    Await
+      .result(slickDataSource.inTransaction(_.workspaceQuery.findByName(WorkspaceName(namespace, workspaceName))),
+              Duration.Inf
+      )
+      .get
+      .name shouldBe workspaceName
   }
 
   it should "throw an exception if the billing profile was created before 9/12/2023" in {
