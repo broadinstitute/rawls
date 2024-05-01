@@ -74,7 +74,8 @@ object MultiCloudWorkspaceService {
       multiCloudWorkspaceConfig,
       leonardoDAO,
       dataSource,
-      workbenchMetricBaseName
+      workbenchMetricBaseName,
+      WorkspaceManagerResourceMonitorRecordDao(dataSource)
     )
 
   def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
@@ -91,7 +92,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  val leonardoDAO: LeonardoDAO,
                                  override val dataSource: SlickDataSource,
-                                 override val workbenchMetricBaseName: String
+                                 override val workbenchMetricBaseName: String,
+                                 workspaceManagerResourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit override val executionContext: ExecutionContext, val system: ActorSystem)
     extends LazyLogging
     with RawlsInstrumented
@@ -323,7 +325,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
-            cloneAzureWorkspaceAsync(sourceWs, profile, destWorkspaceRequest, s)
+            cloneAzureWorkspaceAsync(
+              sourceWs,
+              profile,
+              destWorkspaceRequest,
+              s
+            )
           }
 
         case (RawlsWorkspace, profileOpt)
@@ -384,7 +391,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             // Currently, stairway generates this via a 'ShortUUID' which doesn't parse correctly
             // So for the time being, we need to add it as a job argument instead
             val base64EncodedJobId = cloneResult.getJobReport.getId
-            WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
+            workspaceManagerResourceMonitorRecordDao.create(
               WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
                 UUID.randomUUID(),
                 workspaceId,
@@ -400,7 +407,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 s"], Rawls record being deleted.",
               t
             )
-            dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
+            deleteWorkspaceRecord(newWorkspace) >> Future.failed(t)
+
         }
 
       }
@@ -865,15 +873,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case Right(_) => ()
     }
 
-  private def deleteWorkspaceRecord(workspace: Workspace) =
+  // visible for testing
+  def deleteWorkspaceRecord(workspace: Workspace) =
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
 
-  private def createNewWorkspaceRecord(workspaceId: UUID,
-                                       request: WorkspaceRequest,
-                                       parentContext: RawlsRequestContext,
-                                       state: WorkspaceState = WorkspaceState.Ready
+  // visible for testing
+  def createNewWorkspaceRecord(workspaceId: UUID,
+                               request: WorkspaceRequest,
+                               parentContext: RawlsRequestContext,
+                               state: WorkspaceState = WorkspaceState.Ready
   ): Future[Workspace] =
     dataSource.inTransaction { access =>
       for {
