@@ -37,6 +37,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
@@ -471,7 +472,14 @@ object BootMonitors extends LazyLogging {
                                                               gcsDAO,
                                                               monitorRecordDao
     )
-
+    val workspaceCloneRunner = new WorkspaceCloningRunner(
+      samDAO,
+      gcsDAO,
+      leonardoDAO,
+      workspaceManagerDAO,
+      monitorRecordDao,
+      workspaceRepository
+    )
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
@@ -492,7 +500,7 @@ object BootMonitors extends LazyLogging {
             billingRepo,
             new BillingProjectDeletion(samDAO, billingRepo, billingProfileManagerDAO)
           )
-        )
+        ) ++ JobType.cloneJobTypes.map(jobType => jobType -> workspaceCloneRunner).toMap
       )
     )
   }

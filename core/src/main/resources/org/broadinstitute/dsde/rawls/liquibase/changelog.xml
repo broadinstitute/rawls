@@ -126,4 +126,5 @@
     <include file="changesets/20230829_mrb_add_sts_project.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20231013_submission_monitor_script.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20231130_limit_clone_workspace_file_transfer.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20240418_workspace_monitor_args.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
