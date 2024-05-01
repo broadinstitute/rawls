@@ -1369,7 +1369,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 cloneName.name,
                 Map.empty,
                 None,
-                Some("analyses/")
+                Some("analyses/"),
+                policies = Some(
+                  List(
+                    WorkspacePolicy("dummy-policy-name", "terra", List.empty)
+                  )
+                )
               )
             )
             _ = clone.toWorkspaceName shouldBe cloneName
@@ -1387,6 +1392,27 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               } yield jobs
             }
           } yield {
+            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+              .cloneWorkspace(
+                equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                equalTo(clone.workspaceIdAsUUID),
+                equalTo(cloneName.name),
+                any(),
+                equalTo(cloneName.namespace),
+                any(),
+                equalTo(
+                  Some(
+                    new WsmPolicyInputs()
+                      .inputs(
+                        Seq(
+                          new WsmPolicyInput()
+                            .name("dummy-policy-name")
+                            .namespace("terra")
+                        ).asJava
+                      )
+                  )
+                )
+              )
             verify(mcWorkspaceService.workspaceManagerDAO, times(1))
               .cloneAzureStorageContainer(
                 equalTo(testData.azureWorkspace.workspaceIdAsUUID),

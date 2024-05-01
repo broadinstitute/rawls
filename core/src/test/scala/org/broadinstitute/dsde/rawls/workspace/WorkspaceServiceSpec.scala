@@ -12,9 +12,9 @@ import bio.terra.workspace.model.{
   WorkspaceDescription,
   WorkspaceStageModel,
   WsmPolicyInput,
+  WsmPolicyInputs,
   WsmPolicyPair
 }
-import cats.effect.IO
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -22,7 +22,6 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
-import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -41,7 +40,6 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
-import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -2717,7 +2715,7 @@ class WorkspaceServiceSpec
       ArgumentMatchers.eq(None),
       any[String],
       any[RawlsRequestContext],
-      any[Option[String]]
+      any[Option[WsmPolicyInputs]]
     )
   }
 
@@ -2733,7 +2731,7 @@ class WorkspaceServiceSpec
         ArgumentMatchers.eq(None),
         any[String],
         any[RawlsRequestContext],
-        any[Option[String]]
+        any[Option[WsmPolicyInputs]]
       )
     ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
 
@@ -2752,7 +2750,7 @@ class WorkspaceServiceSpec
       ArgumentMatchers.eq(None),
       any[String],
       any[RawlsRequestContext],
-      any[Option[String]]
+      any[Option[WsmPolicyInputs]]
     )
   }
 
@@ -2768,7 +2766,7 @@ class WorkspaceServiceSpec
         ArgumentMatchers.eq(None),
         any[String],
         any[RawlsRequestContext],
-        any[Option[String]]
+        any[Option[WsmPolicyInputs]]
       )
     ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
 
@@ -2788,7 +2786,7 @@ class WorkspaceServiceSpec
       ArgumentMatchers.eq(None),
       any[String],
       any[RawlsRequestContext],
-      any[Option[String]]
+      any[Option[WsmPolicyInputs]]
     )
     thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
   }

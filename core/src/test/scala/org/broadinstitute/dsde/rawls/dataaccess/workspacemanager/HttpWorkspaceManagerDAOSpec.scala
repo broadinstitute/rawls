@@ -258,12 +258,22 @@ class HttpWorkspaceManagerDAOSpec
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
     val billingProjectId = "billing-project-namespace";
+    val expectedPolicy =
+      new WsmPolicyInputs()
+        .inputs(
+          Seq(
+            new WsmPolicyInput()
+              .name("dummy-policy")
+              .namespace("terra")
+              .additionalData(List().asJava)
+          ).asJava
+        );
 
     val expectedRequest = new CloneWorkspaceRequest()
       .displayName("my-workspace-clone")
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
-      .location("the-moon")
+      .additionalPolicies(expectedPolicy)
       .projectOwnerGroupId(billingProjectId);
 
     wsmDao.cloneWorkspace(
@@ -273,7 +283,7 @@ class HttpWorkspaceManagerDAOSpec
       Option(testData.azureBillingProfile),
       billingProjectId,
       testContext,
-      Some("the-moon")
+      Some(expectedPolicy)
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
