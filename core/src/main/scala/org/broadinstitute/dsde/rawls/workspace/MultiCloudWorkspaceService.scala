@@ -368,7 +368,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             displayName = request.name,
             spendProfile = Option(profile),
             billingProjectNamespace = request.namespace,
-            context
+            context,
+            buildPolicyInputs(request)
           )
         ) match {
           case Success(cloneResult) =>
@@ -468,7 +469,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               displayName = request.name,
               spendProfile = Option(profile),
               billingProjectNamespace = request.namespace,
-              context
+              context,
+              buildPolicyInputs(request)
             )
           })
         }
