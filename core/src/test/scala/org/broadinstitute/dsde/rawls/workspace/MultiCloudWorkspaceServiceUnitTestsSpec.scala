@@ -143,13 +143,14 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     when(requestContext.otelContext).thenReturn(None)
 
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    doReturn(Future.failed(new ApiException()))
-      .when(workspaceManagerDAO.cloneWorkspace(any(), any(), any(), any(), any(), any(), any()))
+    doAnswer(_ => throw new ApiException())
+      .when(workspaceManagerDAO)
+      .cloneWorkspace(any(), any(), any(), any(), any(), any(), any())
 
     val service = spy(
       MultiCloudWorkspaceService.constructor(
         mock[SlickDataSource],
-        mock[WorkspaceManagerDAO],
+        workspaceManagerDAO,
         mock[BillingProfileManagerDAO],
         mock[SamDAO],
         mock[MultiCloudWorkspaceConfig],
