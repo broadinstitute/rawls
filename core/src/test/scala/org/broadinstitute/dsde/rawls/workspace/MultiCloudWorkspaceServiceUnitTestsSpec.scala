@@ -185,7 +185,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     verify(service).deleteWorkspaceRecord(destWorkspace)
   }
 
-  it should "doesn't try to delete the workspace when the new workspace creation fails" in {
+  it should "doesn't try to delete the workspace when creating the new db record in rawls fails" in {
     val sourceWorkspaceName = "source-name"
     val sourceWorkspaceNamespace = "source-namespace"
     val sourceWorkspace = Workspace.buildMcWorkspace(
