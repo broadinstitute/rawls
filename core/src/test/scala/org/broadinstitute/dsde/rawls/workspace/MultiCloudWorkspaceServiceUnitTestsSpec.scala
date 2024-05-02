@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{CloneWorkspaceResult, JobReport}
+import bio.terra.workspace.model.{CloneWorkspaceResult, JobReport, WsmPolicyInputs}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   UserInfo,
   Workspace,
+  WorkspacePolicy,
   WorkspaceRequest,
   WorkspaceState
 }
@@ -40,6 +41,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.SeqHasAsJava
 
 // kept separate from MultiCloudWorkspaceServiceSpec to separate true unit tests from tests with awkward actors
 class MultiCloudWorkspaceServiceUnitTestsSpec
@@ -237,11 +239,9 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
   }
 
   it should "create the async clone job from the result in WSM" in {
-    val sourceWorkspaceName = "source-name"
-    val sourceWorkspaceNamespace = "source-namespace"
     val sourceWorkspace = Workspace.buildMcWorkspace(
-      sourceWorkspaceNamespace,
-      sourceWorkspaceName,
+      "source-namespace",
+      "source-name",
       UUID.randomUUID().toString,
       DateTime.now(),
       DateTime.now(),
@@ -249,15 +249,37 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       Map(),
       WorkspaceState.Ready
     )
-    val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
-
     val requestContext = mock[RawlsRequestContext]
     when(requestContext.otelContext).thenReturn(None)
     val userInfo = mock[UserInfo]
     when(userInfo.userEmail).thenReturn(RawlsUserEmail("user-email"))
     when(requestContext.userInfo).thenReturn(userInfo)
+    val billingProfile = mock[ProfileModel]
+    when(billingProfile.getCreatedDate).thenReturn(DateTime.now().toString)
+    val policies = List(WorkspacePolicy("test-name", "test-namespace", List()))
+    val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map(), policies = Some(policies))
+
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val wsmResult = new CloneWorkspaceResult().jobReport(new JobReport().id("test-id-that-isn't-a-uuid"))
+    when(
+      workspaceManagerDAO.cloneWorkspace(
+        ArgumentMatchers.eq(sourceWorkspace.workspaceIdAsUUID),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(destWorkspaceRequest.name),
+        ArgumentMatchers.eq(Some(billingProfile)),
+        ArgumentMatchers.eq(destWorkspaceRequest.namespace),
+        ArgumentMatchers.eq(requestContext),
+        ArgumentMatchers.eq(Some(new WsmPolicyInputs().inputs(policies.map(p => p.toWsmPolicyInput()).asJava)))
+      )
+    ).thenReturn(wsmResult)
+
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    doAnswer { a =>
+      val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
+      record.userEmail shouldBe Some("user-email")
+      record.jobType shouldBe JobType.CloneWorkspaceInit
+      Future.successful()
+    }.when(workspaceManagerResourceMonitorRecordDao).create(any())
 
     val service = spy(
       new MultiCloudWorkspaceService(
@@ -272,10 +294,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
         workspaceManagerResourceMonitorRecordDao
       )
     )
-
-    val billingProfile = mock[ProfileModel]
-    when(billingProfile.getCreatedDate).thenReturn(DateTime.now().toString)
-
     val destWorkspace = mock[Workspace]
     doReturn(Future.successful(destWorkspace))
       .when(service)
@@ -285,16 +303,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
       )
-
-    val wsmResult = new CloneWorkspaceResult().jobReport(new JobReport().id("test-id-that-isn't-a-uuid"))
-    when(workspaceManagerDAO.cloneWorkspace(any(), any(), any(), any(), any(), any(), any())).thenReturn(wsmResult)
-
-    doAnswer { a =>
-      val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
-      record.userEmail shouldBe Some("user-email")
-      record.jobType shouldBe JobType.CloneWorkspaceInit
-      Future.successful()
-    }.when(workspaceManagerResourceMonitorRecordDao).create(any())
 
     Await.result(
       service.cloneAzureWorkspaceAsync(sourceWorkspace, billingProfile, destWorkspaceRequest, requestContext),

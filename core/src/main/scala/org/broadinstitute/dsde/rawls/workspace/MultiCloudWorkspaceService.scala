@@ -782,7 +782,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest) = {
+  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest): Option[WsmPolicyInputs] = {
     val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {
       case Some(true) =>
         Some(
