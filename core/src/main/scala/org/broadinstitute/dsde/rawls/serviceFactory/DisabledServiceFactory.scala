@@ -37,7 +37,7 @@ object DisabledServiceFactory {
         classTag[T].runtimeClass.getClassLoader,
         Array(classTag[T].runtimeClass),
          (_, method, _) =>
-          if (method.getReturnType().equals(Unit.getClass())) {
+          if (method.getReturnType().equals(().getClass())) {
             implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
             log4CatsLogger.error(s"${method.toString} is not supported in Azure control plane. Service has been identified to be non-blocking while inoperable and will silently fail.")
           } else {
