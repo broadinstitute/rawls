@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.serviceFactory
 
-import cats.effect.IO
-import org.typelevel.log4cats.slf4j.Slf4jLogger
+import com.typesafe.scalalogging.LazyLogging
 
 import java.lang.reflect.{Method, Proxy}
 import scala.reflect.{ClassTag, classTag}
 
-object DisabledServiceFactory {
+object DisabledServiceFactory extends LazyLogging {
 
   /**
    * Create a new instance of a service that throws UnsupportedOperationException for all methods.
@@ -38,8 +37,8 @@ object DisabledServiceFactory {
         Array(classTag[T].runtimeClass),
          (_, method, _) =>
           if (method.getReturnType().equals(().getClass())) {
-            implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
-            log4CatsLogger.error(s"${method.toString} is not supported in Azure control plane. Service has been identified to be non-blocking while inoperable and will silently fail.")
+            logger.error(s"${method.toString} is not supported in Azure control plane. Service has been identified to be non-blocking while inoperable and will silently fail.")
+            None
           } else {
             throw new UnsupportedOperationException(s"${method.toString} is not supported in Azure control plane.")
           }
