@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 import com.typesafe.scalalogging.LazyLogging
 
 import java.lang.reflect.{Method, Proxy}
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 object DisabledServiceFactory extends LazyLogging {
 
@@ -35,13 +35,15 @@ object DisabledServiceFactory extends LazyLogging {
       .newProxyInstance(
         classTag[T].runtimeClass.getClassLoader,
         Array(classTag[T].runtimeClass),
-         (_, method, _) =>
+        (_, method, _) =>
           if (method.getReturnType().equals(().getClass())) {
-            logger.error(s"${method.toString} is not supported in Azure control plane. Service has been identified to be non-blocking while inoperable and will silently fail.")
+            logger.error(
+              s"${method.toString} is not supported in Azure control plane. Service has been identified to be non-blocking while inoperable and will silently fail."
+            )
             None
           } else {
             throw new UnsupportedOperationException(s"${method.toString} is not supported in Azure control plane.")
           }
-  )
+      )
       .asInstanceOf[T]
 }
