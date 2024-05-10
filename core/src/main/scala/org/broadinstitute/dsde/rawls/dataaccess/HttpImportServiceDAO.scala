@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.model.{ImportStatuses, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ImportStatuses, UserInfo}
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 import spray.json.RootJsonFormat
 
@@ -22,17 +22,14 @@ object ImportServiceJsonSupport {
 }
 
 /**
-  * This ImportServiceDAO talks to both cWDS (Java/Spring, new) and Import Service (Python, deprecated). Yes, this
-  * violates encapsulation for a DAO, but it allows for smooth migration from Import Service to cWDS without large
-  * code churn. When Import Service is truly sunset, this DAO will return to form and only talk to one external service.
+  * DAO to talk to cWDS.
   *
-  * @param importServiceUrl base url for Import Service
   * @param cwdsUrl base url for cWDS
   * @param system ActorSystem
   * @param materializer Materializer
   * @param executionContext ExecutionContext
   */
-class HttpImportServiceDAO(importServiceUrl: String, cwdsUrl: String)(implicit
+class HttpImportServiceDAO(cwdsUrl: String)(implicit
   val system: ActorSystem,
   val materializer: Materializer,
   val executionContext: ExecutionContext
@@ -42,20 +39,6 @@ class HttpImportServiceDAO(importServiceUrl: String, cwdsUrl: String)(implicit
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
-
-  // retrieve an import job's status from Import Service
-  override def getImportStatus(importId: UUID,
-                               workspaceName: WorkspaceName,
-                               userInfo: UserInfo
-  ): Future[Option[ImportStatus]] = {
-
-    val requestUrl =
-      Uri(importServiceUrl).withPath(Path(s"/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"))
-
-    doImportStatusRequest(requestUrl, userInfo).map { response =>
-      response.map(statusString => ImportStatuses.withName(statusString.status))
-    }
-  }
 
   // retrieve an import job's status from cWDS, and translate its status into the known values for Import Service
   override def getCwdsStatus(importId: UUID, workspaceId: UUID, userInfo: UserInfo): Future[Option[ImportStatus]] = {

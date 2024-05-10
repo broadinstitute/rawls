@@ -14,9 +14,7 @@ object ImportServiceDAOFactory {
   )(implicit system: ActorSystem, executionContext: ExecutionContext): ImportServiceDAO =
     appConfigManager.cloudProvider match {
       case Gcp =>
-        new HttpImportServiceDAO(appConfigManager.conf.getString("avroUpsertMonitor.server"),
-                                 appConfigManager.conf.getString("avroUpsertMonitor.cwds")
-        )
+        new HttpImportServiceDAO(appConfigManager.conf.getString("avroUpsertMonitor.cwds"))
       case Azure =>
         newDisabledService[ImportServiceDAO]
     }

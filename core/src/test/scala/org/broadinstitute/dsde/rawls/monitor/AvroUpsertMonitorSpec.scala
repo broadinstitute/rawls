@@ -14,7 +14,6 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
-import org.broadinstitute.dsde.rawls.model.ImportStatuses
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeFormat,
@@ -23,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model.{
   DataReferenceName,
   Entity,
   GoogleProjectId,
+  ImportStatuses,
   RawlsRequestContext,
   TypedAttributeListSerializer,
   UserInfo,
@@ -93,14 +93,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     super.afterAll()
   }
 
-  val workspaceName = testData.workspace.toWorkspaceName
   val workspaceId = testData.workspace.workspaceIdAsUUID
-  val importStatusFailingWorkspace = testData.workspaceNoSubmissions.toWorkspaceName
   val googleStorage = FakeGoogleStorageInterpreter
   val importReadPubSubTopic = "request-topic"
   val importReadSubscriptionName = "request-sub"
-  val importWritePubSubTopic = "status-topic"
-  val importWriteSubscriptionName = "status-sub"
   val cwdsWritePubSubTopic = "cwds-status-topic"
   val cwdsWriteSubscriptionName = "cwds-status-sub"
 
@@ -109,16 +105,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   val entityType = "test-type"
   val failImportStatusUUID = UUID.randomUUID()
 
-  def testImportServiceAttributes(importId: UUID): Map[String, String] = Map(
-    "workspaceName" -> workspaceName.name,
-    "workspaceNamespace" -> workspaceName.namespace,
-    "userEmail" -> userInfo.userEmail.toString,
-    "upsertFile" -> s"$bucketName/${importId.toString}",
-    "jobId" -> importId.toString
-  )
-
   def testAttributes(importId: UUID): Map[String, String] = Map(
-    "isCWDS" -> "true",
     "workspaceId" -> workspaceId.toString,
     "userEmail" -> userInfo.userEmail.toString,
     "upsertFile" -> s"$bucketName/${importId.toString}",
@@ -131,7 +118,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     FiniteDuration.apply(1, TimeUnit.SECONDS),
     importReadPubSubTopic,
     importReadSubscriptionName,
-    importWritePubSubTopic,
     cwdsWritePubSubTopic,
     600,
     1000,
@@ -144,17 +130,13 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     Await.result(
       for {
         readTopicCreate <- services.gpsDAO.createTopic(importReadPubSubTopic)
-        writeTopicCreate <- services.gpsDAO.createTopic(importWritePubSubTopic)
-        subscriptionCreate <- services.gpsDAO.createSubscription(importWritePubSubTopic, importWriteSubscriptionName)
         cwdsWriteTopicCreate <- services.gpsDAO.createTopic(cwdsWritePubSubTopic)
         cwdsSubscriptionCreate <- services.gpsDAO.createSubscription(cwdsWritePubSubTopic, cwdsWriteSubscriptionName)
       } yield {
         assert(readTopicCreate, "did not create read topic")
-        assert(writeTopicCreate, "did not create write topic")
-        assert(subscriptionCreate, "did not create write subscription")
         assert(cwdsWriteTopicCreate, "did not create cWDS write topic")
         assert(cwdsSubscriptionCreate, "did not create cWDS write subscription")
-        readTopicCreate && writeTopicCreate && subscriptionCreate && cwdsWriteTopicCreate && cwdsSubscriptionCreate
+        readTopicCreate && cwdsWriteTopicCreate && cwdsSubscriptionCreate
       },
       Duration.apply(10, TimeUnit.SECONDS)
     )
@@ -171,7 +153,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         services.gcsDAO,
         services.samDAO,
         googleStorage,
-        services.gpsDAO,
         services.gpsDAO,
         mockImportServiceDAO,
         config,
@@ -194,7 +175,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         services.gcsDAO,
         services.samDAO,
         googleStorage,
-        services.gpsDAO,
         services.gpsDAO,
         mockImportServiceDAO,
         config,
@@ -232,7 +212,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         services.samDAO,
         googleStorage,
         services.gpsDAO,
-        services.gpsDAO,
         mockImportServiceDAO,
         config,
         slickDataSource
@@ -259,7 +238,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         mockSamDAO,
         googleStorage,
         services.gpsDAO,
-        services.gpsDAO,
         mockImportServiceDAO,
         config,
         slickDataSource
@@ -284,83 +262,69 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     makeOpsJsonString(opsList)
   }
 
-  List("Import Service", "cWDS") foreach { origin =>
-    List(1, 2, 20, 250, 2345, 12345) foreach { upsertQuantity =>
-      it should s"upsert $upsertQuantity entities when origin is $origin" in withTestDataApiServices { services =>
-        val timeout = 120000 milliseconds
-        val interval = 500 milliseconds
-        val importId1 = UUID.randomUUID()
+  List(1, 2, 20, 250, 2345, 12345) foreach { upsertQuantity =>
+    it should s"upsert $upsertQuantity entities" in withTestDataApiServices { services =>
+      val timeout = 120000 milliseconds
+      val interval = 500 milliseconds
+      val importId1 = UUID.randomUUID()
 
-        // generate the inbound pubsub message, which depends on origin
-        val originMessageAttributes = if (origin.equals("Import Service")) {
-          testImportServiceAttributes(importId1)
-        } else {
-          testAttributes(importId1)
-        }
+      // generate the inbound pubsub message, which depends on origin
+      val originMessageAttributes = testAttributes(importId1)
 
-        // add the imports and their statuses to the mock importserviceDAO
-        val mockImportServiceDAO = setUp(services)
-        mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock importserviceDAO
+      val mockImportServiceDAO = setUp(services)
+      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
-        // create upsert json file
-        val contents = makeOpsJsonString(upsertQuantity)
+      // create upsert json file
+      val contents = makeOpsJsonString(upsertQuantity)
 
-        // Store upsert json file
-        Await.result(
-          googleStorage
-            .createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes())
-            .compile
-            .drain
-            .unsafeToFuture(),
-          Duration.apply(10, TimeUnit.SECONDS)
-        )
+      // Store upsert json file
+      Await.result(
+        googleStorage
+          .createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes())
+          .compile
+          .drain
+          .unsafeToFuture(),
+        Duration.apply(10, TimeUnit.SECONDS)
+      )
 
-        Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(),
-                     Duration.apply(10, TimeUnit.SECONDS)
-        )
+      Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(),
+                   Duration.apply(10, TimeUnit.SECONDS)
+      )
 
-        // Publish message on the request topic
-        services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                        List(MessageRequest(importId1.toString, originMessageAttributes))
-        )
+      // Publish message on the request topic
+      services.gpsDAO.publishMessages(importReadPubSubTopic,
+                                      List(MessageRequest(importId1.toString, originMessageAttributes))
+      )
 
-        // check if correct message was posted on request topic
+      // check if correct message was posted on request topic
+      eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+        assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
+      }
+      // Check in db if entities are there
+      withWorkspaceContext(testData.workspace) { context =>
         eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
-        }
-        // Check in db if entities are there
-        withWorkspaceContext(testData.workspace) { context =>
-          eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-            val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
-            assertResult(upsertQuantity)(entitiesOfType.size)
-            upsertRange(upsertQuantity) foreach { idx =>
-              val name = s"avro-entity-$idx"
-              val entity =
-                Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
-              val actual = entitiesOfType.find(_.name == name)
-              assertResult(Some(entity))(actual)
-            }
+          val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
+          assertResult(upsertQuantity)(entitiesOfType.size)
+          upsertRange(upsertQuantity) foreach { idx =>
+            val name = s"avro-entity-$idx"
+            val entity =
+              Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
+            val actual = entitiesOfType.find(_.name == name)
+            assertResult(Some(entity))(actual)
           }
         }
-        // check that a pubsub message was published to the appropriate topic to update the job status
-        val correctSub = if (origin.equals("Import Service")) importWriteSubscriptionName else cwdsWriteSubscriptionName
+      }
+      // check that a pubsub message was published to cwds
 
-        eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          val statusMessages =
-            Await.result(services.gpsDAO.pullMessages(correctSub, 1), Duration.apply(10, TimeUnit.SECONDS))
-          assert(statusMessages.exists { msg =>
-            msg.attributes("importId").contains(importId1.toString) &&
-            msg.attributes("newStatus").contains("Done") &&
-            msg.attributes("action").contains("status")
-          })
-        }
-        // and check that no message was published to the other topic
-        val incorrectSub =
-          if (origin.equals("Import Service")) cwdsWriteSubscriptionName else importWriteSubscriptionName
+      eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
         val statusMessages =
-          Await.result(services.gpsDAO.pullMessages(incorrectSub, 1), Duration.apply(10, TimeUnit.SECONDS))
-        assert(!statusMessages.exists(msg => msg.attributes("importId").contains(importId1.toString)))
-
+          Await.result(services.gpsDAO.pullMessages(cwdsWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+        assert(statusMessages.exists { msg =>
+          msg.attributes("importId").contains(importId1.toString) &&
+          msg.attributes("newStatus").contains("Done") &&
+          msg.attributes("action").contains("status")
+        })
       }
     }
   }
@@ -827,7 +791,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val interval = 250 milliseconds
 
     val mockImportServiceDAO = setUpMockImportService(services)
-    when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
+    when(mockImportServiceDAO.getCwdsStatus(any[UUID], any[UUID], any[UserInfo]))
       .thenReturn(Future.failed(new Exception("User not found")))
 
     val contents = makeOpsJsonString(100)
@@ -878,7 +842,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
     val mockImportServiceDAO = setUpMockImportService(services)
     when(
-      mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo])
+      mockImportServiceDAO.getCwdsStatus(any[UUID], any[UUID], any[UserInfo])
     ).thenReturn(Future.successful(Some(ImportStatuses.Done)))
 
     val contents = makeOpsJsonString(100)
@@ -1020,7 +984,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       {
         val mockImportServiceDAO = setUpMockImportService(services)
 
-        when(mockImportServiceDAO.getImportStatus(any[UUID], any[WorkspaceName], any[UserInfo]))
+        when(mockImportServiceDAO.getCwdsStatus(any[UUID], any[UUID], any[UserInfo]))
           .thenReturn(Future.failed(new Exception("User not found")))
 
         mockImportServiceDAO
