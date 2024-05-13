@@ -368,7 +368,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         case Some(workspace) => workspace
         case None =>
           throw new RawlsException(
-            s"Workspace $attributes.workspaceId.toString not found while importing entities"
+            s"Workspace ${attributes.workspaceId} not found while importing entities"
           )
       }
     }
