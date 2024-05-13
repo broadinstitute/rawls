@@ -15,10 +15,10 @@ import spray.json.RootJsonFormat
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-object ImportServiceJsonSupport {
+object CwdsJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
-  implicit val importServiceResponseFormat: RootJsonFormat[ImportServiceResponse] = jsonFormat2(ImportServiceResponse)
+  implicit val jobStatusResponseFormat: RootJsonFormat[JobStatusResponse] = jsonFormat2(JobStatusResponse)
 }
 
 /**
@@ -29,11 +29,11 @@ object ImportServiceJsonSupport {
   * @param materializer Materializer
   * @param executionContext ExecutionContext
   */
-class HttpImportServiceDAO(cwdsUrl: String)(implicit
+class HttpCwdsDAO(cwdsUrl: String)(implicit
   val system: ActorSystem,
   val materializer: Materializer,
   val executionContext: ExecutionContext
-) extends ImportServiceDAO
+) extends CwdsDAO
     with DsdeHttpDAO
     with Retry {
 
@@ -41,7 +41,7 @@ class HttpImportServiceDAO(cwdsUrl: String)(implicit
   val httpClientUtils = HttpClientUtilsStandard()
 
   // retrieve an import job's status from cWDS, and translate its status into the known values for Import Service
-  override def getCwdsStatus(importId: UUID, workspaceId: UUID, userInfo: UserInfo): Future[Option[ImportStatus]] = {
+  override def getImportStatus(importId: UUID, workspaceId: UUID, userInfo: UserInfo): Future[Option[ImportStatus]] = {
     val requestUrl =
       Uri(cwdsUrl).withPath(Path(s"/job/v1/$importId"))
 
@@ -51,11 +51,11 @@ class HttpImportServiceDAO(cwdsUrl: String)(implicit
 
   }
 
-  private def doImportStatusRequest(requestUrl: Uri, userInfo: UserInfo): Future[Option[ImportServiceResponse]] = {
-    import ImportServiceJsonSupport._
+  private def doImportStatusRequest(requestUrl: Uri, userInfo: UserInfo): Future[Option[JobStatusResponse]] = {
+    import CwdsJsonSupport._
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-    retry[Option[ImportServiceResponse]](when5xx) { () =>
-      executeRequestWithToken[Option[ImportServiceResponse]](userInfo.accessToken)(Get(requestUrl)) recover {
+    retry[Option[JobStatusResponse]](when5xx) { () =>
+      executeRequestWithToken[Option[JobStatusResponse]](userInfo.accessToken)(Get(requestUrl)) recover {
         case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) =>
           None
       }
@@ -64,4 +64,4 @@ class HttpImportServiceDAO(cwdsUrl: String)(implicit
 
 }
 
-case class ImportServiceResponse(jobId: String, status: String)
+case class JobStatusResponse(jobId: String, status: String)

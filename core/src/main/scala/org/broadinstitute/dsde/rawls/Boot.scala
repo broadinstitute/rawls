@@ -162,7 +162,7 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val importServiceDAO = ImportServiceDAOFactory.createImportServiceDAO(appConfigManager)
+      val cwdsDAO = CwdsDAOFactory.createCwdsDAO(appConfigManager)
 
       val bqJsonCreds = BigQueryCredentialsManager.getBigQueryCredentials(appConfigManager)
 
@@ -524,7 +524,7 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           notificationDAO,
           pubSubDAO,
-          importServiceDAO,
+          cwdsDAO,
           workspaceManagerDAO,
           billingProfileManagerDAO,
           leonardoDAO,

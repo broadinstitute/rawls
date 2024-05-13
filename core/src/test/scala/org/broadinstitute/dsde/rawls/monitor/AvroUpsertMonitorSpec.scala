@@ -144,7 +144,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   def setUp(services: TestApiService) = {
     setUpPubSub(services)
 
-    val mockImportServiceDAO = new MockImportServiceDAO()
+    val mockCwdsDAO = new MockCwdsDAO()
 
     // Start the monitor
     system.actorOf(
@@ -154,19 +154,19 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         services.samDAO,
         googleStorage,
         services.gpsDAO,
-        mockImportServiceDAO,
+        mockCwdsDAO,
         config,
         slickDataSource
       )
     )
 
-    mockImportServiceDAO
+    mockCwdsDAO
   }
 
-  def setUpMockImportService(services: TestApiService): ImportServiceDAO = {
+  def setUpMockCwds(services: TestApiService): CwdsDAO = {
     setUpPubSub(services)
 
-    val mockImportServiceDAO = mock[ImportServiceDAO]
+    val mockCwdsDAO = mock[CwdsDAO]
 
     // Start the monitor
     system.actorOf(
@@ -176,19 +176,19 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         services.samDAO,
         googleStorage,
         services.gpsDAO,
-        mockImportServiceDAO,
+        mockCwdsDAO,
         config,
         slickDataSource
       )
     )
 
-    mockImportServiceDAO
+    mockCwdsDAO
   }
 
-  def setUpMockEntityManager(services: TestApiService): (MockImportServiceDAO, EntityService) = {
+  def setUpMockEntityManager(services: TestApiService): (MockCwdsDAO, EntityService) = {
     setUpPubSub(services)
 
-    val mockImportServiceDAO = new MockImportServiceDAO()
+    val mockCwdsDAO = new MockCwdsDAO()
 
     val mockEntityService = mock[EntityService]
 
@@ -212,19 +212,19 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         services.samDAO,
         googleStorage,
         services.gpsDAO,
-        mockImportServiceDAO,
+        mockCwdsDAO,
         config,
         slickDataSource
       )
     )
 
-    (mockImportServiceDAO, mockEntityService)
+    (mockCwdsDAO, mockEntityService)
   }
 
   def setUpMockSamDAO(services: TestApiService) = {
     setUpPubSub(services)
 
-    val mockImportServiceDAO = new MockImportServiceDAO()
+    val mockCwdsDAO = new MockCwdsDAO()
     val mockSamDAO = mock[SamDAO]
 
     when(mockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, userInfo.userEmail))
@@ -238,13 +238,13 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         mockSamDAO,
         googleStorage,
         services.gpsDAO,
-        mockImportServiceDAO,
+        mockCwdsDAO,
         config,
         slickDataSource
       )
     )
 
-    mockImportServiceDAO
+    mockCwdsDAO
   }
 
   behavior of "AvroUpsertMonitor"
@@ -271,9 +271,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // generate the inbound pubsub message, which depends on origin
       val originMessageAttributes = testAttributes(importId1)
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val mockCwdsDAO = setUp(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // create upsert json file
       val contents = makeOpsJsonString(upsertQuantity)
@@ -334,10 +334,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val importId3 = UUID.randomUUID()
     val importId4 = UUID.randomUUID()
 
-    val mockImportServiceDAO = setUp(services)
-    mockImportServiceDAO.imports += (importId2 -> ImportStatuses.Upserting)
-    mockImportServiceDAO.imports += (importId3 -> ImportStatuses.Done)
-    mockImportServiceDAO.imports += (importId4 -> ImportStatuses.Error)
+    val mockCwdsDAO = setUp(services)
+    mockCwdsDAO.imports += (importId2 -> ImportStatuses.Upserting)
+    mockCwdsDAO.imports += (importId3 -> ImportStatuses.Done)
+    mockCwdsDAO.imports += (importId4 -> ImportStatuses.Error)
 
     services.gpsDAO.publishMessages(importReadPubSubTopic,
                                     List(MessageRequest(importId2.toString, testAttributes(importId2)))
@@ -362,9 +362,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
-    // add the imports and their statuses to the mock importserviceDAO
-    val mockImportServiceDAO = setUp(services)
-    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+    // add the imports and their statuses to the mock cwdsDAO
+    val mockCwdsDAO = setUp(services)
+    mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
     // create a -malformed- upsert json file, which will cause problems when reading
     val contents = "hey, this isn't valid json! {{{"
@@ -413,9 +413,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val mockCwdsDAO = setUp(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // create a valid json file that doesn't contain entities
       val contents = """[{"foo":"bar"},{"baz":"qux"}]"""
@@ -462,9 +462,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
-    // add the imports and their statuses to the mock importserviceDAO
-    val mockImportServiceDAO = setUp(services)
-    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+    // add the imports and their statuses to the mock cwdsDAO
+    val mockCwdsDAO = setUp(services)
+    mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
     // create a valid json file that doesn't contain entities
     val contents =
@@ -514,9 +514,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val mockCwdsDAO = setUp(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
       val failureBatch =
@@ -569,9 +569,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val mockCwdsDAO = setUp(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
 
       // failure creates an entity that refers to a non-existent entity
@@ -633,9 +633,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val mockCwdsDAO = setUp(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // failure creates an entity that refers to a non-existent entity
       val ref = AttributeEntityReference("test-type", "this-entity-does-not-exist")
@@ -696,9 +696,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
-    // add the imports and their statuses to the mock importserviceDAO
-    val mockImportServiceDAO = setUp(services)
-    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+    // add the imports and their statuses to the mock cwdsDAO
+    val mockCwdsDAO = setUp(services)
+    mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
     val contents = makeOpsJsonString(100)
 
@@ -744,8 +744,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val importId1 = UUID.randomUUID()
 
     // MockSamDAO should throw an error when fetching the pet service account
-    val mockImportServiceDAO = setUpMockSamDAO(services)
-    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+    val mockCwdsDAO = setUpMockSamDAO(services)
+    mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
     val contents = makeOpsJsonString(100)
 
@@ -790,8 +790,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val timeout = 30000 milliseconds
     val interval = 250 milliseconds
 
-    val mockImportServiceDAO = setUpMockImportService(services)
-    when(mockImportServiceDAO.getCwdsStatus(any[UUID], any[UUID], any[UserInfo]))
+    val mockCwdsDAO = setUpMockCwds(services)
+    when(mockCwdsDAO.getImportStatus(any[UUID], any[UUID], any[UserInfo]))
       .thenReturn(Future.failed(new Exception("User not found")))
 
     val contents = makeOpsJsonString(100)
@@ -840,9 +840,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     val interval = 250 milliseconds
     val importUuid = UUID.randomUUID()
 
-    val mockImportServiceDAO = setUpMockImportService(services)
+    val mockCwdsDAO = setUpMockCwds(services)
     when(
-      mockImportServiceDAO.getCwdsStatus(any[UUID], any[UUID], any[UserInfo])
+      mockCwdsDAO.getImportStatus(any[UUID], any[UUID], any[UserInfo])
     ).thenReturn(Future.successful(Some(ImportStatuses.Done)))
 
     val contents = makeOpsJsonString(100)
@@ -881,9 +881,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val mockImportServiceDAO = setUp(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val mockCwdsDAO = setUp(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       val contents = makeOpsJsonString(100)
 
@@ -933,8 +933,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val importId1 = UUID.randomUUID()
 
       // MockSamDAO should throw an error when fetching the pet service account
-      val mockImportServiceDAO = setUpMockSamDAO(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      val mockCwdsDAO = setUpMockSamDAO(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       val contents = makeOpsJsonString(100)
 
@@ -982,12 +982,12 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 250 milliseconds
 
       {
-        val mockImportServiceDAO = setUpMockImportService(services)
+        val mockCwdsDAO = setUpMockCwds(services)
 
-        when(mockImportServiceDAO.getCwdsStatus(any[UUID], any[UUID], any[UserInfo]))
+        when(mockCwdsDAO.getImportStatus(any[UUID], any[UUID], any[UserInfo]))
           .thenReturn(Future.failed(new Exception("User not found")))
 
-        mockImportServiceDAO
+        mockCwdsDAO
       }
 
       val contents = makeOpsJsonString(100)
@@ -1049,9 +1049,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       val interval = 500 milliseconds
       val importId1 = UUID.randomUUID()
 
-      // add the imports and their statuses to the mock importserviceDAO
-      val (mockImportServiceDAO, mockEntityService) = setUpMockEntityManager(services)
-      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock cwdsDAO
+      val (mockCwdsDAO, mockEntityService) = setUpMockEntityManager(services)
+      mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // create upsert json file
       val contents = makeOpsJsonString(1)

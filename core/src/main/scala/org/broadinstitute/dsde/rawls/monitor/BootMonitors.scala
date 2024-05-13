@@ -72,7 +72,7 @@ object BootMonitors extends LazyLogging {
                    samDAO: SamDAO,
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
-                   importServiceDAO: ImportServiceDAO,
+                   cwdsDAO: CwdsDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
                    billingProfileManagerDAO: BillingProfileManagerDAO,
                    leonardoDAO: LeonardoDAO,
@@ -194,7 +194,7 @@ object BootMonitors extends LazyLogging {
                              samDAO,
                              googleStorage,
                              pubSubDAO,
-                             importServiceDAO,
+                             cwdsDAO,
                              avroUpsertMonitorConfig,
                              slickDataSource
       )
@@ -424,7 +424,7 @@ object BootMonitors extends LazyLogging {
                                      samDAO: SamDAO,
                                      googleStorage: GoogleStorageService[IO],
                                      googlePubSubDAO: GooglePubSubDAO,
-                                     importServiceDAO: ImportServiceDAO,
+                                     cwdsDAO: CwdsDAO,
                                      avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
                                      dataSource: SlickDataSource
   ) =
@@ -435,7 +435,7 @@ object BootMonitors extends LazyLogging {
         samDAO,
         googleStorage,
         googlePubSubDAO,
-        importServiceDAO,
+        cwdsDAO,
         avroUpsertMonitorConfig,
         dataSource
       )

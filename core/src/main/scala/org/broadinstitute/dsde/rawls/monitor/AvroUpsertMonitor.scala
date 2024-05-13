@@ -67,7 +67,7 @@ object AvroUpsertMonitorSupervisor {
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
             pubSubDAO: GooglePubSubDAO,
-            importServiceDAO: ImportServiceDAO,
+            cwdsDAO: CwdsDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
             dataSource: SlickDataSource
   ): Props =
@@ -77,7 +77,7 @@ object AvroUpsertMonitorSupervisor {
                                       samDAO,
                                       googleStorage,
                                       pubSubDAO,
-                                      importServiceDAO,
+                                      cwdsDAO,
                                       avroUpsertMonitorConfig,
                                       dataSource
       )
@@ -109,7 +109,7 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDAO: GooglePubSubDAO,
-                                  importServiceDAO: ImportServiceDAO,
+                                  cwdsDAO: CwdsDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
                                   dataSource: SlickDataSource
 ) extends Actor
@@ -148,7 +148,7 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
         pubSubDAO,
         avroUpsertMonitorConfig.importRequestPubSubSubscription,
         avroUpsertMonitorConfig.updateCwdsStatusPubSubTopic,
-        importServiceDAO,
+        cwdsDAO,
         avroUpsertMonitorConfig.batchSize,
         dataSource
       )
@@ -179,7 +179,7 @@ object AvroUpsertMonitor {
             pubSubDao: GooglePubSubDAO,
             pubSubSubscriptionName: String,
             cwdsStatusPubSubTopic: String,
-            importServiceDAO: ImportServiceDAO,
+            cwdsDAO: CwdsDAO,
             batchSize: Int,
             dataSource: SlickDataSource
   ): Props =
@@ -194,7 +194,7 @@ object AvroUpsertMonitor {
         pubSubDao,
         pubSubSubscriptionName,
         cwdsStatusPubSubTopic,
-        importServiceDAO,
+        cwdsDAO,
         batchSize,
         dataSource
       )
@@ -210,7 +210,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                              pubSubDao: GooglePubSubDAO,
                              pubSubSubscriptionName: String,
                              cwdsStatusPubSubTopic: String,
-                             importServiceDAO: ImportServiceDAO,
+                             cwdsDAO: CwdsDAO,
                              batchSize: Int,
                              dataSource: SlickDataSource
 ) extends Actor
@@ -289,7 +289,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     val importFuture = for {
       workspace <- lookupWorkspace(attributes)
       petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
-      importStatus <- importServiceDAO.getCwdsStatus(attributes.importId, workspace.workspaceIdAsUUID, petUserInfo)
+      importStatus <- cwdsDAO.getImportStatus(attributes.importId, workspace.workspaceIdAsUUID, petUserInfo)
       _ <- importStatus match {
         // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
         // end up with a race condition where multiple threads are attempting the same import / updating the status

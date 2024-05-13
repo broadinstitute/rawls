@@ -7,8 +7,6 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorMessageParser._
 import java.util.UUID
 
 object AvroUpsertMonitorMessageParser {
-  val workspaceNamespace = "workspaceNamespace"
-  val workspaceName = "workspaceName"
   val userEmail = "userEmail"
   val jobId = "jobId"
   val upsertFile = "upsertFile"
