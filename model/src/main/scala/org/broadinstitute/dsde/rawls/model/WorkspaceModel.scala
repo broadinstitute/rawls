@@ -499,6 +499,12 @@ object WorkspaceState {
   sealed trait WorkspaceState extends RawlsEnumeration[WorkspaceState] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceState = WorkspaceState.withName(name)
+    def isDeletable: Boolean = this match {
+      case WorkspaceState.Ready | WorkspaceState.CreateFailed | WorkspaceState.DeleteFailed |
+          WorkspaceState.UpdateFailed | WorkspaceState.CloningFailed =>
+        true
+      case _ => false
+    }
   }
 
   def withName(name: String): WorkspaceState = name.toLowerCase match {
