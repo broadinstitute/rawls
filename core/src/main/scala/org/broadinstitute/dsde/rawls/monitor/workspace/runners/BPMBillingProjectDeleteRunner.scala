@@ -92,7 +92,8 @@ class BPMBillingProjectDeleteRunner(
     executionContext: ExecutionContext
   ): Future[JobStatus] =
     Try(workspaceManagerDAO.getDeleteLandingZoneResult(jobId.toString, lzId, ctx)) match {
-      case Failure(e: ApiException) if e.getCode == StatusCodes.Forbidden.intValue =>
+      case Failure(e: ApiException)
+          if e.getCode == StatusCodes.Forbidden.intValue || e.getCode == StatusCodes.NotFound.intValue =>
         logger.info(
           s"LZ deletion result status = ${e.getCode} for LZ ID ${lzId}, LZ record is gone. Proceeding with rawls billing project deletion"
         )
