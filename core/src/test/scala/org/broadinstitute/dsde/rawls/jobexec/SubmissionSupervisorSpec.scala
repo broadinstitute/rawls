@@ -29,6 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.jdk.DurationConverters.JavaDurationOps
@@ -54,7 +55,10 @@ class SubmissionSupervisorSpec
   val mockServer = RemoteServicesMockServer()
   val gcsDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO =
-    new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
+    new HttpSamDAO(mockServer.mockServerBaseUrl,
+                   FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
+                   1 minute
+    )
   val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
   override def beforeAll(): Unit = {

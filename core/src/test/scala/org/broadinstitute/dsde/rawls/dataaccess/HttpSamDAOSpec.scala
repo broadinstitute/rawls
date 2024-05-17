@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -54,7 +55,10 @@ class HttpSamDAOSpec
 
   "HttpSamDAO" should "handle no content getting access instructions" in {
     val dao =
-      new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
+      new HttpSamDAO(mockServer.mockServerBaseUrl,
+                     FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
+                     1 minute
+      )
     assertResult(None) {
       Await.result(
         dao.getAccessInstructions(
@@ -68,7 +72,10 @@ class HttpSamDAOSpec
 
   it should "handle no content getting user id info" in {
     val dao =
-      new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
+      new HttpSamDAO(mockServer.mockServerBaseUrl,
+                     FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
+                     1 minute
+      )
     assertResult(SamDAO.NotUser) {
       Await.result(dao.getUserIdInfo(
                      "group@example.com",
@@ -81,7 +88,10 @@ class HttpSamDAOSpec
 
   it should "handle 404 getting user id info" in {
     val dao =
-      new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
+      new HttpSamDAO(mockServer.mockServerBaseUrl,
+                     FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
+                     1 minute
+      )
     assertResult(SamDAO.NotFound) {
       Await.result(dao.getUserIdInfo(
                      "dne@example.com",
@@ -119,7 +129,10 @@ class HttpSamDAOSpec
       RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
 
     val dao =
-      new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
+      new HttpSamDAO(mockServer.mockServerBaseUrl,
+                     FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
+                     1 minute
+      )
 
     val errorReportResponse = intercept[RawlsExceptionWithErrorReport] {
       Await.result(dao.inviteUser("fake-email", fakeContext), Duration.Inf)
@@ -151,7 +164,10 @@ class HttpSamDAOSpec
       RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
 
     val dao =
-      new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
+      new HttpSamDAO(mockServer.mockServerBaseUrl,
+                     FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
+                     1 minute
+      )
 
     val junkResponseError = intercept[RawlsExceptionWithErrorReport] {
       Await.result(dao.inviteUser("junk-response", fakeContext), Duration.Inf)

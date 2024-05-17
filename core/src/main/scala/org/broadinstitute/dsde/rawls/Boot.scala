@@ -6,7 +6,6 @@ import akka.stream.ActorMaterializer
 import cats.effect._
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
-import com.google.api.client.json.gson.GsonFactory
 import com.google.cloud.opentelemetry.trace.{TraceConfiguration, TraceExporter}
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigObject}
@@ -24,11 +23,9 @@ import io.opentelemetry.sdk.trace.samplers.Sampler
 import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
 import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
-import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
-import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
@@ -152,8 +149,6 @@ object Boot extends IOApp with LazyLogging {
     val accessContextManagerDAO =
       AccessContextManagerFactory.createAccessContextManager(metricsPrefix, appConfigManager)
 
-    val rawlsCredential = RawlsCredential.getCredential(appConfigManager)
-
     initAppDependencies[IO](appConfigManager, appConfigManager.conf, metricsPrefix).use { appDependencies =>
       val gcsDAO = GoogleServicesDAOFactory.createGoogleServicesDAO(
         appConfigManager,
@@ -180,7 +175,7 @@ object Boot extends IOApp with LazyLogging {
       val bigQueryDAO =
         BigQueryDAOFactory.createBigQueryDAO(appConfigManager, Json(bqJsonCreds), metricsPrefix)
 
-      val samDAO = SamDAOFactory.createSamDAO(appConfigManager, rawlsCredential)
+      val samDAO = SamDAOFactory.createSamDAO(appConfigManager)
       samDAO.registerRawlsIdentity().failed.foreach {
         // this is logged as a warning because almost always the service account is already enabled
         // so this is a problem only the first time rawls is started with a new service account

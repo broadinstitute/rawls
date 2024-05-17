@@ -2,14 +2,17 @@ package org.broadinstitute.dsde.rawls.credentials
 
 import com.google.auth.oauth2.ServiceAccountCredentials
 import org.broadinstitute.dsde.rawls.config.{AzureIdentityConfig, RawlsConfigManager}
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import scala.util.Using
 
+/**
+ * Represents a credential that can be used to authenticate as the Rawls service.
+ */
 trait RawlsCredential {
-  def getExpiresInSeconds: Long
+  def getExpiresAt: Instant
   def getAccessToken: String
   def refreshToken(): Unit
 }
