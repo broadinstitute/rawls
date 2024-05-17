@@ -28,6 +28,7 @@ import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
@@ -148,10 +149,10 @@ object Boot extends IOApp with LazyLogging {
       logger.info("Metrics reporting is disabled.")
     }
 
-    val jsonFactory = GsonFactory.getDefaultInstance
-
     val accessContextManagerDAO =
       AccessContextManagerFactory.createAccessContextManager(metricsPrefix, appConfigManager)
+
+    val rawlsCredential = RawlsCredential.getCredential(appConfigManager)
 
     initAppDependencies[IO](appConfigManager, appConfigManager.conf, metricsPrefix).use { appDependencies =>
       val gcsDAO = GoogleServicesDAOFactory.createGoogleServicesDAO(
@@ -179,9 +180,12 @@ object Boot extends IOApp with LazyLogging {
       val bigQueryDAO =
         BigQueryDAOFactory.createBigQueryDAO(appConfigManager, Json(bqJsonCreds), metricsPrefix)
 
-      val samDAO = SamDAOFactory.createSamDAO(appConfigManager, gcsDAO)
-
-      EnableServiceAccountFactory.createEnableServiceAccount(appConfigManager, gcsDAO, samDAO)
+      val samDAO = SamDAOFactory.createSamDAO(appConfigManager, rawlsCredential)
+      samDAO.registerRawlsIdentity().failed.foreach {
+        // this is logged as a warning because almost always the service account is already enabled
+        // so this is a problem only the first time rawls is started with a new service account
+        t: Throwable => logger.warn("error enabling service account", t)
+      }
 
       system.registerOnTermination {
         slickDataSource.databaseConfig.db.shutdown
@@ -579,23 +583,6 @@ object Boot extends IOApp with LazyLogging {
     }
 
     setupOptions(options)
-  }
-
-  /**
-   * Enables the rawls service account in ldap. Allows service to service auth through the proxy.
-   * @param gcsDAO
-   */
-  def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, samDAO: HttpSamDAO): Unit = {
-    val credential = gcsDAO.getBucketServiceAccountCredential
-    val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
-
-    val registerServiceAccountFuture = samDAO.registerUser(RawlsRequestContext(serviceAccountUserInfo))
-
-    registerServiceAccountFuture.failed.foreach {
-      // this is logged as a warning because almost always the service account is already enabled
-      // so this is a problem only the first time rawls is started with a new service account
-      t: Throwable => logger.warn("error enabling service account", t)
-    }
   }
 
   def startStatsDReporter(host: String,

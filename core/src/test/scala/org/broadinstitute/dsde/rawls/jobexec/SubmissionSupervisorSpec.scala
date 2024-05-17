@@ -6,6 +6,7 @@ import akka.testkit.TestKit
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.credentials.{FakeRawlsCredentials, GoogleRawlsCredential}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   HttpSamDAO,
@@ -53,7 +54,7 @@ class SubmissionSupervisorSpec
   val mockServer = RemoteServicesMockServer()
   val gcsDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO =
-    new HttpSamDAO(mockServer.mockServerBaseUrl, Option(gcsDAO.getPreparedMockGoogleCredential()), 1 minute)
+    new HttpSamDAO(mockServer.mockServerBaseUrl, FakeRawlsCredentials(UUID.randomUUID().toString, 1000L), 1 minute)
   val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
   override def beforeAll(): Unit = {
@@ -79,7 +80,6 @@ class SubmissionSupervisorSpec
           mockSamDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           config,
           ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName

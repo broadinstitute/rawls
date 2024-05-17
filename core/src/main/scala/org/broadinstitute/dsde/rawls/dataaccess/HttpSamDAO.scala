@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import okhttp3.{Interceptor, Protocol, Response}
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
@@ -27,8 +28,7 @@ import scala.util.{Try, Using}
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Credential], timeout: FiniteDuration)(
-  implicit
+class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, timeout: FiniteDuration)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -262,6 +262,8 @@ class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Cre
             None
         }
     }
+
+  override def registerRawlsIdentity(): Future[Option[RawlsUser]] = registerUser(rawlsSAContext)
 
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     retry(when401or5xx) { () =>
@@ -565,16 +567,13 @@ class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Cre
       callback.future.map(WorkbenchEmail)
     }
 
-  private def getServiceAccountAccessToken =
-    maybeServiceAccountCreds
-      .map { serviceAccountCreds =>
-        val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
-        if (expiresInSeconds < 60 * 5) {
-          serviceAccountCreds.refreshToken()
-        }
-        serviceAccountCreds.getAccessToken
-      }
-      .getOrElse(throw new UnsupportedOperationException("Service account credentials not provided"))
+  private def getServiceAccountAccessToken = {
+    val expiresInSeconds = Option(rawlsCredential.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
+    if (expiresInSeconds < 60 * 5) {
+      rawlsCredential.refreshToken()
+    }
+    rawlsCredential.getAccessToken
+  }
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String,
