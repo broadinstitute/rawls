@@ -6,6 +6,7 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsTestUtils}
 
+import java.nio.charset.StandardCharsets
 import java.sql.SQLException
 import java.util.UUID
 
@@ -567,11 +568,28 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(testWorkspace) {
     dataSource =>
-      // it'll be longer than this (and thus will need trimming) because it'll get the entity name too
-      val veryLongString = "a" * EntityComponent.allAttributeValuesColumnSize
-      val sample1 = Entity("sample1",
-                           "Sample",
-                           Map(AttributeName.withDefaultNS("veryLongString") -> AttributeString(veryLongString))
+      /*
+       Create a long string composed of the recycle-symbol emoji. This string has 65534/4 characters in it, and we
+       will insert four copies of it into separate string attributes.
+
+       The recycle symbol used here is a triple-byte character. This means that each string is ~49151 bytes long.
+
+       Both the all_attributes_value and attribute_string columns in the db have a max byte length of 65535. We use
+       four separate attributes to ensure we will not overflow the attribute_string column ... but when concatenated
+       together, the value WOULD overflow all_attribute_values unless our trimming logic came into play.
+
+       This test verifies the all_attribute_values trimming logic.
+       */
+      val veryLongString = "♲" * (EntityComponent.allAttributeValuesColumnSize / 4)
+      val sample1 = Entity(
+        "sample1",
+        "Sample",
+        Map(
+          AttributeName.withDefaultNS("veryLongString1") -> AttributeString(veryLongString),
+          AttributeName.withDefaultNS("veryLongString2") -> AttributeString(veryLongString),
+          AttributeName.withDefaultNS("veryLongString3") -> AttributeString(veryLongString),
+          AttributeName.withDefaultNS("veryLongString4") -> AttributeString(veryLongString)
+        )
       )
       withWorkspaceContext(testWorkspace.workspace) { context =>
         runAndWait(entityQuery.save(context, sample1))
@@ -583,8 +601,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
               .result
           )
         )
+        // measure the byte size of the actual value is exactly what we specified
         assertResult(EntityComponent.allAttributeValuesColumnSize) {
-          entityRec.get.allAttributeValues.get.length
+          entityRec.get.allAttributeValues.get.getBytes(StandardCharsets.UTF_8).length
         }
       }
   }

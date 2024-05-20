@@ -28,7 +28,7 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client-javax" % "0.254.1030-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.1111-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 
@@ -57,7 +57,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-9de70db23"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "1824ef0eb"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),

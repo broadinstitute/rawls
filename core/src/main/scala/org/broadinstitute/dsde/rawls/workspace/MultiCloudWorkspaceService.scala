@@ -141,22 +141,23 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         s"V2 Starting deletion of workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
       )
 
-      _ = workspace.state match {
-        case WorkspaceState.Ready | WorkspaceState.CreateFailed | WorkspaceState.DeleteFailed |
-            WorkspaceState.UpdateFailed =>
+      _ =
+        if (workspace.state.isDeletable) {
           true
-        case WorkspaceState.Deleting =>
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.Conflict, "Workspace is already being deleted.")
-          )
-        case _ =>
-          logger.error(
-            s"Unable to delete workspace [id = ${workspace.workspaceId}, current_state = ${workspace.state}]"
-          )
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Unable to delete workspace")
-          )
-      }
+        } else {
+          if (workspace.state == WorkspaceState.Deleting) {
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Conflict, "Workspace is already being deleted.")
+            )
+          } else {
+            logger.error(
+              s"Unable to delete workspace [id = ${workspace.workspaceId}, current_state = ${workspace.state}]"
+            )
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Unable to delete workspace")
+            )
+          }
+        }
 
       result: WorkspaceDeletionResult <- workspace.workspaceType match {
         case WorkspaceType.McWorkspace    => startMultiCloudDelete(workspace, ctx)
