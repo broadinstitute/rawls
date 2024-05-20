@@ -3207,7 +3207,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject,
                                                    dataAccess: DataAccess,
                                                    requestContext: RawlsRequestContext = ctx
-  ): ReadAction[Unit] =
+  ): ReadWriteAction[Unit] =
     billingProject.servicePerimeter.traverse_ { servicePerimeterName =>
       servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
     }

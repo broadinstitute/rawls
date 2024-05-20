@@ -12,15 +12,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectNumber,
+  RawlsBillingProjectName,
   SamResourceTypeNames,
   SamServicePerimeterActions,
   ServicePerimeterName,
-  Workspace
+  Workspace,
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.ArgumentMatchers.any
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
@@ -188,6 +190,113 @@ class ServicePerimeterServiceSpec
         )
       }
       failure.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
+  }
+
+  it should "delete any workspaces that have a missing Google project and retry the overwrite operation" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val gcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val acmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
+      val operationName = "overwritePerimeterOperation"
+      val servicePerimeterName: ServicePerimeterName = defaultConfig.staticProjectsInPerimeters.keys.head
+      val existingGoogleProjectNumber = UUID.randomUUID().toString
+      val missingGoogleProjectNumber1 = "000000000001"
+      val missingGoogleProjectNumber2 = "000000000002"
+
+      when(gcsDAO.accessContextManagerDAO).thenReturn(acmDAO)
+      when(acmDAO.overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]]))
+        .thenReturn(Future.successful(new Operation().setName(operationName)))
+      when(gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operationName)))
+        .thenReturn(
+          Future.successful(
+            OperationStatus(
+              done = true,
+              errorMessage = Option(
+                s"Invalid resources for Service Perimeter '${servicePerimeterName.value}': Project(s) 'projects/$missingGoogleProjectNumber1, projects/$missingGoogleProjectNumber2' are not member(s) of the parent of the Service Perimeter."
+              )
+            )
+          ),
+          Future.successful(
+            OperationStatus(
+              done = true,
+              errorMessage = None
+            )
+          )
+        )
+
+      val service = new ServicePerimeterServiceImpl(dataSource, gcsDAO, defaultConfig)
+
+      val billingProject1 =
+        testData.testProject1.copy(RawlsBillingProjectName("bp1"), servicePerimeter = servicePerimeterName.some)
+      val billingProject2 =
+        testData.testProject1.copy(RawlsBillingProjectName("bp2"), servicePerimeter = servicePerimeterName.some)
+
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject1)
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject2)
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(
+            testData.workspace.copy(
+              namespace = billingProject1.projectName.value,
+              name = "existing_ws",
+              workspaceId = UUID.randomUUID().toString,
+              googleProjectNumber = Option(GoogleProjectNumber(existingGoogleProjectNumber))
+            )
+          )
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(
+            testData.workspace.copy(
+              namespace = billingProject1.projectName.value,
+              name = "missing_ws1",
+              workspaceId = UUID.randomUUID().toString,
+              googleProjectNumber = Option(GoogleProjectNumber(missingGoogleProjectNumber1))
+            )
+          )
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(
+            testData.workspace.copy(
+              namespace = billingProject2.projectName.value,
+              name = "missing_ws2",
+              workspaceId = UUID.randomUUID().toString,
+              googleProjectNumber = Option(GoogleProjectNumber(missingGoogleProjectNumber2))
+            )
+          )
+        } yield ()
+      }
+
+      Await.result(slickDataSource.inTransaction { dataAccess =>
+                     service.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+                   },
+                   Duration.Inf
+      )
+
+      runAndWait {
+        for {
+          workspacesInPerimeter <- slickDataSource.dataAccess.workspaceQuery.getWorkspacesInPerimeter(
+            servicePerimeterName
+          )
+          missingWs1 <- slickDataSource.dataAccess.workspaceQuery.findByName(
+            WorkspaceName(billingProject1.projectName.value, "missing_ws1")
+          )
+          missingWs2 <- slickDataSource.dataAccess.workspaceQuery.findByName(
+            WorkspaceName(billingProject2.projectName.value, "missing_ws2")
+          )
+        } yield {
+          workspacesInPerimeter.size shouldBe 1
+          missingWs1 shouldBe None
+          missingWs2 shouldBe None
+        }
+      }
+      val inOrder = Mockito.inOrder(acmDAO)
+      val staticProjects = defaultConfig
+        .staticProjectsInPerimeters(servicePerimeterName)
+        .map(_.value)
+      inOrder
+        .verify(acmDAO)
+        .overwriteProjectsInServicePerimeter(
+          servicePerimeterName,
+          Set(existingGoogleProjectNumber, missingGoogleProjectNumber1, missingGoogleProjectNumber2) ++ staticProjects
+        )
+      inOrder
+        .verify(acmDAO)
+        .overwriteProjectsInServicePerimeter(servicePerimeterName, Set(existingGoogleProjectNumber) ++ staticProjects)
   }
 
   behavior of "checkServicePerimeterAccess"

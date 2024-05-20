@@ -6,7 +6,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   ErrorReport,
@@ -16,7 +16,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   SamServicePerimeterActions,
   ServicePerimeterName,
-  UserInfo,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.Retry
@@ -25,6 +24,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
                                   gcsDAO: GoogleServicesDAO,
@@ -35,6 +35,8 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
     with ServicePerimeterService {
 
   import dataSource.dataAccess.driver.api._
+
+  val projectNumbersExtractorRegex = """projects/(\d+)""".r
 
   /**
     * Look up all of the Workspaces contained in Billing Projects that use the specified
@@ -90,7 +92,26 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
 
   def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName,
                                          dataAccess: DataAccess
-  ): ReadAction[Unit] =
+  ): ReadWriteAction[Unit] = overwriteServicePerimeterInternal(servicePerimeterName, dataAccess).asTry.flatMap {
+    case Failure(failure: MissingGoogleProjectsException) =>
+      logger.info(
+        s"Initial service perimeter update operation failed because some Google projects have been deleted. Deleting associated workspaces in Rawls and trying again. [projects=${failure.projectNumbers}]"
+      )
+      dataAccess.workspaceQuery
+        .deleteByGoogleProjectNumbers(failure.projectNumbers)
+        .flatMap(_ => overwriteServicePerimeterInternal(servicePerimeterName, dataAccess))
+    case Failure(e) => throw e
+    case Success(_) => DBIO.successful(())
+  }
+
+  private def overwriteServicePerimeterInternal(servicePerimeterName: ServicePerimeterName,
+                                                dataAccess: DataAccess
+  ): ReadWriteAction[Unit] = {
+    def servicePerimeterUpdatePredicate(t: Throwable): Boolean = t match {
+      case _: MissingGoogleProjectsException => false
+      case _                                 => true
+    }
+
     for {
       workspacesInPerimeter <- collectWorkspacesInPerimeter(servicePerimeterName, dataAccess)
       billingProjectsInPerimeter <- collectBillingProjectsInPerimeter(servicePerimeterName, dataAccess)
@@ -104,8 +125,10 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
         )
       )
       result <- DBIO.from(
-        retryUntilSuccessOrTimeout(failureLogMessage =
-          s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful"
+        retryUntilSuccessOrTimeout(
+          pred = servicePerimeterUpdatePredicate,
+          failureLogMessage =
+            s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful"
         )(config.pollInterval, config.pollTimeout) { () =>
           gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
             case OperationStatus(false, _) =>
@@ -118,26 +141,32 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
             // the list of Projects in the Perimeter may have been wiped or somehow modified in an undesirable way.  If
             // this happened, it would be possible for Projects intended to be in the Perimeter are NOT in that
             // Perimeter anymore, which is a problem.
-            case OperationStatus(true, errorMessage) if !errorMessage.isEmpty =>
-              Future.successful(
+            case OperationStatus(true, Some(errorMessage)) =>
+              val exceptionMessage =
+                s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}"
+              if (errorMessage.contains("Invalid resources for Service Perimeter")) {
+                val deletedProjects = projectNumbersExtractorRegex.findAllMatchIn(errorMessage).map(_.group(1)).toList
+                throw new MissingGoogleProjectsException(exceptionMessage, deletedProjects)
+              } else {
                 throw new RawlsExceptionWithErrorReport(
                   ErrorReport(
                     StatusCodes.InternalServerError,
-                    s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}"
+                    exceptionMessage
                   )
                 )
-              )
+              }
             case _ => Future.successful()
           }
         }
       )
     } yield result match {
       case Left(regrets) =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError, "Failed to update perimeter", regrets.map(ErrorReport(_)).toList)
-        )
+        // only throw the latest exception, everything else is an exception that was thrown
+        // because the update operation wasn't finished on a poll
+        throw regrets.head
       case Right(_) => ()
     }
+  }
 }
 
 object ServicePerimeterServiceImpl {
@@ -168,3 +197,5 @@ object ServicePerimeterServiceImpl {
       }
       .getOrElse(Future.successful(()))
 }
+
+class MissingGoogleProjectsException(message: String, val projectNumbers: List[String]) extends RawlsException(message)
