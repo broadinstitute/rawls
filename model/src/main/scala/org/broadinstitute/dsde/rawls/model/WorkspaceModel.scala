@@ -209,6 +209,7 @@ case class Workspace(
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
+  def isAoU: Boolean = googleProjectId.value.startsWith("terra-vpc-sc-")
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
