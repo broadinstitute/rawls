@@ -64,7 +64,7 @@ class MockWorkspaceManagerDAO(
                               spendProfile: Option[ProfileModel],
                               billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
-                              location: Option[String]
+                              additionalPolicyInputs: Option[WsmPolicyInputs]
   ): CloneWorkspaceResult = {
     val clonedWorkspace = new ClonedWorkspace()
       .sourceWorkspaceId(sourceWorkspaceId)

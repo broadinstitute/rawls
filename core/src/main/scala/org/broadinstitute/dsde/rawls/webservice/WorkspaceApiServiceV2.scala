@@ -5,11 +5,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.webservice.CustomDirectives.addLocationHeader
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -29,18 +30,39 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
       pathPrefix("workspaces" / "v2") {
         pathPrefix(Segment / Segment) { (namespace, name) =>
           val workspaceName = WorkspaceName(namespace, name)
-          pathEndOrSingleSlash {
-            delete {
-              complete {
-                val workspaceService = workspaceServiceConstructor(ctx)
-                val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-                mcWorkspaceService
-                  .deleteMultiCloudOrRawlsWorkspaceV2(workspaceName, workspaceService)
-                  .map(result => StatusCodes.Accepted -> JsObject(Map("result" -> result.toJson)))
 
+          pathPrefix("clone") {
+            post {
+              entity(as[WorkspaceRequest]) { destWorkspace =>
+                addLocationHeader(destWorkspace.toWorkspaceName.path) {
+                  complete {
+                    multiCloudWorkspaceServiceConstructor(ctx)
+                      .cloneMultiCloudWorkspaceAsync(
+                        workspaceServiceConstructor(ctx),
+                        workspaceName,
+                        destWorkspace
+                      )
+                      .map(w =>
+                        StatusCodes.Created ->
+                          WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty))
+                      )
+                  }
+                }
               }
             }
           } ~
+            pathEndOrSingleSlash {
+              delete {
+                complete {
+                  val workspaceService = workspaceServiceConstructor(ctx)
+                  val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
+                  mcWorkspaceService
+                    .deleteMultiCloudOrRawlsWorkspaceV2(workspaceName, workspaceService)
+                    .map(result => StatusCodes.Accepted -> JsObject(Map("result" -> result.toJson)))
+
+                }
+              }
+            } ~
             pathPrefix("bucketMigration") {
               pathEndOrSingleSlash {
                 get {

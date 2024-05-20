@@ -223,11 +223,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - googleoauth:
+        - oidc_google_billing_scope:
             - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
       x-codegen-request-body-name: createProjectRequest
   /api/billing/v2/{projectId}:
     get:
@@ -3823,11 +3820,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - googleoauth:
+        - oidc_google_billing_scope:
             - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -4177,6 +4171,71 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/clone:
+    post:
+      tags:
+        - workspaces_v2
+      summary: Clone workspace
+      description: Clone a workspace, asynchronously if possible
+      operationId: cloneWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: Request for new workspace
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/WorkspaceRequestClone'
+        required: true
+      responses:
+        201:
+          description: Successful Request
+          headers:
+            Location:
+              description: The path to the newly cloned workspace
+              schema:
+                type: string
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDetails'
+        400:
+          description: Workspace namespace is not ready
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to create workspace in namespace
+            or user does not have permission to set attributes in the namespace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Source workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: Destination workspace already exists
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        422:
+          description: Destination workspace must match source's authorization domain,
+            if the dest has one
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: workspaceRequest
+
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketMigration:
     get:
       tags:
@@ -6879,26 +6938,14 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
-    googleoauth:
-      type: oauth2
-      flows:
-        implicit:
-          authorizationUrl: https://accounts.google.com/o/oauth2/auth
-          scopes:
-            openid: open id authorization
-            email: email authorization
-            profile: profile authorization
-            https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
     oidc:
-      type: oauth2
-      flows:
-        authorizationCode:
-          authorizationUrl: /oauth2/authorize
-          tokenUrl: /oauth2/token
-          scopes:
-            openid: open id authorization
-            email: email authorization
-            profile: profile authorization
+      type: openIdConnect
+      openIdConnectUrl: OPEN_ID_CONNECT_URL
+      x-tokenName: id_token
+    oidc_google_billing_scope:
+      type: openIdConnect
+      openIdConnectUrl: OPEN_ID_CONNECT_URL_WITH_GOOGLE_BILLING_SCOPE
+      x-tokenName: id_token
+
 security:
-  - googleoauth: [openid, email, profile]
-  - oidc: [openid, email, profile]
+  - oidc: [openid]

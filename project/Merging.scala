@@ -4,6 +4,13 @@ object Merging {
   def customMergeStrategy(oldStrategy: (String) => MergeStrategy): (String => MergeStrategy) = {
     case x if x.endsWith("Resource$AuthenticationType.class") => MergeStrategy.first
     case x if x.endsWith("module-info.class")                 => MergeStrategy.discard
+    // For bouncycastle merge error:
+    // [error] Deduplicate found different file contents in the following:
+    // [error]   Jar name = bcpkix-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    // [error]   Jar name = bcprov-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    // [error]   Jar name = bcutil-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    case "META-INF/versions/9/OSGI-INF/MANIFEST.MF"           => MergeStrategy.first
+    // For source bouncycastle files
     case x if x.contains("bouncycastle")                      => MergeStrategy.first
     // For the following error:
     // [error] java.lang.RuntimeException: deduplicate: different file contents found in the following:

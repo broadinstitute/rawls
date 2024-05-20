@@ -120,15 +120,16 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                               spendProfile: Option[ProfileModel],
                               billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
-                              location: Option[String]
+                              additionalPolicyInputs: Option[WsmPolicyInputs]
   ): CloneWorkspaceResult = {
     val request = new CloneWorkspaceRequest()
       .destinationWorkspaceId(workspaceId)
       .displayName(displayName)
-      .location(location.orNull)
       .projectOwnerGroupId(billingProjectNamespace)
 
     spendProfile.map(_.getId.toString).map(request.spendProfile)
+
+    additionalPolicyInputs.map(request.additionalPolicies)
 
     getWorkspaceApi(ctx).cloneWorkspace(
       request,
