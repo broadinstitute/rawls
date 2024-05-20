@@ -59,6 +59,5 @@ object DsdeHttpDAO {
   }
 
   def when5xx: Throwable => Boolean = statusCodePredicate(_.intValue / 100 == 5)
-  def when400: Throwable => Boolean = statusCodePredicate(_.intValue == 400)
   def whenUnauthorized: Throwable => Boolean = statusCodePredicate(_.intValue == 401)
 }

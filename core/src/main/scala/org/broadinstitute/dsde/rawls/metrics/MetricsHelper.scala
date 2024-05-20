@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import cats.effect.IO
 import io.opentelemetry.api.GlobalOpenTelemetry
-import io.opentelemetry.api.common.{AttributeKey, Attributes, AttributesBuilder}
+import io.opentelemetry.api.common.{AttributeKey, Attributes}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 
 object MetricsHelper {
@@ -41,6 +41,7 @@ object MetricsHelper {
     incrementFastPassUpdatedCounter(memberType, "revoke")
 
   def incrementCounter(name: String,
+                       count: Int = 1,
                        labels: Map[String, String] = Map.empty,
                        description: Option[String] = None
   ): IO[Unit] = {
@@ -52,7 +53,7 @@ object MetricsHelper {
     labels.foreach { case (k, v) =>
       labelBuilder.put(k, v)
     }
-    IO(metrics.add(1, labelBuilder.build()))
+    IO(metrics.add(count, labelBuilder.build()))
   }
 
   private def incrementFastPassUpdatedCounter(memberType: IamMemberType, action: String) =

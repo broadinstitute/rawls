@@ -74,8 +74,6 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
   protected def when401or5xx: Predicate[Throwable] = anyOf(DsdeHttpDAO.when5xx, DsdeHttpDAO.whenUnauthorized)
 
-  private val deleteResourceRetryCondition: Predicate[Throwable] = anyOf(DsdeHttpDAO.when5xx, DsdeHttpDAO.whenUnauthorized, DsdeHttpDAO.when400)
-
   private class SamApiCallback[T](functionName: String) extends ApiCallback[T] {
     private val promise = Promise[T]()
 
@@ -321,7 +319,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
                               resourceId: String,
                               ctx: RawlsRequestContext
   ): Future[Unit] =
-    retry(deleteResourceRetryCondition) { () =>
+    retry(when401or5xx) { () =>
       val callback = new SamApiCallback[Void]("deleteResourceV2")
 
       resourcesApi(ctx).deleteResourceV2Async(resourceTypeName.value, resourceId, callback)
