@@ -210,7 +210,7 @@ case class Workspace(
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
   // this field is used in metrics labels only. Currently it's either `aou` or `cwb` (community workbench).
-  def projectType: String = if(googleProjectId.value.startsWith("terra-vpc-sc-")) "aou" else "cwb"
+  def projectType: String = if (googleProjectId.value.startsWith("terra-vpc-sc-")) "aou" else "cwb"
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
