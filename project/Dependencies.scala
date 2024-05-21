@@ -108,6 +108,10 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.12.0"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.14.0"
+
+
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
@@ -266,7 +270,9 @@ object Dependencies {
     leonardo,
     jakartaWsRs,
     openApiParser,
-    jerseyJnhConnector
+    jerseyJnhConnector,
+    azureIdentity,
+    azureCoreManagement
   )
 
   val pact4sV = "0.10.0"
