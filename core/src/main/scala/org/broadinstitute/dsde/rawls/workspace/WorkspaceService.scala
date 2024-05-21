@@ -53,6 +53,8 @@ import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, W
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
+import cats.effect.unsafe.implicits.global
 
 import java.io.IOException
 import java.util.UUID
@@ -689,7 +691,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           Future.failed(t)
         }
       )
-
       workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentContext)(_ =>
         gatherWorkflowsToAbortAndSetStatusToAborted(workspaceContext.toWorkspaceName, workspaceContext) recoverWith {
           case t: Throwable =>
@@ -789,6 +790,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceContext.toWorkspaceName}`.",
                 t
               )
+
+              if (t.getMessage.contains("Cannot delete a resource with children")) {
+                MetricsHelper
+                  .incrementCounter("leakingSamResourceError",
+                                    labels = Map("cloud" -> "gcp", "projectType" -> workspaceContext.projectType)
+                  )
+                  .unsafeToFuture()
+              }
               Future.failed(t)
           }
         } else { Future.successful() }
