@@ -68,7 +68,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
   protected def adminApi(ctx: RawlsRequestContext) = new AdminApi(getApiClient(ctx))
 
-  private def rawlsSAContext = RawlsRequestContext(
+  override def rawlsSAContext = RawlsRequestContext(
     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getRawlsIdentityAccessToken), 0, RawlsUserSubjectId(""))
   )
 
