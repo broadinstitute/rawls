@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.serviceperimeter
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.implicits.catsSyntaxOptionId
+import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
@@ -204,17 +206,20 @@ class ServicePerimeterServiceSpec
 
       when(gcsDAO.accessContextManagerDAO).thenReturn(acmDAO)
       when(acmDAO.overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]]))
-        .thenReturn(Future.successful(new Operation().setName(operationName)))
-      when(gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operationName)))
         .thenReturn(
-          Future.successful(
-            OperationStatus(
-              done = true,
-              errorMessage = Option(
+          Future.failed(
+            new GoogleJsonResponseException(
+              new HttpResponseException.Builder(400, "INVALID_ARGUMENT", new HttpHeaders()),
+              new GoogleJsonError().set(
+                "message",
                 s"Invalid resources for Service Perimeter '${servicePerimeterName.value}': Project(s) 'projects/$missingGoogleProjectNumber1, projects/$missingGoogleProjectNumber2' are not member(s) of the parent of the Service Perimeter."
               )
             )
-          ),
+          )
+        )
+        .thenReturn(Future.successful(new Operation().setName(operationName)))
+      when(gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operationName)))
+        .thenReturn(
           Future.successful(
             OperationStatus(
               done = true,
