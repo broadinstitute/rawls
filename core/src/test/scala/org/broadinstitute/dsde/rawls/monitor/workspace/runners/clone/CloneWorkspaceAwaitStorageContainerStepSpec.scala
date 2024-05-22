@@ -7,11 +7,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorR
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace, WorkspaceState}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, WorkspaceState}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doAnswer, spy, verify, when}
+import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -69,7 +69,7 @@ class CloneWorkspaceAwaitStorageContainerStepSpec
       monitorRecord
     )
     whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(workspaceRepository).setFailedState(
+    verify(workspaceRepository, never).setFailedState(
       ArgumentMatchers.eq(workspaceId),
       ArgumentMatchers.any(),
       ArgumentMatchers.contains(apiMessage)

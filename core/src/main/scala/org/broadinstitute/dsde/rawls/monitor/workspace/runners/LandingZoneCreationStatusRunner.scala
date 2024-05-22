@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -58,17 +58,13 @@ class LandingZoneCreationStatusRunner(
           s"AzureLandingZoneResult job ${job.jobControlId} for billing project: $billingProjectName failed: $msg",
           t
         )
-        billingRepository
-          .updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
-          .map(_ => Incomplete)
+        Future.successful(Incomplete)
       case Success(userCtx) =>
         Try(workspaceManagerDAO.getCreateAzureLandingZoneResult(job.jobControlId.toString, userCtx)) match {
           case Failure(exception) =>
             val message =
               Some(s"Api call to get landing zone result from workspace manager failed: ${exception.getMessage}")
-            billingRepository
-              .updateCreationStatus(billingProjectName, CreationStatuses.Error, message)
-              .map(_ => Incomplete)
+            Future.successful(Incomplete)
           case Success(result) =>
             Option(result.getJobReport).map(_.getStatus) match {
               case Some(JobReport.StatusEnum.RUNNING) =>
