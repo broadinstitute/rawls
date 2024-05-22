@@ -144,6 +144,8 @@ trait SamDAO {
 
   def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 
+  def rawlsSAContext(): RawlsRequestContext
+  
   def getStatus(): Future[SubsystemStatus]
 
   def listResourceChildren(resourceTypeName: SamResourceTypeName,
