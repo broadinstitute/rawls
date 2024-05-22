@@ -439,7 +439,6 @@ class SubmissionSpec(_system: ActorSystem)
             samDAO,
             gcsDAO,
             mockNotificationDAO,
-            gcsDAO.getBucketServiceAccountCredential,
             config,
             testConf.getDuration("entities.queryTimeout").toScala,
             workbenchMetricBaseName = workbenchMetricBaseName

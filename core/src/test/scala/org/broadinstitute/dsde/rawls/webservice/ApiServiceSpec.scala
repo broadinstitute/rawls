@@ -8,7 +8,7 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
-import akka.testkit.TestKitBase
+import akka.testkit.{TestActors, TestKitBase}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -157,6 +157,7 @@ trait ApiServiceSpec
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
+    val submissionMonitorsEnabled: Boolean = true // should we start the Cromwell monitor actors?
     val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO =
       new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -191,7 +192,10 @@ trait ApiServiceSpec
 
     val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
     val testConf = ConfigFactory.load()
-    val submissionSupervisor = system.actorOf(
+
+    // if a test doesn't need the Cromwell monitor actors, it can override submissionMonitorsEnabled to false,
+    // and we'll spin up a simple TestKit blackhole actor instead of the heavyweight Rawls actors.
+    val submissionSupervisorProps = if (submissionMonitorsEnabled) {
       SubmissionSupervisor
         .props(
           executionServiceCluster,
@@ -199,13 +203,15 @@ trait ApiServiceSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           config,
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher")
-    )
+    } else {
+      TestActors.blackholeProps
+    }
+    val submissionSupervisor = system.actorOf(submissionSupervisorProps)
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 

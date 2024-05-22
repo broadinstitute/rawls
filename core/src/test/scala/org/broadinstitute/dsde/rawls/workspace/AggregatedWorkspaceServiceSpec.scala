@@ -217,24 +217,6 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
     verify(wsmDao).getWorkspace(ArgumentMatchers.eq(legacyRawlsWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
   }
 
-  behavior of "optimizedFetchAggregatedWorkspace"
-
-  it should "not reach out to WSM for legacy GCP Rawls workspaces" in {
-    val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-    )
-    val svc = new AggregatedWorkspaceService(wsmDao)
-
-    val aggregatedWorkspace = svc.optimizedFetchAggregatedWorkspace(legacyRawlsWorkspace, defaultRequestContext)
-
-    aggregatedWorkspace.baseWorkspace shouldBe legacyRawlsWorkspace
-    aggregatedWorkspace.getCloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
-    aggregatedWorkspace.azureCloudContext shouldBe None
-    aggregatedWorkspace.googleProjectId shouldBe Some(legacyRawlsWorkspace.googleProjectId)
-    verify(wsmDao, never()).getWorkspace(any[UUID], any[RawlsRequestContext])
-  }
-
   behavior of "fetchAggregatedWorkspaces"
 
   it should "match an MC workspace with the correct WSM information" in {

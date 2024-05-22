@@ -37,6 +37,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
@@ -182,6 +183,7 @@ object BootMonitors extends LazyLogging {
         appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
         appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
         appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
+        appConfigManager.conf.getString("avroUpsertMonitor.updateCwdsPubSubTopic"),
         appConfigManager.conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
         appConfigManager.conf.getInt("avroUpsertMonitor.batchSize"),
         appConfigManager.conf.getInt("avroUpsertMonitor.workerCount")
@@ -311,7 +313,6 @@ object BootMonitors extends LazyLogging {
         samDAO,
         gcsDAO,
         notificationDAO,
-        gcsDAO.getBucketServiceAccountCredential,
         submissionMonitorConfig,
         entityQueryTimeout,
         workbenchMetricBaseName = metricsPrefix
@@ -347,7 +348,6 @@ object BootMonitors extends LazyLogging {
           drsResolver,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
-          gcsDAO.getBucketServiceAccountCredential,
           util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
           util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
           maxActiveWorkflowsTotal,
@@ -470,7 +470,14 @@ object BootMonitors extends LazyLogging {
                                                               gcsDAO,
                                                               monitorRecordDao
     )
-
+    val workspaceCloneRunner = new WorkspaceCloningRunner(
+      samDAO,
+      gcsDAO,
+      leonardoDAO,
+      workspaceManagerDAO,
+      monitorRecordDao,
+      workspaceRepository
+    )
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
@@ -491,7 +498,7 @@ object BootMonitors extends LazyLogging {
             billingRepo,
             new BillingProjectDeletion(samDAO, billingRepo, billingProfileManagerDAO)
           )
-        )
+        ) ++ JobType.cloneJobTypes.map(jobType => jobType -> workspaceCloneRunner).toMap
       )
     )
   }

@@ -387,6 +387,15 @@ trait WorkspaceComponent {
           }
       }
 
+    def deleteByGoogleProjectNumbers(googleProjectNumbers: List[String]): ReadWriteAction[Int] =
+      workspaceAttributes(findByGoogleProjectNumbersQuery(googleProjectNumbers)).result
+        .flatMap { recs =>
+          DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))
+        }
+        .andThen {
+          findByGoogleProjectNumbersQuery(googleProjectNumbers).delete
+        }
+
     def updateState(workspaceId: UUID, state: WorkspaceState): WriteAction[Int] =
       findByIdQuery(workspaceId).map(_.state).update(state.toString)
 
@@ -578,6 +587,9 @@ trait WorkspaceComponent {
 
     private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType =
       workspaceQuery.withBillingProject(namespaceName)
+
+    def findByGoogleProjectNumbersQuery(googleProjectNumbers: Seq[String]): WorkspaceQueryType =
+      filter(w => w.googleProjectNumber.map(_.inSetBind(googleProjectNumbers)))
 
     private def loadWorkspace(lookup: WorkspaceQueryType,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None

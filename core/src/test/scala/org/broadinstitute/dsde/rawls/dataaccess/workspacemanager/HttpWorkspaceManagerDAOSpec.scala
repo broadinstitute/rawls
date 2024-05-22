@@ -258,12 +258,22 @@ class HttpWorkspaceManagerDAOSpec
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
     val billingProjectId = "billing-project-namespace";
+    val expectedPolicy =
+      new WsmPolicyInputs()
+        .inputs(
+          Seq(
+            new WsmPolicyInput()
+              .name("dummy-policy")
+              .namespace("terra")
+              .additionalData(List().asJava)
+          ).asJava
+        );
 
     val expectedRequest = new CloneWorkspaceRequest()
       .displayName("my-workspace-clone")
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
-      .location("the-moon")
+      .additionalPolicies(expectedPolicy)
       .projectOwnerGroupId(billingProjectId);
 
     wsmDao.cloneWorkspace(
@@ -273,7 +283,7 @@ class HttpWorkspaceManagerDAOSpec
       Option(testData.azureBillingProfile),
       billingProjectId,
       testContext,
-      Some("the-moon")
+      Some(expectedPolicy)
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
@@ -294,26 +304,31 @@ class HttpWorkspaceManagerDAOSpec
 
     val billingProjectId = "billing-project-namespace";
 
-    val expectedRequest = new CreateWorkspaceRequestBody()
-      .id(testData.azureWorkspace.workspaceIdAsUUID)
-      .displayName(testData.azureWorkspace.name)
-      .spendProfile(testData.azureBillingProfile.getId.toString)
-      .stage(WorkspaceStageModel.MC_WORKSPACE)
-      .applicationIds(Seq("exampleApp").asJava)
-      .policies(policyInputs)
-      .projectOwnerGroupId(billingProjectId)
-
     wsmDao.createWorkspaceWithSpendProfile(
       testData.azureWorkspace.workspaceIdAsUUID,
       testData.azureWorkspace.name,
       testData.azureBillingProfile.getId.toString,
       billingProjectId,
       Seq("exampleApp"),
+      CloudPlatform.AZURE,
       Some(policyInputs),
       testContext
     )
 
-    verify(workspaceApi).createWorkspace(expectedRequest)
+    val createWorkspaceArgumentCaptor = captor[CreateWorkspaceV2Request]
+    verify(workspaceApi).createWorkspaceV2(createWorkspaceArgumentCaptor.capture)
+    // V2-specific values
+    createWorkspaceArgumentCaptor.getValue.getJobControl shouldNot be(null)
+    createWorkspaceArgumentCaptor.getValue.getCloudPlatform shouldBe CloudPlatform.AZURE
+
+    // original values
+    createWorkspaceArgumentCaptor.getValue.getId shouldBe testData.azureWorkspace.workspaceIdAsUUID
+    createWorkspaceArgumentCaptor.getValue.getDisplayName shouldBe testData.azureWorkspace.name
+    createWorkspaceArgumentCaptor.getValue.getSpendProfile shouldBe testData.azureBillingProfile.getId.toString
+    createWorkspaceArgumentCaptor.getValue.getStage shouldBe WorkspaceStageModel.MC_WORKSPACE
+    createWorkspaceArgumentCaptor.getValue.getApplicationIds shouldBe Seq("exampleApp").asJava
+    createWorkspaceArgumentCaptor.getValue.getPolicies shouldBe policyInputs
+    createWorkspaceArgumentCaptor.getValue.getProjectOwnerGroupId shouldBe billingProjectId
   }
 
   behavior of "deleteWorkspaceV2"

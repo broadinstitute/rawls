@@ -18,6 +18,7 @@ import slick.dbio.Effect.Read
 import slick.jdbc.{GetResult, JdbcProfile, ResultSetConcurrency, ResultSetType, SQLActionBuilder, TransactionIsolation}
 import slick.sql.SqlStreamingAction
 
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
@@ -72,8 +73,8 @@ case class EntityAndAttributesResult(entityRecord: EntityRecord,
 )
 
 object EntityComponent {
-  // the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
-  val allAttributeValuesColumnSize = 65534
+  // the length of the all_attribute_values column, which is TEXT, minus a few bytes because i'm nervous
+  val allAttributeValuesColumnSize = 65532
 }
 
 import slick.jdbc.MySQLProfile.api._
@@ -139,11 +140,19 @@ trait EntityComponent {
       }
 
     private def createAllAttributesString(entity: Entity): Option[String] = {
+      // maxLength is the max number of *bytes* we want to insert into the db
       val maxLength = EntityComponent.allAttributeValuesColumnSize
-      Option(
+      // generate the all_attribute_values string. This has {maxLength} *characters* in it; if it contains multi-byte
+      // characters then it will have > {maxLength} bytes in it
+      val raw =
         s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".toLowerCase
-          .take(maxLength)
-      )
+      // take the first {maxLength} bytes from the all_attribute_values string
+      val bytes = raw.getBytes(StandardCharsets.UTF_8).take(maxLength)
+      // convert the bytes back into a string. If the last character was a multi-byte character and we truncated it,
+      // the last character will be corrupted, but we accept that possibility
+      val limited = new String(bytes, StandardCharsets.UTF_8)
+
+      Option(limited)
     }
 
     def batchInsertEntities(workspaceContext: Workspace,

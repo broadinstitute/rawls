@@ -209,6 +209,8 @@ case class Workspace(
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
+  // this field is used in metrics labels only. Currently it's either `aou` or `cwb` (community workbench).
+  def projectType: String = if (googleProjectId.value.startsWith("terra-vpc-sc-")) "aou" else "cwb"
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
@@ -499,20 +501,36 @@ object WorkspaceState {
   sealed trait WorkspaceState extends RawlsEnumeration[WorkspaceState] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceState = WorkspaceState.withName(name)
+    def isDeletable: Boolean = this match {
+      // Ensure all states are explicitly matched on to avoid accidentally adding a new state without
+      // defining if it is deletable.
+      case WorkspaceState.Ready | WorkspaceState.CreateFailed | WorkspaceState.DeleteFailed |
+          WorkspaceState.UpdateFailed | WorkspaceState.CloningFailed =>
+        true
+      case WorkspaceState.Creating | WorkspaceState.Cloning | WorkspaceState.CloningContainer |
+          WorkspaceState.Deleting | WorkspaceState.Updating =>
+        false
+    }
   }
 
   def withName(name: String): WorkspaceState = name.toLowerCase match {
-    case "creating"     => Creating
-    case "createfailed" => CreateFailed
-    case "ready"        => Ready
-    case "updating"     => Updating
-    case "updatefailed" => UpdateFailed
-    case "deleting"     => Deleting
-    case "deletefailed" => DeleteFailed
-    case _              => throw new RawlsException(s"invalid WorkspaceState [$name]")
+    case "creating"         => Creating
+    case "createfailed"     => CreateFailed
+    case "cloning"          => Cloning
+    case "cloningcontainer" => CloningContainer
+    case "cloningfailed"    => CloningFailed
+    case "ready"            => Ready
+    case "updating"         => Updating
+    case "updatefailed"     => UpdateFailed
+    case "deleting"         => Deleting
+    case "deletefailed"     => DeleteFailed
+    case _                  => throw new RawlsException(s"invalid WorkspaceState [$name]")
   }
   case object Creating extends WorkspaceState
   case object CreateFailed extends WorkspaceState
+  case object Cloning extends WorkspaceState
+  case object CloningContainer extends WorkspaceState
+  case object CloningFailed extends WorkspaceState
   case object Ready extends WorkspaceState
   case object Updating extends WorkspaceState
   case object UpdateFailed extends WorkspaceState
