@@ -1902,7 +1902,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         mockGoogleServicesDAO,
         mockNotificationDAO,
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
-        new Builder().build(),
         config,
         ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
         "test"

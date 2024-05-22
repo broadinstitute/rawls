@@ -313,7 +313,6 @@ object BootMonitors extends LazyLogging {
         samDAO,
         gcsDAO,
         notificationDAO,
-        gcsDAO.getBucketServiceAccountCredential,
         submissionMonitorConfig,
         entityQueryTimeout,
         workbenchMetricBaseName = metricsPrefix
@@ -349,7 +348,6 @@ object BootMonitors extends LazyLogging {
           drsResolver,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
-          gcsDAO.getBucketServiceAccountCredential,
           util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
           util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
           maxActiveWorkflowsTotal,

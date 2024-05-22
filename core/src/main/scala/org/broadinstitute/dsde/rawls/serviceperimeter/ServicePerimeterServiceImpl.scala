@@ -2,11 +2,12 @@ package org.broadinstitute.dsde.rawls.serviceperimeter
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   ErrorReport,
@@ -16,7 +17,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   SamServicePerimeterActions,
   ServicePerimeterName,
-  UserInfo,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.Retry
@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
                                   gcsDAO: GoogleServicesDAO,
@@ -35,6 +36,8 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
     with ServicePerimeterService {
 
   import dataSource.dataAccess.driver.api._
+
+  val projectNumbersExtractorRegex = """projects/(\d+)""".r
 
   /**
     * Look up all of the Workspaces contained in Billing Projects that use the specified
@@ -90,7 +93,21 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
 
   def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName,
                                          dataAccess: DataAccess
-  ): ReadAction[Unit] =
+  ): ReadWriteAction[Unit] = overwriteServicePerimeterInternal(servicePerimeterName, dataAccess).asTry.flatMap {
+    case Failure(failure: MissingGoogleProjectsException) =>
+      logger.info(
+        s"Initial service perimeter update operation failed because some Google projects have been deleted. Deleting associated workspaces in Rawls and trying again. [projects=${failure.projectNumbers}]"
+      )
+      dataAccess.workspaceQuery
+        .deleteByGoogleProjectNumbers(failure.projectNumbers)
+        .flatMap(_ => overwriteServicePerimeterInternal(servicePerimeterName, dataAccess))
+    case Failure(e) => throw e
+    case Success(_) => DBIO.successful(())
+  }
+
+  private def overwriteServicePerimeterInternal(servicePerimeterName: ServicePerimeterName,
+                                                dataAccess: DataAccess
+  ): ReadWriteAction[Unit] =
     for {
       workspacesInPerimeter <- collectWorkspacesInPerimeter(servicePerimeterName, dataAccess)
       billingProjectsInPerimeter <- collectBillingProjectsInPerimeter(servicePerimeterName, dataAccess)
@@ -99,9 +116,18 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
       ) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
       googleProjectNumberStrings = googleProjectNumbers.map(_.value).toSet
       operation <- DBIO.from(
-        gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName,
-                                                                           googleProjectNumberStrings
-        )
+        gcsDAO.accessContextManagerDAO
+          .overwriteProjectsInServicePerimeter(servicePerimeterName, googleProjectNumberStrings)
+          .recover {
+            case e: GoogleJsonResponseException
+                if e.getDetails.getMessage.contains("Invalid resources for Service Perimeter") =>
+              val deletedProjects =
+                projectNumbersExtractorRegex.findAllMatchIn(e.getDetails.getMessage).map(_.group(1)).toList
+              throw new MissingGoogleProjectsException(
+                s"Google request to update Service Perimeter ${servicePerimeterName.value} failed due to deleted Google projects: $deletedProjects",
+                deletedProjects
+              )
+          }
       )
       result <- DBIO.from(
         retryUntilSuccessOrTimeout(failureLogMessage =
@@ -118,7 +144,7 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
             // the list of Projects in the Perimeter may have been wiped or somehow modified in an undesirable way.  If
             // this happened, it would be possible for Projects intended to be in the Perimeter are NOT in that
             // Perimeter anymore, which is a problem.
-            case OperationStatus(true, errorMessage) if !errorMessage.isEmpty =>
+            case OperationStatus(true, Some(errorMessage)) =>
               Future.successful(
                 throw new RawlsExceptionWithErrorReport(
                   ErrorReport(
@@ -133,9 +159,9 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
       )
     } yield result match {
       case Left(regrets) =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError, "Failed to update perimeter", regrets.map(ErrorReport(_)).toList)
-        )
+        // only throw the latest exception, everything else is an exception that was thrown
+        // because the update operation wasn't finished on a poll
+        throw regrets.head
       case Right(_) => ()
     }
 }
@@ -168,3 +194,5 @@ object ServicePerimeterServiceImpl {
       }
       .getOrElse(Future.successful(()))
 }
+
+class MissingGoogleProjectsException(message: String, val projectNumbers: List[String]) extends RawlsException(message)

@@ -79,9 +79,8 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
           mockNotificationDAO,
           MockShardedExecutionServiceCluster
             .fromDAO(new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString), dataSource),
-          new Builder().build(),
           config,
-          Duration.create(1, SECONDS), // <-- 1 second timeout for entity queries
+          Duration.create(1, SECONDS),
           "test"
         )
       )
