@@ -61,9 +61,7 @@ class LandingZoneCreationStatusRunner(
         Future.successful(Incomplete)
       case Success(userCtx) =>
         Try(workspaceManagerDAO.getCreateAzureLandingZoneResult(job.jobControlId.toString, userCtx)) match {
-          case Failure(exception) =>
-            val message =
-              Some(s"Api call to get landing zone result from workspace manager failed: ${exception.getMessage}")
+          case Failure(_) =>
             Future.successful(Incomplete)
           case Success(result) =>
             Option(result.getJobReport).map(_.getStatus) match {

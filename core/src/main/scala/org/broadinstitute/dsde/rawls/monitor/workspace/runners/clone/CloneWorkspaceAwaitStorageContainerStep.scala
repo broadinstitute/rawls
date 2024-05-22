@@ -46,10 +46,9 @@ class CloneWorkspaceAwaitStorageContainerStep(
           // Don't retry 4xx codes
           case code if code < 500 => fail(operationName, e.getMessage).map(_ => Complete)
           // Retry non-4xx
-          case code => Future.successful(Incomplete)
+          case _ => Future.successful(Incomplete)
         }
       case Failure(t) =>
-        val msg = s"API call to get clone result from workspace manager failed with: ${t.getMessage}"
         Future.successful(Incomplete)
     }
   }
