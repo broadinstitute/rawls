@@ -791,7 +791,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 t
               )
 
-              if (t.getMessage.contains("Cannot delete a resource with children")) {
+              if (t.errorReport.message.contains("Cannot delete a resource with children")) {
                 MetricsHelper
                   .incrementCounter("leakingSamResourceError",
                                     labels = Map("cloud" -> "gcp", "projectType" -> workspaceContext.projectType)
