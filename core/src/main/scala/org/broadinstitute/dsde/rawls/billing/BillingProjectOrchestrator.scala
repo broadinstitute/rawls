@@ -116,7 +116,10 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                              ctx: RawlsRequestContext
   ): Future[Unit] = {
 
-    val additionalMembers = createProjectRequest.members.getOrElse(Set.empty)
+    val additionalMembers = createProjectRequest.members.getOrElse(Set.empty) ++ samDAO.getRawlsIdentityEmail.map {
+      email =>
+        ProjectAccessUpdate(email, ProjectRoles.Owner)
+    }
     val policies = BillingProjectOrchestrator.buildBillingProjectPolicies(additionalMembers, ctx)
     val inviteUsersNotFound = createProjectRequest.inviteUsersNotFound.getOrElse(false)
 

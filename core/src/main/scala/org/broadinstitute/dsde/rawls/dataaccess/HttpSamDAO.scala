@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.common.tracing.OkHttpClientTracingInterceptor
+import com.nimbusds.jwt.{JWT, JWTParser}
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
@@ -27,8 +28,8 @@ import scala.jdk.DurationConverters._
 import scala.util.{Try, Using}
 
 /**
-  * Created by mbemis on 9/11/17.
-  */
+ * Created by mbemis on 9/11/17.
+ */
 class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, timeout: FiniteDuration)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
@@ -68,8 +69,12 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
   protected def adminApi(ctx: RawlsRequestContext) = new AdminApi(getApiClient(ctx))
 
-  private def rawlsSAContext = RawlsRequestContext(
-    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getRawlsIdentityAccessToken), 0, RawlsUserSubjectId(""))
+  override def rawlsSAContext = RawlsRequestContext(
+    UserInfo(RawlsUserEmail(getRawlsIdentityEmail.getOrElse("")),
+             OAuth2BearerToken(getRawlsIdentityAccessToken),
+             0,
+             RawlsUserSubjectId("")
+    )
   )
 
   protected def when401or5xx: Predicate[Throwable] = anyOf(DsdeHttpDAO.when5xx, DsdeHttpDAO.whenUnauthorized)
@@ -574,6 +579,18 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
     }
     rawlsCredential.getAccessToken
   }
+
+  override def getRawlsIdentityEmail: Option[String] =
+    try {
+      val email = Option(JWTParser.parse(getRawlsIdentityAccessToken).getJWTClaimsSet.getClaim("xms_mirid"))
+        .map(_.toString + "@uami.terra.bio")
+      if (email.isEmpty) logger.info("Error parsing Rawls identity email from token, xms_mirid claim not found")
+      email
+    } catch {
+      case e: Exception =>
+        logger.info("Error parsing Rawls identity email from token", e)
+        None
+    }
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String,
