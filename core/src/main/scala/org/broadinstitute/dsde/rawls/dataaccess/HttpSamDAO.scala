@@ -582,9 +582,9 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
   override def getRawlsIdentityEmail: Option[String] =
     try {
-      val email = Option(JWTParser.parse(getRawlsIdentityAccessToken).getJWTClaimsSet.getClaim("xms_mirid"))
+      val email = Option(JWTParser.parse(getRawlsIdentityAccessToken).getJWTClaimsSet.getClaim("sub"))
         .map(_.toString + "@uami.terra.bio")
-      if (email.isEmpty) logger.info("Error parsing Rawls identity email from token, xms_mirid claim not found")
+      if (email.isEmpty) logger.info("Error parsing Rawls identity email from token, sub claim not found")
       email
     } catch {
       case e: Exception =>
