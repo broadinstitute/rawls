@@ -33,7 +33,7 @@ class CloneWorkspaceAwaitStorageContainerStepSpec
 
   behavior of "retrieving the report for the container cloning job"
 
-  it should "report errors from api response and return Incomplete for jobs failed with a 500" in {
+  it should "return Incomplete for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
     val apiMessage = "some failure message"
