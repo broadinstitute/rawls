@@ -348,7 +348,9 @@ class UserService(
         platform,
         protectedData,
         region = maybeRegion,
-        organization = Option(p.getOrganization).map(org => RawlsBillingProjectOrganization(org.isEnterprise))
+        organization = Option(p.getOrganization).map(org =>
+          RawlsBillingProjectOrganization(org.isEnterprise, org.getLimits.asScala.toMap)
+        )
       )
     case (Some(id), None) =>
       val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
