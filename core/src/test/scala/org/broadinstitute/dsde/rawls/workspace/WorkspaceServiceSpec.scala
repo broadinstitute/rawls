@@ -2370,18 +2370,20 @@ class WorkspaceServiceSpec
   it should "merge destination attributes with source attributes" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
-    testData.workspace.attributes.get(AttributeName.withDefaultNS("string")).value should be(AttributeString("yep, it's a string"))
-    val newAttributes =  Map(
-      AttributeName.withDefaultNS("string") -> AttributeString("destination string"),
+    testData.workspace.attributes.get(AttributeName.withDefaultNS("string")).value should be(
+      AttributeString("yep, it's a string")
+    )
+    val newAttributes = Map(
+      AttributeName.withDefaultNS("string") -> AttributeString("destination string")
     )
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, newAttributes)
 
     val workspace =
       Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-        Duration.Inf
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
       )
 
     workspace.name should be(newWorkspaceName)

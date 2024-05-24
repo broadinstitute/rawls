@@ -7,7 +7,12 @@ import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{
+  makeToolInputParameter,
+  makeToolOutputParameter,
+  makeValueType,
+  makeWorkflowDescription
+}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._

@@ -10,8 +10,27 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, SamWorkspaceActions, UserInfo, Workspace, WorkspacePolicy, WorkspaceRequest, WorkspaceState}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  LeonardoDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeName,
+  AttributeString,
+  CreationStatuses,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  SamWorkspaceActions,
+  UserInfo,
+  Workspace,
+  WorkspacePolicy,
+  WorkspaceRequest,
+  WorkspaceState
+}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -320,7 +339,8 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     val destinationAttributes = Map(
       AttributeName.withDefaultNS("destination") -> AttributeString("destination only")
     )
-    val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", destinationAttributes, policies = Some(policies))
+    val destWorkspaceRequest =
+      WorkspaceRequest("dest-namespace", "dest-name", destinationAttributes, policies = Some(policies))
 
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val wsmResult = new CloneWorkspaceResult().jobReport(new JobReport().id("test-id-that-isn't-a-uuid"))
@@ -362,7 +382,8 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       AttributeName.withDefaultNS("description") -> AttributeString("source description"),
       AttributeName.withDefaultNS("destination") -> AttributeString("destination only")
     )
-    val mergedWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", mergedAttributes, policies = Some(policies))
+    val mergedWorkspaceRequest =
+      WorkspaceRequest("dest-namespace", "dest-name", mergedAttributes, policies = Some(policies))
     doReturn(Future.successful(destWorkspace))
       .when(service)
       .createNewWorkspaceRecord(

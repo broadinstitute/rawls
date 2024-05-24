@@ -369,6 +369,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       newWorkspace <- createNewWorkspaceRecord(workspaceId, mergedRequest, parentContext, WorkspaceState.Cloning)
+
       _ <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
         Try(
           workspaceManagerDAO.cloneWorkspace(
