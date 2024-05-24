@@ -2335,6 +2335,7 @@ class WorkspaceServiceSpec
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
     workspace.googleProjectNumber should not be empty
+    workspace.attributes should be(baseWorkspace.attributes)
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
@@ -2364,6 +2365,34 @@ class WorkspaceServiceSpec
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
     workspace.googleProjectNumber should not be empty
+  }
+
+  it should "merge destination attributes with source attributes" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    testData.workspace.attributes.get(AttributeName.withDefaultNS("string")).value should be(AttributeString("yep, it's a string"))
+    val newAttributes =  Map(
+      AttributeName.withDefaultNS("string") -> AttributeString("destination string"),
+    )
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, newAttributes)
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+        baseWorkspace.toWorkspaceName,
+        workspaceRequest
+      ),
+        Duration.Inf
+      )
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+    val mergedAttributes = workspace.attributes
+    // overrides value in source attributes
+    mergedAttributes.get(AttributeName.withDefaultNS("string")).value should be(AttributeString("destination string"))
+    // from source attributes
+    mergedAttributes.get(AttributeName.withDefaultNS("number")).value should be(AttributeNumber(10))
   }
 
   it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>

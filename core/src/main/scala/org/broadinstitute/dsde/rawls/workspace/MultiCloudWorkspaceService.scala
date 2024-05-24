@@ -363,11 +363,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
     assertBillingProfileCreationDate(profile)
     val workspaceId = UUID.randomUUID()
+    // Merge together source workspace and destination request attributes
+    val mergedRequest = request.copy(attributes = sourceWorkspace.attributes ++ request.attributes)
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
-      newWorkspace <- createNewWorkspaceRecord(workspaceId, request, parentContext, WorkspaceState.Cloning)
-
+      newWorkspace <- createNewWorkspaceRecord(workspaceId, mergedRequest, parentContext, WorkspaceState.Cloning)
       _ <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
         Try(
           workspaceManagerDAO.cloneWorkspace(
@@ -464,10 +465,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
     val workspaceId = UUID.randomUUID()
 
+    // Merge together source workspace and destination request attributes
+    val mergedRequest = request.copy(attributes = sourceWorkspace.attributes ++ request.attributes)
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
-      newWorkspace <- createNewWorkspaceRecord(workspaceId, request, parentContext)
+      newWorkspace <- createNewWorkspaceRecord(workspaceId, mergedRequest, parentContext)
 
       containerCloneResult <- (for {
         cloneResult <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>

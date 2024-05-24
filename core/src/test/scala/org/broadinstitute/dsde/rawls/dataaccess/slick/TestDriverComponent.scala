@@ -7,12 +7,7 @@ import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{
-  makeToolInputParameter,
-  makeToolOutputParameter,
-  makeValueType,
-  makeWorkflowDescription
-}
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._
@@ -35,7 +30,7 @@ import org.scalatest.matchers.should.Matchers
 import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
@@ -1651,7 +1646,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       createdDate = currentTime(),
       lastModified = currentTime(),
       createdBy = "testUser",
-      attributes = Map.empty,
+      attributes = Map(
+        AttributeName.withDefaultNS("description") -> AttributeString("source description")
+      ),
       isLocked = false,
       workspaceVersion = WorkspaceVersions.V2,
       googleProjectId = GoogleProjectId(""),
