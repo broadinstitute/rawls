@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{
   monitorRecord,
@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceCon
 }
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doAnswer, doReturn, spy, verify}
+import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -151,7 +151,9 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+    verify(runner, never).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(
+      ArgumentMatchers.any[ExecutionContext]()
+    )
   }
 
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
