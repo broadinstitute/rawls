@@ -72,8 +72,7 @@ object BootMonitors extends LazyLogging {
                    samDAO: SamDAO,
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
-                   importServicePubSubDAO: GooglePubSubDAO,
-                   importServiceDAO: ImportServiceDAO,
+                   cwdsDAO: CwdsDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
                    billingProfileManagerDAO: BillingProfileManagerDAO,
                    leonardoDAO: LeonardoDAO,
@@ -182,7 +181,6 @@ object BootMonitors extends LazyLogging {
         util.toScalaDuration(appConfigManager.conf.getDuration("avroUpsertMonitor.pollJitter")),
         appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
         appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
-        appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
         appConfigManager.conf.getString("avroUpsertMonitor.updateCwdsPubSubTopic"),
         appConfigManager.conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
         appConfigManager.conf.getInt("avroUpsertMonitor.batchSize"),
@@ -196,8 +194,7 @@ object BootMonitors extends LazyLogging {
                              samDAO,
                              googleStorage,
                              pubSubDAO,
-                             importServicePubSubDAO,
-                             importServiceDAO,
+                             cwdsDAO,
                              avroUpsertMonitorConfig,
                              slickDataSource
       )
@@ -313,7 +310,6 @@ object BootMonitors extends LazyLogging {
         samDAO,
         gcsDAO,
         notificationDAO,
-        gcsDAO.getBucketServiceAccountCredential,
         submissionMonitorConfig,
         entityQueryTimeout,
         workbenchMetricBaseName = metricsPrefix
@@ -349,7 +345,6 @@ object BootMonitors extends LazyLogging {
           drsResolver,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
-          gcsDAO.getBucketServiceAccountCredential,
           util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
           util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
           maxActiveWorkflowsTotal,
@@ -429,8 +424,7 @@ object BootMonitors extends LazyLogging {
                                      samDAO: SamDAO,
                                      googleStorage: GoogleStorageService[IO],
                                      googlePubSubDAO: GooglePubSubDAO,
-                                     importServicePubSubDAO: GooglePubSubDAO,
-                                     importServiceDAO: ImportServiceDAO,
+                                     cwdsDAO: CwdsDAO,
                                      avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
                                      dataSource: SlickDataSource
   ) =
@@ -441,8 +435,7 @@ object BootMonitors extends LazyLogging {
         samDAO,
         googleStorage,
         googlePubSubDAO,
-        importServicePubSubDAO,
-        importServiceDAO,
+        cwdsDAO,
         avroUpsertMonitorConfig,
         dataSource
       )
