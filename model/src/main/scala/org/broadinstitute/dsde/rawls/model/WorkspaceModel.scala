@@ -209,6 +209,8 @@ case class Workspace(
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
+  // this field is used in metrics labels only. Currently it's either `aou` or `cwb` (community workbench).
+  def projectType: String = if (googleProjectId.value.startsWith("terra-vpc-sc-")) "aou" else "cwb"
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
@@ -499,6 +501,16 @@ object WorkspaceState {
   sealed trait WorkspaceState extends RawlsEnumeration[WorkspaceState] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceState = WorkspaceState.withName(name)
+    def isDeletable: Boolean = this match {
+      // Ensure all states are explicitly matched on to avoid accidentally adding a new state without
+      // defining if it is deletable.
+      case WorkspaceState.Ready | WorkspaceState.CreateFailed | WorkspaceState.DeleteFailed |
+          WorkspaceState.UpdateFailed | WorkspaceState.CloningFailed =>
+        true
+      case WorkspaceState.Creating | WorkspaceState.Cloning | WorkspaceState.CloningContainer |
+          WorkspaceState.Deleting | WorkspaceState.Updating =>
+        false
+    }
   }
 
   def withName(name: String): WorkspaceState = name.toLowerCase match {

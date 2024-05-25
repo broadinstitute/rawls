@@ -1,25 +1,26 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleServicesDAO,
   LeonardoDAO,
   SamDAO,
   WorkspaceManagerResourceMonitorRecordDao
 }
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace, WorkspaceState}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.joda.time.DateTime
-import org.scalatest.concurrent.ScalaFutures
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{spy, verify, when}
+import org.mockito.Mockito.{never, spy, verify, when}
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
+
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
@@ -179,7 +180,7 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
     )
   }
 
-  it should "return Incomplete when the if the user context cannot be created" in {
+  it should "return Incomplete when the user context cannot be created" in {
     val workspaceRepository = mock[WorkspaceRepository]
     when(
       workspaceRepository.setFailedState(ArgumentMatchers.eq(workspaceId),
@@ -203,7 +204,7 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
 
-    verify(workspaceRepository).setFailedState(
+    verify(workspaceRepository, never).setFailedState(
       ArgumentMatchers.eq(workspaceId),
       ArgumentMatchers.eq(WorkspaceState.CloningFailed),
       ArgumentMatchers.any[String]

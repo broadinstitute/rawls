@@ -65,24 +65,21 @@ object SubmissionMonitorActor {
             googleServicesDAO: GoogleServicesDAO,
             notificationDAO: NotificationDAO,
             executionServiceCluster: ExecutionServiceCluster,
-            credential: Credential,
             config: SubmissionMonitorConfig,
             queryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionMonitorActor(
-        workspaceName,
-        submissionId,
-        datasource,
-        samDAO,
-        googleServicesDAO,
-        notificationDAO,
-        executionServiceCluster,
-        credential,
-        config,
-        queryTimeout,
-        workbenchMetricBaseName
+      new SubmissionMonitorActor(workspaceName,
+                                 submissionId,
+                                 datasource,
+                                 samDAO,
+                                 googleServicesDAO,
+                                 notificationDAO,
+                                 executionServiceCluster,
+                                 config,
+                                 queryTimeout,
+                                 workbenchMetricBaseName
       )
     )
 
@@ -123,7 +120,6 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val googleServicesDAO: GoogleServicesDAO,
                              val notificationDAO: NotificationDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
-                             val credential: Credential,
                              val config: SubmissionMonitorConfig,
                              val queryTimeout: Duration,
                              override val workbenchMetricBaseName: String
@@ -186,7 +182,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val googleServicesDAO: GoogleServicesDAO
   val notificationDAO: NotificationDAO
   val executionServiceCluster: ExecutionServiceCluster
-  val credential: Credential
   val config: SubmissionMonitorConfig
   val queryTimeout: Duration
 

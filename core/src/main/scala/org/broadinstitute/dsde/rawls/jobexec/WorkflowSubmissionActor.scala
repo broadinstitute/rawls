@@ -33,7 +33,6 @@ object WorkflowSubmissionActor {
             dosResolver: DrsResolver,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
-            credential: Credential,
             processInterval: FiniteDuration,
             pollInterval: FiniteDuration,
             maxActiveWorkflowsTotal: Int,
@@ -57,7 +56,6 @@ object WorkflowSubmissionActor {
         dosResolver,
         executionServiceCluster,
         batchSize,
-        credential,
         processInterval,
         pollInterval,
         maxActiveWorkflowsTotal,
@@ -92,7 +90,6 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val drsResolver: DrsResolver,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
-                              val credential: Credential,
                               val processInterval: FiniteDuration,
                               val pollInterval: FiniteDuration,
                               val maxActiveWorkflowsTotal: Int,
@@ -148,7 +145,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val drsResolver: DrsResolver
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
-  val credential: Credential
   val maxActiveWorkflowsTotal: Int
   val maxActiveWorkflowsPerUser: Int
   val defaultRuntimeOptions: Option[JsValue]

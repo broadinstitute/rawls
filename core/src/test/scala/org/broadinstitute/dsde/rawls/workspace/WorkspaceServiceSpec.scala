@@ -172,7 +172,6 @@ class WorkspaceServiceSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
