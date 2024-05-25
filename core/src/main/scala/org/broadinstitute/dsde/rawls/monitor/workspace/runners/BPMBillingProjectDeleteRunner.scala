@@ -106,9 +106,7 @@ class BPMBillingProjectDeleteRunner(
           case _ =>
             billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
         }
-      case Failure(e) =>
-        val msg = s"Api call to get landing zone delete job $jobId from workspace manager failed: ${e.getMessage}"
-        billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Incomplete)
+      case Failure(_) => Future.successful(Incomplete)
       case Success(result) =>
         Option(result.getJobReport).map(_.getStatus) match {
           case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)
