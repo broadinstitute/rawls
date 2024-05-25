@@ -4,11 +4,11 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.common.tracing.OkHttpClientTracingInterceptor
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import okhttp3.{Interceptor, Protocol, Response}
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
@@ -17,6 +17,8 @@ import org.broadinstitute.dsde.workbench.client.sam.api._
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -27,8 +29,7 @@ import scala.util.{Try, Using}
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Credential], timeout: FiniteDuration)(
-  implicit
+class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, timeout: FiniteDuration)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -68,7 +69,7 @@ class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Cre
   protected def adminApi(ctx: RawlsRequestContext) = new AdminApi(getApiClient(ctx))
 
   private def rawlsSAContext = RawlsRequestContext(
-    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getServiceAccountAccessToken), 0, RawlsUserSubjectId(""))
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getRawlsIdentityAccessToken), 0, RawlsUserSubjectId(""))
   )
 
   protected def when401or5xx: Predicate[Throwable] = anyOf(DsdeHttpDAO.when5xx, DsdeHttpDAO.whenUnauthorized)
@@ -262,6 +263,8 @@ class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Cre
             None
         }
     }
+
+  override def registerRawlsIdentity(): Future[Option[RawlsUser]] = registerUser(rawlsSAContext)
 
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     retry(when401or5xx) { () =>
@@ -565,16 +568,12 @@ class HttpSamDAO(baseSamServiceURL: String, maybeServiceAccountCreds: Option[Cre
       callback.future.map(WorkbenchEmail)
     }
 
-  private def getServiceAccountAccessToken =
-    maybeServiceAccountCreds
-      .map { serviceAccountCreds =>
-        val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
-        if (expiresInSeconds < 60 * 5) {
-          serviceAccountCreds.refreshToken()
-        }
-        serviceAccountCreds.getAccessToken
-      }
-      .getOrElse(throw new UnsupportedOperationException("Service account credentials not provided"))
+  private def getRawlsIdentityAccessToken = {
+    if (rawlsCredential.getExpiresAt.isBefore(Instant.now.plus(5, ChronoUnit.MINUTES))) {
+      rawlsCredential.refreshToken()
+    }
+    rawlsCredential.getAccessToken
+  }
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String,

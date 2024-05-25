@@ -108,6 +108,10 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.12.0"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.14.0"
+
+
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
@@ -125,7 +129,7 @@ object Dependencies {
   val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1111-SNAPSHOT")
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.568.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
-  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.544-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.547-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-70fda75")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
@@ -266,7 +270,9 @@ object Dependencies {
     leonardo,
     jakartaWsRs,
     openApiParser,
-    jerseyJnhConnector
+    jerseyJnhConnector,
+    azureIdentity,
+    azureCoreManagement
   )
 
   val pact4sV = "0.10.0"

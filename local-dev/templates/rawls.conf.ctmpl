@@ -151,16 +151,12 @@ executionservice {
   cromiamUrl = "https://cromiam-priv.dsde-dev.broadinstitute.org"
 }
 avroUpsertMonitor {
-  pubSubProject = "broad-dsde-dev"
-
-  server = "https://terra-importservice-dev.appspot.com"
+  # read by HttpCwdsDao
   cwds = "https://cwds.dsde-dev.broadinstitute.org"
-  bucketName = "import-service-batchupsert-dev"
 
+  # read by BootMonitors.scala
   importRequestPubSubTopic = "rawls-async-import-topic-local"
   importRequestPubSubSubscription = "rawls-async-import-topic-sub-local"
-  updateImportStatusPubSubProject = "terra-importservice-dev"
-  updateImportStatusPubSubTopic = "import-service-notify-local"
   updateCwdsPubSubTopic = "cwds-notify-local"
 
   batchSize = 1000
