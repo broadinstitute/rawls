@@ -37,7 +37,7 @@ trait WorkspaceManagerDAO {
                      spendProfile: Option[ProfileModel],
                      billingProjectNamespace: String,
                      ctx: RawlsRequestContext,
-                     location: Option[String] = None
+                     additionalPolicyInputs: Option[WsmPolicyInputs] = None
   ): CloneWorkspaceResult
 
   def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport

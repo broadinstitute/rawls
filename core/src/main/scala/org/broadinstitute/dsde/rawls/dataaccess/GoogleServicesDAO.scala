@@ -193,8 +193,6 @@ trait GoogleServicesDAO extends ErrorReportable {
 
   def toGoogleGroupName(groupName: RawlsGroupName): String
 
-  def getBucketServiceAccountCredential: Credential
-
   def getResourceBufferServiceAccountCredential: Credential
 
   def getServiceAccountUserInfo(): Future[UserInfo]
