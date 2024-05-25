@@ -162,13 +162,7 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      // Import service uses a different project for its pubsub topic
-      val importServicePubSubDAO = PubSubDAOFactory.createAvroUpsertMonitorPubSubDAO(
-        appConfigManager,
-        metricsPrefix
-      )
-
-      val importServiceDAO = ImportServiceDAOFactory.createImportServiceDAO(appConfigManager)
+      val cwdsDAO = CwdsDAOFactory.createCwdsDAO(appConfigManager)
 
       val bqJsonCreds = BigQueryCredentialsManager.getBigQueryCredentials(appConfigManager)
 
@@ -530,8 +524,7 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           notificationDAO,
           pubSubDAO,
-          importServicePubSubDAO,
-          importServiceDAO,
+          cwdsDAO,
           workspaceManagerDAO,
           billingProfileManagerDAO,
           leonardoDAO,
