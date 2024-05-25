@@ -13,6 +13,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] = ???
 
+  override def registerRawlsIdentity(): Future[Option[RawlsUser]] = ???
+
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     Future.successful(
       Option(SamUserStatusResponse(ctx.userInfo.userSubjectId.value, ctx.userInfo.userEmail.value, enabled = true))

@@ -62,7 +62,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.7"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.7.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.9.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.50"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.10.0"
@@ -108,6 +108,10 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.12.0"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.14.0"
+
+
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
@@ -122,10 +126,10 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1092-SNAPSHOT")
+  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1111-SNAPSHOT")
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.568.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
-  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.539-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.547-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-70fda75")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
@@ -266,7 +270,9 @@ object Dependencies {
     leonardo,
     jakartaWsRs,
     openApiParser,
-    jerseyJnhConnector
+    jerseyJnhConnector,
+    azureIdentity,
+    azureCoreManagement
   )
 
   val pact4sV = "0.10.0"

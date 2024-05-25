@@ -93,7 +93,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         MockShardedExecutionServiceCluster
           .fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
         10,
-        services.gcsDAO.getPreparedMockGoogleCredential(),
         50 milliseconds,
         100 milliseconds,
         100000,
