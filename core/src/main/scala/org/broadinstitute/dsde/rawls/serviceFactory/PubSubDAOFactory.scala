@@ -20,20 +20,6 @@ object PubSubDAOFactory {
         newDisabledService[GooglePubSubDAO]
     }
 
-  def createAvroUpsertMonitorPubSubDAO(appConfigManager: RawlsConfigManager, metricsPrefix: String)(implicit
-    system: ActorSystem,
-    executionContext: ExecutionContext
-  ): GooglePubSubDAO =
-    appConfigManager.gcsConfig match {
-      case Some(gcsConfig) =>
-        createPubSubDAOForProject(metricsPrefix,
-                                  gcsConfig,
-                                  appConfigManager.conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
-        )
-      case None =>
-        newDisabledService[GooglePubSubDAO]
-    }
-
   private def createPubSubDAOForProject(metricsPrefix: String, gcsConfig: Config, project: String)(implicit
     system: ActorSystem,
     executionContext: ExecutionContext

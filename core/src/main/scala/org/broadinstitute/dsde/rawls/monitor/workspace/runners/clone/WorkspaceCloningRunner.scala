@@ -1,12 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleServicesDAO,
-  LeonardoDAO,
-  SamDAO,
-  WorkspaceManagerResourceMonitorRecordDao
-}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
   Incomplete,
@@ -17,6 +11,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  GoogleServicesDAO,
+  LeonardoDAO,
+  SamDAO,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
@@ -125,7 +125,7 @@ class WorkspaceCloningRunner(
         val msg =
           s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve request context for $userEmail"
         logFailure(msg, Some(t))
-        cloneFail(workspaceId, msg).map(_ => Incomplete)
+        Future.successful(Incomplete)
       case Success(userCtx) =>
         val step = getStep(job, workspaceId)
         step.runStep(userCtx)

@@ -1284,7 +1284,7 @@ class UserServiceSpec
     val billingProfile = new ProfileModel()
       .id(UUID.randomUUID())
       .cloudPlatform(BPMCloudPlatform.AZURE)
-      .organization(new Organization().enterprise(true))
+      .organization(new Organization().enterprise(true).limits(Map.empty[String, String].asJava))
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val landingZoneId = UUID.randomUUID()
     val lzRegion = "dummy-region"
@@ -1322,7 +1322,7 @@ class UserServiceSpec
                                     CloudPlatform.AZURE,
                                     Option(false),
                                     Option(lzRegion),
-                                    Option(RawlsBillingProjectOrganization(true))
+                                    Option(RawlsBillingProjectOrganization(true, Map()))
         )
       )
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
@@ -1362,7 +1362,7 @@ class UserServiceSpec
     val billingProfile = new ProfileModel()
       .id(UUID.randomUUID())
       .cloudPlatform(BPMCloudPlatform.AZURE)
-      .organization(new Organization().enterprise(false))
+      .organization(new Organization().enterprise(false).limits(Map("autoPause" -> "30").asJava))
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val landingZoneId = UUID.randomUUID()
     val lzRegion = "dummy-region"
@@ -1403,7 +1403,7 @@ class UserServiceSpec
         CloudPlatform.AZURE,
         Option(false),
         Option(lzRegion),
-        Option(RawlsBillingProjectOrganization(false))
+        Option(RawlsBillingProjectOrganization(false, Map("autoPause" -> "30")))
       )
     )
 
