@@ -36,6 +36,8 @@ trait SamDAO {
 
   def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]]
 
+  def registerRawlsIdentity(): Future[Option[RawlsUser]]
+
   def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]]
 
   def getUserIdInfo(userEmail: String, ctx: RawlsRequestContext): Future[SamDAO.GetUserIdInfoResult]

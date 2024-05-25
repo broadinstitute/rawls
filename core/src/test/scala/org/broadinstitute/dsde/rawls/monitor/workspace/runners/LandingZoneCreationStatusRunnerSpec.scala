@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   RawlsBillingProjectName,
@@ -14,14 +14,12 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.LandingZoneCreationStatusRunnerSpec._
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doReturn, spy, verify, when}
+import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.sql.Timestamp
-import java.time.Instant
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -87,7 +85,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
 
   }
 
-  it should "set an error in the billing project and return job as incomplete if the user context cannot be created" in {
+  it should "return the job status as incomplete and not set an error status and message on the project if the user context cannot be created" in {
     val billingRepository = mock[BillingRepository]
     when(
       billingRepository.updateCreationStatus(
@@ -115,14 +113,14 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(billingRepository).updateCreationStatus(
+    verify(billingRepository, never).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
       ArgumentMatchers.eq(CreationStatuses.Error),
       ArgumentMatchers.any[Some[String]]()
     )
   }
 
-  it should "set an error status and message on the project and return the job status as incomplete if the call to get the landing zone job results fail" in {
+  it should "return the job status as incomplete and not set an error status and message on the project if the call to get the landing zone job results fail" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
     val wsmExceptionMessage = "looking for this to be reported in the billing project message"
@@ -149,7 +147,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(billingRepository).updateCreationStatus(
+    verify(billingRepository, never).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
       ArgumentMatchers.eq(CreationStatuses.Error),
       ArgumentMatchers.any[Some[String]]()

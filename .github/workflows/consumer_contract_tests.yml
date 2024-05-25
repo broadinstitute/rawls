@@ -50,15 +50,42 @@ env:
   CAN_I_DEPLOY_RUN_NAME: 'can-i-deploy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
 
 jobs:
+  bump-check:
+    runs-on: ubuntu-latest
+    outputs:
+      is-bump: ${{ steps.skiptest.outputs.is-bump }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip version bump merges
+        id: skiptest
+        uses: ./.github/actions/bump-skip
+        with:
+          event-name: ${{ github.event_name }}
+
+  regulated-tag-job:
+      needs: [ bump-check ]
+      if: ${{ needs.bump-check.outputs.is-bump == 'no' }}
+      uses: ./.github/workflows/tag.yml
+      with:
+        # The 'ref' parameter ensures that the consumer version is postfixed with the HEAD commit of the PR branch,
+        # facilitating cross-referencing of a pact between Pact Broker and GitHub.
+        ref: ${{ github.head_ref || '' }}
+        # The 'dry-run' parameter prevents the new tag from being dispatched.
+        dry-run: true
+        release-branches: develop
+      secrets: inherit
+
   init-github-context:
     runs-on: ubuntu-latest
+    needs: [ bump-check ]
+    if: ${{ needs.bump-check.outputs.is-bump == 'no' }}
     outputs:
       repo-branch: ${{ steps.extract-branch.outputs.repo-branch }}
       repo-version: ${{ steps.extract-branch.outputs.repo-version }}
       fork: ${{ steps.extract-branch.outputs.fork }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Obtain branch properties
         id: extract-branch
@@ -96,12 +123,13 @@ jobs:
 
   rawls-consumer-contract-tests:
     runs-on: ubuntu-latest
-    needs: [ init-github-context ]
+    needs: [ bump-check, init-github-context ]
+    if: ${{ needs.bump-check.outputs.is-bump == 'no' }}
     outputs:
       pact-b64: ${{ steps.encode-pact.outputs.pact-b64 }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Run consumer tests
         run: |
           docker run --rm -v $PWD:/working \
@@ -109,7 +137,7 @@ jobs:
                           -v jar-cache:/root/.ivy2 \
                           -w /working \
                           sbtscala/scala-sbt:openjdk-17.0.2_1.7.2_2.13.10 \
-                          sbt "project pact4s" clean test
+                          sbt -J-Xmx2g -J-XX:+UseG1GC "project pact4s" clean "testOnly org.broadinstitute.dsde.rawls.consumer.*"
 
       - name: Output consumer contract as non-breaking base64 string
         id: encode-pact
@@ -122,8 +150,10 @@ jobs:
   # since access to secrets is not allowed.
   publish-contracts:
     runs-on: ubuntu-latest
-    if: ${{ needs.init-github-context.outputs.fork == 'false' }}
+    if: ${{ (needs.init-github-context.outputs.fork == 'false') && (needs.bump-check.outputs.is-bump == 'no') }}
     needs:
+      - bump-check
+      - regulated-tag-job
       - init-github-context
       - rawls-consumer-contract-tests
     steps:
@@ -140,15 +170,13 @@ jobs:
             "pact-b64": "${{ needs.rawls-consumer-contract-tests.outputs.pact-b64 }}",
             "repo-owner": "${{ github.repository_owner }}",
             "repo-name": "${{ github.event.repository.name }}",
-            "repo-branch": "${{ needs.init-github-context.outputs.repo-branch }}"
+            "repo-branch": "${{ needs.init-github-context.outputs.repo-branch }}",
+            "release-tag": "${{ needs.regulated-tag-job.outputs.app-version }}"
           }'
-
   can-i-deploy:
     runs-on: ubuntu-latest
-    if: ${{ needs.init-github-context.outputs.fork == 'false' }}
-    needs:
-      - init-github-context
-      - publish-contracts
+    needs: [ bump-check, regulated-tag-job, init-github-context, publish-contracts ]
+    if: ${{ (needs.init-github-context.outputs.fork == 'false') && (needs.bump-check.outputs.is-bump == 'no') }}
     steps:
       - name: Dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -161,5 +189,5 @@ jobs:
           inputs: '{
             "run-name": "${{ env.CAN_I_DEPLOY_RUN_NAME }}",
             "pacticipant": "rawls",
-            "version": "${{ needs.init-github-context.outputs.repo-version }}"
+            "version": "${{ needs.regulated-tag-job.outputs.app-version }}"
           }'

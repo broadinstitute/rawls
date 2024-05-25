@@ -151,16 +151,13 @@ executionservice {
   cromiamUrl = "https://cromiam-priv.dsde-dev.broadinstitute.org"
 }
 avroUpsertMonitor {
-  pubSubProject = "broad-dsde-dev"
-
-  server = "https://terra-importservice-dev.appspot.com"
+  # read by HttpCwdsDao
   cwds = "https://cwds.dsde-dev.broadinstitute.org"
-  bucketName = "import-service-batchupsert-dev"
 
+  # read by BootMonitors.scala
   importRequestPubSubTopic = "rawls-async-import-topic-local"
   importRequestPubSubSubscription = "rawls-async-import-topic-sub-local"
-  updateImportStatusPubSubProject = "terra-importservice-dev"
-  updateImportStatusPubSubTopic = "import-service-notify-local"
+  updateCwdsPubSubTopic = "cwds-notify-local"
 
   batchSize = 1000
   ackDeadlineSeconds = 600
@@ -312,7 +309,6 @@ directory {
 oidc {
   authorityEndpoint = "https://terra{{ $b2cTenant }}b2c.b2clogin.com/terra{{ $b2cTenant }}b2c.onmicrosoft.com/v2.0?p=b2c_1a_signup_signin_{{ $b2cEnv }}"
   oidcClientId = "{{ $b2cAppId }}"
-  legacyGoogleClientId = "{{ $refreshTokenCredential.web.client_id }}"
 }
 
 # TODO: remove once https://github.com/broadinstitute/rawls/pull/1794 is merged

@@ -916,7 +916,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                                                      slickDataSource
           ),
           3,
-          credential,
           1 milliseconds,
           1 milliseconds,
           100,
@@ -983,7 +982,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           mockDrsResolver,
           MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
           batchSize,
-          credential,
           1 milliseconds,
           1 milliseconds,
           100,

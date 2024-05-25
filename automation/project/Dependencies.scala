@@ -5,10 +5,10 @@ object Dependencies {
 
   val akkaV         = "2.6.8"
   val akkaHttpV     = "10.2.0"
-  val jacksonV      = "2.16.2"
+  val jacksonV      = "2.17.0"
 
-  val workbenchLibsHash = "1c0cf92"
-  val serviceTestV = s"4.3-${workbenchLibsHash}"
+  val workbenchLibsHash = "3a8f98c"
+  val serviceTestV = s"4.4-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.30-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
   val workbenchModelV  = s"0.19-${workbenchLibsHash}"
@@ -28,7 +28,7 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client-javax" % "0.254.1030-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.1111-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 
@@ -39,7 +39,7 @@ object Dependencies {
     "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV,
     "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
     "com.fasterxml.jackson.module" % ("jackson-module-scala_" + scalaV) % jacksonV,
-    "ch.qos.logback" % "logback-classic" % "1.5.3",
+    "ch.qos.logback" % "logback-classic" % "1.5.6",
     "net.logstash.logback" % "logstash-logback-encoder" % "6.6",
     "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.22.0" excludeAll (
       ExclusionRule("com.google.guava", "guava-jdk5"),
@@ -57,7 +57,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-9de70db23"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "1824ef0eb"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),

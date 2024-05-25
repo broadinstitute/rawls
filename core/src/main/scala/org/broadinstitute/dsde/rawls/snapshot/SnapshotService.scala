@@ -158,13 +158,20 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
   private def getSnapshotFromDataRepo(snapshotIdentifiers: NamedDataRepoSnapshot) =
     Try(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken)) match {
       case Success(snapshot) => snapshot
+      // if snapshot not found in TDR, this is a bad request
       case Failure(ex: ApiException) if ex.getCode == StatusCodes.NotFound.intValue =>
         throw new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest, s"Snapshot ${snapshotIdentifiers.snapshotId} not found.")
         )
+      // on some other TDR API exception, strip the stack trace and propagate
+      case Failure(ex: ApiException) =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(ex.getCode, ex.getMessage)
+        )
+      // else, propagate by wrapping in an error report
       case Failure(other) =>
-        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}")
-        throw new RawlsExceptionWithErrorReport(ErrorReport(other))
+        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}", other)
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, other.getMessage))
     }
 
   def getSnapshotResourceFromWsm(workspaceName: WorkspaceName,

@@ -6,6 +6,7 @@ import io.opentelemetry.api.common.{AttributeKey, Attributes}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 
 object MetricsHelper {
+  private val PREFIX = "rawls"
   private val FAST_PASS_FAILURE_METER_NAME = "fastpass_failure"
   private val FAST_PASS_UPDATED_METER_NAME = "fastpass_updated"
   private val FAST_PASS_QUOTA_EXCEEDED_METER_NAME = "fastpass_quota_exceeded"
@@ -30,26 +31,43 @@ object MetricsHelper {
     .setUnit("failure")
     .build
 
-  def incrementFastPassFailureCounter(functionName: String): IO[Unit] = {
-      IO(fastPassFailureCounter.add(1, Attributes.of(AttributeKey.stringKey("function"), functionName)))
-  }
+  def incrementFastPassFailureCounter(functionName: String): IO[Unit] =
+    IO(fastPassFailureCounter.add(1, Attributes.of(AttributeKey.stringKey("function"), functionName)))
 
-  def incrementFastPassGrantedCounter(memberType: IamMemberType): IO[Unit] = {
-      incrementFastPassUpdatedCounter(memberType, "grant")
-  }
+  def incrementFastPassGrantedCounter(memberType: IamMemberType): IO[Unit] =
+    incrementFastPassUpdatedCounter(memberType, "grant")
 
-  def incrementFastPassRevokedCounter(memberType: IamMemberType): IO[Unit] = {
+  def incrementFastPassRevokedCounter(memberType: IamMemberType): IO[Unit] =
     incrementFastPassUpdatedCounter(memberType, "revoke")
+
+  def incrementCounter(name: String,
+                       count: Int = 1,
+                       labels: Map[String, String] = Map.empty,
+                       description: Option[String] = None
+  ): IO[Unit] = {
+    val metrics = meter
+      .counterBuilder(s"$PREFIX/$name")
+      .setDescription(description.getOrElse("none"))
+      .build
+    val labelBuilder = Attributes.builder()
+    labels.foreach { case (k, v) =>
+      labelBuilder.put(k, v)
+    }
+    IO(metrics.add(count, labelBuilder.build()))
   }
 
-  private def incrementFastPassUpdatedCounter(memberType: IamMemberType, action: String) = {
-    IO(fastPassUpdatedCounter.add(1, Attributes.of(
-      AttributeKey.stringKey("member_type"), memberType.toString,
-      AttributeKey.stringKey("action"), action
-    )))
-  }
+  private def incrementFastPassUpdatedCounter(memberType: IamMemberType, action: String) =
+    IO(
+      fastPassUpdatedCounter.add(1,
+                                 Attributes.of(
+                                   AttributeKey.stringKey("member_type"),
+                                   memberType.toString,
+                                   AttributeKey.stringKey("action"),
+                                   action
+                                 )
+      )
+    )
 
-  def incrementFastPassQuotaExceededCounter(): IO[Unit] = {
-      IO(fastPassQuotaExceededCounter.add(1))
-  }
+  def incrementFastPassQuotaExceededCounter(): IO[Unit] =
+    IO(fastPassQuotaExceededCounter.add(1))
 }

@@ -1,0 +1,27 @@
+# This action must be done after the checkout action
+name: 'bump-skip'
+description: 'Set is-bump when we are doing a version bump'
+inputs:
+  event-name:
+    description: 'github.event_name from the calling workflow'
+    required: true
+outputs:
+  is-bump:
+    description: 'yes if this is a push made by bumper; no if it is a regular push'
+    value: ${{ steps.bumptest.outputs.is-bump }}
+runs:
+  using: "composite"
+  steps:
+    - name: Bump test
+      id: bumptest
+      run: |
+        log=$(git log --pretty='%B')
+        echo "log=$log"
+        pattern="^bump .*"
+        IS_BUMP=no
+        if [[ "${{ inputs.event-name }}" == "push" && "$log" =~ $pattern ]]; then
+          IS_BUMP=yes
+        fi
+        echo "IS_BUMP=$IS_BUMP"
+        echo "is-bump=$IS_BUMP" >> $GITHUB_OUTPUT
+      shell: bash

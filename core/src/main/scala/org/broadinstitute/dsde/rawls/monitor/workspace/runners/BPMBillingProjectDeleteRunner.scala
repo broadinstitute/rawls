@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
+import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
@@ -91,6 +92,11 @@ class BPMBillingProjectDeleteRunner(
     executionContext: ExecutionContext
   ): Future[JobStatus] =
     Try(workspaceManagerDAO.getDeleteLandingZoneResult(jobId.toString, lzId, ctx)) match {
+      case Failure(e: ApiException) if e.getCode == StatusCodes.Forbidden.intValue =>
+        logger.info(
+          s"LZ deletion result status = ${e.getCode} for LZ ID ${lzId}, LZ record is gone. Proceeding with rawls billing project deletion"
+        )
+        billingProjectDeletion.finalizeDelete(projectName, ctx).map(_ => Complete)
       case Failure(e: ApiException) =>
         val msg =
           s"API call to get Landing Zone deletion operation failed with status code ${e.getCode}: ${e.getMessage}"
@@ -100,9 +106,7 @@ class BPMBillingProjectDeleteRunner(
           case _ =>
             billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
         }
-      case Failure(e) =>
-        val msg = s"Api call to get landing zone delete job $jobId from workspace manager failed: ${e.getMessage}"
-        billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Incomplete)
+      case Failure(_) => Future.successful(Incomplete)
       case Success(result) =>
         Option(result.getJobReport).map(_.getStatus) match {
           case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)

@@ -268,10 +268,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "createMultiCloudWorkspace"
 
-  it should "throw an exception if a workspace with the same name already exists" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+  it should "throw an exception if a workspace with the same name already exists and not delete the original workspace" in {
+    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val samDAO = new MockSamDAO(slickDataSource)
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val namespace = "fake"
+    val workspaceName = s"fake-name-${UUID.randomUUID().toString}"
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
@@ -282,8 +284,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
-      "fake",
-      s"fake-name-${UUID.randomUUID().toString}",
+      namespace,
+      workspaceName,
       Map.empty
     )
     val billingProfileId = UUID.randomUUID()
@@ -298,6 +300,15 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+
+    // Make sure that the pre-existing workspace was not deleted.
+    verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
+    Await
+      .result(slickDataSource.inTransaction(_.workspaceQuery.findByName(WorkspaceName(namespace, workspaceName))),
+              Duration.Inf
+      )
+      .get
+      .name shouldBe workspaceName
   }
 
   it should "throw an exception if the billing profile was created before 9/12/2023" in {
@@ -398,13 +409,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         any(), // spend profile id
         ArgumentMatchers.eq(namespace),
         any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
         any[Option[WsmPolicyInputs]],
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -453,12 +459,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
-    Mockito
-      .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(testContext)
-      )
     Mockito
       .verify(leonardoDAO, never())
       .createWDSInstance(
@@ -509,12 +509,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
     Mockito
-      .verify(workspaceManagerDAO)
-      .createAzureWorkspaceCloudContext(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
       .verify(leonardoDAO)
       .createWDSInstance(
         ArgumentMatchers.eq("token"),
@@ -537,9 +531,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                    spendProfileId: String,
                                                    billingProjectNamespace: String,
                                                    applicationIds: Seq[String],
+                                                   cloudPlatform: CloudPlatform,
                                                    policyInputs: Option[WsmPolicyInputs],
                                                    ctx: RawlsRequestContext
-      ): CreatedWorkspace = throw new ApiException(500, "whoops")
+      ): CreateWorkspaceV2Result = throw new ApiException(500, "whoops")
 
       override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
         throw new ApiException(404, "i've never seen that workspace in my life")
@@ -567,9 +562,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
-  it should "fail on cloud context creation failure and try to rollback workspace creation" in {
+  it should "fail on workspace creation failure and try to rollback workspace creation" in {
     val workspaceManagerDAO =
-      Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED))
+      Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCreateWorkspaceResult(StatusEnum.FAILED))
 
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
@@ -738,6 +733,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
         any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
         ArgumentMatchers.eq(
           Some(
             new WsmPolicyInputs()
@@ -771,6 +767,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any(),
         any(),
         ArgumentMatchers.eq(None),
         ArgumentMatchers.any()
@@ -815,6 +812,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
         any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
         ArgumentMatchers.eq(
           Some(
             new WsmPolicyInputs()
@@ -838,6 +836,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.eq(namespace),
+        any(),
         any(),
         ArgumentMatchers.eq(None),
         ArgumentMatchers.any()
@@ -1370,7 +1369,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 cloneName.name,
                 Map.empty,
                 None,
-                Some("analyses/")
+                Some("analyses/"),
+                policies = Some(
+                  List(
+                    WorkspacePolicy("dummy-policy-name", "terra", List.empty)
+                  )
+                )
               )
             )
             _ = clone.toWorkspaceName shouldBe cloneName
@@ -1388,6 +1392,27 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               } yield jobs
             }
           } yield {
+            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+              .cloneWorkspace(
+                equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                equalTo(clone.workspaceIdAsUUID),
+                equalTo(cloneName.name),
+                any(),
+                equalTo(cloneName.namespace),
+                any(),
+                equalTo(
+                  Some(
+                    new WsmPolicyInputs()
+                      .inputs(
+                        Seq(
+                          new WsmPolicyInput()
+                            .name("dummy-policy-name")
+                            .namespace("terra")
+                        ).asJava
+                      )
+                  )
+                )
+              )
             verify(mcWorkspaceService.workspaceManagerDAO, times(1))
               .cloneAzureStorageContainer(
                 equalTo(testData.azureWorkspace.workspaceIdAsUUID),

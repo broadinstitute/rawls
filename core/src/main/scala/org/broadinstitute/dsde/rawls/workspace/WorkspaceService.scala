@@ -38,8 +38,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.resourcebuffer.{ResourceBufferService, ResourceBufferServiceImpl}
-import org.broadinstitute.dsde.rawls.serviceperimeter.{ServicePerimeterService, ServicePerimeterServiceImpl}
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -53,10 +53,12 @@ import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, W
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
+import cats.effect.unsafe.implicits.global
 
 import java.io.IOException
 import java.util.UUID
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -311,7 +313,24 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val wsmContext = wsmService.optimizedFetchAggregatedWorkspace(workspaceContext, ctx)
+            // some GCP workspaces, like those with linked snapshots, have a stub WSM workspace
+            val wsmContext =
+              try
+                wsmService.fetchAggregatedWorkspace(workspaceContext, ctx)
+              catch {
+                case e: AggregateWorkspaceNotFoundException =>
+                  // return workspace with no WSM information for gcp workspace
+                  if (workspaceContext.workspaceType == WorkspaceType.RawlsWorkspace) {
+                    AggregatedWorkspace(workspaceContext,
+                                        Some(workspaceContext.googleProjectId),
+                                        azureCloudContext = None,
+                                        policies = List.empty
+                    )
+                  } else {
+                    // bubble up an MC workspace exception
+                    throw e
+                  }
+              }
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -672,7 +691,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           Future.failed(t)
         }
       )
-
       workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentContext)(_ =>
         gatherWorkflowsToAbortAndSetStatusToAborted(workspaceContext.toWorkspaceName, workspaceContext) recoverWith {
           case t: Throwable =>
@@ -772,6 +790,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceContext.toWorkspaceName}`.",
                 t
               )
+
+              if (t.errorReport.message.contains("Cannot delete a resource with children")) {
+                MetricsHelper
+                  .incrementCounter("leakingSamResourceError",
+                                    labels = Map("cloud" -> "gcp", "projectType" -> workspaceContext.projectType)
+                  )
+                  .unsafeToFuture()
+              }
               Future.failed(t)
           }
         } else { Future.successful() }
@@ -3190,7 +3216,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject,
                                                    dataAccess: DataAccess,
                                                    requestContext: RawlsRequestContext = ctx
-  ): ReadAction[Unit] =
+  ): ReadWriteAction[Unit] =
     billingProject.servicePerimeter.traverse_ { servicePerimeterName =>
       servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
     }

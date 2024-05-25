@@ -21,9 +21,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ImportStatuses,
   RawlsRequestContext,
   RawlsUserEmail,
-  UserInfo,
-  Workspace,
-  WorkspaceName
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{
   updateImportStatusFormat,
@@ -40,8 +38,8 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
+import scala.concurrent.Future
 import scala.concurrent.duration.{FiniteDuration, _}
-import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -58,7 +56,7 @@ object AvroUpsertMonitorSupervisor {
                                            pollIntervalJitter: FiniteDuration,
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
-                                           updateImportStatusPubSubTopic: String,
+                                           updateCwdsStatusPubSubTopic: String,
                                            ackDeadlineSeconds: Int,
                                            batchSize: Int,
                                            workerCount: Int
@@ -69,19 +67,17 @@ object AvroUpsertMonitorSupervisor {
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
             pubSubDAO: GooglePubSubDAO,
-            importServicePubSubDAO: GooglePubSubDAO,
-            importServiceDAO: ImportServiceDAO,
+            cwdsDAO: CwdsDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
             dataSource: SlickDataSource
-  )(implicit executionContext: ExecutionContext): Props =
+  ): Props =
     Props(
       new AvroUpsertMonitorSupervisor(entityService,
                                       googleServicesDAO,
                                       samDAO,
                                       googleStorage,
                                       pubSubDAO,
-                                      importServicePubSubDAO,
-                                      importServiceDAO,
+                                      cwdsDAO,
                                       avroUpsertMonitorConfig,
                                       dataSource
       )
@@ -100,40 +96,20 @@ case class UpdateImportStatus(importId: String,
 
 case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
-// base for CwdsUpsertAttributes and ImportServiceUpsertAttributes
-trait AvroUpsertAttributes {
-  def userEmail: RawlsUserEmail
-  def importId: UUID
-  def upsertFile: String
-  def isUpsert: Boolean
-  def isCwds: Boolean
-}
-
 // attributes expected from a cWDS pub/sub message
 case class CwdsUpsertAttributes(workspaceId: UUID,
                                 userEmail: RawlsUserEmail,
                                 importId: UUID,
                                 upsertFile: String,
-                                isUpsert: Boolean,
-                                isCwds: Boolean
-) extends AvroUpsertAttributes
-
-// attributes expected from an Import Service pub/sub message
-case class ImportServiceUpsertAttributes(workspace: WorkspaceName,
-                                         userEmail: RawlsUserEmail,
-                                         importId: UUID,
-                                         upsertFile: String,
-                                         isUpsert: Boolean,
-                                         isCwds: Boolean
-) extends AvroUpsertAttributes
+                                isUpsert: Boolean
+)
 
 class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDAO: GooglePubSubDAO,
-                                  importServicePubSubDAO: GooglePubSubDAO,
-                                  importServiceDAO: ImportServiceDAO,
+                                  cwdsDAO: CwdsDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
                                   dataSource: SlickDataSource
 ) extends Actor
@@ -170,10 +146,9 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
         samDAO,
         googleStorage,
         pubSubDAO,
-        importServicePubSubDAO,
         avroUpsertMonitorConfig.importRequestPubSubSubscription,
-        avroUpsertMonitorConfig.updateImportStatusPubSubTopic,
-        importServiceDAO,
+        avroUpsertMonitorConfig.updateCwdsStatusPubSubTopic,
+        cwdsDAO,
         avroUpsertMonitorConfig.batchSize,
         dataSource
       )
@@ -202,10 +177,9 @@ object AvroUpsertMonitor {
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
             pubSubDao: GooglePubSubDAO,
-            importServicePubSubDAO: GooglePubSubDAO,
             pubSubSubscriptionName: String,
-            importStatusPubSubTopic: String,
-            importServiceDAO: ImportServiceDAO,
+            cwdsStatusPubSubTopic: String,
+            cwdsDAO: CwdsDAO,
             batchSize: Int,
             dataSource: SlickDataSource
   ): Props =
@@ -218,10 +192,9 @@ object AvroUpsertMonitor {
         samDAO,
         googleStorage,
         pubSubDao,
-        importServicePubSubDAO,
         pubSubSubscriptionName,
-        importStatusPubSubTopic,
-        importServiceDAO,
+        cwdsStatusPubSubTopic,
+        cwdsDAO,
         batchSize,
         dataSource
       )
@@ -235,10 +208,9 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                              val samDAO: SamDAO,
                              googleStorage: GoogleStorageService[IO],
                              pubSubDao: GooglePubSubDAO,
-                             importServicePubSubDAO: GooglePubSubDAO,
                              pubSubSubscriptionName: String,
-                             importStatusPubSubTopic: String,
-                             importServiceDAO: ImportServiceDAO,
+                             cwdsStatusPubSubTopic: String,
+                             cwdsDAO: CwdsDAO,
                              batchSize: Int,
                              dataSource: SlickDataSource
 ) extends Actor
@@ -317,7 +289,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     val importFuture = for {
       workspace <- lookupWorkspace(attributes)
       petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
-      importStatus <- getImportStatus(attributes, workspace, petUserInfo)
+      importStatus <- cwdsDAO.getImportStatus(attributes.importId, workspace.workspaceIdAsUUID, petUserInfo)
       _ <- importStatus match {
         // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
         // end up with a race condition where multiple threads are attempting the same import / updating the status
@@ -390,35 +362,15 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
 
   }
 
-  private def lookupWorkspace(attributes: AvroUpsertAttributes): Future[Workspace] =
+  private def lookupWorkspace(attributes: CwdsUpsertAttributes): Future[Workspace] =
     dataSource.inTransaction { dataAccess =>
-      // db query: the SQL to find the workspace in the db
-      // errorId: if the workspace is not found, what identifier do we put in the error message?
-      val (dbQuery, errorId) = attributes match {
-        case cwdsAttributes: CwdsUpsertAttributes =>
-          (dataAccess.workspaceQuery.findById(cwdsAttributes.workspaceId.toString), cwdsAttributes.workspaceId.toString)
-        case importServiceAttributes: ImportServiceUpsertAttributes =>
-          (dataAccess.workspaceQuery.findByName(importServiceAttributes.workspace),
-           importServiceAttributes.workspace.toString
-          )
-      }
-      dbQuery.map {
+      dataAccess.workspaceQuery.findById(attributes.workspaceId.toString).map {
         case Some(workspace) => workspace
         case None =>
           throw new RawlsException(
-            s"Workspace $errorId not found while importing entities"
+            s"Workspace ${attributes.workspaceId} not found while importing entities"
           )
       }
-    }
-
-  private def getImportStatus(attributes: AvroUpsertAttributes,
-                              workspace: Workspace,
-                              petUserInfo: UserInfo
-  ): Future[Option[ImportStatus]] =
-    if (attributes.isCwds) {
-      importServiceDAO.getCwdsStatus(attributes.importId, workspace.workspaceIdAsUUID, petUserInfo)
-    } else {
-      importServiceDAO.getImportStatus(attributes.importId, workspace.toWorkspaceName, petUserInfo)
     }
 
   private def publishMessageToUpdateImportStatus(importId: UUID,
@@ -427,7 +379,8 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                                                  errorMessage: Option[String]
   ) = {
     logger.info(
-      s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}"
+      s"asking to change import job $importId on topic $cwdsStatusPubSubTopic from $currentImportStatus to $newImportStatus ${errorMessage
+          .getOrElse("")}"
     )
     val updateImportStatus =
       UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
@@ -437,10 +390,10 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
         (attName, usableValue)
     }
-    importServicePubSubDAO.publishMessages(
-      importStatusPubSubTopic,
-      scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
-    )
+    // publish the message to cWDS
+    val message = scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
+
+    pubSubDao.publishMessages(cwdsStatusPubSubTopic, message)
   }
 
   private def initUpsert(upsertFile: String,
