@@ -41,8 +41,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
 
-  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] = {
+  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
     dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
-  }
 
 }
