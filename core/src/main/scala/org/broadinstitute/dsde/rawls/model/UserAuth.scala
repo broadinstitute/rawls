@@ -90,7 +90,7 @@ case class WorkspaceBillingAccount(
   currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
 )
 
-case class RawlsBillingProjectOrganization(enterprise: Boolean)
+case class RawlsBillingProjectOrganization(enterprise: Boolean, limits: Map[String, String])
 
 case class RawlsBillingProjectResponse(
   projectName: RawlsBillingProjectName,
@@ -327,7 +327,7 @@ class UserAuthJsonSupport extends JsonSupport {
     WorkspaceBillingAccount
   )
 
-  implicit val BillingProjectOrganizationFormat: RootJsonFormat[RawlsBillingProjectOrganization] = jsonFormat1(
+  implicit val BillingProjectOrganizationFormat: RootJsonFormat[RawlsBillingProjectOrganization] = jsonFormat2(
     RawlsBillingProjectOrganization.apply
   )
 

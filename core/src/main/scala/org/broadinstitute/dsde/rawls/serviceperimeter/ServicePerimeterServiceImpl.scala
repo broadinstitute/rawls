@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.serviceperimeter
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
@@ -106,12 +107,7 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
 
   private def overwriteServicePerimeterInternal(servicePerimeterName: ServicePerimeterName,
                                                 dataAccess: DataAccess
-  ): ReadWriteAction[Unit] = {
-    def servicePerimeterUpdatePredicate(t: Throwable): Boolean = t match {
-      case _: MissingGoogleProjectsException => false
-      case _                                 => true
-    }
-
+  ): ReadWriteAction[Unit] =
     for {
       workspacesInPerimeter <- collectWorkspacesInPerimeter(servicePerimeterName, dataAccess)
       billingProjectsInPerimeter <- collectBillingProjectsInPerimeter(servicePerimeterName, dataAccess)
@@ -120,15 +116,22 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
       ) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
       googleProjectNumberStrings = googleProjectNumbers.map(_.value).toSet
       operation <- DBIO.from(
-        gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName,
-                                                                           googleProjectNumberStrings
-        )
+        gcsDAO.accessContextManagerDAO
+          .overwriteProjectsInServicePerimeter(servicePerimeterName, googleProjectNumberStrings)
+          .recover {
+            case e: GoogleJsonResponseException
+                if e.getDetails.getMessage.contains("Invalid resources for Service Perimeter") =>
+              val deletedProjects =
+                projectNumbersExtractorRegex.findAllMatchIn(e.getDetails.getMessage).map(_.group(1)).toList
+              throw new MissingGoogleProjectsException(
+                s"Google request to update Service Perimeter ${servicePerimeterName.value} failed due to deleted Google projects: $deletedProjects",
+                deletedProjects
+              )
+          }
       )
       result <- DBIO.from(
-        retryUntilSuccessOrTimeout(
-          pred = servicePerimeterUpdatePredicate,
-          failureLogMessage =
-            s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful"
+        retryUntilSuccessOrTimeout(failureLogMessage =
+          s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful"
         )(config.pollInterval, config.pollTimeout) { () =>
           gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
             case OperationStatus(false, _) =>
@@ -142,19 +145,14 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
             // this happened, it would be possible for Projects intended to be in the Perimeter are NOT in that
             // Perimeter anymore, which is a problem.
             case OperationStatus(true, Some(errorMessage)) =>
-              val exceptionMessage =
-                s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}"
-              if (errorMessage.contains("Invalid resources for Service Perimeter")) {
-                val deletedProjects = projectNumbersExtractorRegex.findAllMatchIn(errorMessage).map(_.group(1)).toList
-                throw new MissingGoogleProjectsException(exceptionMessage, deletedProjects)
-              } else {
+              Future.successful(
                 throw new RawlsExceptionWithErrorReport(
                   ErrorReport(
                     StatusCodes.InternalServerError,
-                    exceptionMessage
+                    s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}"
                   )
                 )
-              }
+              )
             case _ => Future.successful()
           }
         }
@@ -166,7 +164,6 @@ class ServicePerimeterServiceImpl(dataSource: SlickDataSource,
         throw regrets.head
       case Right(_) => ()
     }
-  }
 }
 
 object ServicePerimeterServiceImpl {
