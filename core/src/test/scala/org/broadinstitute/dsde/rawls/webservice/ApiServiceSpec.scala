@@ -203,7 +203,6 @@ trait ApiServiceSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           config,
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName

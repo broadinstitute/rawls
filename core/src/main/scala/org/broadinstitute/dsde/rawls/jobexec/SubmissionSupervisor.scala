@@ -55,22 +55,19 @@ object SubmissionSupervisor {
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
             notificationDAO: NotificationDAO,
-            bucketCredential: Credential,
             submissionMonitorConfig: SubmissionMonitorConfig,
             entityQueryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionSupervisor(
-        executionServiceCluster,
-        datasource,
-        samDAO,
-        googleServicesDAO,
-        notificationDAO,
-        bucketCredential,
-        submissionMonitorConfig,
-        entityQueryTimeout,
-        workbenchMetricBaseName
+      new SubmissionSupervisor(executionServiceCluster,
+                               datasource,
+                               samDAO,
+                               googleServicesDAO,
+                               notificationDAO,
+                               submissionMonitorConfig,
+                               entityQueryTimeout,
+                               workbenchMetricBaseName
       )
     )
 }
@@ -88,7 +85,6 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            samDAO: SamDAO,
                            googleServicesDAO: GoogleServicesDAO,
                            notificationDAO: NotificationDAO,
-                           bucketCredential: Credential,
                            submissionMonitorConfig: SubmissionMonitorConfig,
                            entityQueryTimeout: Duration,
                            override val workbenchMetricBaseName: String
@@ -138,7 +134,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     case StartMonitorPass =>
       startMonitoringNewSubmissions pipeTo self
     case SubmissionStarted(workspaceName, submissionId) =>
-      val child = startSubmissionMonitor(workspaceName, submissionId, bucketCredential)
+      val child = startSubmissionMonitor(workspaceName, submissionId)
       scheduleNextCheckCurrentWorkflowStatus(child)
       registerDetailedJobExecGauges(workspaceName, submissionId)
 
@@ -183,10 +179,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     // we want to track them over a longer time frame.
     workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand("cause", cause).asCounter("monitorRestarted")
 
-  private def startSubmissionMonitor(workspaceName: WorkspaceName,
-                                     submissionId: UUID,
-                                     credential: Credential
-  ): ActorRef =
+  private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID) =
     actorOf(
       SubmissionMonitorActor
         .props(
@@ -197,7 +190,6 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           googleServicesDAO,
           notificationDAO,
           executionServiceCluster,
-          credential,
           submissionMonitorConfig,
           entityQueryTimeout,
           workbenchMetricBaseName

@@ -75,7 +75,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     credential
   }
 
-  override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
+  def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
   lazy val getResourceBufferServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
