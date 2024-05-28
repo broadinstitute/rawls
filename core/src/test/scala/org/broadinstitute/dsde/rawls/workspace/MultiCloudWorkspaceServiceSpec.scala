@@ -1335,7 +1335,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should
     "clone an azure workspace" +
-    " & create a new workspace record" +
+    " & create a new workspace record with merged attributes" +
     " & create a new job for the workspace manager resource monitor" in
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
@@ -1367,7 +1367,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               WorkspaceRequest(
                 cloneName.namespace,
                 cloneName.name,
-                Map.empty,
+                Map(
+                  AttributeName.withDefaultNS("destination") -> AttributeString("destination only")
+                ),
                 None,
                 Some("analyses/"),
                 policies = Some(
@@ -1377,8 +1379,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 )
               )
             )
+            // Ensure test data has the attribute we expect to merge in.
+            _ = testData.azureWorkspace.attributes shouldBe Map(
+              AttributeName.withDefaultNS("description") -> AttributeString("source description")
+            )
             _ = clone.toWorkspaceName shouldBe cloneName
             _ = clone.workspaceType shouldBe McWorkspace
+            _ = clone.attributes shouldBe Map(
+              AttributeName.withDefaultNS("description") -> AttributeString("source description"),
+              AttributeName.withDefaultNS("destination") -> AttributeString("destination only")
+            )
 
             jobs <- slickDataSource.inTransaction { access =>
               for {
