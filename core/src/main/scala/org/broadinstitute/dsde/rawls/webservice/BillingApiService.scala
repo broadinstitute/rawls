@@ -23,7 +23,7 @@ trait BillingApiService extends UserInfoDirectives {
 
   val userServiceConstructor: RawlsRequestContext => UserService
 
-  def billingRoutes(otelContext: Context = Context.root()): server.Route = {
+  def billingRoutes(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / Segment) { projectId =>
@@ -57,5 +57,4 @@ trait BillingApiService extends UserInfoDirectives {
           }
       }
     }
-  }
 }
