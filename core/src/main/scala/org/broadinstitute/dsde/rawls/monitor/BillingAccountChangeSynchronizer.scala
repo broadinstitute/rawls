@@ -5,7 +5,15 @@ import akka.actor.typed.scaladsl.Behaviors
 import cats.data._
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, LiftIO}
-import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApplyOps, catsSyntaxOptionId, catsSyntaxSemigroup, toFlatMapOps, toFoldableOps, toFunctorOps}
+import cats.implicits.{
+  catsSyntaxApplicativeError,
+  catsSyntaxApplyOps,
+  catsSyntaxOptionId,
+  catsSyntaxSemigroup,
+  toFlatMapOps,
+  toFoldableOps,
+  toFunctorOps
+}
 import cats.mtl.Ask
 import cats.{Applicative, Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
@@ -109,7 +117,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield projectOpt.getOrElse(throw new IllegalStateException(s"No such billing account $projectName"))
 
   private def updateBillingProjectGoogleProject[F[_]](
-                                                       billingProject: RawlsBillingProject, tracingContext: RawlsTracingContext
+    billingProject: RawlsBillingProject,
+    tracingContext: RawlsTracingContext
   )(implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F]): F[Outcome] =
     for {
       // the billing probe can only access billing accounts that are defined
@@ -216,7 +225,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield outcome
 
   private def setGoogleProjectBillingAccount[F[_]](
-                                                    googleProjectId: GoogleProjectId, tracingContext: RawlsTracingContext
+    googleProjectId: GoogleProjectId,
+    tracingContext: RawlsTracingContext
   )(implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F]): F[Unit] =
     for {
       projectBillingInfo <- L.liftIO {

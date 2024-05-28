@@ -9,9 +9,9 @@ object Merging {
     // [error]   Jar name = bcpkix-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
     // [error]   Jar name = bcprov-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
     // [error]   Jar name = bcutil-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
-    case "META-INF/versions/9/OSGI-INF/MANIFEST.MF"           => MergeStrategy.first
+    case "META-INF/versions/9/OSGI-INF/MANIFEST.MF" => MergeStrategy.first
     // For source bouncycastle files
-    case x if x.contains("bouncycastle")                      => MergeStrategy.first
+    case x if x.contains("bouncycastle") => MergeStrategy.first
     // For the following error:
     // [error] java.lang.RuntimeException: deduplicate: different file contents found in the following:
     // [error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
