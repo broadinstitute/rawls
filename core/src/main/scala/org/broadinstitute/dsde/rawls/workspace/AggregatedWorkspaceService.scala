@@ -46,33 +46,31 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
   def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] =
     TracingUtils.traceNakedWithParent("listWorkspacesFromWorkspaceManager", ctx.toTracingContext) { _ =>
       val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx).groupBy(_.getId)
-      workspaces.map(workspace =>
-        workspace.workspaceType match {
-          case WorkspaceType.RawlsWorkspace =>
-            AggregatedWorkspace(workspace,
-                                Some(workspace.googleProjectId),
-                                azureCloudContext = None,
-                                policies = List.empty
-            )
-          case WorkspaceType.McWorkspace =>
-            val id = workspace.workspaceIdAsUUID
-            wsmResponse
-              .get(id)
-              .map(wsmInfo =>
-                Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
-                  case e: InvalidCloudContextException =>
-                    val ws = workspace.copy(errorMessage =
-                      Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}")
-                    )
-                    AggregatedWorkspace(ws, None, None, policies = List.empty)
-                }.get
-              )
-              .getOrElse {
-                val ws = workspace.copy(errorMessage = Some("Workspace not found in Workspace Manager"))
+      workspaces.map { workspace =>
+        val id = workspace.workspaceIdAsUUID
+        wsmResponse
+          .get(id)
+          .map(wsmInfo =>
+            Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
+              case e: InvalidCloudContextException =>
+                val ws =
+                  workspace.copy(errorMessage = Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}"))
                 AggregatedWorkspace(ws, None, None, policies = List.empty)
-              }
-        }
-      )
+            }.get
+          )
+          .getOrElse {
+            if (workspace.workspaceType == WorkspaceType.RawlsWorkspace) {
+              AggregatedWorkspace(workspace,
+                                  Some(workspace.googleProjectId),
+                                  azureCloudContext = None,
+                                  policies = List.empty
+              )
+            } else {
+              val ws = workspace.copy(errorMessage = Some("Workspace not found in Workspace Manager"))
+              AggregatedWorkspace(ws, None, None, policies = List.empty)
+            }
+          }
+      }
     }
 
   /**

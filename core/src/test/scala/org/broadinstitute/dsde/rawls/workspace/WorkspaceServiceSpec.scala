@@ -3045,29 +3045,44 @@ class WorkspaceServiceSpec
                                    managedAppCoordinates: AzureManagedAppCoordinates,
                                    policies: List[WsmPolicyInput] = List()
   ): Workspace = {
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceName = s"rawls-azure-test-ws-${UUID.randomUUID().toString}"
 
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
       Map.empty
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .azureContext(
-          new AzureContext()
-            .tenantId(managedAppCoordinates.tenantId.toString)
-            .subscriptionId(managedAppCoordinates.subscriptionId.toString)
-            .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
-        )
-        .policies(policies.asJava)
-    )
 
-    Await.result(
+    val createdWorkspace = Await.result(
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
     )
+
+    val workspaceDescription = new WorkspaceDescription()
+      .id(createdWorkspace.workspaceIdAsUUID)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .azureContext(
+        new AzureContext()
+          .tenantId(managedAppCoordinates.tenantId.toString)
+          .subscriptionId(managedAppCoordinates.subscriptionId.toString)
+          .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
+      )
+      .policies(policies.asJava)
+
+    when(
+      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
+                                                any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      workspaceDescription
+    )
+
+    when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        workspaceDescription
+      )
+    )
+    createdWorkspace
   }
 
   private def createGcpWorkspaceStub(services: TestApiService,
@@ -3080,16 +3095,27 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-        .policies(policies.asJava)
-    )
-
-    Await.result(
+    val createdWorkspace = Await.result(
       services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
       Duration.Inf
     )
+    val workspaceDescription = new WorkspaceDescription()
+      .id(createdWorkspace.workspaceIdAsUUID)
+      .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+      .policies(policies.asJava)
+    when(
+      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
+                                                any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      workspaceDescription
+    )
+    when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        workspaceDescription
+      )
+    )
+    createdWorkspace
   }
 
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
@@ -3512,7 +3538,10 @@ class WorkspaceServiceSpec
         new WorkspaceDescription().id(deletingAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
         // no azureContext, should not be returned
         new WorkspaceDescription().id(readyAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
-        new WorkspaceDescription().id(googleWorkspace.workspaceIdAsUUID).gcpContext(new GcpContext())
+        new WorkspaceDescription()
+          .id(googleWorkspace.workspaceIdAsUUID)
+          .gcpContext(new GcpContext())
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
       )
     )
 
@@ -3564,7 +3593,7 @@ class WorkspaceServiceSpec
       // set up test data
       val azureWorkspace =
         Workspace.buildReadyMcWorkspace("test_namespace1",
-                                        "name",
+                                        "azureWorkspaceWithNoWsmRecord",
                                         workspaceId1,
                                         new DateTime(),
                                         new DateTime(),
@@ -3572,7 +3601,7 @@ class WorkspaceServiceSpec
                                         Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
-                                      workspaceId2,
+                                      "googleWorkspaceWithWsmRecord",
                                       workspaceId2,
                                       "aBucket",
                                       Some("workflow-collection"),
@@ -3594,7 +3623,10 @@ class WorkspaceServiceSpec
 
       when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
         List(
-          new WorkspaceDescription().id(googleWorkspace.workspaceIdAsUUID).gcpContext(new GcpContext())
+          new WorkspaceDescription()
+            .id(googleWorkspace.workspaceIdAsUUID)
+            .gcpContext(new GcpContext())
+            .stage(WorkspaceStageModel.MC_WORKSPACE)
         )
       )
 
@@ -3860,6 +3892,92 @@ class WorkspaceServiceSpec
 
       actualNumber shouldBe numberAttr
     }
+  }
+
+  it should "return policy information for GCP workspaces with a stub workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("gcp_test_name")
+      .namespace("gcp_test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key")
+        ).asJava
+      )
+    createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
+
+    val result = Await
+      .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+      .convertTo[Seq[WorkspaceListResponse]]
+
+    val matchingWorkspaces = scala.collection.mutable.Set[WorkspaceListResponse]()
+    result.map { ws =>
+      if (ws.workspace.name == workspaceName) {
+        val policies: List[WorkspacePolicy] = ws.policies.get
+        policies should not be empty
+        val policy: WorkspacePolicy = policies.head
+        policy.name shouldBe wsmPolicyInput.getName
+        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        matchingWorkspaces += ws
+      }
+    }
+    matchingWorkspaces.size should be(1)
+  }
+
+  it should "return no policy information for GCP workspaces without a stub workspace" in withTestDataServices {
+    services =>
+      val noPoliciesWorkspaceName = s"rawls-no-policies-test-ws-${UUID.randomUUID().toString}"
+      val workspaceNoPoliciesRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        noPoliciesWorkspaceName,
+        Map.empty
+      )
+      Await.result(services.workspaceService.createWorkspace(workspaceNoPoliciesRequest), Duration.Inf)
+
+      val result = Await
+        .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+
+      val matchingWorkspaces = scala.collection.mutable.Set[WorkspaceListResponse]()
+      result.map { ws =>
+        if (ws.workspace.name == noPoliciesWorkspaceName) {
+          ws.policies.get should be(empty)
+          matchingWorkspaces += ws
+          // We shouldn't report an error about the workspace not existing in workspace manager.
+          ws.workspace.errorMessage should be(empty)
+        }
+      }
+      matchingWorkspaces.size should be(1)
+  }
+
+  it should "return policy information for Azure workspaces" in withTestDataServices { services =>
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("azure_test_name")
+      .namespace("azure_test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key")
+        ).asJava
+      )
+    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
+    val workspace = createAzureWorkspace(services, managedAppCoordinates, List(wsmPolicyInput))
+
+    val result = Await
+      .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+      .convertTo[Seq[WorkspaceListResponse]]
+
+    val matchingWorkspaces = scala.collection.mutable.Set[WorkspaceListResponse]()
+    result.map { ws =>
+      if (ws.workspace.name == workspace.name) {
+        val policies: List[WorkspacePolicy] = ws.policies.get
+        policies should not be empty
+        val policy: WorkspacePolicy = policies.head
+        policy.name shouldBe wsmPolicyInput.getName
+        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        matchingWorkspaces += ws
+      }
+    }
+    matchingWorkspaces.size should be(1)
   }
 
   "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {
