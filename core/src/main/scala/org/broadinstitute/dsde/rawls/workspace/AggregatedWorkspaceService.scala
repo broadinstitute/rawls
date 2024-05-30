@@ -59,6 +59,7 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
             }.get
           )
           .getOrElse {
+            // Rawls workspaces without a RAWLS_STAGE stub workspace have no record in WSM.
             if (workspace.workspaceType == WorkspaceType.RawlsWorkspace) {
               AggregatedWorkspace(workspace,
                                   Some(workspace.googleProjectId),

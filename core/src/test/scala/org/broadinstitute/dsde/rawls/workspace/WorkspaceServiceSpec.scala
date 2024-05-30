@@ -3541,7 +3541,7 @@ class WorkspaceServiceSpec
         new WorkspaceDescription()
           .id(googleWorkspace.workspaceIdAsUUID)
           .gcpContext(new GcpContext())
-          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
       )
     )
 
@@ -3626,7 +3626,7 @@ class WorkspaceServiceSpec
           new WorkspaceDescription()
             .id(googleWorkspace.workspaceIdAsUUID)
             .gcpContext(new GcpContext())
-            .stage(WorkspaceStageModel.MC_WORKSPACE)
+            .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
         )
       )
 
@@ -3910,15 +3910,16 @@ class WorkspaceServiceSpec
       .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
       .convertTo[Seq[WorkspaceListResponse]]
 
-    val matchingWorkspaces = scala.collection.mutable.Set[WorkspaceListResponse]()
-    result.map { ws =>
+    val matchingWorkspaces = result.filter { ws =>
       if (ws.workspace.name == workspaceName) {
         val policies: List[WorkspacePolicy] = ws.policies.get
         policies should not be empty
         val policy: WorkspacePolicy = policies.head
         policy.name shouldBe wsmPolicyInput.getName
         policy.namespace shouldBe wsmPolicyInput.getNamespace
-        matchingWorkspaces += ws
+        true
+      } else {
+        false
       }
     }
     matchingWorkspaces.size should be(1)
@@ -3938,13 +3939,14 @@ class WorkspaceServiceSpec
         .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
         .convertTo[Seq[WorkspaceListResponse]]
 
-      val matchingWorkspaces = scala.collection.mutable.Set[WorkspaceListResponse]()
-      result.map { ws =>
+      val matchingWorkspaces = result.filter { ws =>
         if (ws.workspace.name == noPoliciesWorkspaceName) {
           ws.policies.get should be(empty)
-          matchingWorkspaces += ws
           // We shouldn't report an error about the workspace not existing in workspace manager.
           ws.workspace.errorMessage should be(empty)
+          true
+        } else {
+          false
         }
       }
       matchingWorkspaces.size should be(1)
@@ -3966,15 +3968,16 @@ class WorkspaceServiceSpec
       .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
       .convertTo[Seq[WorkspaceListResponse]]
 
-    val matchingWorkspaces = scala.collection.mutable.Set[WorkspaceListResponse]()
-    result.map { ws =>
+    val matchingWorkspaces = result.filter { ws =>
       if (ws.workspace.name == workspace.name) {
         val policies: List[WorkspacePolicy] = ws.policies.get
         policies should not be empty
         val policy: WorkspacePolicy = policies.head
         policy.name shouldBe wsmPolicyInput.getName
         policy.namespace shouldBe wsmPolicyInput.getNamespace
-        matchingWorkspaces += ws
+        true
+      } else {
+        false
       }
     }
     matchingWorkspaces.size should be(1)
