@@ -1,6 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobStatus
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobStatus
+}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   cloneJobTypes,
   JobType
@@ -13,6 +17,7 @@ import slick.ast.TypedType
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -148,7 +153,19 @@ final case class WorkspaceManagerResourceMonitorRecord(
   userEmail: Option[String],
   createdTime: Timestamp,
   args: Option[Map[String, String]] = None
-)
+) {
+
+  def retryOrTimeout(onTimeout: () => Future[Unit] = () => Future.successful())(implicit
+    executionContext: ExecutionContext
+  ): Future[JobStatus] = {
+    val expireTime = Instant.ofEpochMilli(createdTime.getTime).plus(1, ChronoUnit.DAYS)
+    if (expireTime.isBefore(Instant.now())) {
+      onTimeout().map(_ => Complete)
+    } else {
+      Future.successful(Incomplete)
+    }
+  }
+}
 
 trait WorkspaceManagerResourceMonitorRecordComponent {
   this: DriverComponent =>
