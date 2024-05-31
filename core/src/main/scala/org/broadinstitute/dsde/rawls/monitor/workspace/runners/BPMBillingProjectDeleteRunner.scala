@@ -68,13 +68,13 @@ class BPMBillingProjectDeleteRunner(
       case Success(userCtx) =>
         billingRepository.getLandingZoneId(projectName).flatMap {
           case Some(landingZoneId) =>
-            handleLandingZoneDeletion(job.jobControlId, projectName, UUID.fromString(landingZoneId), userCtx)
+            handleLandingZoneDeletion(job, projectName, UUID.fromString(landingZoneId), userCtx)
           case None => billingProjectDeletion.finalizeDelete(projectName, userCtx).map(_ => Complete)
         }
       case Failure(t) =>
         val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
         logger.error(s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg", t)
-        billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
+        job.retryOrTimeout(() => billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)))
     }
   }
 
@@ -84,14 +84,14 @@ class BPMBillingProjectDeleteRunner(
     }
     .getOrElse(s"Landing Zone deletion failed: no error reported in response")
 
-  private def handleLandingZoneDeletion(jobId: UUID,
+  private def handleLandingZoneDeletion(job: WorkspaceManagerResourceMonitorRecord,
                                         projectName: RawlsBillingProjectName,
                                         lzId: UUID,
                                         ctx: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
   ): Future[JobStatus] =
-    Try(workspaceManagerDAO.getDeleteLandingZoneResult(jobId.toString, lzId, ctx)) match {
+    Try(workspaceManagerDAO.getDeleteLandingZoneResult(job.jobControlId.toString, lzId, ctx)) match {
       case Failure(e: ApiException) if e.getCode == StatusCodes.Forbidden.intValue =>
         logger.info(
           s"LZ deletion result status = ${e.getCode} for LZ ID ${lzId}, LZ record is gone. Proceeding with rawls billing project deletion"
@@ -102,11 +102,14 @@ class BPMBillingProjectDeleteRunner(
           s"API call to get Landing Zone deletion operation failed with status code ${e.getCode}: ${e.getMessage}"
         e.getCode match {
           case code if code >= 400 && code < 500 =>
-            billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
+            billingRepository.updateCreationStatus(projectName, DeletionFailed, Option(msg)).map(_ => Complete)
           case _ =>
-            billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
+            job.retryOrTimeout(() => billingRepository.updateCreationStatus(projectName, DeletionFailed, Option(msg)))
         }
-      case Failure(_) => Future.successful(Incomplete)
+      case Failure(t) =>
+        job.retryOrTimeout(() =>
+          billingRepository.updateCreationStatus(projectName, DeletionFailed, Option(t.getMessage))
+        )
       case Success(result) =>
         Option(result.getJobReport).map(_.getStatus) match {
           case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)

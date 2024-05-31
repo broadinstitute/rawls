@@ -155,7 +155,7 @@ final case class WorkspaceManagerResourceMonitorRecord(
   args: Option[Map[String, String]] = None
 ) {
 
-  def retryOrTimeout(onTimeout: () => Future[Unit] = () => Future.successful())(implicit
+  def retryOrTimeout(onTimeout: () => Future[Any] = () => Future.successful())(implicit
     executionContext: ExecutionContext
   ): Future[JobStatus] = {
     val expireTime = Instant.ofEpochMilli(createdTime.getTime).plus(1, ChronoUnit.DAYS)
