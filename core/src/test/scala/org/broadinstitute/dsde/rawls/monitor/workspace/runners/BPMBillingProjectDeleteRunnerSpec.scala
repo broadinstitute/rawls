@@ -123,7 +123,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(Deleting),
+        ArgumentMatchers.eq(DeletionFailed),
         ArgumentMatchers.any[Some[String]]()
       )
     ).thenAnswer { invocation =>
@@ -158,7 +158,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(Deleting),
+      ArgumentMatchers.eq(DeletionFailed),
       ArgumentMatchers.any[Some[String]]()
     )
   }

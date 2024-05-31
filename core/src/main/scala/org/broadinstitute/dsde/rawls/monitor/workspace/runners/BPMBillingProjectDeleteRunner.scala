@@ -74,7 +74,7 @@ class BPMBillingProjectDeleteRunner(
       case Failure(t) =>
         val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
         logger.error(s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg", t)
-        job.retryOrTimeout(() => billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)))
+        job.retryOrTimeout(() => billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)))
     }
   }
 
