@@ -58,11 +58,19 @@ class LandingZoneCreationStatusRunner(
           s"AzureLandingZoneResult job ${job.jobControlId} for billing project: $billingProjectName failed: $msg",
           t
         )
-        Future.successful(Incomplete)
+        job.retryOrTimeout(() =>
+          billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
+        )
       case Success(userCtx) =>
         Try(workspaceManagerDAO.getCreateAzureLandingZoneResult(job.jobControlId.toString, userCtx)) match {
-          case Failure(_) =>
-            Future.successful(Incomplete)
+          case Failure(t) =>
+            job.retryOrTimeout(() =>
+              billingRepository.updateCreationStatus(
+                billingProjectName,
+                CreationStatuses.Error,
+                Some(s"Unable to retrieve landing zone creation results: ${t.getMessage}")
+              )
+            )
           case Success(result) =>
             Option(result.getJobReport).map(_.getStatus) match {
               case Some(JobReport.StatusEnum.RUNNING) =>
