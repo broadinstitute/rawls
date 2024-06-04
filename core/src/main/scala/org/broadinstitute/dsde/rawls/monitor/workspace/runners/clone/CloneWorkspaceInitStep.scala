@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
+import bio.terra.workspace.model.CloneResourceResult
 import bio.terra.workspace.model.JobReport.StatusEnum
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
