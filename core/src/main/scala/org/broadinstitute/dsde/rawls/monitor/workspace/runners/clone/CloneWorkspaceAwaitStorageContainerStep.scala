@@ -46,10 +46,10 @@ class CloneWorkspaceAwaitStorageContainerStep(
           // Don't retry 4xx codes
           case code if code < 500 => fail(operationName, e.getMessage).map(_ => Complete)
           // Retry non-4xx
-          case _ => Future.successful(Incomplete)
+          case _ => job.retryOrTimeout(() => fail(operationName, e.getMessage))
         }
-      case Failure(t) =>
-        Future.successful(Incomplete)
+      case Failure(t) => job.retryOrTimeout(() => fail(operationName, t.getMessage))
+
     }
   }
 

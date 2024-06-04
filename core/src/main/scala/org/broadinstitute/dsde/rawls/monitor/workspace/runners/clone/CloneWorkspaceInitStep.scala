@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
   JobType
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceState}
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceManagerPollingOperationException, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 

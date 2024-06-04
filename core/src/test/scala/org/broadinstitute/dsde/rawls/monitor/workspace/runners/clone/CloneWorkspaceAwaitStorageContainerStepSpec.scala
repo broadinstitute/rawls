@@ -17,6 +17,9 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -70,6 +73,49 @@ class CloneWorkspaceAwaitStorageContainerStepSpec
     )
     whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(workspaceRepository, never).setFailedState(
+      ArgumentMatchers.eq(workspaceId),
+      ArgumentMatchers.any(),
+      ArgumentMatchers.contains(apiMessage)
+    )
+  }
+
+  it should "return Complete and record the error for jobs failed with a 500 after a timout period" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val apiMessage = "some failure message"
+    val apiException = new ApiException(500, apiMessage)
+    val createTime = Timestamp.from(Instant.now().minus(25, ChronoUnit.HOURS))
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.CloneWorkspaceAwaitContainerResult,
+      Some(workspaceId),
+      billingProjectId = None,
+      userEmail = Some(userEmail),
+      createTime,
+      Some(Map.empty)
+    )
+    doAnswer(_ => throw apiException)
+      .when(wsmDao)
+      .getJob(ArgumentMatchers.eq(monitorRecord.jobControlId.toString), ArgumentMatchers.any())
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.setFailedState(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.contains(apiMessage)
+      )
+    ).thenReturn(Future(1))
+
+    val runner = new CloneWorkspaceAwaitStorageContainerStep(
+      wsmDao,
+      workspaceRepository,
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceId,
+      monitorRecord
+    )
+
+    whenReady(runner.runStep(ctx))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    verify(workspaceRepository).setFailedState(
       ArgumentMatchers.eq(workspaceId),
       ArgumentMatchers.any(),
       ArgumentMatchers.contains(apiMessage)
