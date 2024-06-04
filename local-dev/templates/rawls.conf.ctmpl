@@ -309,6 +309,7 @@ directory {
 oidc {
   authorityEndpoint = "https://terra{{ $b2cTenant }}b2c.b2clogin.com/terra{{ $b2cTenant }}b2c.onmicrosoft.com/v2.0?p=b2c_1a_signup_signin_{{ $b2cEnv }}"
   oidcClientId = "{{ $b2cAppId }}"
+  authorityEndpointWithGoogleBillingScope = "https://terra{{ $b2cTenant }}b2c.b2clogin.com/terra{{ $b2cTenant }}b2c.onmicrosoft.com/v2.0?p=b2c_1a_signup_signin_billing_{{ $b2cEnv }}"
 }
 
 # TODO: remove once https://github.com/broadinstitute/rawls/pull/1794 is merged
