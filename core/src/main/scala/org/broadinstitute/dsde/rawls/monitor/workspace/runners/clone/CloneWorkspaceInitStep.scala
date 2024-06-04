@@ -40,10 +40,10 @@ class CloneWorkspaceInitStep(
           for (resource <- workspaceResult.getResources().asScala)
             if (resource.getResult() == CloneResourceResult.FAILED) {
               if (errorMessages.nonEmpty) {
-                errorMessages.append("\n");
+                errorMessages.append(", ");
               }
-              errorMessages.append(s"Workspace resource (${resource.getName()}, ${resource
-                  .getResourceType()}) failed to clone with the following error: ${resource.getErrorMessage()}.");
+              errorMessages.append(s"resource (${resource.getName()}, ${resource
+                  .getResourceType()}) failed to clone with error \"${resource.getErrorMessage()}\"");
             }
         }
         if (errorMessages.nonEmpty) {

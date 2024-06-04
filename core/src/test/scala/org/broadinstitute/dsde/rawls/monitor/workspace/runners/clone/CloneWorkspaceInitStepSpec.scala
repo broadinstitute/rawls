@@ -168,7 +168,7 @@ class CloneWorkspaceInitStepSpec extends AnyFlatSpecLike with MockitoSugar with 
       ArgumentMatchers.eq(workspaceId),
       ArgumentMatchers.eq(CloningFailed),
       ArgumentMatchers.eq(
-        s"Workspace Clone Operation [Initial Workspace Clone], source workspace: [Unknown], dest workspace [$workspaceId] failed for jobId [$jobId]: Workspace resource (failedResource1, AZURE_VM) failed to clone with the following error: error1.\nWorkspace resource (failedResource2, AZURE_DATABASE) failed to clone with the following error: error2."
+        s"Workspace Clone Operation [Initial Workspace Clone], source workspace: [Unknown], dest workspace [$workspaceId] failed for jobId [$jobId]: resource (failedResource1, AZURE_VM) failed to clone with error \"error1\", resource (failedResource2, AZURE_DATABASE) failed to clone with error \"error2\""
       )
     )
   }
