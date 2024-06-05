@@ -650,22 +650,20 @@ object Boot extends IOApp with LazyLogging {
       .merge(ContainerResource.get())
       .merge(resourceBuilder.build)
 
-    val maybeTracerProvider = conf.getBooleanOption("opencensus-scala.trace.exporters.stackdriver.enabled").flatMap {
-      case false => None
-      case true =>
+    val maybeTracerProvider =
+      conf.getBooleanOption("opencensus-scala.trace.exporters.stackdriver.enabled").flatMap { _ =>
         val traceProviderBuilder = SdkTracerProvider.builder
         val projectId = conf.getString("opencensus-scala.trace.exporters.stackdriver.project-id")
         val googleTraceExporter =
           TraceExporter.createWithConfiguration(TraceConfiguration.builder().setProjectId(projectId).build())
         traceProviderBuilder.addSpanProcessor(BatchSpanProcessor.builder(googleTraceExporter).build())
-        val probabilitySampler =
-          Sampler.traceIdRatioBased(conf.getDouble("opencensus-scala.trace.sampling-probability"))
+        val probabilitySampler = Sampler.traceIdRatioBased(1.0)
         traceProviderBuilder
           .setResource(resource)
           .setSampler(Sampler.parentBased(probabilitySampler))
           .build
           .some
-    }
+      }
 
     val prometheusConfig = PrometheusConfig.apply(conf)
 
