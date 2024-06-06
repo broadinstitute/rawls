@@ -23,7 +23,7 @@ jobs:
     with:
       release-branches: develop
     secrets: inherit
-  
+
   # Compile the Scala code to a jar.
   # Build the docker image and push that image to GCR.
   rawls-build-publish-job:
@@ -35,7 +35,7 @@ jobs:
     outputs:
       custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
     steps:
-      - uses: 'actions/checkout@v4'        
+      - uses: 'actions/checkout@v4'
 
       - name: Extract branch
         id: extract-branch
@@ -153,7 +153,7 @@ jobs:
             "custom-version-json": "${{ needs.rawls-build-publish-job.outputs.custom-version-json }}"
           }'
 
-  # Run swat tests. This kicks off two parallel jobs for Workflows and Workspaces tests, which both run against the BEE
+  # Run swat tests. This kicks off multiple parallel jobs for Workflows and Workspaces tests, which run against the BEE
   # we just created.
   rawls-swat-test-job:
     strategy:
@@ -164,7 +164,8 @@ jobs:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
         testing-env: [ qa ] # what env resources to use, e.g. SA keys
         test-group: [
-          { group_name: workspaces, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest -n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesTest" },
+          { group_name: workspaces, tag: "-n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesTest" },
+          { group_name: workspacesAuthDomains, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest" },
           { group_name: workflows, tag: "-n org.broadinstitute.dsde.test.api.MethodsTest" }
           # The Analysis Journeys swat tests (DataRepoSnapshotsTest) are all disabled, so the following matrix value
           # will run zero tests. Instead of running a noop test job, skip it altogether. We are leaving this value

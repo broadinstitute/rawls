@@ -25,7 +25,7 @@ trait UserApiService extends UserInfoDirectives {
 
   // standard /api routes begin here
 
-  def userRoutes(otelContext: Context = Context.root()): server.Route = {
+  def userRoutes(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("user" / "billing") {
@@ -87,5 +87,4 @@ trait UserApiService extends UserInfoDirectives {
           }
         }
     }
-  }
 }

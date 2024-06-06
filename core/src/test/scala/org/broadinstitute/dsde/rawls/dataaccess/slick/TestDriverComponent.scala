@@ -35,7 +35,7 @@ import org.scalatest.matchers.should.Matchers
 import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
@@ -1651,7 +1651,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       createdDate = currentTime(),
       lastModified = currentTime(),
       createdBy = "testUser",
-      attributes = Map.empty,
+      attributes = Map(
+        AttributeName.withDefaultNS("description") -> AttributeString("source description")
+      ),
       isLocked = false,
       workspaceVersion = WorkspaceVersions.V2,
       googleProjectId = GoogleProjectId(""),

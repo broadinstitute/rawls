@@ -29,7 +29,7 @@ class CloneWorkspaceAwaitStorageContainerStep(
 )(implicit executionContext: ExecutionContext)
     extends WorkspaceCloningStep(workspaceRepository, monitorRecordDao, workspaceId, job) {
 
-  override val jobType: JobType = JobType.CloneWorkspaceContainerInit
+  override val jobType: JobType = JobType.CloneWorkspaceAwaitContainerResult
 
   override def runStep(userCtx: RawlsRequestContext): Future[JobStatus] = {
     val operationName = "Await Storage Container Clone"
@@ -46,10 +46,10 @@ class CloneWorkspaceAwaitStorageContainerStep(
           // Don't retry 4xx codes
           case code if code < 500 => fail(operationName, e.getMessage).map(_ => Complete)
           // Retry non-4xx
-          case _ => Future.successful(Incomplete)
+          case _ => job.retryOrTimeout(() => fail(operationName, e.getMessage))
         }
-      case Failure(t) =>
-        Future.successful(Incomplete)
+      case Failure(t) => job.retryOrTimeout(() => fail(operationName, t.getMessage))
+
     }
   }
 
