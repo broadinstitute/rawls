@@ -19,6 +19,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -89,20 +90,8 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
 
   }
 
-  it should "set an error in the billing project and return job as incomplete if the user context cannot be created" in {
+  it should "return job as incomplete if the user context cannot be created before timeout" in {
     val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(Deleting),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.toLowerCase.contains("request context"))
-      assert(message.get.contains(userEmail))
-      Future.successful(1)
-    }
     val runner =
       spy(
         new BPMBillingProjectDeleteRunner(
@@ -126,14 +115,55 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       )
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+
+  }
+
+  it should "set an error in the billing project and return job as complete if the user context cannot be created after timing out" in {
+    val billingRepository = mock[BillingRepository]
+    when(
+      billingRepository.updateCreationStatus(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.eq(DeletionFailed),
+        ArgumentMatchers.any[Some[String]]()
+      )
+    ).thenAnswer { invocation =>
+      val message: Option[String] = invocation.getArgument(2)
+      assert(message.get.toLowerCase.contains("request context"))
+      assert(message.get.contains(userEmail))
+      Future.successful(1)
+    }
+    val runner =
+      spy(
+        new BPMBillingProjectDeleteRunner(
+          mock[SamDAO],
+          mock[GoogleServicesDAO],
+          mock[WorkspaceManagerDAO],
+          billingRepository,
+          mock[BillingProjectDeletion]
+        )
+      )
+    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
+      .when(runner)
+      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    val createTime = Timestamp.from(Instant.now().minus(25, ChronoUnit.HOURS))
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord =
+      WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
+                                            JobType.BpmBillingProjectDelete,
+                                            None,
+                                            Some(billingProjectName.value),
+                                            Some(userEmail),
+                                            createTime
+      )
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(Deleting),
+      ArgumentMatchers.eq(DeletionFailed),
       ArgumentMatchers.any[Some[String]]()
     )
   }
 
-  it should "set an error status and message on the project and return incomplete when landing zone call returns 500" in {
+  it should "return incomplete when landing zone call returns 500 before the timeout" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
     val wsmExceptionMessage = "looking for this to be reported in the billing project message"
@@ -158,10 +188,51 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
       .thenReturn(Future.successful(Some(landingZoneId)))
+
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        wsmDao,
+        billingRepository,
+        mock[BillingProjectDeletion]
+      )
+    )
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+  }
+
+  it should "set an error status and message on the project and return complete when landing zone call returns 500 after timing out" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmExceptionMessage = "looking for this to be reported in the billing project message"
+    val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
+    val createTime = Timestamp.from(Instant.now().minus(25, ChronoUnit.HOURS))
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.BpmBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      createTime
+    )
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(UUID.fromString(landingZoneId)),
+        ArgumentMatchers.any()
+      )
+    )
+      .thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(500, wsmExceptionMessage))
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId)))
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(Deleting),
+        ArgumentMatchers.eq(DeletionFailed),
         ArgumentMatchers.any[Some[String]]()
       )
     ).thenAnswer { invocation =>
@@ -180,11 +251,11 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     )
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(Deleting),
+      ArgumentMatchers.eq(DeletionFailed),
       ArgumentMatchers.any[Some[String]]()
     )
   }

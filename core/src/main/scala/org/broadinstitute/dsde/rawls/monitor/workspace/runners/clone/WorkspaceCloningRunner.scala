@@ -1,11 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
-  Complete,
-  Incomplete,
-  JobType
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
@@ -125,7 +121,7 @@ class WorkspaceCloningRunner(
         val msg =
           s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve request context for $userEmail"
         logFailure(msg, Some(t))
-        Future.successful(Incomplete)
+        job.retryOrTimeout(() => cloneFail(workspaceId, msg))
       case Success(userCtx) =>
         val step = getStep(job, workspaceId)
         step.runStep(userCtx)
