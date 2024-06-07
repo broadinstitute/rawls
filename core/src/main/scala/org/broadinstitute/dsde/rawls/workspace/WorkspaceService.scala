@@ -962,6 +962,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     } yield result
 
+  // IGNORE
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
     val (options, attributeSpecs) =
       processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
