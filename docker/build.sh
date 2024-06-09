@@ -108,7 +108,7 @@ function make_jar()
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
     fi
-    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.9.9_2.13.13 /working/docker/install.sh /working"
+    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/install.sh /working"
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
@@ -130,7 +130,7 @@ function artifactory_push()
     ARTIFACTORY_USERNAME=dsdejenkins
     ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
     echo "Publishing to artifactory..."
-    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.9.9_2.13.13 /$PROJECT/core/src/bin/publishSnapshot.sh
+    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
 
 function docker_cmd()
