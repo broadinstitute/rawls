@@ -372,14 +372,17 @@ multiCloudWorkspaces {
 
     landingZoneParameters = {
       # Total Network IP Space Size - 16,384 unique ips
+      # 10.1.0.0 - 10.1.63.255
       "VNET_ADDRESS_SPACE": "10.1.0.0/18"
-      # Each subnet will have 1024 unique ips
-      # This intenionally leaves a large number of the vnet address space unallocated
-      # This is hedging against future need for additional subnets or expanding the current ones
+      # 10.1.0.0 - 10.1.3.255 -- 1024 ips
       "AKS_SUBNET": "10.1.0.0/22"
-      "BATCH_SUBNET": "10.1.4.0/22"
+      # 10.1.4.0 - 10.1.7.255 -- 1024 ips
+      "COMPUTE_SUBNET": "10.1.4.0/22"
+      # 10.1.8.0 - 10.1.11.255 -- 1024 ips
       "POSTGRESQL_SUBNET": "10.1.8.0/22"
-      "COMPUTE_SUBNET": "10.1.12.0/22"
+      # gap from 10.1.12.0 - 10.1.31.255 -- available for future use
+      # 10.1.32.0 - 10.1.63.254 -- 8192 ips
+      "BATCH_SUBNET": "10.1.32.0/19"
       "POSTGRES_DB_ADMIN": "{{ $landingZonePostgres.username }}"
       "POSTGRES_DB_PASSWORD": "{{ $landingZonePostgres.password }}"
       "AKS_AUTOSCALING_ENABLED": "true"
