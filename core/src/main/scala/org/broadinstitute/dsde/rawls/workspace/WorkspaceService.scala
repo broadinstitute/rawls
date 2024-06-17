@@ -234,10 +234,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
-  // Note, this is a legacy implementation that returns only a GCP workspace.
-  def createWorkspace(workspaceRequest: WorkspaceRequest,
-                      parentContext: RawlsRequestContext = ctx
-  ): Future[WorkspaceDetails] =
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext = ctx): Future[Workspace] =
     for {
       _ <- traceFutureWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
         withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
@@ -267,11 +264,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
       )
-    } yield WorkspaceDetails.fromWorkspaceAndOptions(workspace,
-                                                     Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
-                                                     useAttributes = true,
-                                                     Some(WorkspaceCloudPlatform.Gcp)
-    )
+    } yield workspace
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.

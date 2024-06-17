@@ -255,7 +255,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                   workspaceRequest,
                   profileModel,
                   s
-                )
+                ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
               }
             }
         }
@@ -264,14 +264,20 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // This can happen if there's
       // - no azure config
       // - no billing profile or the billing profile's cloud platform is GCP
-      workspace <- workspaceOpt.flatten
+      (workspace, cloudPlatform) <- workspaceOpt.flatten
         .map(Future.successful)
         .getOrElse(
           traceFutureWithParent("createWorkspace", parentContext) { s =>
-            workspaceService.createWorkspace(workspaceRequest, s)
+            workspaceService
+              .createWorkspace(workspaceRequest, s)
+              .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
         )
-    } yield workspace
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                                     Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+                                                     useAttributes = true,
+                                                     Some(cloudPlatform)
+    )
 
   /**
     * Returns the billing profile associated with the billing project, if the billing project
@@ -608,7 +614,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest,
                                 profile: ProfileModel,
                                 parentContext: RawlsRequestContext = ctx
-  ): Future[WorkspaceDetails] = {
+  ): Future[Workspace] = {
     assertBillingProfileCreationDate(profile)
 
     traceFutureWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
@@ -704,7 +710,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   private def createWorkspace(workspaceRequest: WorkspaceRequest,
                               profile: ProfileModel,
                               parentContext: RawlsRequestContext
-  ): Future[WorkspaceDetails] = {
+  ): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
 
     val spendProfileId = profile.getId.toString
@@ -763,11 +769,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // create a WDS application in Leo
       _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
-    } yield WorkspaceDetails.fromWorkspaceAndOptions(savedWorkspace,
-                                                     Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
-                                                     useAttributes = true,
-                                                     Some(WorkspaceCloudPlatform.Azure)
-    )).recoverWith {
+    } yield savedWorkspace).recoverWith {
       case r: RawlsExceptionWithErrorReport if r.errorReport.statusCode.contains(StatusCodes.Conflict) =>
         // Workspace already exists with this name/namespace, and we don't want to delete it.
         Future.failed(r)

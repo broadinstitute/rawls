@@ -335,24 +335,24 @@ class FastPassMonitorSpec
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
     val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.toWorkspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
     workspaceFastPassGrants should not be empty
 
     fastPassMonitor ! FastPassMonitor.DeleteExpiredGrants
 
     val petEmail =
-      Await.result(services.mockFastPassSamDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProject),
+      Await.result(services.mockFastPassSamDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId),
                    Duration.Inf
       )
 
     eventually {
       val noMoreWorkspaceFastPassGrants =
-        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.toWorkspace.workspaceIdAsUUID))
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
       noMoreWorkspaceFastPassGrants should be(empty)
     }
 
     verify(services.googleIamDAO, times(1)).removeRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProject.value)),
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
       ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -360,7 +360,7 @@ class FastPassMonitorSpec
     )
 
     verify(services.googleIamDAO, times(1)).removeRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProject.value)),
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
       ArgumentMatchers.eq(petEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -373,7 +373,7 @@ class FastPassMonitorSpec
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProject.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
 
     verify(services.googleStorageDAO, times(1)).removeIamRoles(
@@ -382,7 +382,7 @@ class FastPassMonitorSpec
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProject.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
   }
 
@@ -409,14 +409,14 @@ class FastPassMonitorSpec
       val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
       val workspaceFastPassGrants =
-        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.toWorkspace.workspaceIdAsUUID))
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
       workspaceFastPassGrants should not be empty
 
       fastPassMonitor ! FastPassMonitor.DeleteExpiredGrants
 
       eventually {
         val postCleanupWorkspaceFastPassGrants =
-          runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.toWorkspace.workspaceIdAsUUID))
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
         postCleanupWorkspaceFastPassGrants should not be empty
         postCleanupWorkspaceFastPassGrants should not equal workspaceFastPassGrants
         postCleanupWorkspaceFastPassGrants.map(_.accountEmail.value) should contain only (services.user.userEmail.value)

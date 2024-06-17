@@ -1331,7 +1331,7 @@ class WorkspaceServiceSpec
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
     )
-    assertResult(Option(workspace.toWorkspace.toWorkspaceName)) {
+    assertResult(Option(workspace.toWorkspaceName)) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
@@ -1963,7 +1963,7 @@ class WorkspaceServiceSpec
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.toWorkspace.googleProjectId.value should not be empty
+    workspace.googleProjectId.value should not be empty
     workspace.googleProjectNumber should not be empty
   }
 
@@ -1976,7 +1976,7 @@ class WorkspaceServiceSpec
     // Verify that samDAO.createResourceFull was called
     verify(services.samDAO).createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-      ArgumentMatchers.eq(workspace.toWorkspace.googleProjectId.value),
+      ArgumentMatchers.eq(workspace.googleProjectId.value),
       any[Map[SamResourcePolicyName, SamPolicy]],
       any[Set[String]],
       any[RawlsRequestContext],
@@ -2315,9 +2315,7 @@ class WorkspaceServiceSpec
       servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
       // verify that we set the folder for the perimeter
-      verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.toWorkspace.googleProjectId),
-                                                 any[String]
-      )
+      verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
   }
 
   "cloneWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
@@ -2636,12 +2634,11 @@ class WorkspaceServiceSpec
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
       val workspace =
-        Await.result(
-          services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                               baseWorkspace.toWorkspace.toWorkspaceName,
-                                                               workspaceRequest
-          ),
-          Duration.Inf
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
         )
 
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
@@ -2662,12 +2659,11 @@ class WorkspaceServiceSpec
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
       val workspace =
-        Await.result(
-          services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                               baseWorkspace.toWorkspace.toWorkspaceName,
-                                                               workspaceRequest
-          ),
-          Duration.Inf
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
         )
 
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
@@ -2689,12 +2685,11 @@ class WorkspaceServiceSpec
         WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty, bucketLocation = Some("US"))
 
       val workspace =
-        Await.result(
-          services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                               baseWorkspace.toWorkspace.toWorkspaceName,
-                                                               workspaceRequest
-          ),
-          Duration.Inf
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
         )
 
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
@@ -2720,12 +2715,11 @@ class WorkspaceServiceSpec
         )
 
       val workspace =
-        Await.result(
-          services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                               baseWorkspace.toWorkspace.toWorkspaceName,
-                                                               workspaceRequest
-          ),
-          Duration.Inf
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
         )
 
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
@@ -3050,7 +3044,7 @@ class WorkspaceServiceSpec
   private def createAzureWorkspace(services: TestApiService,
                                    managedAppCoordinates: AzureManagedAppCoordinates,
                                    policies: List[WsmPolicyInput] = List()
-  ): WorkspaceDetails = {
+  ): Workspace = {
     val workspaceName = s"rawls-azure-test-ws-${UUID.randomUUID().toString}"
 
     val workspaceRequest = WorkspaceRequest(
@@ -3065,7 +3059,7 @@ class WorkspaceServiceSpec
     )
 
     val workspaceDescription = new WorkspaceDescription()
-      .id(createdWorkspace.toWorkspace.workspaceIdAsUUID)
+      .id(createdWorkspace.workspaceIdAsUUID)
       .stage(WorkspaceStageModel.MC_WORKSPACE)
       .azureContext(
         new AzureContext()
@@ -3076,7 +3070,7 @@ class WorkspaceServiceSpec
       .policies(policies.asJava)
 
     when(
-      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.toWorkspace.workspaceIdAsUUID),
+      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
                                                 any[RawlsRequestContext]
       )
     ).thenReturn(
@@ -3095,7 +3089,7 @@ class WorkspaceServiceSpec
                                      workspaceName: String,
                                      policies: List[WsmPolicyInput] = List(),
                                      workspaceService: WorkspaceService
-  ): WorkspaceDetails = {
+  ): Workspace = {
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
@@ -3121,7 +3115,7 @@ class WorkspaceServiceSpec
         workspaceDescription
       )
     )
-    createdWorkspace
+    createdWorkspace.toWorkspace
   }
 
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
@@ -3297,7 +3291,7 @@ class WorkspaceServiceSpec
       .thenReturn(Future.successful(Set(SamWorkspaceRoles.reader)))
 
     val readerWorkspace =
-      Await.result(testUserWS.getWorkspace(workspace.toWorkspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
     val readerResponse = readerWorkspace.convertTo[WorkspaceResponse]
     readerResponse.canCompute.get shouldEqual false
     readerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Read
@@ -3312,7 +3306,7 @@ class WorkspaceServiceSpec
       .thenReturn(Future.successful(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.reader)))
 
     val writerWorkspace =
-      Await.result(testUserWS.getWorkspace(workspace.toWorkspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
     val writerResponse = writerWorkspace.convertTo[WorkspaceResponse]
     writerResponse.canCompute.get shouldEqual true
     writerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Write
@@ -3327,7 +3321,7 @@ class WorkspaceServiceSpec
       .thenReturn(Future.successful(Set(SamWorkspaceRoles.owner)))
 
     val ownerWorkspace =
-      Await.result(testUserWS.getWorkspace(workspace.toWorkspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
     val ownerResponse = ownerWorkspace.convertTo[WorkspaceResponse]
     ownerResponse.canCompute.get shouldEqual true
     ownerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Owner

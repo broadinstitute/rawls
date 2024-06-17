@@ -31,7 +31,6 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceCloudPlatform,
   WorkspaceDeletionResult,
-  WorkspaceDetails,
   WorkspaceName,
   WorkspacePolicy,
   WorkspaceRequest,
@@ -106,15 +105,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
-    val mockedWorkspace =
-      Workspace("fake", "fake", "fake", "fake", None, currentTime(), currentTime(), "fake", Map.empty)
     when(workspaceService.createWorkspace(any(), any())).thenReturn(
       Future.successful(
-        WorkspaceDetails.fromWorkspaceAndOptions(mockedWorkspace,
-                                                 None,
-                                                 useAttributes = true,
-                                                 Some(WorkspaceCloudPlatform.Gcp)
-        )
+        Workspace("fake", "fake", "fake", "fake", None, currentTime(), currentTime(), "fake", Map.empty)
       )
     )
 
@@ -403,14 +396,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       name,
       Map.empty
     )
-    val result: WorkspaceDetails =
+    val result: Workspace =
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
                    Duration.Inf
       )
 
     result.name shouldBe name
-    result.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
-    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
     Mockito
       .verify(workspaceManagerDAO)
@@ -462,14 +454,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
     )
-    val result: WorkspaceDetails =
+    val result: Workspace =
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
                    Duration.Inf
       )
 
     result.name shouldBe "fake_name"
-    result.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
-    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
     Mockito
       .verify(leonardoDAO, never())
@@ -512,14 +503,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty
     )
-    val result: WorkspaceDetails =
+    val result: Workspace =
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
                    Duration.Inf
       )
 
     result.name shouldBe "fake_name"
-    result.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
-    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
     Mockito
       .verify(leonardoDAO)
@@ -730,14 +720,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       policies = Some(policies)
     )
 
-    val result: WorkspaceDetails =
+    val result: Workspace =
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
                    Duration.Inf
       )
 
     result.name shouldBe "fake_name"
-    result.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
-    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
     Mockito
       .verify(workspaceManagerDAO)
@@ -809,14 +798,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       Map.empty,
       protectedData = Some(true)
     )
-    val result: WorkspaceDetails =
+    val result: Workspace =
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
                    Duration.Inf
       )
 
     result.name shouldBe "fake_name"
-    result.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
-    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
 
     Mockito

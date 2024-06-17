@@ -389,7 +389,7 @@ class FastPassServiceSpec
       WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
       WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
     )
-    Await.ready(services.workspaceService.updateACL(workspace.toWorkspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
 
     verify(services.mockFastPassService)
       .syncFastPassesForUserInWorkspace(
@@ -1038,7 +1038,7 @@ class FastPassServiceSpec
       WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
       WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
     )
-    Await.ready(services.workspaceService.updateACL(workspace.toWorkspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
   }
 
   it should "collect errors while removing FastPass grants" in withTestDataServices { services =>
