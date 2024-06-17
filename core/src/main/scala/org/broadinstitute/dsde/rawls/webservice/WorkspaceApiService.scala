@@ -39,9 +39,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
                 val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
                 mcWorkspaceService
                   .createMultiCloudOrRawlsWorkspace(workspace, workspaceService)
-                  .map(w =>
-                    StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty))
-                  )
+                  .map(w => StatusCodes.Created -> w)
               }
             }
           }

@@ -234,7 +234,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
-  def createWorkspace(workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext = ctx): Future[Workspace] =
+  def createWorkspace(workspaceRequest: WorkspaceRequest,
+                      parentContext: RawlsRequestContext = ctx
+  ): Future[WorkspaceDetails] =
     for {
       _ <- traceFutureWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
         withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
@@ -246,7 +248,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // policies are not supported on GCP workspaces
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
-      workspace <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
+      (aggregatedWorkspace, workspace) <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess =>
             for {
@@ -256,15 +258,23 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         dataAccess,
                                                         s
               )
+              aggregatedWorkspace = new AggregatedWorkspaceService(workspaceManagerDAO)
+                .fetchAggregatedWorkspace(newWorkspace, ctx)
               _ = createdWorkspaceCounter.inc()
-            } yield newWorkspace,
+            } yield (aggregatedWorkspace, newWorkspace),
           TransactionIsolation.ReadCommitted
         )
       ) // read committed to avoid deadlocks on workspace attr scratch table
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
       )
-    } yield workspace
+    } yield
+    // None is temporary to see if this works
+    WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                             Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+                                             useAttributes = true,
+                                             aggregatedWorkspace.getCloudPlatform
+    )
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.

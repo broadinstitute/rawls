@@ -38,7 +38,9 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   Workspace,
+  WorkspaceCloudPlatform,
   WorkspaceDeletionResult,
+  WorkspaceDetails,
   WorkspaceName,
   WorkspaceRequest,
   WorkspaceState,
@@ -226,7 +228,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
                                        workspaceService: WorkspaceService,
                                        parentContext: RawlsRequestContext = ctx
-  ): Future[Workspace] =
+  ): Future[WorkspaceDetails] =
     for {
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext) { s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
@@ -606,7 +608,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest,
                                 profile: ProfileModel,
                                 parentContext: RawlsRequestContext = ctx
-  ): Future[Workspace] = {
+  ): Future[WorkspaceDetails] = {
     assertBillingProfileCreationDate(profile)
 
     traceFutureWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
@@ -702,7 +704,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   private def createWorkspace(workspaceRequest: WorkspaceRequest,
                               profile: ProfileModel,
                               parentContext: RawlsRequestContext
-  ): Future[Workspace] = {
+  ): Future[WorkspaceDetails] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
 
     val spendProfileId = profile.getId.toString
@@ -761,7 +763,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // create a WDS application in Leo
       _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
-    } yield savedWorkspace).recoverWith {
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(savedWorkspace,
+                                                     Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+                                                     useAttributes = true,
+                                                     Some(WorkspaceCloudPlatform.Azure)
+    )).recoverWith {
       case r: RawlsExceptionWithErrorReport if r.errorReport.statusCode.contains(StatusCodes.Conflict) =>
         // Workspace already exists with this name/namespace, and we don't want to delete it.
         Future.failed(r)
