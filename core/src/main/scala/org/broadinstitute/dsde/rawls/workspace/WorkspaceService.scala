@@ -234,6 +234,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
+  // Note, this is a legacy implementation that returns only a GCP workspace.
   def createWorkspace(workspaceRequest: WorkspaceRequest,
                       parentContext: RawlsRequestContext = ctx
   ): Future[WorkspaceDetails] =
@@ -248,7 +249,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // policies are not supported on GCP workspaces
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
-      (aggregatedWorkspace, workspace) <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
+      workspace <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess =>
             for {
@@ -258,22 +259,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         dataAccess,
                                                         s
               )
-              aggregatedWorkspace = new AggregatedWorkspaceService(workspaceManagerDAO)
-                .fetchAggregatedWorkspace(newWorkspace, ctx)
               _ = createdWorkspaceCounter.inc()
-            } yield (aggregatedWorkspace, newWorkspace),
+            } yield newWorkspace,
           TransactionIsolation.ReadCommitted
         )
       ) // read committed to avoid deadlocks on workspace attr scratch table
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
       )
-    } yield
-    // None is temporary to see if this works
-    WorkspaceDetails.fromWorkspaceAndOptions(workspace,
-                                             Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
-                                             useAttributes = true,
-                                             aggregatedWorkspace.getCloudPlatform
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                                     Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+                                                     useAttributes = true,
+                                                     Some(WorkspaceCloudPlatform.Gcp)
     )
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
