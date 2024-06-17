@@ -41,6 +41,7 @@ import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -2333,9 +2334,11 @@ class WorkspaceServiceSpec
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectId.value should not be empty
+    workspace.googleProject.value should not be empty
     workspace.googleProjectNumber should not be empty
-    workspace.attributes should be(baseWorkspace.attributes)
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    workspace.attributes shouldBe Some(baseWorkspace.attributes)
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
@@ -2359,11 +2362,13 @@ class WorkspaceServiceSpec
     eventually(timeout = timeout(Span(10, Seconds))) {
       runAndWait(slickDataSource.dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers())
         .map(_.destWorkspaceId)
-        .contains(workspace.workspaceIdAsUUID) shouldBe true
+        .contains(workspace.toWorkspace.workspaceIdAsUUID) shouldBe true
     }
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectId.value should not be empty
+    workspace.googleProject.value should not be empty
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     workspace.googleProjectNumber should not be empty
   }
 
@@ -2388,9 +2393,11 @@ class WorkspaceServiceSpec
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectId.value should not be empty
+    workspace.googleProject.value should not be empty
     workspace.googleProjectNumber should not be empty
-    val mergedAttributes = workspace.attributes
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    val mergedAttributes = workspace.attributes.get
     // overrides value in source attributes
     mergedAttributes.get(AttributeName.withDefaultNS("string")).value should be(AttributeString("destination string"))
     // from source attributes
@@ -2881,7 +2888,7 @@ class WorkspaceServiceSpec
       servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
       // verify that we set the folder for the perimeter
-      verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
+      verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProject), any[String])
   }
 
   "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices {

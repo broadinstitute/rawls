@@ -429,24 +429,28 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def cloneMultiCloudWorkspace(wsService: WorkspaceService,
                                sourceWorkspaceName: WorkspaceName,
                                destWorkspaceRequest: WorkspaceRequest
-  ): Future[Workspace] =
+  ): Future[WorkspaceDetails] =
     for {
       sourceWs <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       billingProfileOpt <- getBillingProfile(billingProject)
-      clone <- (sourceWs.workspaceType, billingProfileOpt) match {
+      (clone, cloudPlatform) <- (sourceWs.workspaceType, billingProfileOpt) match {
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
-            cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
+            cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s).map(workspace =>
+              (workspace, WorkspaceCloudPlatform.Azure)
+            )
           }
 
         case (RawlsWorkspace, profileOpt)
             if profileOpt.isEmpty ||
               profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           traceFutureWithParent("cloneRawlsWorkspace", ctx) { s =>
-            wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+            wsService
+              .cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+              .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
 
         case (wsType, profileOpt) =>
@@ -461,7 +465,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             )
           )
       }
-    } yield clone
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(
+      clone,
+      Some(destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+      useAttributes = true,
+      Some(cloudPlatform)
+    )
 
   def cloneAzureWorkspace(sourceWorkspace: Workspace,
                           profile: ProfileModel,

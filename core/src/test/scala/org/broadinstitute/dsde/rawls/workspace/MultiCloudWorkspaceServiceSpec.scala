@@ -1222,11 +1222,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           // validation of the clone success.
           verify(mcWorkspaceService.leonardoDAO, times(1))
             .createWDSInstance(anyString(),
-                               equalTo(clone.workspaceIdAsUUID),
+                               equalTo(clone.toWorkspace.workspaceIdAsUUID),
                                equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
             )
-          clone.toWorkspaceName shouldBe cloneName
-          clone.workspaceType shouldBe McWorkspace
+          clone.toWorkspace.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe Some(McWorkspace)
+          clone.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
         },
         Duration.Inf
       )
@@ -1271,11 +1272,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           // a resource manager job. This test only checks that cloning does not deploy WDS.
           verify(mcWorkspaceService.leonardoDAO, never())
             .createWDSInstance(anyString(),
-                               equalTo(clone.workspaceIdAsUUID),
+                               equalTo(clone.toWorkspace.workspaceIdAsUUID),
                                equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
             )
-          clone.toWorkspaceName shouldBe cloneName
-          clone.workspaceType shouldBe McWorkspace
+          clone.toWorkspace.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe Some(McWorkspace)
+          clone.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
         },
         Duration.Inf
       )
@@ -1325,11 +1327,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           // validation of the clone success.
           verify(mcWorkspaceService.leonardoDAO, times(1))
             .createWDSInstance(anyString(),
-                               equalTo(clone.workspaceIdAsUUID),
+                               equalTo(clone.toWorkspace.workspaceIdAsUUID),
                                equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
             )
-          clone.toWorkspaceName shouldBe cloneName
-          clone.workspaceType shouldBe McWorkspace
+          clone.toWorkspace.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe Some(McWorkspace)
+          clone.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
         },
         Duration.Inf
       )
@@ -1386,9 +1389,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             _ = testData.azureWorkspace.attributes shouldBe Map(
               AttributeName.withDefaultNS("description") -> AttributeString("source description")
             )
-            _ = clone.toWorkspaceName shouldBe cloneName
-            _ = clone.workspaceType shouldBe McWorkspace
-            _ = clone.attributes shouldBe Map(
+            _ = clone.toWorkspace.toWorkspaceName shouldBe cloneName
+            _ = clone.workspaceType shouldBe Some(McWorkspace)
+            _ = clone.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+            _ = clone.attributes.get shouldBe Map(
               AttributeName.withDefaultNS("description") -> AttributeString("source description"),
               AttributeName.withDefaultNS("destination") -> AttributeString("destination only")
             )
@@ -1401,14 +1405,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
                 // a new resource monitor job should be created
                 jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
-                  .selectByWorkspaceId(clone.workspaceIdAsUUID)
+                  .selectByWorkspaceId(clone.toWorkspace.workspaceIdAsUUID)
               } yield jobs
             }
           } yield {
             verify(mcWorkspaceService.workspaceManagerDAO, times(1))
               .cloneWorkspace(
                 equalTo(testData.azureWorkspace.workspaceIdAsUUID),
-                equalTo(clone.workspaceIdAsUUID),
+                equalTo(clone.toWorkspace.workspaceIdAsUUID),
                 equalTo(cloneName.name),
                 any(),
                 equalTo(cloneName.namespace),
@@ -1429,9 +1433,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             verify(mcWorkspaceService.workspaceManagerDAO, times(1))
               .cloneAzureStorageContainer(
                 equalTo(testData.azureWorkspace.workspaceIdAsUUID),
-                equalTo(clone.workspaceIdAsUUID),
+                equalTo(clone.toWorkspace.workspaceIdAsUUID),
                 equalTo(sourceContainerUUID),
-                equalTo(getStorageContainerName(clone.workspaceIdAsUUID)),
+                equalTo(getStorageContainerName(clone.toWorkspace.workspaceIdAsUUID)),
                 equalTo(CloningInstructionsEnum.RESOURCE),
                 equalTo(Some("analyses/")),
                 any()
