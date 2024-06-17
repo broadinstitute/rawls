@@ -66,11 +66,9 @@ trait MethodConfigurationComponent {
     def key = column[String]("KEY", O.Length(254))
     def value = column[String]("VALUE")
 
-    def * = (methodConfigId,
-             id,
-             key,
-             value
-    ) <> (MethodConfigurationInputRecord.tupled, MethodConfigurationInputRecord.unapply)
+    def * = (methodConfigId, id, key, value) <> (MethodConfigurationInputRecord.tupled,
+                                                 MethodConfigurationInputRecord.unapply
+    )
 
     def methodConfig = foreignKey("FK_MC_INPUT", methodConfigId, methodConfigurationQuery)(_.id)
     def configKeyIdx = index("IDX_MC_INPUT", (methodConfigId, key), unique = true)
@@ -83,11 +81,9 @@ trait MethodConfigurationComponent {
     def key = column[String]("KEY", O.Length(254))
     def value = column[String]("VALUE")
 
-    def * = (methodConfigId,
-             id,
-             key,
-             value
-    ) <> (MethodConfigurationOutputRecord.tupled, MethodConfigurationOutputRecord.unapply)
+    def * = (methodConfigId, id, key, value) <> (MethodConfigurationOutputRecord.tupled,
+                                                 MethodConfigurationOutputRecord.unapply
+    )
 
     def methodConfig = foreignKey("FK_MC_OUTPUT", methodConfigId, methodConfigurationQuery)(_.id)
     def configKeyIdx = index("IDX_MC_OUTPUT", (methodConfigId, key), unique = true)

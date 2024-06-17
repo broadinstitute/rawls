@@ -22,11 +22,9 @@ trait EntityAttributeStatisticsComponent {
     def attributeNamespace = column[String]("ATTRIBUTE_NAMESPACE", O.Length(32))
     def attributeName = column[String]("ATTRIBUTE_NAME", O.Length(254))
 
-    def * = (workspaceId,
-             entityType,
-             attributeNamespace,
-             attributeName
-    ) <> (EntityAttributeStatisticsRecord.tupled, EntityAttributeStatisticsRecord.unapply)
+    def * = (workspaceId, entityType, attributeNamespace, attributeName) <> (EntityAttributeStatisticsRecord.tupled,
+                                                                             EntityAttributeStatisticsRecord.unapply
+    )
   }
 
   object entityAttributeStatisticsQuery extends TableQuery(new EntityAttributeStatisticsTable(_)) {
