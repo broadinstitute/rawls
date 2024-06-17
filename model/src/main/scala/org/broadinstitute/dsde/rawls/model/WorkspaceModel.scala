@@ -299,6 +299,35 @@ object Workspace {
       WorkspaceType.McWorkspace,
       state
     )
+  def buildRawlsWorkspace(namespace: String,
+                          name: String,
+                          workspaceId: String,
+                          createdDate: DateTime,
+                          lastModified: DateTime,
+                          createdBy: String,
+                          attributes: AttributeMap,
+                          state: WorkspaceState
+  ) =
+    new Workspace(
+      namespace,
+      name,
+      workspaceId,
+      "",
+      None,
+      createdDate,
+      lastModified,
+      createdBy,
+      attributes,
+      false,
+      WorkspaceVersions.V2,
+      GoogleProjectId("google-id"),
+      None,
+      None,
+      None,
+      None,
+      WorkspaceType.RawlsWorkspace,
+      state
+    )
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
