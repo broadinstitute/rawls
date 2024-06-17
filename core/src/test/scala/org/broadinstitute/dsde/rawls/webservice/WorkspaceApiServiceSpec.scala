@@ -10,7 +10,6 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
-import io.opencensus.trace.Span
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -462,14 +461,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           .managedResourceGroupId("fake")
       )
     )
-    val policyList = List(
-      WorkspacePolicy("dummy-policy-name", "terra", List.empty)
-    )
     val newWorkspace = WorkspaceRequest(
       namespace = "test-azure-bp",
       name = "newWorkspace",
-      Map.empty,
-      policies = Some(policyList)
+      Map.empty
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>

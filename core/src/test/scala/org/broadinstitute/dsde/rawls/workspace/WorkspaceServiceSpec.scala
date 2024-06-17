@@ -3098,13 +3098,13 @@ class WorkspaceServiceSpec
     val createdWorkspace = Await.result(
       services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
       Duration.Inf
-    )
+    ).toWorkspace
     val workspaceDescription = new WorkspaceDescription()
-      .id(createdWorkspace.toWorkspace.workspaceIdAsUUID)
+      .id(createdWorkspace.workspaceIdAsUUID)
       .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
       .policies(policies.asJava)
     when(
-      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.toWorkspace.workspaceIdAsUUID),
+      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
                                                 any[RawlsRequestContext]
       )
     ).thenReturn(
@@ -3115,7 +3115,7 @@ class WorkspaceServiceSpec
         workspaceDescription
       )
     )
-    createdWorkspace.toWorkspace
+    createdWorkspace
   }
 
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
