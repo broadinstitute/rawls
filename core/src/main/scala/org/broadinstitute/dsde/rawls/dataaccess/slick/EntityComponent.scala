@@ -101,15 +101,10 @@ class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
 class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecordWithInlineAttributes](tag) {
   def allAttributeValues = column[Option[String]]("all_attribute_values")
 
-  def * = (id,
-           name,
-           entityType,
-           workspaceId,
-           version,
-           allAttributeValues,
-           deleted,
-           deletedDate
-  ) <> (EntityRecordWithInlineAttributes.tupled, EntityRecordWithInlineAttributes.unapply)
+  def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (
+    EntityRecordWithInlineAttributes.tupled,
+    EntityRecordWithInlineAttributes.unapply
+  )
 }
 
 //noinspection TypeAnnotation

@@ -51,10 +51,10 @@ case object Aes256Cbc {
     }
 
   final def decrypt(encryptedBytes: EncryptedBytes, secretKey: SecretKey): Try[Array[Byte]] =
-    validateLength("Secret key",
-                   secretKey.key,
-                   keySize
-    ) validateAnotherLength ("Initialization vector", encryptedBytes.iv, blockSize) map { _ =>
+    validateLength("Secret key", secretKey.key, keySize) validateAnotherLength ("Initialization vector",
+                                                                                encryptedBytes.iv,
+                                                                                blockSize
+    ) map { _ =>
       val cipher = init(Cipher.DECRYPT_MODE, secretKey.key, encryptedBytes.iv)
       cipher.doFinal(encryptedBytes.cipherText)
     }
