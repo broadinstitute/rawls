@@ -436,7 +436,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           status
         }
         responseAs[Seq[SubmissionListResponse]] should contain allOf (submissionListResponseWithFailureMode,
-        submissionListResponseWithoutFailureMode)
+                                                                      submissionListResponseWithoutFailureMode
+        )
       }
   }
 
