@@ -3095,10 +3095,12 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty
     )
-    val createdWorkspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
-      Duration.Inf
-    ).toWorkspace
+    val createdWorkspace = Await
+      .result(
+        services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
+        Duration.Inf
+      )
+      .toWorkspace
     val workspaceDescription = new WorkspaceDescription()
       .id(createdWorkspace.workspaceIdAsUUID)
       .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
