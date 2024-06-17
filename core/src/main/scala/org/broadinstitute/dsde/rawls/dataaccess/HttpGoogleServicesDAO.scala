@@ -18,12 +18,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{
-  BillingAccount,
-  ListBillingAccountsResponse,
-  ProjectBillingInfo,
-  TestIamPermissionsRequest
-}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -41,7 +36,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.{StorageClass, StorageException}
+import com.google.cloud.storage.{Cors, HttpMethod, StorageClass, StorageException}
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -52,11 +47,7 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{
-  setTraceSpanAttribute,
-  traceFutureWithParent,
-  traceNakedWithParent
-}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent, traceNakedWithParent}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
@@ -219,6 +210,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
+    val cors = List(
+      Cors.newBuilder()
+        .setOrigins(List(Cors.Origin.of("https://notebooks.firecloud.org")).asJava)
+        .setMethods(List(HttpMethod.GET).asJava)
+        .setResponseHeaders(List("*").asJava)
+        .setMaxAgeSeconds(3600)
+        .build()
+    )
 
     for {
       _ <- traceFutureWithParent("insertBucket", requestContext)(_ =>
@@ -233,7 +232,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
             location = bucketLocation,
             autoclassEnabled = true,
-            autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE)
+            autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE),
+            cors = cors
           )
           .compile
           .drain

@@ -6,7 +6,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
-import com.google.cloud.storage.{Acl, BucketInfo, Storage, StorageClass}
+import com.google.cloud.storage.{Acl, BucketInfo, Cors, Storage, StorageClass}
 import com.google.rpc.Code
 import com.google.storagetransfer.v1.proto.TransferTypes._
 import io.grpc.{Status, StatusRuntimeException}
@@ -17,12 +17,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{
-  MultiregionalBucketMigration,
-  MultiregionalBucketMigrationFailureModes,
-  MultiregionalBucketMigrationStep,
-  MultiregionalStorageTransferJob
-}
+import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigration, MultiregionalBucketMigrationFailureModes, MultiregionalBucketMigrationStep, MultiregionalStorageTransferJob}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
@@ -595,7 +590,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                     location: Option[String],
                                     bucketTargetOptions: List[Storage.BucketTargetOption],
                                     autoclassEnabled: Boolean,
-                                    autoclassTerminalStorageClass: Option[StorageClass]
+                                    autoclassTerminalStorageClass: Option[StorageClass],
+                                    cors: List[Cors]
           ): fs2.Stream[IO, Unit] =
             fs2.Stream.raiseError[IO](error)
         }

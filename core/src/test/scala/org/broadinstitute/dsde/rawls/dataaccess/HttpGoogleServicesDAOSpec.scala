@@ -6,23 +6,16 @@ import akka.stream.ActorMaterializer
 import cats.effect.IO
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
-import com.google.cloud.storage.StorageClass
+import com.google.cloud.storage.{Cors, HttpMethod, StorageClass}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
-import org.broadinstitute.dsde.rawls.model.{
-  GoogleProjectId,
-  RawlsBillingAccount,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccount, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -30,6 +23,7 @@ import java.io.StringReader
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
+import scala.jdk.CollectionConverters._
 
 class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
@@ -150,6 +144,14 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     val googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
     val googleProjectId = "project-id"
     val bucketName = GcsBucketName("fc-bucket-name")
+    val expectedCorsPolicy = List(
+      Cors.newBuilder()
+        .setOrigins(List(Cors.Origin.of("https://notebooks.firecloud.org")).asJava)
+        .setMethods(List(HttpMethod.GET).asJava)
+        .setResponseHeaders(List("*").asJava)
+        .setMaxAgeSeconds(3600)
+        .build()
+    )
     when(
       googleStorageService.insertBucket(
         ArgumentMatchers.eq(GoogleProject(googleProjectId)),
@@ -163,7 +165,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
         any(),
         any(),
         autoclassEnabled = ArgumentMatchers.eq(true),
-        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE))
+        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
+        cors = ArgumentMatchers.eq(expectedCorsPolicy)
       )
     ).thenReturn(fs2.Stream.unit)
 
@@ -212,7 +215,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
         any(),
         any(),
         autoclassEnabled = ArgumentMatchers.eq(true),
-        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE))
+        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
+        cors = ArgumentMatchers.eq(expectedCorsPolicy)
       ),
       times(1)
     )
