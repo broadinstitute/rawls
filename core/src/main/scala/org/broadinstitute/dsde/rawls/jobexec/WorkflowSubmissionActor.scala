@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.metrics.logEvents.SubmissionEvent
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -464,12 +465,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris
             .take(20)}"
       )
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig)
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
+      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
+        workflowBatchFuture
       dosServiceAccounts <- resolveDrsUriServiceAccounts(dosUris, petUserInfo)
       // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
       // We still call DRSHub for those because we can verify the user has permission on the DRS object as
@@ -499,13 +501,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       val elapsedTime = System.currentTimeMillis() - submissionRec.submissionDate.getTime
       workflowToCromwellLatency.update(elapsedTime, TimeUnit.MILLISECONDS)
 
-      (executionServiceKey, workflowRecs.zip(executionServiceResults))
+      (executionServiceKey, workflowRecs.zip(executionServiceResults), methodConfig)
     }
 
     // Second txn to update workflows to Launching.
     // If this txn fails we'll just end up rescheduling the next workflow query and will restart this function from the top.
     // Since the first txn didn't do any writes to the db it won't be left in a weird halfway state.
-    cromwellSubmission flatMap { case (executionServiceKey, results) =>
+    cromwellSubmission flatMap { case (executionServiceKey, results, methodConfig) =>
       dataSource.inTransaction { dataAccess =>
         // save successes as submitted workflows and hook up their cromwell ids
         val successUpdates = results collect { case (wfRec, Left(success: ExecutionServiceStatus)) =>
@@ -526,6 +528,26 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1),
                                                                                                 WorkflowStatuses.Failed,
                                                                                                 executionServiceKey
+        )
+        val submissionEvent = SubmissionEvent(
+          submissionRec.id.toString,
+          workspaceRec.id.toString,
+          methodConfig.toId,
+          methodConfig.namespace,
+          methodConfig.name,
+          methodConfig.methodRepoMethod.methodUri,
+          methodConfig.methodRepoMethod.repo.scheme,
+          methodConfig.methodConfigVersion,
+          methodConfig.dataReferenceName.map(_.toString()),
+          workflowIds,
+          results.filter(_._2.isLeft).flatMap(_._2.swap.toOption.map(_.id)),
+          submissionRec.useCallCache,
+          submissionRec.useReferenceDisks,
+          submissionRec.memoryRetryMultiplier,
+          submissionRec.userComment
+        )
+        logger.info(s"Workflow Submission Complete: ${submissionRec.id.toString}",
+                    submissionEvent.toStructuredArguments
         )
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd): _*)
