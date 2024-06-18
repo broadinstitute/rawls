@@ -236,8 +236,9 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
 
     doReturn(Future()).when(service).requireCreateWorkspaceAction(billingProject.projectName, requestContext)
 
-    // Because there is no billing profile, we will call the legacy GCP clone method.
-    doReturn(Future(None)).when(service).getBillingProfile(billingProject, requestContext)
+    val billingProfile = mock[ProfileModel]
+    when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.GCP)
+    doReturn(Future(Some(billingProfile))).when(service).getBillingProfile(billingProject, requestContext)
 
     val destWorkspace = mock[Workspace]
     doReturn(Future(destWorkspace))
