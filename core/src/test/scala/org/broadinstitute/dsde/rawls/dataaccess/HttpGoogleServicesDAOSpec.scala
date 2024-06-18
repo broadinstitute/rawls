@@ -9,13 +9,20 @@ import com.google.api.client.json.gson.GsonFactory
 import com.google.cloud.storage.{Cors, HttpMethod, StorageClass}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccount, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  GoogleProjectId,
+  RawlsBillingAccount,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  UserInfo
+}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
+import org.mockito.Mockito.{times, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -145,7 +152,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     val googleProjectId = "project-id"
     val bucketName = GcsBucketName("fc-bucket-name")
     val expectedCorsPolicy = List(
-      Cors.newBuilder()
+      Cors
+        .newBuilder()
         .setOrigins(List(Cors.Origin.of("https://notebooks.firecloud.org")).asJava)
         .setMethods(List(HttpMethod.GET).asJava)
         .setResponseHeaders(List("*").asJava)
