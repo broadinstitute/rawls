@@ -419,12 +419,14 @@ class FastPassServiceSpec
     parentWorkspaceFastPassGrantsBefore should be(empty)
 
     val childWorkspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        parentWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+      Await
+        .result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                     parentWorkspace.toWorkspaceName,
+                                                                     workspaceRequest
+                ),
+                Duration.Inf
+        )
+        .toWorkspace
 
     verify(services.mockFastPassService)
       .setupFastPassForUserInClonedWorkspace(
@@ -990,14 +992,12 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    val childWorkspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        parentWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+    Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                      parentWorkspace.toWorkspaceName,
+                                                                      workspaceRequest
+                 ),
+                 Duration.Inf
+    )
   }
 
   it should "not block workspace delete if FastPass fails" in withTestDataServices { services =>
