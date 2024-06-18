@@ -31,8 +31,10 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
   CreationStatuses,
+  ManagedGroupRef,
   RawlsBillingProject,
   RawlsBillingProjectName,
+  RawlsGroupName,
   RawlsRequestContext,
   RawlsUserEmail,
   SamWorkspaceActions,
@@ -42,7 +44,8 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceDetails,
   WorkspacePolicy,
   WorkspaceRequest,
-  WorkspaceState
+  WorkspaceState,
+  WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -152,7 +155,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
   it should "pass a request to clone a GCP workspace to cloneWorkspace in workspaceService" in {
     val sourceWorkspaceName = "source-name"
     val sourceWorkspaceNamespace = "source-namespace"
-    val sourceWorkspace = Workspace.buildRawlsWorkspace(
+    val sourceWorkspace = Workspace.buildWorkspace(
       sourceWorkspaceNamespace,
       sourceWorkspaceName,
       UUID.randomUUID().toString,
@@ -160,9 +163,11 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       DateTime.now(),
       "creator",
       Map(),
-      WorkspaceState.Ready
+      WorkspaceState.Ready,
+      WorkspaceType.RawlsWorkspace
     )
-    val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
+    val authDomain = Some(Set(ManagedGroupRef(RawlsGroupName("Test-Realm"))))
+    val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map(), authorizationDomain = authDomain)
 
     val requestContext = mock[RawlsRequestContext]
     when(requestContext.otelContext).thenReturn(None)
@@ -231,6 +236,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
 
     doReturn(Future()).when(service).requireCreateWorkspaceAction(billingProject.projectName, requestContext)
 
+    // Because there is no billing profile, we will call the legacy GCP clone method.
     doReturn(Future(None)).when(service).getBillingProfile(billingProject, requestContext)
 
     val destWorkspace = mock[Workspace]
@@ -251,7 +257,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       )
     )(
       _ shouldBe WorkspaceDetails.fromWorkspaceAndOptions(destWorkspace,
-                                                          Some(Set.empty),
+                                                          authDomain,
                                                           useAttributes = true,
                                                           Some(WorkspaceCloudPlatform.Gcp)
       )
