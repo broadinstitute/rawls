@@ -225,7 +225,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         .setOrigins(List(Cors.Origin.of("https://notebooks.firecloud.org")).asJava)
         .setMethods(List(HttpMethod.GET).asJava)
         .setResponseHeaders(List("*").asJava)
-        .setMaxAgeSeconds(3600)
+        .setMaxAgeSeconds(0)
         .build()
     )
 
