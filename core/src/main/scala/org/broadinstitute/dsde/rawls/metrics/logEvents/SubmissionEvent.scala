@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.metrics.logEvents
 
 import java.util
 
-case class SubmissionEvent(submissionId: String,
+case class SubmissionEvent(submitterSamUserId: Option[String],
+                           submissionId: String,
                            workspaceId: String,
                            methodId: String,
                            methodNamespace: String,
@@ -13,9 +14,11 @@ case class SubmissionEvent(submissionId: String,
                            methodDataReferenceName: Option[String],
                            rawlsWorkflowIds: Seq[Long],
                            externalIds: Seq[String],
+                           rootEntityType: Option[String],
                            useCallCaching: Boolean,
                            useReferenceDisks: Boolean,
                            memoryRetryMultiplier: Double,
+                           ignoreEmtpyOutputs: Boolean,
                            userComment: Option[String]
 ) extends MetricsLoggable {
 
@@ -24,6 +27,7 @@ case class SubmissionEvent(submissionId: String,
   override protected def toLoggableMap: util.Map[String, Any] =
     this.transformMap(
       Map(
+        "submitterSamUserId" -> submitterSamUserId,
         "submissionId" -> submissionId,
         "workspaceId" -> workspaceId,
         "methodId" -> methodId,
@@ -35,9 +39,11 @@ case class SubmissionEvent(submissionId: String,
         "methodDataReferenceName" -> methodDataReferenceName,
         "rawlsWorkflowIds" -> rawlsWorkflowIds,
         "externalIds" -> externalIds,
+        "rootEntityType" -> rootEntityType,
         "useCallCaching" -> useCallCaching,
         "useReferenceDisks" -> useReferenceDisks,
         "memoryRetryMultiplier" -> memoryRetryMultiplier,
+        "ignoreEmtpyOutputs" -> ignoreEmtpyOutputs,
         "userComment" -> userComment
       )
     )

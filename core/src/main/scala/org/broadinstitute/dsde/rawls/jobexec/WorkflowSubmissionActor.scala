@@ -421,6 +421,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                                                          RawlsUserEmail(submissionRec.submitterEmail)
       )
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+      samUserInfo <- samDAO.getUserStatus(RawlsRequestContext(petUserInfo))
       wdl <- getWdl(methodConfig, petUserInfo)
       updatedRuntimeOptions <- getRuntimeOptions(workspaceRec.googleProjectId, workspaceRec.bucketName)
     } yield {
@@ -465,12 +466,22 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris
             .take(20)}"
       )
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig)
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, samUserInfo, methodConfig)
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
+      (wdl,
+       workflowRecs,
+       wfInputsBatch,
+       wfOpts,
+       wfLabels,
+       wfCollection,
+       dosUris,
+       petUserInfo,
+       samUserInfo,
+       methodConfig
+      ) <-
         workflowBatchFuture
       dosServiceAccounts <- resolveDrsUriServiceAccounts(dosUris, petUserInfo)
       // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
@@ -501,13 +512,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       val elapsedTime = System.currentTimeMillis() - submissionRec.submissionDate.getTime
       workflowToCromwellLatency.update(elapsedTime, TimeUnit.MILLISECONDS)
 
-      (executionServiceKey, workflowRecs.zip(executionServiceResults), methodConfig)
+      (executionServiceKey, workflowRecs.zip(executionServiceResults), methodConfig, samUserInfo)
     }
 
     // Second txn to update workflows to Launching.
     // If this txn fails we'll just end up rescheduling the next workflow query and will restart this function from the top.
     // Since the first txn didn't do any writes to the db it won't be left in a weird halfway state.
-    cromwellSubmission flatMap { case (executionServiceKey, results, methodConfig) =>
+    cromwellSubmission flatMap { case (executionServiceKey, results, methodConfig, samUserInfo) =>
       dataSource.inTransaction { dataAccess =>
         // save successes as submitted workflows and hook up their cromwell ids
         val successUpdates = results collect { case (wfRec, Left(success: ExecutionServiceStatus)) =>
@@ -530,6 +541,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                                                                                                 executionServiceKey
         )
         val submissionEvent = SubmissionEvent(
+          samUserInfo.map(_.userSubjectId),
           submissionRec.id.toString,
           workspaceRec.id.toString,
           methodConfig.toId,
@@ -540,10 +552,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           methodConfig.methodConfigVersion,
           methodConfig.dataReferenceName.map(_.toString()),
           workflowIds,
-          results.filter(_._2.isLeft).flatMap(_._2.swap.toOption.map(_.id)),
+          results
+            .filter(_._2.isLeft)
+            .flatMap(
+              _._2.swap.toOption.map(_.id)
+            ), // This is because the Left is the success, breaking Scala's Either convention
+          submissionRec.rootEntityType,
           submissionRec.useCallCache,
           submissionRec.useReferenceDisks,
           submissionRec.memoryRetryMultiplier,
+          submissionRec.ignoreEmptyOutputs,
           submissionRec.userComment
         )
         logger.info(s"Workflow Submission Complete: ${submissionRec.id.toString}",
