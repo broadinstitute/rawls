@@ -10,7 +10,6 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
-import io.opencensus.trace.Span
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -405,10 +404,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
 
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
+    val authDomain = Some(Set(ManagedGroupRef(RawlsGroupName("Test-Realm"))))
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Map.empty
+      Map.empty,
+      authorizationDomain = authDomain
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
@@ -419,11 +420,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, authDomain)
         }
+        val details = responseAs[WorkspaceDetails]
+        details.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
         assertResult(newWorkspace) {
-          val ws = responseAs[WorkspaceDetails]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty))
+          WorkspaceRequest(details.namespace,
+                           details.name,
+                           details.attributes.getOrElse(Map()),
+                           details.authorizationDomain
+          )
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -469,6 +475,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val ws = responseAs[WorkspaceDetails]
         ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
+        ws.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
       }
   }
 

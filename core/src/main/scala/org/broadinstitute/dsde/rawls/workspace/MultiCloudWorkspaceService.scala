@@ -38,7 +38,9 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   Workspace,
+  WorkspaceCloudPlatform,
   WorkspaceDeletionResult,
+  WorkspaceDetails,
   WorkspaceName,
   WorkspaceRequest,
   WorkspaceState,
@@ -226,7 +228,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
                                        workspaceService: WorkspaceService,
                                        parentContext: RawlsRequestContext = ctx
-  ): Future[Workspace] =
+  ): Future[WorkspaceDetails] =
     for {
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext) { s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
@@ -253,7 +255,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                   workspaceRequest,
                   profileModel,
                   s
-                )
+                ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
               }
             }
         }
@@ -262,14 +264,20 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // This can happen if there's
       // - no azure config
       // - no billing profile or the billing profile's cloud platform is GCP
-      workspace <- workspaceOpt.flatten
+      (workspace, cloudPlatform) <- workspaceOpt.flatten
         .map(Future.successful)
         .getOrElse(
           traceFutureWithParent("createWorkspace", parentContext) { s =>
-            workspaceService.createWorkspace(workspaceRequest, s)
+            workspaceService
+              .createWorkspace(workspaceRequest, s)
+              .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
         )
-    } yield workspace
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                                     Some(workspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+                                                     useAttributes = true,
+                                                     Some(cloudPlatform)
+    )
 
   /**
     * Returns the billing profile associated with the billing project, if the billing project
@@ -316,13 +324,13 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     wsService: WorkspaceService,
     sourceWorkspaceName: WorkspaceName,
     destWorkspaceRequest: WorkspaceRequest
-  ): Future[Workspace] =
+  ): Future[WorkspaceDetails] =
     for {
       sourceWs <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       billingProfileOpt <- getBillingProfile(billingProject)
-      clone <- (sourceWs.workspaceType, billingProfileOpt) match {
+      (clone, cloudPlatform) <- (sourceWs.workspaceType, billingProfileOpt) match {
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
@@ -331,14 +339,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               profile,
               destWorkspaceRequest,
               s
-            )
+            ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
           }
 
         case (RawlsWorkspace, profileOpt)
             if profileOpt.isEmpty ||
               profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           traceFutureWithParent("cloneRawlsWorkspace", ctx) { s =>
-            wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+            wsService
+              .cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+              .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
 
         case (wsType, profileOpt) =>
@@ -353,7 +363,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             )
           )
       }
-    } yield clone
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(
+      clone,
+      Some(destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+      useAttributes = true,
+      Some(cloudPlatform)
+    )
 
   def cloneAzureWorkspaceAsync(sourceWorkspace: Workspace,
                                profile: ProfileModel,
@@ -421,24 +436,28 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def cloneMultiCloudWorkspace(wsService: WorkspaceService,
                                sourceWorkspaceName: WorkspaceName,
                                destWorkspaceRequest: WorkspaceRequest
-  ): Future[Workspace] =
+  ): Future[WorkspaceDetails] =
     for {
       sourceWs <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       billingProfileOpt <- getBillingProfile(billingProject)
-      clone <- (sourceWs.workspaceType, billingProfileOpt) match {
+      (clone, cloudPlatform) <- (sourceWs.workspaceType, billingProfileOpt) match {
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceFutureWithParent("cloneAzureWorkspace", ctx) { s =>
-            cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
+            cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s).map(workspace =>
+              (workspace, WorkspaceCloudPlatform.Azure)
+            )
           }
 
         case (RawlsWorkspace, profileOpt)
             if profileOpt.isEmpty ||
               profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           traceFutureWithParent("cloneRawlsWorkspace", ctx) { s =>
-            wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+            wsService
+              .cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+              .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
 
         case (wsType, profileOpt) =>
@@ -453,7 +472,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             )
           )
       }
-    } yield clone
+    } yield WorkspaceDetails.fromWorkspaceAndOptions(
+      clone,
+      Some(destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)),
+      useAttributes = true,
+      Some(cloudPlatform)
+    )
 
   def cloneAzureWorkspace(sourceWorkspace: Workspace,
                           profile: ProfileModel,

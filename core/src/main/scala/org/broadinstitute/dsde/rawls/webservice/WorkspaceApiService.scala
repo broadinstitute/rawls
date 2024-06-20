@@ -14,8 +14,7 @@ import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
 
-import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 /**
   * Created by dvoet on 6/4/15.
@@ -39,9 +38,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
                 val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
                 mcWorkspaceService
                   .createMultiCloudOrRawlsWorkspace(workspace, workspaceService)
-                  .map(w =>
-                    StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty))
-                  )
+                  .map(w => StatusCodes.Created -> w)
               }
             }
           }
@@ -142,10 +139,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
                       WorkspaceName(sourceNamespace, sourceWorkspace),
                       destWorkspace
                     )
-                    .map(w =>
-                      StatusCodes.Created ->
-                        WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty))
-                    )
+                    .map(w => StatusCodes.Created -> w)
                 }
               }
             }

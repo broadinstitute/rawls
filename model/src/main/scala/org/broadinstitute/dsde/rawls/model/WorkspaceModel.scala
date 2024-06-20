@@ -279,6 +279,28 @@ object Workspace {
                        attributes: AttributeMap,
                        state: WorkspaceState
   ) =
+    buildWorkspace(namespace,
+                   name,
+                   workspaceId,
+                   createdDate,
+                   lastModified,
+                   createdBy,
+                   attributes,
+                   state,
+                   WorkspaceType.McWorkspace
+    )
+  def buildWorkspace(namespace: String,
+                     name: String,
+                     workspaceId: String,
+                     createdDate: DateTime,
+                     lastModified: DateTime,
+                     createdBy: String,
+                     attributes: AttributeMap,
+                     state: WorkspaceState,
+                     workspaceType: WorkspaceType
+  ) = {
+    val googleProjectId =
+      if (workspaceType == WorkspaceType.RawlsWorkspace) GoogleProjectId("google-id") else GoogleProjectId("")
     new Workspace(
       namespace,
       name,
@@ -291,14 +313,15 @@ object Workspace {
       attributes,
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId(""),
+      googleProjectId,
       None,
       None,
       None,
       None,
-      WorkspaceType.McWorkspace,
+      workspaceType,
       state
     )
+  }
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
