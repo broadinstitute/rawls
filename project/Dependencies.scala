@@ -59,6 +59,7 @@ object Dependencies {
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
   val logstashLogbackEncoder: ModuleID = "net.logstash.logback" % "logstash-logback-encoder" % "6.6"
+  val stackdriverLogging: ModuleID = "com.google.cloud" % "google-cloud-logging-logback" % "0.127.11-alpha"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.17.1"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.7"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
@@ -231,6 +232,7 @@ object Dependencies {
     typesafeConfig,
     sentryLogback,
     logstashLogbackEncoder,
+    stackdriverLogging,
     slick,
     slickHikariCP,
     akkaHttp,
