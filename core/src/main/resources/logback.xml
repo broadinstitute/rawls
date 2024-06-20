@@ -1,6 +1,6 @@
 <configuration>
 
-    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+    <appender name="console" class="com.google.cloud.logging.logback.LoggingAppender">
         <enhancer>com.google.cloud.logging.logback.TraceLoggingEventEnhancer</enhancer>
         <encoder>
             <!-- See http://logback.qos.ch/manual/layouts.html -->
