@@ -41,7 +41,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.{StorageClass, StorageException}
+import com.google.cloud.storage.{Cors, HttpMethod, StorageClass, StorageException}
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -219,6 +219,15 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
+    val cors = List(
+      Cors
+        .newBuilder()
+        .setOrigins(List(Cors.Origin.of("*")).asJava)
+        .setMethods(List(HttpMethod.GET).asJava)
+        .setResponseHeaders(List("*").asJava)
+        .setMaxAgeSeconds(0)
+        .build()
+    )
 
     for {
       _ <- traceFutureWithParent("insertBucket", requestContext)(_ =>
@@ -233,7 +242,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
             location = bucketLocation,
             autoclassEnabled = true,
-            autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE)
+            autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE),
+            cors = cors
           )
           .compile
           .drain

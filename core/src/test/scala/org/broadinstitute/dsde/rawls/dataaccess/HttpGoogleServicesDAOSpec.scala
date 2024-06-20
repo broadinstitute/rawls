@@ -6,7 +6,7 @@ import akka.stream.ActorMaterializer
 import cats.effect.IO
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
-import com.google.cloud.storage.StorageClass
+import com.google.cloud.storage.{Cors, HttpMethod, StorageClass}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.model.{
@@ -30,6 +30,7 @@ import java.io.StringReader
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
+import scala.jdk.CollectionConverters._
 
 class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
@@ -150,6 +151,15 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     val googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
     val googleProjectId = "project-id"
     val bucketName = GcsBucketName("fc-bucket-name")
+    val expectedCorsPolicy = List(
+      Cors
+        .newBuilder()
+        .setOrigins(List(Cors.Origin.of("*")).asJava)
+        .setMethods(List(HttpMethod.GET).asJava)
+        .setResponseHeaders(List("*").asJava)
+        .setMaxAgeSeconds(0)
+        .build()
+    )
     when(
       googleStorageService.insertBucket(
         ArgumentMatchers.eq(GoogleProject(googleProjectId)),
@@ -163,7 +173,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
         any(),
         any(),
         autoclassEnabled = ArgumentMatchers.eq(true),
-        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE))
+        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
+        cors = ArgumentMatchers.eq(expectedCorsPolicy)
       )
     ).thenReturn(fs2.Stream.unit)
 
@@ -212,7 +223,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
         any(),
         any(),
         autoclassEnabled = ArgumentMatchers.eq(true),
-        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE))
+        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
+        cors = ArgumentMatchers.eq(expectedCorsPolicy)
       ),
       times(1)
     )
