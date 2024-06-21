@@ -134,4 +134,26 @@ class BardServiceSpec extends AnyFlatSpec with TestDriverComponent with Matchers
     } finally if (mockServer != null) mockServer.close()
   }
 
+  it should "not send an event if Bard is disabled" in {
+    val mockServer = ClientAndServer.startClientAndServer()
+    try {
+      val bardApiPath = "/api/eventLog/v1/rawls/submission:summary"
+      val bardUrl = "http://localhost:" + mockServer.getPort
+      //  Mock the server response
+      mockServer
+        .when(HttpRequest.request(bardApiPath).withMethod("POST"))
+        .respond(HttpResponse.response.withStatusCode(200).withContentType(MediaType.APPLICATION_JSON))
+
+      val bardService = new BardService(false, bardUrl, 10)
+
+      bardService.sendEvent(submissionEvent, user)
+
+      mockServer.verify(
+        HttpRequest
+          .request(bardApiPath)
+          .withMethod("POST"),
+        VerificationTimes.exactly(0)
+      )
+    } finally if (mockServer != null) mockServer.close()
+  }
 }
