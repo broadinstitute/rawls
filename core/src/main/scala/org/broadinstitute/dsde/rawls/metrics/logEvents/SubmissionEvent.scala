@@ -21,7 +21,7 @@ case class SubmissionEvent(submissionId: String,
                            userComment: Option[String]
 ) extends BardEvent {
 
-  override def eventName: String = "rawls:submission"
+  override def eventName: String = "submission:summary"
 
   override def getProperties: util.Map[String, Any] =
     this.transformMap(
