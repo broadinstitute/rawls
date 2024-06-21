@@ -2,8 +2,7 @@ package org.broadinstitute.dsde.rawls.metrics.logEvents
 
 import java.util
 
-case class SubmissionEvent(submitterSamUserId: Option[String],
-                           submissionId: String,
+case class SubmissionEvent(submissionId: String,
                            workspaceId: String,
                            methodId: String,
                            methodNamespace: String,
@@ -20,14 +19,13 @@ case class SubmissionEvent(submitterSamUserId: Option[String],
                            memoryRetryMultiplier: Double,
                            ignoreEmtpyOutputs: Boolean,
                            userComment: Option[String]
-) extends MetricsLoggable {
+) extends BardEvent {
 
-  override def event: String = "rawls:submission"
+  override def eventName: String = "rawls:submission"
 
-  override protected def toLoggableMap: util.Map[String, Any] =
+  override def getProperties: util.Map[String, Any] =
     this.transformMap(
       Map(
-        "submitterSamUserId" -> submitterSamUserId,
         "submissionId" -> submissionId,
         "workspaceId" -> workspaceId,
         "methodId" -> methodId,
