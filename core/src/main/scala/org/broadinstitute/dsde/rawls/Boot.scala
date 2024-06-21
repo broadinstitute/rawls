@@ -517,7 +517,7 @@ object Boot extends IOApp with LazyLogging {
 
         val bardService = new BardService(
           appConfigManager.conf.getBoolean("bard.enabled"),
-          appConfigManager.conf.getString("bard.url"),
+          appConfigManager.conf.getString("bard.bardUrl"),
           appConfigManager.conf.getInt("bard.connectionPoolSize")
         )
 
