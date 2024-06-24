@@ -108,7 +108,7 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.12.2"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.13.0"
   val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.0"
 
 
