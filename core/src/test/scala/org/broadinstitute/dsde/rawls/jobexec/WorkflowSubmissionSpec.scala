@@ -20,8 +20,8 @@ import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{
   SubmitWorkflowBatch,
   WorkflowBatch
 }
-import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
+import org.broadinstitute.dsde.rawls.mock.{MockBardService, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -69,6 +69,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   val mockSamDAO = new MockSamDAO(slickDataSource)
   val mockDrsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
   private val requesterPaysRole = "requesterPays"
+  val mockBardService = new MockBardService()
 
   object DrsTestVals {
     val jdrDevUrl = "drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4"
@@ -115,7 +116,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val useWorkflowCollectionLabel: Boolean = false,
     val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2"),
     val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
-    val methodConfigResolver: MethodConfigResolver = methodConfigResolver
+    val methodConfigResolver: MethodConfigResolver = methodConfigResolver,
+    val bardService: BardService = mockBardService
   ) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
@@ -928,7 +930,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           false,
           CromwellBackend("PAPIv2"),
           CromwellBackend("PAPIv2-CloudNAT"),
-          methodConfigResolver
+          methodConfigResolver,
+          mockBardService
         )
       )
 
@@ -994,7 +997,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           false,
           CromwellBackend("PAPIv2"),
           CromwellBackend("PAPIv2-CloudNAT"),
-          methodConfigResolver
+          methodConfigResolver,
+          mockBardService
         )
       )
 

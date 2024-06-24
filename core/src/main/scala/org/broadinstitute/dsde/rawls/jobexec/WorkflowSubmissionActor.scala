@@ -3,23 +3,21 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.logEvents.SubmissionEvent
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{addJitter, FutureSupport, MethodWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -45,7 +43,8 @@ object WorkflowSubmissionActor {
             useWorkflowCollectionLabel: Boolean,
             defaultNetworkCromwellBackend: CromwellBackend,
             highSecurityNetworkCromwellBackend: CromwellBackend,
-            methodConfigResolver: MethodConfigResolver
+            methodConfigResolver: MethodConfigResolver,
+            bardService: BardService
   ): Props =
     Props(
       new WorkflowSubmissionActor(
@@ -68,7 +67,8 @@ object WorkflowSubmissionActor {
         useWorkflowCollectionLabel,
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
-        methodConfigResolver
+        methodConfigResolver,
+        bardService
       )
     )
 
@@ -102,7 +102,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val useWorkflowCollectionLabel: Boolean,
                               val defaultNetworkCromwellBackend: CromwellBackend,
                               val highSecurityNetworkCromwellBackend: CromwellBackend,
-                              val methodConfigResolver: MethodConfigResolver
+                              val methodConfigResolver: MethodConfigResolver,
+                              val bardService: BardService
 ) extends Actor
     with WorkflowSubmission
     with LazyLogging {
@@ -155,6 +156,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val defaultNetworkCromwellBackend: CromwellBackend
   val highSecurityNetworkCromwellBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
+  val bardService: BardService
 
   import dataSource.dataAccess.driver.api._
 
@@ -464,12 +466,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris
             .take(20)}"
       )
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig)
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
+      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
+        workflowBatchFuture
       dosServiceAccounts <- resolveDrsUriServiceAccounts(dosUris, petUserInfo)
       // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
       // We still call DRSHub for those because we can verify the user has permission on the DRS object as
@@ -499,13 +502,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       val elapsedTime = System.currentTimeMillis() - submissionRec.submissionDate.getTime
       workflowToCromwellLatency.update(elapsedTime, TimeUnit.MILLISECONDS)
 
-      (executionServiceKey, workflowRecs.zip(executionServiceResults))
+      (executionServiceKey, workflowRecs.zip(executionServiceResults), methodConfig, petUserInfo)
     }
 
     // Second txn to update workflows to Launching.
     // If this txn fails we'll just end up rescheduling the next workflow query and will restart this function from the top.
     // Since the first txn didn't do any writes to the db it won't be left in a weird halfway state.
-    cromwellSubmission flatMap { case (executionServiceKey, results) =>
+    cromwellSubmission flatMap { case (executionServiceKey, results, methodConfig, petUserInfo) =>
       dataSource.inTransaction { dataAccess =>
         // save successes as submitted workflows and hook up their cromwell ids
         val successUpdates = results collect { case (wfRec, Left(success: ExecutionServiceStatus)) =>
@@ -527,6 +530,30 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                                                                                                 WorkflowStatuses.Failed,
                                                                                                 executionServiceKey
         )
+        val submissionEvent = SubmissionEvent(
+          submissionRec.id.toString,
+          workspaceRec.id.toString,
+          methodConfig.toId,
+          methodConfig.namespace,
+          methodConfig.name,
+          methodConfig.methodRepoMethod.methodUri,
+          methodConfig.methodRepoMethod.repo.scheme,
+          methodConfig.methodConfigVersion,
+          methodConfig.dataReferenceName.map(_.toString()),
+          workflowIds,
+          results
+            .filter(_._2.isLeft)
+            .flatMap(
+              _._2.swap.toOption.map(_.id)
+            ), // This is because the Left is the success, breaking Scala's Either convention
+          submissionRec.rootEntityType,
+          submissionRec.useCallCache,
+          submissionRec.useReferenceDisks,
+          submissionRec.memoryRetryMultiplier,
+          submissionRec.ignoreEmptyOutputs,
+          submissionRec.userComment
+        )
+        bardService.sendEvent(submissionEvent, petUserInfo)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd): _*)
       } map { _ => ProcessNextWorkflow }

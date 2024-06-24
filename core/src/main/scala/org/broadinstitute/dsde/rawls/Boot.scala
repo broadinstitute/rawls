@@ -43,6 +43,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
+import org.broadinstitute.dsde.rawls.metrics.BardService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.serviceFactory._
@@ -514,6 +515,12 @@ object Boot extends IOApp with LazyLogging {
       if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
 
+        val bardService = new BardService(
+          appConfigManager.conf.getBoolean("bard.enabled"),
+          appConfigManager.conf.getString("bard.bardUrl"),
+          appConfigManager.conf.getInt("bard.connectionPoolSize")
+        )
+
         BootMonitors.bootMonitors(
           system,
           appConfigManager,
@@ -545,7 +552,8 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
-          methodConfigResolver
+          methodConfigResolver,
+          bardService
         )
       } else
         logger.info(

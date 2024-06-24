@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
   SubmissionSupervisor,
   WorkflowSubmissionActor
 }
+import org.broadinstitute.dsde.rawls.metrics.BardService
 import org.broadinstitute.dsde.rawls.model.{
   CromwellBackend,
   RawlsRequestContext,
@@ -93,7 +94,8 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
-                   methodConfigResolver: MethodConfigResolver
+                   methodConfigResolver: MethodConfigResolver,
+                   bardService: BardService
   ): Unit = {
 
     if (appConfigManager.cloudProvider == WorkspaceCloudPlatform.Gcp) {
@@ -144,7 +146,8 @@ object BootMonitors extends LazyLogging {
         useWorkflowCollectionLabel,
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
-        methodConfigResolver
+        methodConfigResolver,
+        bardService
       )
 
       // Boot bucket deletion monitor
@@ -333,7 +336,8 @@ object BootMonitors extends LazyLogging {
                                             useWorkflowCollectionLabel: Boolean,
                                             defaultNetworkCromwellBackend: CromwellBackend,
                                             highSecurityNetworkCromwellBackend: CromwellBackend,
-                                            methodConfigResolver: MethodConfigResolver
+                                            methodConfigResolver: MethodConfigResolver,
+                                            bardService: BardService
   ) =
     for (i <- 0 until conf.getInt("executionservice.parallelSubmitters"))
       system.actorOf(
@@ -359,7 +363,8 @@ object BootMonitors extends LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
-          methodConfigResolver
+          methodConfigResolver,
+          bardService
         )
       )
 
