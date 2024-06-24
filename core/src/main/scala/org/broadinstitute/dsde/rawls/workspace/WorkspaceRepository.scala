@@ -1,12 +1,22 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.model.Workspace
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsRequestContext,
+  Workspace,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceState
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
 
 import java.util.UUID
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Data access for rawls workspaces
@@ -41,7 +51,43 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
 
+  def deleteWorkspaceRecord(workspaceName: WorkspaceName): Future[Boolean] =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.delete(workspaceName)
+    }
+
   def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
     dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+
+  def createNewMCWorkspaceRecord(workspaceId: UUID,
+                                 request: WorkspaceRequest,
+                                 parentContext: RawlsRequestContext,
+                                 state: WorkspaceState = WorkspaceState.Ready
+  )(implicit ex: ExecutionContext): Future[Workspace] =
+    dataSource.inTransaction { access =>
+      val workspaceName = request.toWorkspaceName
+      for {
+        _ <- access.workspaceQuery.getWorkspaceId(workspaceName).map { workspaceId =>
+          if (workspaceId.isDefined)
+            throw RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Conflict, s"Workspace '$workspaceName' already exists")
+            )
+        }
+        currentDate = DateTime.now
+        workspace = Workspace.buildMcWorkspace(
+          namespace = workspaceName.namespace,
+          name = workspaceName.name,
+          workspaceId = workspaceId.toString,
+          createdDate = currentDate,
+          lastModified = currentDate,
+          createdBy = parentContext.userInfo.userEmail.value,
+          attributes = request.attributes,
+          state
+        )
+        newWorkspace <- traceDBIOWithParent("saveMultiCloudWorkspace", parentContext)(_ =>
+          access.workspaceQuery.createOrUpdate(workspace)
+        )
+      } yield newWorkspace
+    }
 
 }
