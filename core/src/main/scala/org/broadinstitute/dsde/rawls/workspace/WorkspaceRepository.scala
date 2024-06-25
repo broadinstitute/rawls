@@ -45,7 +45,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs)
     }
 
-  def getV2WorkspaceContext(workspaceId: String,
+  def getV2WorkspaceContextById(workspaceId: String,
                             attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Option[Workspace]] =
     dataSource.inTransaction { dataAccess =>

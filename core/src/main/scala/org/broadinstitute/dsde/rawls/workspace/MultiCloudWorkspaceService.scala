@@ -70,10 +70,10 @@ object MultiCloudWorkspaceService {
       samDAO,
       multiCloudWorkspaceConfig,
       leonardoDAO,
-      dataSource,
       workbenchMetricBaseName,
       WorkspaceManagerResourceMonitorRecordDao(dataSource),
-      new WorkspaceRepository(dataSource)
+      new WorkspaceRepository(dataSource),
+      new BillingRepository(dataSource)
     )
 
   def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
@@ -89,18 +89,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  override val samDAO: SamDAO,
                                  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  val leonardoDAO: LeonardoDAO,
-                                 override val dataSource: SlickDataSource,
                                  override val workbenchMetricBaseName: String,
                                  workspaceManagerResourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
-                                 val workspaceRepository: WorkspaceRepository
+                                 val workspaceRepository: WorkspaceRepository,
+                                 val billingRepository: BillingRepository
 )(implicit override val executionContext: ExecutionContext, val system: ActorSystem)
     extends LazyLogging
     with RawlsInstrumented
     with Retry
     with WorkspaceSupport
     with BillingProjectSupport {
-
-  val billingRepository: BillingRepository = new BillingRepository(dataSource)
 
   /**
     * Deletes a workspace. For legacy "rawls" workspaces,

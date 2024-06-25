@@ -149,7 +149,7 @@ trait WorkspaceSupport {
                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] = for {
     _ <- userEnabledCheck
-    workspaceContext <- workspaceRepository.getV2WorkspaceContext(workspaceId, attributeSpecs)
+    workspaceContext <- workspaceRepository.getV2WorkspaceContextById(workspaceId, attributeSpecs)
   } yield workspaceContext match {
     case Some(workspace) => workspace
     case None            => throw NoSuchWorkspaceException(workspaceId)
