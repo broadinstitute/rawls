@@ -425,9 +425,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
     }
 
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+    when(datasource.inTransaction[Option[Workspace]](any(), any())).thenReturn(
       Future.successful(
-        Workspace("fake_namespace",
+        Option(Workspace("fake_namespace",
                   "fake_name",
                   workspaceId.toString,
                   "fake_bucket",
@@ -436,7 +436,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                   DateTime.now(),
                   "creator@example.com",
                   Map.empty
-        ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
+        ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId))
       )
     )
     datasource
