@@ -230,6 +230,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
+
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000

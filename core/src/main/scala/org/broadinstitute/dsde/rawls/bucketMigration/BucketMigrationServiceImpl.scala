@@ -7,20 +7,11 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  SamWorkspaceRoles,
-  Workspace,
-  WorkspaceName
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, SamWorkspaceActions, SamWorkspaceRoles, Workspace, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -36,6 +27,9 @@ class BucketMigrationServiceImpl(val dataSource: SlickDataSource, val samDAO: Sa
     with WorkspaceSupport
     with LazyLogging
     with BucketMigrationService {
+
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   /**
     * Helper functions to enforce appropriate authz and load workspace(s) if authz passes

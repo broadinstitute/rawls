@@ -6,28 +6,15 @@ import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{
-  CreationStatuses,
-  ErrorReport,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamBillingProjectRoles,
-  SamResourceAction,
-  SamResourceTypeName,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName
-}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import scala.concurrent.{ExecutionContext, Future}
 
 trait WorkspaceSupport {
   val samDAO: SamDAO
+  val workspaceRepository: WorkspaceRepository
   protected val ctx: RawlsRequestContext
   implicit protected val executionContext: ExecutionContext
   protected val dataSource: SlickDataSource

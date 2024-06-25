@@ -8,21 +8,9 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{
-  DataReferenceName,
-  ErrorReport,
-  NamedDataRepoSnapshot,
-  RawlsRequestContext,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  SnapshotListResponse,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceCloudPlatform,
-  WorkspaceName
-}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SnapshotListResponse, Workspace, WorkspaceAttributeSpecs, WorkspaceCloudPlatform, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService, WorkspaceRepository}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -58,6 +46,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     extends FutureSupport
     with WorkspaceSupport
     with LazyLogging {
+
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   // Finds a workspace using the workspaceId then calls the createSnapshot method
   def createSnapshotByWorkspaceId(workspaceId: String,
