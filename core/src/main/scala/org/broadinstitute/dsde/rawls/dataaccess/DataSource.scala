@@ -94,7 +94,8 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
             )
           case otherStatusCode =>
             logger.error(
-              s"Error in transaction (${tempTableTypes.mkString(",")}): $otherStatusCode: ${t.getMessage}"
+              s"Error in transaction (${tempTableTypes
+                  .mkString(",")}). ${t.getClass.getName} with status $otherStatusCode: ${t.getMessage}"
             )
         }
       case _ =>
