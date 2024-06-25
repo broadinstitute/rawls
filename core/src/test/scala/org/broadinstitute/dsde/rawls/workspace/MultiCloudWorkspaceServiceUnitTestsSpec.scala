@@ -11,12 +11,42 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceDAO, GoogleServicesDAO, LeonardoDAO, MethodRepoDAO, RequesterPaysSetupService, SamDAO, SlickDataSource, SubmissionCostService, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  ExecutionServiceCluster,
+  ExecutionServiceDAO,
+  GoogleServicesDAO,
+  LeonardoDAO,
+  MethodRepoDAO,
+  RequesterPaysSetupService,
+  SamDAO,
+  SlickDataSource,
+  SubmissionCostService,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, CreationStatuses, ManagedGroupRef, RawlsBillingProject, RawlsBillingProjectName, RawlsGroupName, RawlsRequestContext, RawlsUserEmail, SamWorkspaceActions, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceDetails, WorkspacePolicy, WorkspaceRequest, WorkspaceState, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeName,
+  AttributeString,
+  CreationStatuses,
+  ManagedGroupRef,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsGroupName,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  SamWorkspaceActions,
+  UserInfo,
+  Workspace,
+  WorkspaceCloudPlatform,
+  WorkspaceDetails,
+  WorkspacePolicy,
+  WorkspaceRequest,
+  WorkspaceState,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
