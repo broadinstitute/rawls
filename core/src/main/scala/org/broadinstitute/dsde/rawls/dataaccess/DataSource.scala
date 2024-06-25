@@ -2,11 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import _root_.slick.basic.DatabaseConfig
 import _root_.slick.jdbc.{JdbcProfile, TransactionIsolation}
+import akka.http.scaladsl.model.StatusCodes.ClientError
 import com.google.common.base.Throwables
 import com.typesafe.scalalogging.LazyLogging
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
 import liquibase.{Contexts, Liquibase}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, DataAccessComponent, ReadWriteAction}
 import sun.security.provider.certpath.SunCertPathBuilderException
 
@@ -75,12 +77,31 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     }
 
     database.run(callerActionWithTempTables.withPinnedSession).recover { case t: Throwable =>
-      logger.error(
-        s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). Message: ${t.getMessage}"
-      )
+      logTransactionError(t, tempTableTypes)
       throw t
     }
   }
+
+  // conditionally log the transaction error. We don't want to log bad requests at ERROR level, as that will spam
+  // Sentry alerts.
+  private def logTransactionError(t: Throwable, tempTableTypes: Set[AttributeTempTableType.Value]): Unit =
+    t match {
+      case withErrorReport: RawlsExceptionWithErrorReport =>
+        withErrorReport.errorReport.statusCode match {
+          case Some(ce: ClientError) =>
+            logger.warn(
+              s"Client error in transaction (${tempTableTypes.mkString(",")}): ${t.getMessage}"
+            )
+          case otherStatusCode =>
+            logger.error(
+              s"Error in transaction (${tempTableTypes.mkString(",")}): $otherStatusCode: ${t.getMessage}"
+            )
+        }
+      case _ =>
+        logger.error(
+          s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). ${t.getClass.getName}: ${t.getMessage}"
+        )
+    }
 
   def initWithLiquibase(liquibaseChangeLog: String, parameters: Map[String, AnyRef]) = {
     val dbConnection = database.source.createConnection()
