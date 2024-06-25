@@ -8,9 +8,25 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SnapshotListResponse, Workspace, WorkspaceAttributeSpecs, WorkspaceCloudPlatform, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceName,
+  ErrorReport,
+  NamedDataRepoSnapshot,
+  RawlsRequestContext,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  SnapshotListResponse,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceCloudPlatform,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.{
+  AggregateWorkspaceNotFoundException,
+  AggregatedWorkspaceService,
+  WorkspaceRepository
+}
 
 import java.util.UUID
 import scala.annotation.tailrec

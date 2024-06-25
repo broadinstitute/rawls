@@ -6,7 +6,22 @@ import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  CreationStatuses,
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamBillingProjectRoles,
+  SamResourceAction,
+  SamResourceTypeName,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
@@ -62,17 +77,18 @@ trait WorkspaceSupport {
     accessCheck(workspace, requiredAction, ignoreLock = true) flatMap { _ => codeBlock }
 
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
-    getWorkspaceContext(workspaceName).flatMap { workspace =>
-      def require(action: SamResourceAction, mkThrowable: WorkspaceName => Throwable) =
-        raiseUnlessUserHasAction(action, SamResourceTypeNames.workspace, workspace.workspaceId, ctx) {
-          mkThrowable(workspaceName)
-        }
-
-      require(SamWorkspaceActions.compute, WorkspaceAccessDeniedException.apply).recoverWith { case t: Throwable =>
-        // verify the user has `read` on the workspace to avoid exposing its existence
-        require(SamWorkspaceActions.read, NoSuchWorkspaceException.apply) *> Future.failed(t)
+    for {
+      _ <- userEnabledCheck
+      workspace <- getWorkspaceContext(workspaceName)
+      workspaceId = workspace.workspaceId
+      _ <- raiseUnlessUserHasAction(SamWorkspaceActions.compute, SamResourceTypeNames.workspace, workspaceId) {
+        WorkspaceAccessDeniedException(workspaceName)
+      }.recoverWith { case t: Throwable =>
+        raiseUnlessUserHasAction(SamWorkspaceActions.read, SamResourceTypeNames.workspace, workspaceId) {
+          NoSuchWorkspaceException(workspaceName)
+        } *> Future.failed(t)
       }
-    }
+    } yield ()
 
   def requireCreateWorkspaceAction(project: RawlsBillingProjectName, context: RawlsRequestContext = ctx): Future[Unit] =
     raiseUnlessUserHasAction(SamBillingProjectActions.createWorkspace,
@@ -138,6 +154,7 @@ trait WorkspaceSupport {
                                         attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
+      _ <- userEnabledCheck
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
@@ -145,10 +162,9 @@ trait WorkspaceSupport {
   def getWorkspaceContext(workspaceName: WorkspaceName,
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
-    userEnabledCheck.flatMap { _ =>
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess, attributeSpecs)(DBIO.successful)
-      }
+    workspaceRepository.getWorkspaceContext(workspaceName, attributeSpecs).map {
+      case Some(workspace) => workspace
+      case None            => throw NoSuchWorkspaceException(workspaceName)
     }
 
   def withWorkspaceContext[T](workspaceName: WorkspaceName,

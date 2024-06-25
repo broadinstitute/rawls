@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsRequestContext,
   Workspace,
+  WorkspaceAttributeSpecs,
   WorkspaceName,
   WorkspaceRequest,
   WorkspaceState
@@ -89,5 +90,11 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
         )
       } yield newWorkspace
     }
+
+  def getWorkspaceContext(workspaceName: WorkspaceName,
+                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
+    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs)
+  }
 
 }
