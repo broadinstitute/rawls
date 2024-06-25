@@ -165,10 +165,14 @@ trait RawlsApiService
         .map(_.decodeString(entity.contentType.charsetOption.getOrElse(HttpCharsets.`UTF-8`).value))
         .runWith(Sink.head)
 
+    // for these paths, don't log 5xx responses as ERROR; log them as WARN. This prevents spamming Sentry.
+    val ignorableErrorPaths = Set("/status")
+
     def myLoggingFunction(logger: LoggingAdapter)(req: HttpRequest)(res: Any): Unit = {
       val entry = res match {
         case Complete(resp) =>
           val logLevel: LogLevel = resp.status.intValue / 100 match {
+            case 5 if ignorableErrorPaths.contains(req.uri.path.toString()) => Logging.WarningLevel
             case 5 => Logging.ErrorLevel
             case 4 => Logging.InfoLevel
             case _ => Logging.DebugLevel
