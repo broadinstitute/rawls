@@ -2986,9 +2986,21 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def withWorkspaceContext[T](workspaceName: WorkspaceName,
                                       dataAccess: DataAccess,
                                       attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-                                     )(op: (Workspace) => ReadWriteAction[T]) =
+  )(op: (Workspace) => ReadWriteAction[T]) =
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
-      case None => throw NoSuchWorkspaceException(workspaceName)
+      case None            => throw NoSuchWorkspaceException(workspaceName)
+      case Some(workspace) => op(workspace)
+    }
+
+  // Finds workspace by workspaceName
+  // moved out of WorkspaceSupport because the only usage was in this file,
+  // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
+  private def withV2WorkspaceContext[T](workspaceName: WorkspaceName,
+                                        dataAccess: DataAccess,
+                                        attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  )(op: (Workspace) => ReadWriteAction[T]) =
+    dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs) flatMap {
+      case None            => throw NoSuchWorkspaceException(workspaceName)
       case Some(workspace) => op(workspace)
     }
 

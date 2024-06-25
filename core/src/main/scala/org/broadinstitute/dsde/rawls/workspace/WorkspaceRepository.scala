@@ -32,6 +32,26 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.findById(workspaceId.toString)
     }
 
+  def getWorkspaceContext(workspaceName: WorkspaceName,
+                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
+    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs)
+  }
+
+  def getV2WorkspaceContext(workspaceName: WorkspaceName,
+                            attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Option[Workspace]] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs)
+    }
+
+  def getV2WorkspaceContext(workspaceId: String,
+                            attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Option[Workspace]] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.findById(workspaceId, attributeSpecs)
+    }
+
   def createWorkspace(workspace: Workspace): Future[Workspace] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.createOrUpdate(workspace)
@@ -90,11 +110,5 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
         )
       } yield newWorkspace
     }
-
-  def getWorkspaceContext(workspaceName: WorkspaceName,
-                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
-    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs)
-  }
 
 }

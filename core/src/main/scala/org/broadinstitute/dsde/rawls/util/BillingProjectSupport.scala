@@ -5,7 +5,18 @@ import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames}
+import org.broadinstitute.dsde.rawls.model.{
+  CreationStatuses,
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamBillingProjectRoles,
+  SamResourceAction,
+  SamResourceTypeName,
+  SamResourceTypeNames
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -16,12 +27,11 @@ trait BillingProjectSupport {
   protected val ctx: RawlsRequestContext
   implicit protected val executionContext: ExecutionContext
 
-
   def requireCreateWorkspaceAction(project: RawlsBillingProjectName, context: RawlsRequestContext = ctx): Future[Unit] =
     raiseUnlessUserHasAction(SamBillingProjectActions.createWorkspace,
-      SamResourceTypeNames.billingProject,
-      project.value,
-      context
+                             SamResourceTypeNames.billingProject,
+                             project.value,
+                             context
     ) {
       RawlsExceptionWithErrorReport(
         ErrorReport(
@@ -35,7 +45,7 @@ trait BillingProjectSupport {
   // granted on the Workspace's Billing Project
   def requireBillingProjectOwnerAccess(projectName: RawlsBillingProjectName,
                                        parentContext: RawlsRequestContext
-                                      ): Future[Unit] =
+  ): Future[Unit] =
     for {
       billingProjectRoles <- traceFutureWithParent("listUserRolesForResource", parentContext)(context =>
         samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, context)
@@ -50,13 +60,12 @@ trait BillingProjectSupport {
       }
     } yield ()
 
-
   /**
     * Load the specified billing project, throwing if the billing project is not ready.
     */
   def getBillingProjectContext(projectName: RawlsBillingProjectName,
                                context: RawlsRequestContext = ctx
-                              ): Future[RawlsBillingProject] =
+  ): Future[RawlsBillingProject] =
     for {
 
       maybeBillingProject <- traceFutureWithParent("loadBillingProject", context) { _ =>
@@ -84,9 +93,9 @@ trait BillingProjectSupport {
                                        resType: SamResourceTypeName,
                                        resId: String,
                                        context: RawlsRequestContext = ctx
-                                      )(
-                                        throwable: Throwable
-                                      ): Future[Unit] =
+  )(
+    throwable: Throwable
+  ): Future[Unit] =
     samDAO
       .userHasAction(resType, resId, action, context)
       .flatMap(ApplicativeThrow[Future].raiseUnless(_)(throwable))

@@ -4,9 +4,18 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.implicits.{catsSyntaxApplyOps, toFoldableOps}
 import cats.ApplicativeThrow
 import org.broadinstitute.dsde.rawls._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsRequestContext,
+  SamResourceAction,
+  SamResourceTypeName,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -16,9 +25,6 @@ trait WorkspaceSupport {
   val workspaceRepository: WorkspaceRepository
   protected val ctx: RawlsRequestContext
   implicit protected val executionContext: ExecutionContext
-  protected val dataSource: SlickDataSource
-
-  import dataSource.dataAccess.driver.api._
 
   // Access/permission helpers
   private def userEnabledCheck: Future[Unit] =
@@ -74,8 +80,6 @@ trait WorkspaceSupport {
       }
     } yield ()
 
-
-
   def raiseUnlessUserHasAction(action: SamResourceAction,
                                resType: SamResourceTypeName,
                                resId: String,
@@ -86,7 +90,6 @@ trait WorkspaceSupport {
     samDAO
       .userHasAction(resType, resId, action, context)
       .flatMap(ApplicativeThrow[Future].raiseUnless(_)(throwable))
-
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
   def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): Boolean =
@@ -113,28 +116,29 @@ trait WorkspaceSupport {
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
 
-  def getWorkspaceContext(workspaceName: WorkspaceName,
-                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  def getWorkspaceContext(
+    workspaceName: WorkspaceName,
+    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     workspaceRepository.getWorkspaceContext(workspaceName, attributeSpecs).map {
       case Some(workspace) => workspace
       case None            => throw NoSuchWorkspaceException(workspaceName)
     }
 
-
-
-  def getV2WorkspaceContextAndPermissions(workspaceName: WorkspaceName,
-                                          requiredAction: SamResourceAction,
-                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  def getV2WorkspaceContextAndPermissions(
+    workspaceName: WorkspaceName,
+    requiredAction: SamResourceAction,
+    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
       workspaceContext <- getV2WorkspaceContext(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
 
-  def getV2WorkspaceContextAndPermissionsById(workspaceId: String,
-                                              requiredAction: SamResourceAction,
-                                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  def getV2WorkspaceContextAndPermissionsById(
+    workspaceId: String,
+    requiredAction: SamResourceAction,
+    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
       workspaceContext <- getV2WorkspaceContextByWorkspaceId(workspaceId, attributeSpecs)
@@ -143,41 +147,23 @@ trait WorkspaceSupport {
 
   def getV2WorkspaceContextByWorkspaceId(workspaceId: String,
                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] =
-    userEnabledCheck.flatMap { _ =>
-      dataSource.inTransaction { dataAccess =>
-        withV2WorkspaceContextByWorkspaceId(workspaceId, dataAccess, attributeSpecs)(DBIO.successful)
-      }
-    }
+  ): Future[Workspace] = for {
+    _ <- userEnabledCheck
+    workspaceContext <- workspaceRepository.getV2WorkspaceContext(workspaceId, attributeSpecs)
+  } yield workspaceContext match {
+    case Some(workspace) => workspace
+    case None            => throw NoSuchWorkspaceException(workspaceId)
+  }
 
   def getV2WorkspaceContext(workspaceName: WorkspaceName,
                             attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] =
-    userEnabledCheck.flatMap { _ =>
-      dataSource.inTransaction { dataAccess =>
-        withV2WorkspaceContext(workspaceName, dataAccess, attributeSpecs)(DBIO.successful)
-      }
-    }
-
-  // Finds workspace by workspaceName
-  def withV2WorkspaceContext[T](workspaceName: WorkspaceName,
-                                dataAccess: DataAccess,
-                                attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  )(op: (Workspace) => ReadWriteAction[T]) =
-    dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs) flatMap {
-      case None            => throw NoSuchWorkspaceException(workspaceName)
-      case Some(workspace) => op(workspace)
-    }
-
-//Finds workspace by workspaceId
-  def withV2WorkspaceContextByWorkspaceId[T](workspaceId: String,
-                                             dataAccess: DataAccess,
-                                             attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  )(op: (Workspace) => ReadWriteAction[T]) =
-    dataAccess.workspaceQuery.findById(workspaceId, attributeSpecs) flatMap {
-      case None            => throw NoSuchWorkspaceException(workspaceId)
-      case Some(workspace) => op(workspace)
-    }
+  ): Future[Workspace] = for {
+    _ <- userEnabledCheck
+    workspaceContext <- workspaceRepository.getV2WorkspaceContext(workspaceName, attributeSpecs)
+  } yield workspaceContext match {
+    case Some(workspace) => workspace
+    case None            => throw NoSuchWorkspaceException(workspaceName)
+  }
 
   def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
     bucketRegion.traverse_ { region =>
@@ -195,8 +181,5 @@ trait WorkspaceSupport {
         )
       }
     }
-
-
-
 
 }
