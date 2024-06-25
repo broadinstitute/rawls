@@ -2,27 +2,11 @@ package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.implicits.{catsSyntaxApplyOps, toFoldableOps}
-import cats.{Applicative, ApplicativeThrow}
+import cats.ApplicativeThrow
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{
-  CreationStatuses,
-  ErrorReport,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamBillingProjectRoles,
-  SamResourceAction,
-  SamResourceTypeName,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName
-}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -90,19 +74,7 @@ trait WorkspaceSupport {
       }
     } yield ()
 
-  def requireCreateWorkspaceAction(project: RawlsBillingProjectName, context: RawlsRequestContext = ctx): Future[Unit] =
-    raiseUnlessUserHasAction(SamBillingProjectActions.createWorkspace,
-                             SamResourceTypeNames.billingProject,
-                             project.value,
-                             context
-    ) {
-      RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.Forbidden,
-          s"You are not authorized to create a workspace in billing project $project"
-        )
-      )
-    }
+
 
   def raiseUnlessUserHasAction(action: SamResourceAction,
                                resType: SamResourceTypeName,
@@ -115,24 +87,6 @@ trait WorkspaceSupport {
       .userHasAction(resType, resId, action, context)
       .flatMap(ApplicativeThrow[Future].raiseUnless(_)(throwable))
 
-  // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
-  // granted on the Workspace's Billing Project
-  def requireBillingProjectOwnerAccess(projectName: RawlsBillingProjectName,
-                                       parentContext: RawlsRequestContext
-  ): Future[Unit] =
-    for {
-      billingProjectRoles <- traceFutureWithParent("listUserRolesForResource", parentContext)(context =>
-        samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, context)
-      )
-      _ <- ApplicativeThrow[Future].raiseUnless(billingProjectRoles.contains(SamBillingProjectRoles.owner)) {
-        RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.Forbidden,
-            s"Missing ${SamBillingProjectRoles.owner} role on billing project '$projectName'."
-          )
-        )
-      }
-    } yield ()
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
   def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): Boolean =
@@ -167,14 +121,7 @@ trait WorkspaceSupport {
       case None            => throw NoSuchWorkspaceException(workspaceName)
     }
 
-  def withWorkspaceContext[T](workspaceName: WorkspaceName,
-                              dataAccess: DataAccess,
-                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  )(op: (Workspace) => ReadWriteAction[T]) =
-    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
-      case None            => throw NoSuchWorkspaceException(workspaceName)
-      case Some(workspace) => op(workspace)
-    }
+
 
   def getV2WorkspaceContextAndPermissions(workspaceName: WorkspaceName,
                                           requiredAction: SamResourceAction,
@@ -249,42 +196,7 @@ trait WorkspaceSupport {
       }
     }
 
-  /**
-    * Load the specified billing project, throwing if the billing project is not ready.
-    */
-  def getBillingProjectContext(projectName: RawlsBillingProjectName,
-                               context: RawlsRequestContext = ctx
-  ): Future[RawlsBillingProject] =
-    for {
-      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("loadBillingProject", context) { _ =>
-          dataAccess.rawlsBillingProjectQuery.load(projectName)
-        }
-      }
 
-      billingProject = maybeBillingProject.getOrElse(
-        throw RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest, s"Billing Project $projectName does not exist")
-        )
-      )
-      _ <- failUnlessBillingProjectReady(billingProject)
-    } yield billingProject
 
-  def failUnlessBillingProjectReady(billingProject: RawlsBillingProject): Future[Unit] =
-    Applicative[Future].unlessA(billingProject.status == CreationStatuses.Ready) {
-      Future.failed(
-        RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProject.projectName} is not ready")
-        )
-      )
-    }
-
-  def failIfWorkspaceExists(name: WorkspaceName): ReadWriteAction[Unit] =
-    dataSource.dataAccess.workspaceQuery.getWorkspaceId(name).map { workspaceId =>
-      if (workspaceId.isDefined)
-        throw RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.Conflict, s"Workspace '$name' already exists")
-        )
-    }
 
 }

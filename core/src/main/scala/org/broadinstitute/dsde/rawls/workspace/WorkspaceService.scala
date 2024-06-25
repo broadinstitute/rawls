@@ -55,6 +55,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
 import cats.effect.unsafe.implicits.global
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 
 import java.io.IOException
 import java.util.UUID
@@ -222,6 +223,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     with RawlsInstrumented
     with JsonFilterUtils
     with WorkspaceSupport
+    with BillingProjectSupport
     with EntitySupport
     with AttributeSupport
     with StringValidationUtils {
@@ -232,6 +234,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
   val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
+  val billingRepository: BillingRepository = new BillingRepository(dataSource)
 
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
@@ -2978,6 +2981,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // moved out of WorkspaceSupport because the only usage was in this file,
+  // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName,
+                                      dataAccess: DataAccess,
+                                      attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+                                     )(op: (Workspace) => ReadWriteAction[T]) =
+    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
+      case None => throw NoSuchWorkspaceException(workspaceName)
+      case Some(workspace) => op(workspace)
+    }
+
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] =
     // don't do the sam REST call inside the db transaction.
     getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
@@ -3579,6 +3593,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
     } yield savedWorkspace
   }
+
+  def failIfWorkspaceExists(name: WorkspaceName): ReadWriteAction[Unit] =
+    dataSource.dataAccess.workspaceQuery.getWorkspaceId(name).map { workspaceId =>
+      if (workspaceId.isDefined)
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.Conflict, s"Workspace '$name' already exists")
+        )
+    }
 
   // A new workspace request may specify the region where the bucket should be created. In the case of cloning a
   // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region

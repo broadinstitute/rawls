@@ -10,46 +10,24 @@ import bio.terra.workspace.model._
 import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  LeonardoDAO,
-  SamDAO,
-  SlickDataSource,
-  WorkspaceManagerResourceMonitorRecordDao
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeBoolean,
-  AttributeName,
-  AttributeString,
-  ErrorReport,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamWorkspaceActions,
-  Workspace,
-  WorkspaceCloudPlatform,
-  WorkspaceDeletionResult,
-  WorkspaceDetails,
-  WorkspaceName,
-  WorkspaceRequest,
-  WorkspaceState,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeString, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceCloudPlatform, WorkspaceDeletionResult, WorkspaceDetails, WorkspaceName, WorkspaceRequest, WorkspaceState, WorkspaceType}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
-import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.util.{BillingProjectSupport, Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.{DateTime, DateTimeZone}
 
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -97,7 +75,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     extends LazyLogging
     with RawlsInstrumented
     with Retry
-    with WorkspaceSupport {
+    with WorkspaceSupport
+    with BillingProjectSupport {
+
+  val billingRepository: BillingRepository = new BillingRepository(dataSource)
 
   /**
     * Deletes a workspace. For legacy "rawls" workspaces,
