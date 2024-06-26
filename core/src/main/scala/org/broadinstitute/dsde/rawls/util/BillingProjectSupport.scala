@@ -21,12 +21,19 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
 
+/**
+  * Trait for common functionality for billing projects.
+  * Split from WorkspaceSupport, to better fit scope
+  */
 trait BillingProjectSupport {
   val samDAO: SamDAO
   val billingRepository: BillingRepository
   protected val ctx: RawlsRequestContext
   implicit protected val executionContext: ExecutionContext
 
+  /**
+    * Throws an exception of the user does not have the "create_workspace" permission on the specified billing project
+    */
   def requireCreateWorkspaceAction(project: RawlsBillingProjectName, context: RawlsRequestContext = ctx): Future[Unit] =
     raiseUnlessUserHasAction(SamBillingProjectActions.createWorkspace,
                              SamResourceTypeNames.billingProject,
@@ -80,6 +87,9 @@ trait BillingProjectSupport {
       _ <- failUnlessBillingProjectReady(billingProject)
     } yield billingProject
 
+  /**
+    * Throws an exception if the specified billing project status is not in a Ready state.
+    */
   def failUnlessBillingProjectReady(billingProject: RawlsBillingProject): Future[Unit] =
     Applicative[Future].unlessA(billingProject.status == CreationStatuses.Ready) {
       Future.failed(
@@ -89,6 +99,9 @@ trait BillingProjectSupport {
       )
     }
 
+  /**
+    * Throws the passed exception if the user does not have the specified action on the specified resource
+    */
   private def raiseUnlessUserHasAction(action: SamResourceAction,
                                        resType: SamResourceTypeName,
                                        resId: String,
