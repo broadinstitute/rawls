@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
 import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
-import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.BpmAzureReportErrorMessageJsonProtocol._
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
@@ -220,6 +220,38 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
     verify(profileApi).createProfile(createProfileRequestCaptor.capture)
     assertResult(expectedPolicies)(createProfileRequestCaptor.getValue.getPolicies)
+  }
+
+  it should "return 409 conflict if BPM says required Azure resource providers are not present" in {
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+    val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
+    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest]))
+      .thenThrow(new ApiException(StatusCodes.Conflict.intValue, "Missing required providers"))
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      bpmDAO.createBillingProfile("fake", Right(coords), Map.empty, testContext)
+    }
+
+    e.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+  }
+
+  it should "return 500 for other api errors" in {
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+    val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
+    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest]))
+      .thenThrow(new ApiException(StatusCodes.BadGateway.intValue, "Error"))
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      bpmDAO.createBillingProfile("fake", Right(coords), Map.empty, testContext)
+    }
+
+    e.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
   }
 
   behavior of "deleteBillingProfile"

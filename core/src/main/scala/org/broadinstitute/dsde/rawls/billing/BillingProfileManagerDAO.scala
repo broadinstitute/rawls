@@ -94,9 +94,9 @@ class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExcepti
 class BpmAzureSpendReportApiException(val statusCode: Int, message: String, cause: Throwable = null)
     extends Exception(message, cause)
 
-class BpmException(billingProfileId: UUID, cause: Throwable)
+class BpmException(message: String, cause: Throwable)
     extends RawlsExceptionWithErrorReport(
-      ErrorReport(StatusCodes.InternalServerError, s"Error fetching billing profile ID $billingProfileId", cause)
+      ErrorReport(StatusCodes.InternalServerError, message, cause)
     )
 
 object BillingProfileManagerDAO {
@@ -193,7 +193,15 @@ class BillingProfileManagerDAOImpl(
     }
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
-    profileApi.createProfile(createProfileRequest)
+    Try(profileApi.createProfile(createProfileRequest)) match {
+      case Success(value) => value
+      case Failure(e: ApiException)
+          if e.getCode == StatusCodes.Conflict.intValue && e.getMessage.contains("Missing required providers") =>
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, e.getMessage))
+      case Failure(e) =>
+        logger.error("Error creating billing profile", e)
+        throw new BpmException(s"Error creating billing profile", e)
+    }
   }
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
@@ -202,7 +210,7 @@ class BillingProfileManagerDAOImpl(
       case Failure(e: ApiException)
           if e.getCode == StatusCodes.NotFound.intValue || e.getCode == StatusCodes.Forbidden.intValue =>
         None
-      case Failure(e) => throw new BpmException(billingProfileId, e);
+      case Failure(e) => throw new BpmException(s"Error fetching billing profile id ${billingProfileId}", e);
     }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
