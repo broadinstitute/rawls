@@ -427,16 +427,18 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     when(datasource.inTransaction[Option[Workspace]](any(), any())).thenReturn(
       Future.successful(
-        Option(Workspace("fake_namespace",
-                  "fake_name",
-                  workspaceId.toString,
-                  "fake_bucket",
-                  None,
-                  DateTime.now(),
-                  DateTime.now(),
-                  "creator@example.com",
-                  Map.empty
-        ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId))
+        Option(
+          Workspace("fake_namespace",
+                    "fake_name",
+                    workspaceId.toString,
+                    "fake_bucket",
+                    None,
+                    DateTime.now(),
+                    DateTime.now(),
+                    "creator@example.com",
+                    Map.empty
+          ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
+        )
       )
     )
     datasource
