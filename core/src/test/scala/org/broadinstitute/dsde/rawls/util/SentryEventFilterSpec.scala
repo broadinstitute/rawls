@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.util
 
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
+import com.google.cloud.bigquery.BigQueryException
+import com.google.cloud.http.BaseHttpServiceException
 import com.google.cloud.storage.StorageException
 import io.sentry.SentryEvent
 import io.sentry.protocol.Message
@@ -87,11 +90,6 @@ class SentryEventFilterSpec extends AnyFlatSpec with Matchers {
     val messageEvent = evt(Some("other event"))
     messageEvent.setLogger(httpGoogleServicesDao)
     SentryEventFilter.filterEvent(messageEvent) shouldBe messageEvent
-
-    val throwable = new StorageException(403, "some event")
-    val throwableEvent = new SentryEvent(throwable)
-    throwableEvent.setLogger(httpGoogleServicesDao)
-    SentryEventFilter.filterEvent(throwableEvent) shouldBe throwableEvent
   }
 
   it should "not filter out other events" in {
@@ -109,4 +107,58 @@ class SentryEventFilterSpec extends AnyFlatSpec with Matchers {
 
     result should not be null
   }
+
+  // GoogleJsonResponseException and TokenResponseException are complicated to build directly,
+  // so we use a generic HttpResponseException for tests
+  private def testHttpResponseException(code: Int): HttpResponseException =
+    new HttpResponseException.Builder(code, "status", new HttpHeaders).setMessage("message").build()
+
+  // ignore 4xx errors from GoogleJsonResponseException and TokenResponseException
+  Seq[HttpResponseException](
+    testHttpResponseException(401),
+    testHttpResponseException(400)
+  ).foreach { ex =>
+    it should s"filter out ${ex.getClass.getName} with code ${ex.getStatusCode}" in {
+      val e = new SentryEvent(ex)
+      e.setLogger(httpGoogleServicesDao)
+      SentryEventFilter.filterEvent(e) shouldBe null
+    }
+  }
+
+  // pass through 5xx or 0 errors from GoogleJsonResponseException and TokenResponseException
+  Seq[HttpResponseException](
+    testHttpResponseException(500),
+    testHttpResponseException(0)
+  ).foreach { ex =>
+    it should s"filter out ${ex.getClass.getName} with code ${ex.getStatusCode}" in {
+      val e = new SentryEvent(ex)
+      e.setLogger(httpGoogleServicesDao)
+      SentryEventFilter.filterEvent(e) should not be null
+    }
+  }
+
+  // ignore 4xx errors from BigQueryException and StorageException
+  Seq[BaseHttpServiceException](
+    new BigQueryException(404, "not found"),
+    new StorageException(403, "forbidden")
+  ).foreach { ex =>
+    it should s"filter out ${ex.getClass.getName} with code ${ex.getCode}" in {
+      val e = new SentryEvent(ex)
+      e.setLogger(httpGoogleServicesDao)
+      SentryEventFilter.filterEvent(e) shouldBe null
+    }
+  }
+
+  // pass through 5xx or 0 errors from BigQueryException and StorageException
+  Seq[BaseHttpServiceException](
+    new BigQueryException(503, "unavailable"),
+    new StorageException(0, "disconnect")
+  ).foreach { ex =>
+    it should s"not filter out ${ex.getClass.getName} with code ${ex.getCode}" in {
+      val e = new SentryEvent(ex)
+      e.setLogger(httpGoogleServicesDao)
+      SentryEventFilter.filterEvent(e) should not be null
+    }
+  }
+
 }
