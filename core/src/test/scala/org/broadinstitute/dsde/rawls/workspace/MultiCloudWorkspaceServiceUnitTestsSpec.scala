@@ -6,27 +6,11 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{CloneWorkspaceResult, JobReport, WsmPolicyInputs}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
-import org.broadinstitute.dsde.rawls.config.{MultiCloudWorkspaceConfig, WorkspaceServiceConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  ExecutionServiceCluster,
-  ExecutionServiceDAO,
-  GoogleServicesDAO,
-  LeonardoDAO,
-  MethodRepoDAO,
-  RequesterPaysSetupService,
-  SamDAO,
-  SlickDataSource,
-  SubmissionCostService,
-  WorkspaceManagerResourceMonitorRecordDao
-}
-import org.broadinstitute.dsde.rawls.entities.EntityManager
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
@@ -37,6 +21,9 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsGroupName,
   RawlsRequestContext,
   RawlsUserEmail,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  SamUserStatusResponse,
   SamWorkspaceActions,
   UserInfo,
   Workspace,
@@ -47,11 +34,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceState,
   WorkspaceType
 }
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
-import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -78,6 +60,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
   behavior of "cloneMultiCloudWorkspaceAsync"
 
   it should "pass a request to clone an azure workspace to cloneAzureWorkspaceAsync" in {
+    // Set up static data
     val sourceWorkspaceName = "source-name"
     val sourceWorkspaceNamespace = "source-namespace"
     val sourceWorkspace = Workspace.buildMcWorkspace(
@@ -91,42 +74,59 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       WorkspaceState.Ready
     )
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
-
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
-    val service = spy(
-      MultiCloudWorkspaceService.constructor(
-        mock[SlickDataSource],
-        mock[WorkspaceManagerDAO],
-        mock[BillingProfileManagerDAO],
-        mock[SamDAO],
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test"
-      )(requestContext)
-    )
-
-    doReturn(Future(sourceWorkspace))
-      .when(service)
-      .getV2WorkspaceContextAndPermissions(sourceWorkspace.toWorkspaceName, SamWorkspaceActions.read, None)
-
+    val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(
       RawlsBillingProjectName(destWorkspaceRequest.namespace),
       CreationStatuses.Ready,
       None,
-      None
+      None,
+      billingProfileId = Some(billingProfileId.toString)
     )
-
-    doReturn(Future(billingProject))
-      .when(service)
-      .getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace), requestContext)
-
-    doReturn(Future()).when(service).requireCreateWorkspaceAction(billingProject.projectName, requestContext)
-
+    // Set up mocks
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCloudPlatform()).thenReturn(CloudPlatform.AZURE)
-    doReturn(Future(Some(billingProfile))).when(service).getBillingProfile(billingProject, requestContext)
-
+    val requestContext = mock[RawlsRequestContext]
+    when(requestContext.otelContext).thenReturn(None)
+    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
+    when(billingProfileManagerDAO.getBillingProfile(billingProfileId, requestContext)).thenReturn(Some(billingProfile))
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(requestContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(
+      samDAO.userHasAction(
+        SamResourceTypeNames.workspace,
+        sourceWorkspace.workspaceId,
+        SamWorkspaceActions.read,
+        requestContext
+      )
+    ).thenReturn(Future(true))
+    when(
+      samDAO.userHasAction(
+        SamResourceTypeNames.billingProject,
+        billingProject.projectName.value,
+        SamBillingProjectActions.createWorkspace,
+        requestContext
+      )
+    ).thenReturn(Future(true))
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
+      .thenReturn(Future(Some(sourceWorkspace)))
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(RawlsBillingProjectName(destWorkspaceRequest.namespace)))
+      .thenReturn(Future(Some(billingProject)))
+    val service = spy(
+      new MultiCloudWorkspaceService(
+        requestContext,
+        mock[WorkspaceManagerDAO],
+        billingProfileManagerDAO,
+        samDAO,
+        mock[MultiCloudWorkspaceConfig],
+        mock[LeonardoDAO],
+        "MultiCloudWorkspaceService-test",
+        mock[WorkspaceManagerResourceMonitorRecordDao],
+        workspaceRepository,
+        billingRepository
+      )
+    )
     val destWorkspace = mock[Workspace]
     doReturn(Future(destWorkspace))
       .when(service)
@@ -137,22 +137,30 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
         ArgumentMatchers.any()
       )
 
-    whenReady(
+    val result = Await.result(
       service.cloneMultiCloudWorkspaceAsync(
         mock[WorkspaceService],
         sourceWorkspace.toWorkspaceName,
         destWorkspaceRequest
-      )
-    )(
-      _ shouldBe WorkspaceDetails.fromWorkspaceAndOptions(destWorkspace,
-                                                          Some(Set.empty),
-                                                          useAttributes = true,
-                                                          Some(WorkspaceCloudPlatform.Azure)
-      )
+      ),
+      Duration.Inf
+    )
+
+    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(destWorkspace,
+                                                             Some(Set.empty),
+                                                             useAttributes = true,
+                                                             Some(WorkspaceCloudPlatform.Azure)
+    )
+    verify(service).cloneAzureWorkspaceAsync(
+      ArgumentMatchers.eq(sourceWorkspace),
+      ArgumentMatchers.eq(billingProfile),
+      ArgumentMatchers.eq(destWorkspaceRequest),
+      ArgumentMatchers.any()
     )
   }
 
   it should "pass a request to clone a GCP workspace to cloneWorkspace in workspaceService" in {
+    // Static data
     val sourceWorkspaceName = "source-name"
     val sourceWorkspaceNamespace = "source-namespace"
     val sourceWorkspace = Workspace.buildWorkspace(
@@ -168,100 +176,88 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     )
     val authDomain = Some(Set(ManagedGroupRef(RawlsGroupName("Test-Realm"))))
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map(), authorizationDomain = authDomain)
-
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
-    val service = spy(
-      MultiCloudWorkspaceService.constructor(
-        mock[SlickDataSource],
-        mock[WorkspaceManagerDAO],
-        mock[BillingProfileManagerDAO],
-        mock[SamDAO],
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test"
-      )(requestContext)
-    )
-
-    val workspaceService = spy(
-      WorkspaceService.constructor(
-        dataSource = mock[SlickDataSource],
-        methodRepoDAO = mock[MethodRepoDAO],
-        cromiamDAO = mock[ExecutionServiceDAO],
-        executionServiceCluster = mock[ExecutionServiceCluster],
-        execServiceBatchSize = 10,
-        workspaceManagerDAO = mock[WorkspaceManagerDAO],
-        leonardoService = mock[LeonardoService],
-        methodConfigResolver = mock[MethodConfigResolver],
-        gcsDAO = mock[GoogleServicesDAO],
-        samDAO = mock[SamDAO],
-        notificationDAO = mock[NotificationDAO],
-        userServiceConstructor = _ => mock[UserService],
-        genomicsServiceConstructor = _ => mock[GenomicsService],
-        maxActiveWorkflowsTotal = 1000,
-        maxActiveWorkflowsPerUser = 100,
-        workbenchMetricBaseName = "test",
-        submissionCostService = mock[SubmissionCostService],
-        config = mock[WorkspaceServiceConfig],
-        requesterPaysSetupService = mock[RequesterPaysSetupService],
-        entityManager = mock[EntityManager],
-        resourceBufferService = mock[ResourceBufferService],
-        servicePerimeterService = mock[ServicePerimeterService],
-        googleIamDao = mock[GoogleIamDAO],
-        terraBillingProjectOwnerRole = "terraBillingProjectOwnerRole",
-        terraWorkspaceCanComputeRole = "terraWorkspaceCanComputeRole",
-        terraWorkspaceNextflowRole = "terraWorkspaceNextflowRole",
-        terraBucketReaderRole = "terraBucketReaderRole",
-        terraBucketWriterRole = "terraBucketWriterRole",
-        rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager],
-        multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager],
-        fastPassServiceConstructor = (_, _) => mock[FastPassService]
-      )(requestContext)
-    )
-
-    doReturn(Future(sourceWorkspace))
-      .when(service)
-      .getV2WorkspaceContextAndPermissions(sourceWorkspace.toWorkspaceName, SamWorkspaceActions.read, None)
-
+    val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(
       RawlsBillingProjectName(destWorkspaceRequest.namespace),
       CreationStatuses.Ready,
       None,
-      None
+      None,
+      billingProfileId = Some(billingProfileId.toString)
     )
-
-    doReturn(Future(billingProject))
-      .when(service)
-      .getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace), requestContext)
-
-    doReturn(Future()).when(service).requireCreateWorkspaceAction(billingProject.projectName, requestContext)
-
+    // Mocks
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.GCP)
-    doReturn(Future(Some(billingProfile))).when(service).getBillingProfile(billingProject, requestContext)
-
-    val destWorkspace = mock[Workspace]
-    doReturn(Future(destWorkspace))
-      .when(workspaceService)
-      .cloneWorkspace(
-        ArgumentMatchers.eq(sourceWorkspace),
-        ArgumentMatchers.eq(billingProject),
-        ArgumentMatchers.eq(destWorkspaceRequest),
-        ArgumentMatchers.any()
+    val requestContext = mock[RawlsRequestContext]
+    when(requestContext.otelContext).thenReturn(None)
+    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
+    when(billingProfileManagerDAO.getBillingProfile(billingProfileId, requestContext)).thenReturn(Some(billingProfile))
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(requestContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(
+      samDAO.userHasAction(
+        SamResourceTypeNames.workspace,
+        sourceWorkspace.workspaceId,
+        SamWorkspaceActions.read,
+        requestContext
       )
+    ).thenReturn(Future(true))
+    when(
+      samDAO.userHasAction(
+        SamResourceTypeNames.billingProject,
+        billingProject.projectName.value,
+        SamBillingProjectActions.createWorkspace,
+        requestContext
+      )
+    ).thenReturn(Future(true))
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
+      .thenReturn(Future(Some(sourceWorkspace)))
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(RawlsBillingProjectName(destWorkspaceRequest.namespace)))
+      .thenReturn(Future(Some(billingProject)))
+    val workspaceService = mock[WorkspaceService]
+    val destWorkspace = mock[Workspace]
+    when(
+      workspaceService
+        .cloneWorkspace(
+          ArgumentMatchers.eq(sourceWorkspace),
+          ArgumentMatchers.eq(billingProject),
+          ArgumentMatchers.eq(destWorkspaceRequest),
+          ArgumentMatchers.any()
+        )
+    ).thenReturn(Future(destWorkspace))
+    val service = new MultiCloudWorkspaceService(
+      requestContext,
+      mock[WorkspaceManagerDAO],
+      billingProfileManagerDAO,
+      samDAO,
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      billingRepository
+    )
 
-    whenReady(
+    val result = Await.result(
       service.cloneMultiCloudWorkspaceAsync(
         workspaceService,
         sourceWorkspace.toWorkspaceName,
         destWorkspaceRequest
-      )
-    )(
-      _ shouldBe WorkspaceDetails.fromWorkspaceAndOptions(destWorkspace,
-                                                          authDomain,
-                                                          useAttributes = true,
-                                                          Some(WorkspaceCloudPlatform.Gcp)
-      )
+      ),
+      Duration.Inf
+    )
+    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(
+      destWorkspace,
+      authDomain,
+      useAttributes = true,
+      Some(WorkspaceCloudPlatform.Gcp)
+    )
+    verify(workspaceService).cloneWorkspace(
+      ArgumentMatchers.eq(sourceWorkspace),
+      ArgumentMatchers.eq(billingProject),
+      ArgumentMatchers.eq(destWorkspaceRequest),
+      ArgumentMatchers.any()
     )
   }
 
@@ -292,19 +288,17 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
 
     val workspaceRepository = mock[WorkspaceRepository]
 
-    val service = spy(
-      new MultiCloudWorkspaceService(
-        requestContext,
-        workspaceManagerDAO,
-        mock[BillingProfileManagerDAO],
-        mock[SamDAO],
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test",
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceRepository,
-        mock[BillingRepository]
-      )
+    val service = new MultiCloudWorkspaceService(
+      requestContext,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
     )
 
     val billingProfile = mock[ProfileModel]
@@ -353,19 +347,17 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     when(requestContext.otelContext).thenReturn(None)
 
     val workspaceRepository = mock[WorkspaceRepository]
-    val service = spy(
-      new MultiCloudWorkspaceService(
-        requestContext,
-        mock[WorkspaceManagerDAO],
-        mock[BillingProfileManagerDAO],
-        mock[SamDAO],
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test",
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceRepository,
-        mock[BillingRepository]
-      )
+    val service = new MultiCloudWorkspaceService(
+      requestContext,
+      mock[WorkspaceManagerDAO],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
     )
 
     val billingProfile = mock[ProfileModel]
@@ -436,19 +428,17 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     }.when(workspaceManagerResourceMonitorRecordDao).create(any())
 
     val workspaceRepository = mock[WorkspaceRepository]
-    val service = spy(
-      new MultiCloudWorkspaceService(
-        requestContext,
-        workspaceManagerDAO,
-        mock[BillingProfileManagerDAO],
-        mock[SamDAO],
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test",
-        workspaceManagerResourceMonitorRecordDao,
-        workspaceRepository,
-        mock[BillingRepository]
-      )
+    val service = new MultiCloudWorkspaceService(
+      requestContext,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      workspaceManagerResourceMonitorRecordDao,
+      workspaceRepository,
+      mock[BillingRepository]
     )
     val destWorkspace = mock[Workspace]
     doReturn(Future.successful(destWorkspace))
@@ -519,19 +509,17 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       Future.successful()
     }.when(workspaceManagerResourceMonitorRecordDao).create(any())
     val workspaceRepository = mock[WorkspaceRepository]
-    val service = spy(
-      new MultiCloudWorkspaceService(
-        requestContext,
-        workspaceManagerDAO,
-        mock[BillingProfileManagerDAO],
-        mock[SamDAO],
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test",
-        workspaceManagerResourceMonitorRecordDao,
-        workspaceRepository,
-        mock[BillingRepository]
-      )
+    val service = new MultiCloudWorkspaceService(
+      requestContext,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      workspaceManagerResourceMonitorRecordDao,
+      workspaceRepository,
+      mock[BillingRepository]
     )
     val destWorkspace = mock[Workspace]
     val mergedAttributes = Map(
