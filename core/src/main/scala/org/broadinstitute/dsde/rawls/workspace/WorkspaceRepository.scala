@@ -3,13 +3,13 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceName,
-  WorkspaceRequest,
   WorkspaceState
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
@@ -27,29 +27,20 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class WorkspaceRepository(dataSource: SlickDataSource) {
 
-  def getWorkspace(workspaceId: UUID): Future[Option[Workspace]] =
+  def getWorkspace(workspaceId: UUID): Future[Option[Workspace]] = getWorkspace(workspaceId, None)
+
+  def getWorkspace(workspaceId: UUID, attributeSpecs: Option[WorkspaceAttributeSpecs]): Future[Option[Workspace]] =
     dataSource.inTransaction { access =>
-      access.workspaceQuery.findById(workspaceId.toString)
+      access.workspaceQuery.findV2WorkspaceById(workspaceId, attributeSpecs)
     }
 
-  def getWorkspaceContext(workspaceName: WorkspaceName,
-                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
-    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs)
-  }
+  def getWorkspace(workspaceName: WorkspaceName): Future[Option[Workspace]] = getWorkspace(workspaceName, None)
 
-  def getV2WorkspaceContext(workspaceName: WorkspaceName,
-                            attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  def getWorkspace(workspaceName: WorkspaceName,
+                   attributeSpecs: Option[WorkspaceAttributeSpecs]
   ): Future[Option[Workspace]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs)
-    }
-
-  def getV2WorkspaceContextById(workspaceId: String,
-                                attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Option[Workspace]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.findById(workspaceId, attributeSpecs)
     }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =
@@ -81,12 +72,12 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
 
   def createMCWorkspace(workspaceId: UUID,
-                        request: WorkspaceRequest,
+                        workspaceName: WorkspaceName,
+                        attributes: AttributeMap,
                         parentContext: RawlsRequestContext,
                         state: WorkspaceState = WorkspaceState.Ready
   )(implicit ex: ExecutionContext): Future[Workspace] =
     dataSource.inTransaction { access =>
-      val workspaceName = request.toWorkspaceName
       for {
         _ <- access.workspaceQuery.getWorkspaceId(workspaceName).map { workspaceId =>
           if (workspaceId.isDefined)
@@ -102,7 +93,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
           createdDate = currentDate,
           lastModified = currentDate,
           createdBy = parentContext.userInfo.userEmail.value,
-          attributes = request.attributes,
+          attributes = attributes,
           state
         )
         newWorkspace <- traceDBIOWithParent("saveMultiCloudWorkspace", parentContext)(_ =>

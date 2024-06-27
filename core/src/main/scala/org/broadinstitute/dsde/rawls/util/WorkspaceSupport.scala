@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 trait WorkspaceSupport {
@@ -120,7 +121,7 @@ trait WorkspaceSupport {
     workspaceName: WorkspaceName,
     attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
-    workspaceRepository.getWorkspaceContext(workspaceName, attributeSpecs).map {
+    workspaceRepository.getWorkspace(workspaceName, attributeSpecs).map {
       case Some(workspace) => workspace
       case None            => throw NoSuchWorkspaceException(workspaceName)
     }
@@ -149,7 +150,7 @@ trait WorkspaceSupport {
                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] = for {
     _ <- userEnabledCheck
-    workspaceContext <- workspaceRepository.getV2WorkspaceContextById(workspaceId, attributeSpecs)
+    workspaceContext <- workspaceRepository.getWorkspace(UUID.fromString(workspaceId), attributeSpecs)
   } yield workspaceContext match {
     case Some(workspace) => workspace
     case None            => throw NoSuchWorkspaceException(workspaceId)
@@ -159,7 +160,7 @@ trait WorkspaceSupport {
                             attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] = for {
     _ <- userEnabledCheck
-    workspaceContext <- workspaceRepository.getV2WorkspaceContext(workspaceName, attributeSpecs)
+    workspaceContext <- workspaceRepository.getWorkspace(workspaceName, attributeSpecs)
   } yield workspaceContext match {
     case Some(workspace) => workspace
     case None            => throw NoSuchWorkspaceException(workspaceName)

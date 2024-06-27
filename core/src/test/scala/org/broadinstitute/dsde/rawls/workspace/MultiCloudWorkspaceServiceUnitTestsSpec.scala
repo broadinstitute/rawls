@@ -316,7 +316,8 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       .when(workspaceRepository)
       .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(destWorkspaceRequest),
+        ArgumentMatchers.eq(destWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
       )(ArgumentMatchers.any())
@@ -375,7 +376,8 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       .when(workspaceRepository)
       .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(destWorkspaceRequest),
+        ArgumentMatchers.eq(destWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
       )(ArgumentMatchers.any())
@@ -453,7 +455,8 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       .when(workspaceRepository)
       .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(destWorkspaceRequest),
+        ArgumentMatchers.eq(destWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
       )(ArgumentMatchers.any())
@@ -541,7 +544,8 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       .when(workspaceRepository)
       .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(mergedWorkspaceRequest),
+        ArgumentMatchers.eq(mergedWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.eq(mergedAttributes),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
       )(ArgumentMatchers.any())
