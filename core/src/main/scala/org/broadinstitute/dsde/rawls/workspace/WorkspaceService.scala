@@ -1013,7 +1013,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   Try(ws.getCloudPlatform)
                     .map(context => context.isDefined)
                     .recover { case e: InvalidCloudContextException =>
-                      logger.error(e.getMessage)
+                      logger.warn(e.getMessage)
                       false
                     }
                     .get
