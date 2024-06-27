@@ -314,14 +314,14 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
 
     doReturn(Future(destWorkspace))
       .when(workspaceRepository)
-      .createNewMCWorkspaceRecord(
+      .createMCWorkspace(
         ArgumentMatchers.any(),
         ArgumentMatchers.eq(destWorkspaceRequest),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
       )(ArgumentMatchers.any())
 
-    when(workspaceRepository.deleteWorkspaceRecord(destWorkspace)).thenReturn(Future(true))
+    when(workspaceRepository.deleteWorkspace(destWorkspace)).thenReturn(Future(true))
 
     intercept[ApiException] {
       Await.result(
@@ -330,7 +330,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       )
     }
 
-    verify(workspaceRepository).deleteWorkspaceRecord(destWorkspace)
+    verify(workspaceRepository).deleteWorkspace(destWorkspace)
   }
 
   it should "doesn't try to delete the workspace when creating the new db record in rawls fails" in {
@@ -373,7 +373,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     val destWorkspace = mock[Workspace]
     doReturn(Future(new Exception()))
       .when(workspaceRepository)
-      .createNewMCWorkspaceRecord(
+      .createMCWorkspace(
         ArgumentMatchers.any(),
         ArgumentMatchers.eq(destWorkspaceRequest),
         ArgumentMatchers.eq(requestContext),
@@ -387,7 +387,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       )
     }
 
-    verify(workspaceRepository, never()).deleteWorkspaceRecord(destWorkspace)
+    verify(workspaceRepository, never()).deleteWorkspace(destWorkspace)
   }
 
   it should "create the async clone job from the result in WSM" in {
@@ -451,7 +451,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     val destWorkspace = mock[Workspace]
     doReturn(Future.successful(destWorkspace))
       .when(workspaceRepository)
-      .createNewMCWorkspaceRecord(
+      .createMCWorkspace(
         ArgumentMatchers.any(),
         ArgumentMatchers.eq(destWorkspaceRequest),
         ArgumentMatchers.eq(requestContext),
@@ -539,7 +539,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       WorkspaceRequest("dest-namespace", "dest-name", mergedAttributes, policies = Some(policies))
     doReturn(Future.successful(destWorkspace))
       .when(workspaceRepository)
-      .createNewMCWorkspaceRecord(
+      .createMCWorkspace(
         ArgumentMatchers.any(),
         ArgumentMatchers.eq(mergedWorkspaceRequest),
         ArgumentMatchers.eq(requestContext),

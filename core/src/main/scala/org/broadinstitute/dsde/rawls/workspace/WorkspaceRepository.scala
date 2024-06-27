@@ -67,12 +67,12 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.updateStateWithErrorMessage(workspaceId, state, message)
     }
 
-  def deleteWorkspaceRecord(workspace: Workspace): Future[Boolean] =
+  def deleteWorkspace(workspace: Workspace): Future[Boolean] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
 
-  def deleteWorkspaceRecord(workspaceName: WorkspaceName): Future[Boolean] =
+  def deleteWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspaceName)
     }
@@ -80,10 +80,10 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
     dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
 
-  def createNewMCWorkspaceRecord(workspaceId: UUID,
-                                 request: WorkspaceRequest,
-                                 parentContext: RawlsRequestContext,
-                                 state: WorkspaceState = WorkspaceState.Ready
+  def createMCWorkspace(workspaceId: UUID,
+                        request: WorkspaceRequest,
+                        parentContext: RawlsRequestContext,
+                        state: WorkspaceState = WorkspaceState.Ready
   )(implicit ex: ExecutionContext): Future[Workspace] =
     dataSource.inTransaction { access =>
       val workspaceName = request.toWorkspaceName

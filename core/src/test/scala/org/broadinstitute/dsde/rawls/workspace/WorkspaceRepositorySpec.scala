@@ -76,7 +76,7 @@ class WorkspaceRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val ws: Workspace = makeWorkspace()
     Await.result(repo.createWorkspace(ws), Duration.Inf)
 
-    val result = Await.result(repo.deleteWorkspaceRecord(ws), Duration.Inf)
+    val result = Await.result(repo.deleteWorkspace(ws), Duration.Inf)
     val readback = Await.result(repo.getWorkspace(ws.workspaceIdAsUUID), Duration.Inf)
 
     assertResult(readback)(None)

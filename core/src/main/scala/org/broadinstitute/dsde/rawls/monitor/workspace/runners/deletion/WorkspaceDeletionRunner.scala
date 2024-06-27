@@ -207,7 +207,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
         logger.info(
           s"Deleting rawls workspace record [workspaceId=${workspace.workspaceId}, jobControlId=${job.jobControlId}, jobType=${job.jobType}]"
         )
-        workspaceRepository.deleteWorkspaceRecord(workspace).map(_ => Complete)
+        workspaceRepository.deleteWorkspace(workspace).map(_ => Complete)
     }
 
 }

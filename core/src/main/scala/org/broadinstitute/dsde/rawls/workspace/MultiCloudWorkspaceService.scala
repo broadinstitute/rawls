@@ -198,7 +198,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           )
         }
       }
-      _ <- workspaceRepository.deleteWorkspaceRecord(workspace)
+      _ <- workspaceRepository.deleteWorkspace(workspace)
     } yield {
       deletedMultiCloudWorkspaceCounter.inc()
       logger.info(
@@ -379,7 +379,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
-      newWorkspace <- workspaceRepository.createNewMCWorkspaceRecord(workspaceId,
+      newWorkspace <- workspaceRepository.createMCWorkspace(workspaceId,
                                                                      mergedRequest,
                                                                      parentContext,
                                                                      WorkspaceState.Cloning
@@ -425,7 +425,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                 s"], Rawls record being deleted.",
               t
             )
-            workspaceRepository.deleteWorkspaceRecord(newWorkspace) >> Future.failed(t)
+            workspaceRepository.deleteWorkspace(newWorkspace) >> Future.failed(t)
 
         }
 
@@ -495,7 +495,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
-      newWorkspace <- workspaceRepository.createNewMCWorkspaceRecord(workspaceId, mergedRequest, parentContext)
+      newWorkspace <- workspaceRepository.createMCWorkspace(workspaceId, mergedRequest, parentContext)
 
       containerCloneResult <- (for {
         cloneResult <- traceFutureWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
@@ -553,7 +553,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             s"], Rawls record being deleted.",
           t
         )
-        workspaceRepository.deleteWorkspaceRecord(newWorkspace) >> Future.failed(t)
+        workspaceRepository.deleteWorkspace(newWorkspace) >> Future.failed(t)
       }
       _ = clonedMultiCloudWorkspaceCounter.inc()
       _ = logger.info(
@@ -736,7 +736,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
       _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
       savedWorkspace <- traceFutureWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
-        workspaceRepository.createNewMCWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
+        workspaceRepository.createMCWorkspace(workspaceId, workspaceRequest, parentContext)
       )
 
       _ = logger.info(s"Creating workspace with cloud context in WSM [workspaceId = ${workspaceId}]")
@@ -798,7 +798,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               e
             )
           }
-          _ <- workspaceRepository.deleteWorkspaceRecord(workspaceRequest.toWorkspaceName)
+          _ <- workspaceRepository.deleteWorkspace(workspaceRequest.toWorkspaceName)
         } yield e match {
           case rawlsException: RawlsExceptionWithErrorReport => throw rawlsException
           case _ =>
