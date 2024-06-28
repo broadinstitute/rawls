@@ -75,6 +75,7 @@ trait WorkspaceSupport {
       _ <- raiseUnlessUserHasAction(SamWorkspaceActions.compute, SamResourceTypeNames.workspace, workspaceId) {
         WorkspaceAccessDeniedException(workspaceName)
       }.recoverWith { case t: Throwable =>
+        // verify the user has `read` on the workspace to avoid exposing its existence
         raiseUnlessUserHasAction(SamWorkspaceActions.read, SamResourceTypeNames.workspace, workspaceId) {
           NoSuchWorkspaceException(workspaceName)
         } *> Future.failed(t)
