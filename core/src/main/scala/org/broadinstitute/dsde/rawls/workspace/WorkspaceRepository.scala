@@ -58,10 +58,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.updateStateWithErrorMessage(workspaceId, state, message)
     }
 
-  def deleteWorkspace(workspace: Workspace): Future[Boolean] =
-    dataSource.inTransaction { access =>
-      access.workspaceQuery.delete(workspace.toWorkspaceName)
-    }
+  def deleteWorkspace(workspace: Workspace): Future[Boolean] = deleteWorkspace(workspace.toWorkspaceName)
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     dataSource.inTransaction { access =>
