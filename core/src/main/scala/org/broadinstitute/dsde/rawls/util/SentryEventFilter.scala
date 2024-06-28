@@ -42,6 +42,6 @@ object SentryEventFilter {
     }
 
   private def isStatusCodeIgnorable(code: Int): Boolean =
-    Option(code).nonEmpty && code > 0 && code / 100 < 5
+    Option(code).nonEmpty && code > 0 && code < 500
 
 }
