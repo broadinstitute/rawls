@@ -489,7 +489,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     val workspaceId = UUID.randomUUID()
 
     // Merge together source workspace and destination request attributes
-    val mergedRequest = request.copy(attributes = sourceWorkspace.attributes ++ request.attributes)
     val mergedAttributes = sourceWorkspace.attributes ++ request.attributes
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
