@@ -57,6 +57,9 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
 
+  val requestContext = mock[RawlsRequestContext]
+  when(requestContext.otelContext).thenReturn(None)
+
   behavior of "cloneMultiCloudWorkspaceAsync"
 
   it should "pass a request to clone an azure workspace to cloneAzureWorkspaceAsync" in {
@@ -85,8 +88,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     // Set up mocks
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCloudPlatform()).thenReturn(CloudPlatform.AZURE)
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     when(billingProfileManagerDAO.getBillingProfile(billingProfileId, requestContext)).thenReturn(Some(billingProfile))
     val samDAO = mock[SamDAO]
@@ -187,8 +188,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     // Mocks
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.GCP)
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     when(billingProfileManagerDAO.getBillingProfile(billingProfileId, requestContext)).thenReturn(Some(billingProfile))
     val samDAO = mock[SamDAO]
@@ -277,17 +276,11 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       WorkspaceState.Ready
     )
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
-
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
-
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     doAnswer(_ => throw new ApiException())
       .when(workspaceManagerDAO)
       .cloneWorkspace(any(), any(), any(), any(), any(), any(), any())
-
     val workspaceRepository = mock[WorkspaceRepository]
-
     val service = new MultiCloudWorkspaceService(
       requestContext,
       workspaceManagerDAO,
@@ -342,10 +335,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       WorkspaceState.Ready
     )
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
-
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
-
     val workspaceRepository = mock[WorkspaceRepository]
     val service = new MultiCloudWorkspaceService(
       requestContext,
@@ -395,8 +384,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       Map(),
       WorkspaceState.Ready
     )
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
     val userInfo = mock[UserInfo]
     when(userInfo.userEmail).thenReturn(RawlsUserEmail("user-email"))
     when(requestContext.userInfo).thenReturn(userInfo)
@@ -473,8 +460,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       sourceAttributes,
       WorkspaceState.Ready
     )
-    val requestContext = mock[RawlsRequestContext]
-    when(requestContext.otelContext).thenReturn(None)
     val userInfo = mock[UserInfo]
     when(userInfo.userEmail).thenReturn(RawlsUserEmail("user-email"))
     when(requestContext.userInfo).thenReturn(userInfo)

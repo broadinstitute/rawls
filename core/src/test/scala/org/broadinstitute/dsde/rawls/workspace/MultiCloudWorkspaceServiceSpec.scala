@@ -8,12 +8,17 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  LeonardoDAO,
+  MockLeonardoDAO,
+  SamDAO,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
@@ -23,7 +28,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   ErrorReport,
   RawlsBillingProject,
-  RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
   SamResourceTypeNames,
@@ -44,10 +48,11 @@ import org.mockito.ArgumentMatchers.{any, anyString, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, OptionValues}
-import org.scalatestplus.mockito.MockitoSugar.mock
+import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -55,8 +60,13 @@ import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
-class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with OptionValues with TestDriverComponent {
-
+class MultiCloudWorkspaceServiceSpec
+    extends AnyFlatSpecLike
+    with MockitoSugar
+    with ScalaFutures
+    with Matchers
+    with OptionValues
+    with TestDriverComponent {
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
   implicit val workbenchMetricBaseName: ShardId = "test"
 
@@ -271,47 +281,46 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "createMultiCloudWorkspace"
 
-  it should "throw an exception if a workspace with the same name already exists and not delete the original workspace" in {
+  it should "not delete the original workspace if a workspace with the same name already exists" in {
     val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val namespace = "fake"
-    val workspaceName = s"fake-name-${UUID.randomUUID().toString}"
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
+    val name = "fake-name"
+    val workspaceName = WorkspaceName(namespace, name)
+    val workspaceRepository = mock[WorkspaceRepository]
+
+    doAnswer(_ =>
+      throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Workspace '$name' already exists"))
+    ).when(workspaceRepository)
+      .createMCWorkspace(
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(workspaceName),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any)
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
       mock[BillingProfileManagerDAO],
       samDAO,
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest(
-      namespace,
-      workspaceName,
-      Map.empty
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      new BillingRepository(slickDataSource)
     )
-    val billingProfileId = UUID.randomUUID()
+    val request = WorkspaceRequest(namespace, name, Map.empty)
 
-    Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(billingProfileId)),
-                 Duration.Inf
-    )
     val thrown = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(billingProfileId)),
-                   Duration.Inf
-      )
+      Await.result(service.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())), Duration.Inf)
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
-
     // Make sure that the pre-existing workspace was not deleted.
     verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
-    Await
-      .result(slickDataSource.inTransaction(_.workspaceQuery.findByName(WorkspaceName(namespace, workspaceName))),
-              Duration.Inf
-      )
-      .get
-      .name shouldBe workspaceName
+    verify(workspaceRepository, times(0)).deleteWorkspace(workspaceName)
   }
 
   it should "throw an exception if the billing profile was created before 9/12/2023" in {
