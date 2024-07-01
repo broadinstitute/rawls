@@ -42,7 +42,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceFutureWithParent, traceNakedWithParent}
 import org.broadinstitute.dsde.rawls.util.{BillingProjectSupport, Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.{DateTime, DateTimeZone}
@@ -541,10 +541,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         }
 
         // create a WDS application in Leo
-        _ <- createWdsAppInWorkspace(workspaceId,
-                                     parentContext,
-                                     Some(sourceWorkspace.workspaceIdAsUUID),
-                                     request.attributes
+        _ = createWdsAppInWorkspace(workspaceId,
+                                    parentContext,
+                                    Some(sourceWorkspace.workspaceIdAsUUID),
+                                    request.attributes
         )
 
       } yield containerCloneResult).recoverWith { t: Throwable =>
@@ -788,7 +788,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
 
       // create a WDS application in Leo
-      _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+      _ = createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
     } yield savedWorkspace).recoverWith {
       case r: RawlsExceptionWithErrorReport if r.errorReport.statusCode.contains(StatusCodes.Conflict) =>
@@ -911,23 +911,24 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                       parentContext: RawlsRequestContext,
                                       sourceWorkspaceId: Option[UUID],
                                       workspaceAttributeMap: AttributeMap
-  ): Future[Unit] =
+  ): Unit =
     workspaceAttributeMap.get(AttributeName.withDefaultNS("disableAutomaticAppCreation")) match {
       case Some(AttributeString("true")) | Some(AttributeBoolean(true)) =>
         // Skip WDS deployment for testing purposes.
         logger.info("Skipping creation of WDS per request attributes")
-        Future.successful()
+        ()
+      // Future.successful()
       case _ =>
         // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
         logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
-        traceFutureWithParent("createWDSInstance", parentContext)(_ =>
-          Future(
+        traceNakedWithParent("createWDSInstance", parentContext.toTracingContext)(_ =>
+          // Future(
+          Try(
             leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
-          )
-            .recover { case t: Throwable =>
-              // fail silently, but log the error
-              logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
-            }
+          ).recover { case t: Throwable =>
+            // fail silently, but log the error
+            logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
+          }.get
         )
     }
 
