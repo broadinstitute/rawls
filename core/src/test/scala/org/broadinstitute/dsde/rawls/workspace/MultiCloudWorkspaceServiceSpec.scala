@@ -88,9 +88,9 @@ class MultiCloudWorkspaceServiceSpec
     val samDAO = mock[SamDAO]
     when(
       samDAO.userHasAction(SamResourceTypeNames.billingProject,
-        testData.azureBillingProject.projectName.value,
-        SamBillingProjectActions.createWorkspace,
-        testContext
+                           testData.azureBillingProject.projectName.value,
+                           SamBillingProjectActions.createWorkspace,
+                           testContext
       )
     ).thenReturn(Future.successful(false))
     val billingRepository = mock[BillingRepository]
@@ -121,10 +121,10 @@ class MultiCloudWorkspaceServiceSpec
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.createMultiCloudOrRawlsWorkspace(
-        workspaceRequest,
-        mock[WorkspaceService]
-      ),
-        Duration.Inf
+                     workspaceRequest,
+                     mock[WorkspaceService]
+                   ),
+                   Duration.Inf
       )
     }
 
@@ -133,7 +133,7 @@ class MultiCloudWorkspaceServiceSpec
 
   it should "throw an exception if the billing profile is not found" in {
     val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(),any(),any(),any())).thenReturn(Future(true))
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
     val billingRepository = mock[BillingRepository]
