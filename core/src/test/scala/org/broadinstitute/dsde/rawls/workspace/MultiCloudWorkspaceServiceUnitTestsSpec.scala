@@ -391,7 +391,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     when(billingProfile.getCreatedDate).thenReturn(DateTime.now().toString)
     val policies = List(WorkspacePolicy("test-name", "test-namespace", List()))
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map(), policies = Some(policies))
-
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val wsmResult = new CloneWorkspaceResult().jobReport(new JobReport().id("test-id-that-isn't-a-uuid"))
     when(
@@ -405,7 +404,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
         ArgumentMatchers.eq(Some(new WsmPolicyInputs().inputs(policies.map(p => p.toWsmPolicyInput()).asJava)))
       )
     ).thenReturn(wsmResult)
-
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     doAnswer { a =>
       val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
@@ -413,7 +411,6 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       record.jobType shouldBe JobType.CloneWorkspaceInit
       Future.successful()
     }.when(workspaceManagerResourceMonitorRecordDao).create(any())
-
     val workspaceRepository = mock[WorkspaceRepository]
     val service = new MultiCloudWorkspaceService(
       requestContext,
