@@ -85,32 +85,32 @@ class MultiCloudWorkspaceServiceSpec
   behavior of "createMultiCloudOrRawlsWorkspace"
 
   it should "return forbidden if creating a workspace against a billing project that the user does not have the createWorkspace action for" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
-    val samDAO = Mockito.spy(new MockSamDAO(slickDataSource))
-    val bpDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS);
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
+    val samDAO = mock[SamDAO]
     when(
       samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                           "fake_mc_billing_project_name",
-                           SamBillingProjectActions.createWorkspace,
-                           testContext
+        testData.azureBillingProject.projectName.value,
+        SamBillingProjectActions.createWorkspace,
+        testContext
       )
     ).thenReturn(Future.successful(false))
-    val mcWorkspaceService = spy(
-      MultiCloudWorkspaceService.constructor(
-        slickDataSource,
-        workspaceManagerDAO,
-        bpDAO,
-        samDAO,
-        config,
-        leonardoDAO,
-        workbenchMetricBaseName
-      )(testContext)
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(any())).thenReturn(Future(Some(testData.azureBillingProject)))
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Some(testData.azureBillingProfile))
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
+      bpmDAO,
+      samDAO,
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      mock[WorkspaceRepository],
+      billingRepository
     )
     val workspaceRequest = WorkspaceRequest(
-      "fake_mc_billing_project_name",
+      testData.azureBillingProject.projectName.value,
       UUID.randomUUID().toString,
       Map.empty,
       None,
@@ -118,22 +118,13 @@ class MultiCloudWorkspaceServiceSpec
       None,
       None
     )
-    val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-
-    doReturn(Future.successful(testData.azureBillingProject))
-      .when(mcWorkspaceService)
-      .getBillingProjectContext(any(), any())
-
-    doReturn(Some(testData.azureBillingProfile))
-      .when(bpDAO)
-      .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
-                     workspaceRequest,
-                     workspaceService
-                   ),
-                   Duration.Inf
+      Await.result(service.createMultiCloudOrRawlsWorkspace(
+        workspaceRequest,
+        mock[WorkspaceService]
+      ),
+        Duration.Inf
       )
     }
 
@@ -141,24 +132,23 @@ class MultiCloudWorkspaceServiceSpec
   }
 
   it should "throw an exception if the billing profile is not found" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
-    val samDAO = new MockSamDAO(slickDataSource)
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(),any(),any(),any())).thenReturn(Future(true))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
-    val mcWorkspaceService = spy(
-      MultiCloudWorkspaceService.constructor(
-        slickDataSource,
-        workspaceManagerDAO,
-        bpmDAO,
-        samDAO,
-        config,
-        leonardoDAO,
-        workbenchMetricBaseName
-      )(testContext)
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(any())).thenReturn(Future(Some(testData.azureBillingProject)))
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
+      bpmDAO,
+      samDAO,
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      mock[WorkspaceRepository],
+      billingRepository
     )
     val request = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -170,13 +160,9 @@ class MultiCloudWorkspaceServiceSpec
       None
     )
 
-    doReturn(Future.successful(testData.azureBillingProject))
-      .when(mcWorkspaceService)
-      .getBillingProjectContext(any(), any())
-
     val actual = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        mcWorkspaceService.createMultiCloudOrRawlsWorkspace(request, workspaceService),
+        service.createMultiCloudOrRawlsWorkspace(request, mock[WorkspaceService]),
         Duration.Inf
       )
     }
@@ -214,7 +200,7 @@ class MultiCloudWorkspaceServiceSpec
       "MultiCloudWorkspaceService-test",
       mock[WorkspaceManagerResourceMonitorRecordDao],
       workspaceRepository,
-      new BillingRepository(slickDataSource)
+      mock[BillingRepository]
     )
     val request = WorkspaceRequest(namespace, name, Map.empty)
 
