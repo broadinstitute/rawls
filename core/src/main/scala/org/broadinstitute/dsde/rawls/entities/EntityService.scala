@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
   _
 }
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
+import org.broadinstitute.dsde.rawls.workspace.{AttributeUpdateOperationException, WorkspaceRepository}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
@@ -61,6 +61,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
+
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {

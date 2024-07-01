@@ -5,7 +5,7 @@ import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{CloneWorkspaceResult, JobReport, WsmPolicyInputs}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.{MultiCloudWorkspaceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -290,31 +290,39 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       .when(workspaceManagerDAO)
       .cloneWorkspace(any(), any(), any(), any(), any(), any(), any())
 
+    val workspaceRepository = mock[WorkspaceRepository]
+
     val service = spy(
-      MultiCloudWorkspaceService.constructor(
-        mock[SlickDataSource],
+      new MultiCloudWorkspaceService(
+        requestContext,
         workspaceManagerDAO,
         mock[BillingProfileManagerDAO],
         mock[SamDAO],
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test"
-      )(requestContext)
+        "MultiCloudWorkspaceService-test",
+        mock[WorkspaceManagerResourceMonitorRecordDao],
+        workspaceRepository,
+        mock[BillingRepository]
+      )
     )
 
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCreatedDate).thenReturn(DateTime.now().toString)
 
     val destWorkspace = mock[Workspace]
+
     doReturn(Future(destWorkspace))
-      .when(service)
-      .createNewWorkspaceRecord(
+      .when(workspaceRepository)
+      .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(destWorkspaceRequest),
+        ArgumentMatchers.eq(destWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
-      )
-    doReturn(Future(true)).when(service).deleteWorkspaceRecord(destWorkspace)
+      )(ArgumentMatchers.any())
+
+    when(workspaceRepository.deleteWorkspace(destWorkspace)).thenReturn(Future(true))
 
     intercept[ApiException] {
       Await.result(
@@ -323,7 +331,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       )
     }
 
-    verify(service).deleteWorkspaceRecord(destWorkspace)
+    verify(workspaceRepository).deleteWorkspace(destWorkspace)
   }
 
   it should "doesn't try to delete the workspace when creating the new db record in rawls fails" in {
@@ -344,16 +352,20 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     val requestContext = mock[RawlsRequestContext]
     when(requestContext.otelContext).thenReturn(None)
 
+    val workspaceRepository = mock[WorkspaceRepository]
     val service = spy(
-      MultiCloudWorkspaceService.constructor(
-        mock[SlickDataSource],
+      new MultiCloudWorkspaceService(
+        requestContext,
         mock[WorkspaceManagerDAO],
         mock[BillingProfileManagerDAO],
         mock[SamDAO],
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test"
-      )(requestContext)
+        "MultiCloudWorkspaceService-test",
+        mock[WorkspaceManagerResourceMonitorRecordDao],
+        workspaceRepository,
+        mock[BillingRepository]
+      )
     )
 
     val billingProfile = mock[ProfileModel]
@@ -361,13 +373,14 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
 
     val destWorkspace = mock[Workspace]
     doReturn(Future(new Exception()))
-      .when(service)
-      .createNewWorkspaceRecord(
+      .when(workspaceRepository)
+      .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(destWorkspaceRequest),
+        ArgumentMatchers.eq(destWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
-      )
+      )(ArgumentMatchers.any())
 
     intercept[Exception] {
       Await.result(
@@ -376,7 +389,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       )
     }
 
-    verify(service, never()).deleteWorkspaceRecord(destWorkspace)
+    verify(workspaceRepository, never()).deleteWorkspace(destWorkspace)
   }
 
   it should "create the async clone job from the result in WSM" in {
@@ -422,6 +435,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       Future.successful()
     }.when(workspaceManagerResourceMonitorRecordDao).create(any())
 
+    val workspaceRepository = mock[WorkspaceRepository]
     val service = spy(
       new MultiCloudWorkspaceService(
         requestContext,
@@ -430,20 +444,22 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
         mock[SamDAO],
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
-        mock[SlickDataSource],
         "MultiCloudWorkspaceService-test",
-        workspaceManagerResourceMonitorRecordDao
+        workspaceManagerResourceMonitorRecordDao,
+        workspaceRepository,
+        mock[BillingRepository]
       )
     )
     val destWorkspace = mock[Workspace]
     doReturn(Future.successful(destWorkspace))
-      .when(service)
-      .createNewWorkspaceRecord(
+      .when(workspaceRepository)
+      .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(destWorkspaceRequest),
+        ArgumentMatchers.eq(destWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.any(),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
-      )
+      )(ArgumentMatchers.any())
 
     Await.result(
       service.cloneAzureWorkspaceAsync(sourceWorkspace, billingProfile, destWorkspaceRequest, requestContext),
@@ -502,7 +518,7 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
       record.jobType shouldBe JobType.CloneWorkspaceInit
       Future.successful()
     }.when(workspaceManagerResourceMonitorRecordDao).create(any())
-
+    val workspaceRepository = mock[WorkspaceRepository]
     val service = spy(
       new MultiCloudWorkspaceService(
         requestContext,
@@ -511,9 +527,10 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
         mock[SamDAO],
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
-        mock[SlickDataSource],
         "MultiCloudWorkspaceService-test",
-        workspaceManagerResourceMonitorRecordDao
+        workspaceManagerResourceMonitorRecordDao,
+        workspaceRepository,
+        mock[BillingRepository]
       )
     )
     val destWorkspace = mock[Workspace]
@@ -524,13 +541,14 @@ class MultiCloudWorkspaceServiceUnitTestsSpec
     val mergedWorkspaceRequest =
       WorkspaceRequest("dest-namespace", "dest-name", mergedAttributes, policies = Some(policies))
     doReturn(Future.successful(destWorkspace))
-      .when(service)
-      .createNewWorkspaceRecord(
+      .when(workspaceRepository)
+      .createMCWorkspace(
         ArgumentMatchers.any(),
-        ArgumentMatchers.eq(mergedWorkspaceRequest),
+        ArgumentMatchers.eq(mergedWorkspaceRequest.toWorkspaceName),
+        ArgumentMatchers.eq(mergedAttributes),
         ArgumentMatchers.eq(requestContext),
         ArgumentMatchers.eq(WorkspaceState.Cloning)
-      )
+      )(ArgumentMatchers.any())
 
     Await.result(
       service.cloneAzureWorkspaceAsync(sourceWorkspace, billingProfile, destWorkspaceRequest, requestContext),

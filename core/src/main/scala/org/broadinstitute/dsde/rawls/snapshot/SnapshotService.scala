@@ -22,7 +22,11 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  AggregateWorkspaceNotFoundException,
+  AggregatedWorkspaceService,
+  WorkspaceRepository
+}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -58,6 +62,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     extends FutureSupport
     with WorkspaceSupport
     with LazyLogging {
+
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   // Finds a workspace using the workspaceId then calls the createSnapshot method
   def createSnapshotByWorkspaceId(workspaceId: String,

@@ -339,7 +339,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     val wsmAction = mock[WsmDeletionAction](RETURNS_SMART_NULLS)
     when(wsmAction.pollForCompletion(any(), any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(true))
     val repo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(repo.deleteWorkspaceRecord(azureWorkspace)).thenReturn(Future.successful(true))
+    when(repo.deleteWorkspace(azureWorkspace)).thenReturn(Future.successful(true))
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
@@ -356,7 +356,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       )
     )(_ shouldBe Complete)
     verify(wsmAction).pollForCompletion(any(), any(), any())(any[ExecutionContext]())
-    verify(repo).deleteWorkspaceRecord(azureWorkspace)
+    verify(repo).deleteWorkspace(azureWorkspace)
 
   }
 
