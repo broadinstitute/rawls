@@ -266,7 +266,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } yield newWorkspace,
           TransactionIsolation.ReadCommitted
         )
-      ) // read committed to avoid deadlocks on workspace attr scratch table
+      ) // read committed to avoid deadlocks on workspace attribute scratch table
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
       )
