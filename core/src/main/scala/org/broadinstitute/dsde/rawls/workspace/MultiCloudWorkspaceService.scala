@@ -78,6 +78,36 @@ object MultiCloudWorkspaceService {
 
   def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
 
+
+  def buildPolicyInputs(workspaceRequest: WorkspaceRequest): Option[WsmPolicyInputs] = {
+    val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {
+      case Some(true) =>
+        Some(
+          Seq(
+            new WsmPolicyInput()
+              .name("protected-data")
+              .namespace("terra")
+              .additionalData(List().asJava)
+          )
+        )
+      case _ => None
+    }
+
+    val otherPolicyInputs: Option[Seq[WsmPolicyInput]] = workspaceRequest.policies match {
+      case Some(inputs) =>
+        Some(inputs.map { requestedPolicy =>
+          requestedPolicy.toWsmPolicyInput()
+        })
+      case _ => None
+    }
+
+    val merged: Option[WsmPolicyInputs] = synthesizedProtectedDataPolicyInput |+| otherPolicyInputs match {
+      case Some(mergedInputs) => Some(new WsmPolicyInputs().inputs(mergedInputs.asJava))
+      case _ => None
+    }
+
+    merged
+  }
 }
 
 /**
@@ -394,7 +424,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             spendProfile = Option(profile),
             billingProjectNamespace = request.namespace,
             context,
-            buildPolicyInputs(request)
+            MultiCloudWorkspaceService.buildPolicyInputs(request)
           )
         ) match {
           case Success(cloneResult) =>
@@ -509,7 +539,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               spendProfile = Option(profile),
               billingProjectNamespace = request.namespace,
               context,
-              buildPolicyInputs(request)
+              MultiCloudWorkspaceService.buildPolicyInputs(request)
             )
           })
         }
@@ -754,7 +784,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             workspaceRequest.namespace,
             Seq(wsmConfig.leonardoWsmApplicationId),
             model.CloudPlatform.AZURE,
-            buildPolicyInputs(workspaceRequest),
+            MultiCloudWorkspaceService.buildPolicyInputs(workspaceRequest),
             ctx
           )
         )
@@ -816,35 +846,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def buildPolicyInputs(workspaceRequest: WorkspaceRequest): Option[WsmPolicyInputs] = {
-    val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {
-      case Some(true) =>
-        Some(
-          Seq(
-            new WsmPolicyInput()
-              .name("protected-data")
-              .namespace("terra")
-              .additionalData(List().asJava)
-          )
-        )
-      case _ => None
-    }
-
-    val otherPolicyInputs: Option[Seq[WsmPolicyInput]] = workspaceRequest.policies match {
-      case Some(inputs) =>
-        Some(inputs.map { requestedPolicy =>
-          requestedPolicy.toWsmPolicyInput()
-        })
-      case _ => None
-    }
-
-    val merged: Option[WsmPolicyInputs] = synthesizedProtectedDataPolicyInput |+| otherPolicyInputs match {
-      case Some(mergedInputs) => Some(new WsmPolicyInputs().inputs(mergedInputs.asJava))
-      case _                  => None
-    }
-
-    merged
-  }
 
   private def getWorkspaceCreationStatus(_workspaceId: UUID, // Unused, but polling helper method passes it.
                                          jobControlId: String,
