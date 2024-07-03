@@ -84,13 +84,13 @@ class MultiCloudWorkspaceServiceSpec
 
   behavior of "createMultiCloudOrRawlsWorkspace"
 
-  it should "return forbidden if creating a workspace against a billing project that the user does not have the createWorkspace action for" in {
+  it should "return forbidden if the user does not have the createWorkspace action for the billing project" in {
     val samDAO = mock[SamDAO]
     when(
       samDAO.userHasAction(SamResourceTypeNames.billingProject,
-        testData.azureBillingProject.projectName.value,
-        SamBillingProjectActions.createWorkspace,
-        testContext
+                           testData.azureBillingProject.projectName.value,
+                           SamBillingProjectActions.createWorkspace,
+                           testContext
       )
     ).thenReturn(Future.successful(false))
     val billingRepository = mock[BillingRepository]
@@ -121,10 +121,10 @@ class MultiCloudWorkspaceServiceSpec
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.createMultiCloudOrRawlsWorkspace(
-        workspaceRequest,
-        mock[WorkspaceService]
-      ),
-        Duration.Inf
+                     workspaceRequest,
+                     mock[WorkspaceService]
+                   ),
+                   Duration.Inf
       )
     }
 
@@ -133,7 +133,7 @@ class MultiCloudWorkspaceServiceSpec
 
   it should "throw an exception if the billing profile is not found" in {
     val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(),any(),any(),any())).thenReturn(Future(true))
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
     val billingRepository = mock[BillingRepository]
@@ -215,29 +215,28 @@ class MultiCloudWorkspaceServiceSpec
   }
 
   it should "throw an exception if the billing profile was created before 9/12/2023" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
       mock[BillingProfileManagerDAO],
-      samDAO,
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      mock[WorkspaceRepository],
+      mock[BillingRepository]
+    )
     val request = WorkspaceRequest(
       "fake",
       s"fake-name-${UUID.randomUUID().toString}",
       Map.empty
     )
-    val billingProfileId = UUID.randomUUID()
 
     val thrown = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(
+      Await.result(service.createMultiCloudWorkspace(
                      request,
-                     new ProfileModel().id(billingProfileId).createdDate("2023-09-11T22:20:48.949Z")
+                     new ProfileModel().id(UUID.randomUUID()).createdDate("2023-09-11T22:20:48.949Z")
                    ),
                    Duration.Inf
       )
@@ -247,57 +246,111 @@ class MultiCloudWorkspaceServiceSpec
   }
 
   it should "not throw an exception for billing profiles created 9/12/2023 or later" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
       mock[BillingProfileManagerDAO],
-      samDAO,
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest(
-      "fake",
-      s"fake-name-${UUID.randomUUID().toString}",
-      Map.empty
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      mock[WorkspaceRepository],
+      mock[BillingRepository]
     )
-    val billingProfileId = UUID.randomUUID()
-    Await.result(mcWorkspaceService.createMultiCloudWorkspace(
-                   request,
-                   new ProfileModel().id(billingProfileId).createdDate("2023-09-12T22:20:48.949Z")
-                 ),
-                 Duration.Inf
-    )
+
+    // calls assertBillingProfileCreationDate directly instead of createMultiCloudWorkspace
+    // so we don't need to mock all the successes
+    // we already know createMultiCloudWorkspace is calling assertBillingProfileCreationDate, because of the test above
+    service.assertBillingProfileCreationDate(
+      new ProfileModel().id(UUID.randomUUID()).createdDate("2023-09-12T22:20:48.949Z")
+    ) shouldBe ()
+
   }
 
   it should "deploy a WDS instance during workspace creation" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val namespace = "fake_ns"
+    val name = "fake_name"
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val billingProfile = new ProfileModel().id(UUID.randomUUID())
 
-    val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = Mockito.spy(
-      new MockLeonardoDAO()
+    val workspaceRepository = mock[WorkspaceRepository]
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId.toString,
+      DateTime.now(),
+      DateTime.now(),
+      createdBy = testContext.userInfo.userEmail.value,
+      attributes = Map.empty,
+      state = WorkspaceState.Ready
     )
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(workspace))
+
+    val workspaceJobId = UUID.randomUUID()
+    val jobReport = new CreateWorkspaceV2Result()
+      .jobReport(new JobReport().id(workspaceJobId.toString).status(StatusEnum.SUCCEEDED))
+      .workspaceId(UUID.fromString(workspace.workspaceId))
+
+    when(
+      workspaceManagerDAO
+        .createWorkspaceWithSpendProfile(
+          any(),
+          ArgumentMatchers.eq(name),
+          ArgumentMatchers.eq(billingProfile.getId.toString),
+          ArgumentMatchers.eq(namespace),
+          any[Seq[String]],
+          ArgumentMatchers.eq(CloudPlatform.AZURE),
+          any[Option[WsmPolicyInputs]],
+          ArgumentMatchers.eq(testContext)
+        )
+    ).thenReturn(
+      jobReport
+    )
+    when(workspaceManagerDAO.getCreateWorkspaceResult(workspaceJobId.toString, testContext)).thenReturn(jobReport)
+    val azureStorageContainerId = UUID.randomUUID()
+    val containerResult = new CreatedControlledAzureStorageContainer().resourceId(azureStorageContainerId)
+    when(
+      workspaceManagerDAO.createAzureStorageContainer(
+        workspaceId,
+        MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+        testContext
+      )
+    )
+      .thenReturn(containerResult)
+
+    val leonardoDAO: LeonardoDAO = mock[LeonardoDAO]
+    val service = new MultiCloudWorkspaceService(
+      testContext,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
       leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
-    val name = "fake_name"
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+
     val request = WorkspaceRequest(
       namespace,
       name,
       Map.empty
     )
     val result: Workspace =
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+      Await.result(service.createMultiCloudWorkspaceInt(request, workspaceId, billingProfile, testContext),
                    Duration.Inf
       )
 
@@ -333,35 +386,108 @@ class MultiCloudWorkspaceServiceSpec
   }
 
   it should "not deploy a WDS instance during workspace creation if test attribute is set as a boolean" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val namespace = "fake_ns"
+    val name = "fake_name"
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val billingProfile = new ProfileModel().id(UUID.randomUUID())
 
-    val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = Mockito.spy(
-      new MockLeonardoDAO()
+    val workspaceRepository = mock[WorkspaceRepository]
+    val workspaceId = UUID.randomUUID()
+    val attributes = Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId.toString,
+      DateTime.now(),
+      DateTime.now(),
+      createdBy = testContext.userInfo.userEmail.value,
+      attributes = attributes,
+      state = WorkspaceState.Ready
     )
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.eq(attributes),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(workspace))
+
+    val workspaceJobId = UUID.randomUUID()
+    val jobReport = new CreateWorkspaceV2Result()
+      .jobReport(new JobReport().id(workspaceJobId.toString).status(StatusEnum.SUCCEEDED))
+      .workspaceId(UUID.fromString(workspace.workspaceId))
+
+    when(
+      workspaceManagerDAO
+        .createWorkspaceWithSpendProfile(
+          any(),
+          ArgumentMatchers.eq(name),
+          ArgumentMatchers.eq(billingProfile.getId.toString),
+          ArgumentMatchers.eq(namespace),
+          any[Seq[String]],
+          ArgumentMatchers.eq(CloudPlatform.AZURE),
+          any[Option[WsmPolicyInputs]],
+          ArgumentMatchers.eq(testContext)
+        )
+    ).thenReturn(
+      jobReport
+    )
+    when(workspaceManagerDAO.getCreateWorkspaceResult(workspaceJobId.toString, testContext)).thenReturn(jobReport)
+    val azureStorageContainerId = UUID.randomUUID()
+    val containerResult = new CreatedControlledAzureStorageContainer().resourceId(azureStorageContainerId)
+    when(
+      workspaceManagerDAO.createAzureStorageContainer(
+        workspaceId,
+        MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+        testContext
+      )
+    )
+      .thenReturn(containerResult)
+
+    val leonardoDAO: LeonardoDAO = mock[LeonardoDAO]
+    val service = new MultiCloudWorkspaceService(
+      testContext,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
       leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+
     val request = WorkspaceRequest(
       namespace,
-      "fake_name",
-      Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+      name,
+      attributes
     )
     val result: Workspace =
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+      Await.result(service.createMultiCloudWorkspaceInt(request, workspaceId, billingProfile, testContext),
                    Duration.Inf
       )
 
-    result.name shouldBe "fake_name"
+    result.name shouldBe name
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(name),
+        any(), // spend profile id
+        ArgumentMatchers.eq(namespace),
+        any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
+        any[Option[WsmPolicyInputs]],
+        ArgumentMatchers.eq(testContext)
+      )
     Mockito
       .verify(leonardoDAO, never())
       .createWDSInstance(
@@ -378,186 +504,287 @@ class MultiCloudWorkspaceServiceSpec
       )
   }
 
-  it should "create the workspace even if WDS instance creation fails" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-
-    val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = mock[MockLeonardoDAO]
-
-    Mockito
-      .when(leonardoDAO.createWDSInstance(anyString(), any[UUID](), any()))
-      .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
+  it should "fail and rollback workspace creation on initial WSM workspace creation failure" in {
+    val namespace = "fake_ns"
+    val name = "fake_name"
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId.toString,
+      DateTime.now(),
+      DateTime.now(),
+      createdBy = testContext.userInfo.userEmail.value,
+      attributes = Map.empty,
+      state = WorkspaceState.Ready
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(workspace))
+    when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val wsmDAO = mock[WorkspaceManagerDAO]
+    // The primary failure
+    doAnswer(_ => throw new ApiException(404, "i've never seen that workspace in my life"))
+      .when(wsmDAO)
+      .createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any())
+    val deleteJobId = UUID.randomUUID()
+    when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any()))
+      .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString)))
+    when(wsmDAO.getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext))
+      .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString).status(StatusEnum.SUCCEEDED)))
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      wsmDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
-    val request = WorkspaceRequest(
-      namespace,
-      "fake_name",
-      Map.empty
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
     )
-    val result: Workspace =
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
 
-    result.name shouldBe "fake_name"
-    result.workspaceType shouldBe WorkspaceType.McWorkspace
-    result.namespace shouldEqual namespace
-    Mockito
-      .verify(leonardoDAO)
-      .createWDSInstance(
-        ArgumentMatchers.eq("token"),
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(None)
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.createMultiCloudWorkspaceInt(
+          WorkspaceRequest(namespace, name, Map.empty),
+          workspaceId,
+          new ProfileModel().id(UUID.randomUUID()),
+          testContext
+        ),
+        Duration.Inf
       )
-    Mockito
-      .verify(workspaceManagerDAO)
+    }
+
+    e.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
+    verify(wsmDAO).deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any())
+    verify(wsmDAO).getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext)
+  }
+
+  it should "fail and rollback workspace creation on async workspace creation job failure in WSM" in {
+    val namespace = "fake_ns"
+    val name = "fake_name"
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId.toString,
+      DateTime.now(),
+      DateTime.now(),
+      createdBy = testContext.userInfo.userEmail.value,
+      attributes = Map.empty,
+      state = WorkspaceState.Ready
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(workspace))
+    when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val wsmDAO = mock[WorkspaceManagerDAO]
+    val createJobId = UUID.randomUUID()
+    when(wsmDAO.createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any()))
+      .thenReturn(new CreateWorkspaceV2Result().jobReport(new JobReport().id(createJobId.toString)))
+    // This is the primary failure we're testing
+    when(wsmDAO.getCreateWorkspaceResult(createJobId.toString, testContext))
+      .thenReturn(new CreateWorkspaceV2Result().jobReport(new JobReport().status(StatusEnum.FAILED)))
+    val deleteJobId = UUID.randomUUID()
+    when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any()))
+      .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString)))
+    when(wsmDAO.getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext))
+      .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString).status(StatusEnum.SUCCEEDED)))
+
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      wsmDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.createMultiCloudWorkspaceInt(
+          WorkspaceRequest(namespace, name, Map.empty),
+          workspaceId,
+          new ProfileModel().id(UUID.randomUUID()),
+          testContext
+        ),
+        Duration.Inf
+      )
+    }
+
+    e.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
+    verify(wsmDAO).deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any())
+    verify(wsmDAO).getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext)
+  }
+
+  it should "fail and rollback workspace creation on container creation failure in WSM " in {
+    val namespace = "fake_ns"
+    val name = "fake_name"
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId.toString,
+      DateTime.now(),
+      DateTime.now(),
+      createdBy = testContext.userInfo.userEmail.value,
+      attributes = Map.empty,
+      state = WorkspaceState.Ready
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(workspace))
+    when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val wsmDAO = mock[WorkspaceManagerDAO]
+    val createJobId = UUID.randomUUID()
+    when(wsmDAO.createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any()))
+      .thenReturn(new CreateWorkspaceV2Result().jobReport(new JobReport().id(createJobId.toString)))
+    when(wsmDAO.getCreateWorkspaceResult(createJobId.toString, testContext))
+      .thenReturn(new CreateWorkspaceV2Result().jobReport(new JobReport().status(StatusEnum.SUCCEEDED)))
+    val deleteJobId = UUID.randomUUID()
+    when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any()))
+      .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString)))
+    when(wsmDAO.getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext))
+      .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString).status(StatusEnum.SUCCEEDED)))
+    // The primary failure
+    doAnswer(_ => throw new ApiException(500, "what's a container?"))
+      .when(wsmDAO)
       .createAzureStorageContainer(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
-        ArgumentMatchers.eq(testContext)
+        workspaceId,
+        MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+        testContext
       )
-  }
 
-  it should "fail on WSM workspace creation failure and try to rollback workspace creation" in {
-    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO() {
-      override def createWorkspaceWithSpendProfile(workspaceId: UUID,
-                                                   displayName: String,
-                                                   spendProfileId: String,
-                                                   billingProjectNamespace: String,
-                                                   applicationIds: Seq[String],
-                                                   cloudPlatform: CloudPlatform,
-                                                   policyInputs: Option[WsmPolicyInputs],
-                                                   ctx: RawlsRequestContext
-      ): CreateWorkspaceV2Result = throw new ApiException(500, "whoops")
-
-      override def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult =
-        throw new ApiException(404, "i've never seen that workspace in my life")
-    })
-
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      wsmDAO,
       mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
+      samDAO,
       activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest("fake_ns", s"fake_name-${UUID.randomUUID()}", Map.empty)
-
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
-    }
-
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
-  }
-
-  it should "fail on workspace creation failure and try to rollback workspace creation" in {
-    val workspaceManagerDAO =
-      Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCreateWorkspaceResult(StatusEnum.FAILED))
-
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest(
-      s"fake_ns_${UUID.randomUUID()}",
-      s"fake_name_${UUID.randomUUID()}",
-      Map.empty
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
     )
 
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.createMultiCloudWorkspaceInt(
+          WorkspaceRequest(namespace, name, Map.empty),
+          workspaceId,
+          new ProfileModel().id(UUID.randomUUID()),
+          testContext
+        ),
+        Duration.Inf
       )
     }
 
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
-  }
-
-  it should "fail on container creation failure and try to rollback workspace creation" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      override def createAzureStorageContainer(workspaceId: UUID,
-                                               storageContainerName: String,
-                                               ctx: RawlsRequestContext
-      ): CreatedControlledAzureStorageContainer = throw new ApiException(500, "what's a container?")
-    })
-
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
-      activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
-    }
-
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+    e.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
+    verify(wsmDAO).deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any())
+    verify(wsmDAO).getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext)
   }
 
   it should "still delete from the database when cleaning up the workspace in WSM fails" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
-      override def createAzureStorageContainer(workspaceId: UUID,
-                                               storageContainerName: String,
-                                               ctx: RawlsRequestContext
-      ): CreatedControlledAzureStorageContainer =
-        throw new ApiException(500, "error")
-
-      override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
-        throw new ApiException(500, "no take backsies")
-    })
-
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
+    val namespace = "fake_ns"
+    val name = "fake_name"
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId.toString,
+      DateTime.now(),
+      DateTime.now(),
+      createdBy = testContext.userInfo.userEmail.value,
+      attributes = Map.empty,
+      state = WorkspaceState.Ready
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(workspace))
+    when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val wsmDAO = mock[WorkspaceManagerDAO]
+    doAnswer(_ => throw new ApiException(404, "i've never seen that workspace in my life"))
+      .when(wsmDAO)
+      .createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any())
+    doAnswer(_ => throw new ApiException(404, "Workspace not found because it wasn't created successfully"))
+      .when(wsmDAO)
+      .deleteWorkspaceV2(any(), any(), any())
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      wsmDAO,
       mock[BillingProfileManagerDAO],
-      new MockSamDAO(slickDataSource),
+      samDAO,
       activeMcWorkspaceConfig,
-      leonardoDAO,
-      workbenchMetricBaseName
-    )(testContext)
-    val request = WorkspaceRequest("fake_ns", s"fake_name-${UUID.randomUUID()}", Map.empty)
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.createMultiCloudWorkspaceInt(
+          WorkspaceRequest(namespace, name, Map.empty),
+          workspaceId,
+          new ProfileModel().id(UUID.randomUUID()),
+          testContext
+        ),
+        Duration.Inf
       )
     }
-
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+    e.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    verify(wsmDAO).deleteWorkspaceV2(any(), any(), any())
+    verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
   }
 
-  it should "fail with an improperly structured additional fields element on a policy and rollback workspace creation" in {
+  it should "fail and rollback workspace creation with improperly structured additional fields on a policy" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
