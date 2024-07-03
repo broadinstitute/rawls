@@ -636,7 +636,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     assertBillingProfileCreationDate(profile)
 
     traceFutureWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
-      createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
+      createMultiCloudWorkspaceInt(workspaceRequest, UUID.randomUUID(), profile, s1) andThen { case Success(_) =>
         createdMultiCloudWorkspaceCounter.inc()
       }
     )
@@ -725,14 +725,14 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def createWorkspace(workspaceRequest: WorkspaceRequest,
-                              profile: ProfileModel,
-                              parentContext: RawlsRequestContext
+  // visible so it can be called directly for testing
+  def createMultiCloudWorkspaceInt(workspaceRequest: WorkspaceRequest,
+                                   workspaceId: UUID,
+                                   profile: ProfileModel,
+                                   parentContext: RawlsRequestContext
   ): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
-
     val spendProfileId = profile.getId.toString
-    val workspaceId = UUID.randomUUID()
     (for {
       _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
       _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
