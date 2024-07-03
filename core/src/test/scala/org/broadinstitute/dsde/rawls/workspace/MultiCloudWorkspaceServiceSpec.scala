@@ -784,6 +784,8 @@ class MultiCloudWorkspaceServiceSpec
     verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
   }
 
+
+  // TODO replace with a test that just checks the result of the transformation is passed
   it should "create a workspace with the requested policies" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val samDAO = new MockSamDAO(slickDataSource)
@@ -867,75 +869,102 @@ class MultiCloudWorkspaceServiceSpec
       )
   }
 
-  it should "create a protected data workspace" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
-    val samDAO = new MockSamDAO(slickDataSource)
+  behavior of "buildPolicyInputs"
 
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      activeMcWorkspaceConfig,
-      mock[MockLeonardoDAO],
-      workbenchMetricBaseName
-    )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
+  it should "transform the policy inputs from the request" in {
+    val requestPolicies = List(
+      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
+      WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
+    )
     val request = WorkspaceRequest(
-      namespace,
+      "namespace",
+      "fake_name",
+      Map.empty,
+      policies = Some(requestPolicies)
+    )
+    val policies = MultiCloudWorkspaceService.buildPolicyInputs(request)
+    policies shouldBe Some(
+      new WsmPolicyInputs()
+        .inputs(
+          Seq(
+            new WsmPolicyInput()
+              .name("group-constraint")
+              .namespace("terra")
+              .additionalData(List(new WsmPolicyPair().key("group").value("myFakeGroup")).asJava),
+            new WsmPolicyInput()
+              .name("region-constraint")
+              .namespace("other-namespace")
+              .additionalData(
+                List(new WsmPolicyPair().key("key1").value("value1"),
+                  new WsmPolicyPair().key("key2").value("value2")
+                ).asJava
+              )
+          ).asJava
+        )
+    )
+
+  }
+
+  it should "create a policy for the protected data flag" in {
+    val request = WorkspaceRequest(
+      "namespace",
       "fake_name",
       Map.empty,
       protectedData = Some(true)
     )
-    val result: Workspace =
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
 
-    result.name shouldBe "fake_name"
-    result.workspaceType shouldBe WorkspaceType.McWorkspace
-    result.namespace shouldEqual namespace
-
-    Mockito
-      .verify(workspaceManagerDAO)
-      .createWorkspaceWithSpendProfile(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_name"),
-        ArgumentMatchers.anyString(),
-        ArgumentMatchers.eq(namespace),
-        any[Seq[String]],
-        ArgumentMatchers.eq(CloudPlatform.AZURE),
-        ArgumentMatchers.eq(
-          Some(
-            new WsmPolicyInputs()
-              .inputs(
-                Seq(
-                  new WsmPolicyInput()
-                    .name("protected-data")
-                    .namespace("terra")
-                    .additionalData(List().asJava)
-                ).asJava
-              )
-          )
-        ),
-        ArgumentMatchers.eq(testContext)
-      )
-
-    Mockito
-      .verify(workspaceManagerDAO, Mockito.times(0))
-      .createWorkspaceWithSpendProfile(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.anyString(),
-        ArgumentMatchers.anyString(),
-        ArgumentMatchers.eq(namespace),
-        any(),
-        any(),
-        ArgumentMatchers.eq(None),
-        ArgumentMatchers.any()
-      )
+    val policies = MultiCloudWorkspaceService.buildPolicyInputs(request)
+    policies shouldBe Some(
+      new WsmPolicyInputs()
+        .inputs(
+          Seq(
+            new WsmPolicyInput()
+              .name("protected-data")
+              .namespace("terra")
+              .additionalData(List().asJava)
+          ).asJava
+        )
+    )
   }
 
+  it should "merge the protected data policy with other inputs in the request" in {
+    val requestPolicies = List(
+      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
+      WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
+    )
+    val request = WorkspaceRequest(
+      "namespace",
+      "fake_name",
+      Map.empty,
+      policies = Some(requestPolicies),
+      protectedData = Some(true)
+    )
+    val policies = MultiCloudWorkspaceService.buildPolicyInputs(request)
+    policies shouldBe Some(
+      new WsmPolicyInputs()
+        .inputs(
+          Seq(
+            new WsmPolicyInput()
+              .name("protected-data")
+              .namespace("terra")
+              .additionalData(List().asJava),
+            new WsmPolicyInput()
+              .name("group-constraint")
+              .namespace("terra")
+              .additionalData(List(new WsmPolicyPair().key("group").value("myFakeGroup")).asJava),
+            new WsmPolicyInput()
+              .name("region-constraint")
+              .namespace("other-namespace")
+              .additionalData(
+                List(new WsmPolicyPair().key("key1").value("value1"),
+                  new WsmPolicyPair().key("key2").value("value2")
+                ).asJava
+              )
+          ).asJava
+        )
+    )
+  }
 
   behavior of "cloneMultiCloudWorkspace"
 
