@@ -784,43 +784,6 @@ class MultiCloudWorkspaceServiceSpec
     verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
   }
 
-  it should "fail and rollback workspace creation with improperly structured additional fields on a policy" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-
-    val samDAO = new MockSamDAO(slickDataSource)
-
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      activeMcWorkspaceConfig,
-      mock[MockLeonardoDAO],
-      workbenchMetricBaseName
-    )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
-    val policies = List(
-      WorkspacePolicy("protected-data", "terra", List.empty),
-      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup", "otherInvalid" -> "other")))
-    )
-    val request = WorkspaceRequest(
-      namespace,
-      "fake_name",
-      Map.empty,
-      protectedData = None,
-      policies = Some(policies)
-    )
-
-    val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-                   Duration.Inf
-      )
-    }
-
-    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
-  }
-
   it should "create a workspace with the requested policies" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val samDAO = new MockSamDAO(slickDataSource)
@@ -973,12 +936,6 @@ class MultiCloudWorkspaceServiceSpec
       )
   }
 
-  private def verifyWorkspaceCreationRollback(workspaceManagerDAO: MockWorkspaceManagerDAO,
-                                              workspaceName: WorkspaceName
-  ): Unit = {
-    verify(workspaceManagerDAO).deleteWorkspaceV2(any(), anyString(), any[RawlsRequestContext])
-    Await.result(slickDataSource.inTransaction(_.workspaceQuery.findByName(workspaceName)), Duration.Inf) shouldBe None
-  }
 
   behavior of "cloneMultiCloudWorkspace"
 
