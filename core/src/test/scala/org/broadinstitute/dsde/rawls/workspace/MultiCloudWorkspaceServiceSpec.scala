@@ -784,7 +784,6 @@ class MultiCloudWorkspaceServiceSpec
     verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
   }
 
-
   // TODO replace with a test that just checks the result of the transformation is passed
   it should "create a workspace with the requested policies" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
@@ -869,7 +868,6 @@ class MultiCloudWorkspaceServiceSpec
       )
   }
 
-
   behavior of "buildPolicyInputs"
 
   it should "transform the policy inputs from the request" in {
@@ -897,7 +895,7 @@ class MultiCloudWorkspaceServiceSpec
               .namespace("other-namespace")
               .additionalData(
                 List(new WsmPolicyPair().key("key1").value("value1"),
-                  new WsmPolicyPair().key("key2").value("value2")
+                     new WsmPolicyPair().key("key2").value("value2")
                 ).asJava
               )
           ).asJava
@@ -958,7 +956,7 @@ class MultiCloudWorkspaceServiceSpec
               .namespace("other-namespace")
               .additionalData(
                 List(new WsmPolicyPair().key("key1").value("value1"),
-                  new WsmPolicyPair().key("key2").value("value2")
+                     new WsmPolicyPair().key("key2").value("value2")
                 ).asJava
               )
           ).asJava

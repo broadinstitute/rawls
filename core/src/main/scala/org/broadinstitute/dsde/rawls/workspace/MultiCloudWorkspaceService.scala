@@ -78,7 +78,6 @@ object MultiCloudWorkspaceService {
 
   def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
 
-
   def buildPolicyInputs(workspaceRequest: WorkspaceRequest): Option[WsmPolicyInputs] = {
     val synthesizedProtectedDataPolicyInput: Option[Seq[WsmPolicyInput]] = workspaceRequest.protectedData match {
       case Some(true) =>
@@ -103,7 +102,7 @@ object MultiCloudWorkspaceService {
 
     val merged: Option[WsmPolicyInputs] = synthesizedProtectedDataPolicyInput |+| otherPolicyInputs match {
       case Some(mergedInputs) => Some(new WsmPolicyInputs().inputs(mergedInputs.asJava))
-      case _ => None
+      case _                  => None
     }
 
     merged
@@ -691,6 +690,18 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * @return
     */
   def deleteWorkspaceInWSM(workspaceId: UUID): Future[Unit] = {
+    def getWorkspaceFromWsm(workspaceId: UUID, ctx: RawlsRequestContext): Option[WorkspaceDescription] =
+      Try(workspaceManagerDAO.getWorkspace(workspaceId, ctx)) match {
+        case Success(w) => Some(w)
+        case Failure(e: ApiException) if e.getCode == 404 =>
+          logger.warn(s"Workspace not found in workspace manager for deletion [id=${workspaceId}]")
+          None
+        case Failure(e) =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError, e)
+          )
+      }
+
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
     getWorkspaceFromWsm(workspaceId, ctx).getOrElse(return Future.successful())
     for {
@@ -711,18 +722,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
     } yield {}
   }
-
-  private def getWorkspaceFromWsm(workspaceId: UUID, ctx: RawlsRequestContext): Option[WorkspaceDescription] =
-    Try(workspaceManagerDAO.getWorkspace(workspaceId, ctx)) match {
-      case Success(w) => Some(w)
-      case Failure(e: ApiException) if e.getCode == 404 =>
-        logger.warn(s"Workspace not found in workspace manager for deletion [id=${workspaceId}]")
-        None
-      case Failure(e) =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError, e)
-        )
-    }
 
   private def getWorkspaceDeletionStatus(workspaceId: UUID,
                                          jobControlId: String,
@@ -846,7 +845,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-
   private def getWorkspaceCreationStatus(_workspaceId: UUID, // Unused, but polling helper method passes it.
                                          jobControlId: String,
                                          localCtx: RawlsRequestContext
@@ -881,11 +879,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def jobStatusPredicate(t: Throwable): Boolean =
-    t match {
-      case t: WorkspaceManagerPollingOperationException => t.status == StatusEnum.RUNNING
-      case _                                            => false
-    }
   private def pollWMOperation(workspaceId: UUID,
                               jobControlId: String,
                               localCtx: RawlsRequestContext,
@@ -893,7 +886,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                               pollTimeout: FiniteDuration,
                               resourceType: String,
                               getOperationStatus: (UUID, String, RawlsRequestContext) => Future[Object]
-  ): Future[Unit] =
+  ): Future[Unit] = {
+    def jobStatusPredicate(t: Throwable): Boolean =
+      t match {
+        case t: WorkspaceManagerPollingOperationException => t.status == StatusEnum.RUNNING
+        case _                                            => false
+      }
     for {
       result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(interval, pollTimeout) { () =>
         getOperationStatus(workspaceId, jobControlId, localCtx)
@@ -907,6 +905,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       case Right(_) => ()
     }
+  }
 
   private def createWdsAppInWorkspace(workspaceId: UUID,
                                       parentContext: RawlsRequestContext,
@@ -917,13 +916,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case Some(AttributeString("true")) | Some(AttributeBoolean(true)) =>
         // Skip WDS deployment for testing purposes.
         logger.info("Skipping creation of WDS per request attributes")
-        ()
-      // Future.successful()
       case _ =>
         // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
         logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
         traceNakedWithParent("createWDSInstance", parentContext.toTracingContext)(_ =>
-          // Future(
           Try(
             leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
           ).recover { case t: Throwable =>
