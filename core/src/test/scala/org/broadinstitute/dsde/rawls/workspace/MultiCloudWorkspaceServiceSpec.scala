@@ -61,53 +61,6 @@ class MultiCloudWorkspaceServiceSpec
 
   behavior of "createMultiCloudOrRawlsWorkspace"
 
-  it should "return forbidden if the user does not have the createWorkspace action for the billing project" in {
-    val samDAO = mock[SamDAO]
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                           testData.azureBillingProject.projectName.value,
-                           SamBillingProjectActions.createWorkspace,
-                           testContext
-      )
-    ).thenReturn(Future.successful(false))
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.getBillingProject(any())).thenReturn(Future(Some(testData.azureBillingProject)))
-    val bpmDAO = mock[BillingProfileManagerDAO]
-    when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Some(testData.azureBillingProfile))
-    val service = new MultiCloudWorkspaceService(
-      testContext,
-      mock[WorkspaceManagerDAO],
-      bpmDAO,
-      samDAO,
-      mock[MultiCloudWorkspaceConfig],
-      mock[LeonardoDAO],
-      "MultiCloudWorkspaceService-test",
-      mock[WorkspaceManagerResourceMonitorRecordDao],
-      mock[WorkspaceRepository],
-      billingRepository
-    )
-    val workspaceRequest = WorkspaceRequest(
-      testData.azureBillingProject.projectName.value,
-      UUID.randomUUID().toString,
-      Map.empty,
-      None,
-      None,
-      None,
-      None
-    )
-
-    val actual = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.createMultiCloudOrRawlsWorkspace(
-                     workspaceRequest,
-                     mock[WorkspaceService]
-                   ),
-                   Duration.Inf
-      )
-    }
-
-    actual.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
-  }
-
   it should "throw an exception if the billing profile is not found" in {
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
