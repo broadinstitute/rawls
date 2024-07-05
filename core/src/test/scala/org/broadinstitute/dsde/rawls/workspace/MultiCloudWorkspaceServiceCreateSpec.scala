@@ -67,40 +67,15 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   implicit val executionContext: TestExecutionContext = new TestExecutionContext()
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
-  /*
-  object TestData {
-    val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
-      OAuth2BearerToken("token"),
-      123,
-      RawlsUserSubjectId("123456789876543212345")
-    )
-    val ctx: RawlsRequestContext = RawlsRequestContext(userInfo)
 
-    val namespace: String = "fake-namespace"
-    val name: String = "fake-name"
-    val workspaceName: WorkspaceName = WorkspaceName(namespace, name)
-    val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace.buildMcWorkspace(
-      namespace = namespace,
-      name = name,
-      workspaceId = workspaceId.toString,
-      DateTime.now(),
-      DateTime.now(),
-      createdBy = testContext.userInfo.userEmail.value,
-      attributes = Map.empty,
-      state = WorkspaceState.Ready
-    )
-  }*/
-
-  val userInfo = UserInfo(RawlsUserEmail("owner-access"),
-                          OAuth2BearerToken("token"),
-                          123,
-                          RawlsUserSubjectId("123456789876543212345")
+  val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
+                                    OAuth2BearerToken("token"),
+                                    123,
+                                    RawlsUserSubjectId("123456789876543212345")
   )
-  val testContext = RawlsRequestContext(userInfo)
-
-  val namespace = "fake-namespace"
-  val name = "fake-name"
+  val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
+  val namespace: String = "fake-namespace"
+  val name: String = "fake-name"
   val workspaceName: WorkspaceName = WorkspaceName(namespace, name)
   val workspaceId: UUID = UUID.randomUUID()
   val defaultWorkspace: Workspace = Workspace.buildMcWorkspace(
