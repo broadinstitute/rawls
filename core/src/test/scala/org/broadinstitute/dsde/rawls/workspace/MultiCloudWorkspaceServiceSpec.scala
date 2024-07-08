@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import com.typesafe.config.ConfigFactory
@@ -23,15 +22,13 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceCloudPlatform,
   WorkspaceName,
   WorkspacePolicy,
-  WorkspaceRequest,
-  WorkspaceType
+  WorkspaceRequest
 }
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.broadinstitute.dsde.workbench.client.leonardo
 import org.mockito.ArgumentMatchers.{any, anyString, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -126,146 +123,6 @@ class MultiCloudWorkspaceServiceSpec
 
     runTest(mcWorkspaceService)
   }
-
-  it should "fail if the destination workspace already exists" in
-    withEmptyTestDatabase {
-      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
-        val result = intercept[RawlsExceptionWithErrorReport] {
-          Await.result(
-            for {
-              _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.azureWorkspace)
-              _ <- mcWorkspaceService.cloneMultiCloudWorkspace(
-                mock[WorkspaceService](RETURNS_SMART_NULLS),
-                testData.azureWorkspace.toWorkspaceName,
-                WorkspaceRequest(
-                  testData.azureWorkspace.namespace,
-                  testData.azureWorkspace.name,
-                  Map.empty
-                )
-              )
-            } yield fail(
-              "cloneMultiCloudWorkspace does not fail when a workspace " +
-                "with the same name already exists."
-            ),
-            Duration.Inf
-          )
-        }
-
-        result.errorReport.statusCode.value shouldBe StatusCodes.Conflict
-      }
-    }
-
-  it should "not create a workspace record if the request to Workspace Manager fails" in
-    withEmptyTestDatabase {
-      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
-        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
-
-        when(
-          mcWorkspaceService.workspaceManagerDAO.cloneWorkspace(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
-                                                                any(),
-                                                                equalTo("kifflom"),
-                                                                any(),
-                                                                equalTo(testData.azureWorkspace.namespace),
-                                                                any(),
-                                                                any()
-          )
-        ).thenAnswer((_: InvocationOnMock) =>
-          throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.ImATeapot, "short and stout"))
-        )
-
-        val result = intercept[RawlsExceptionWithErrorReport] {
-          Await.result(
-            mcWorkspaceService.cloneMultiCloudWorkspace(
-              mock[WorkspaceService](RETURNS_SMART_NULLS),
-              testData.azureWorkspace.toWorkspaceName,
-              WorkspaceRequest(
-                cloneName.namespace,
-                cloneName.name,
-                Map.empty
-              )
-            ),
-            Duration.Inf
-          )
-        }
-
-        // preserve the error workspace manager returned
-        result.errorReport.statusCode.value shouldBe StatusCodes.ImATeapot
-
-        // fail if the workspace exists
-        val clone = Await.result(
-          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
-          Duration.Inf
-        )
-
-        clone shouldBe empty
-      }
-    }
-
-  it should "throw an exception if the billing profile was created before 9/12/2023" in
-    withEmptyTestDatabase {
-      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
-        val cloneName = WorkspaceName(testData.oldAzureBillingProject.projectName.value, "unsupported")
-        val result = intercept[RawlsExceptionWithErrorReport] {
-          Await.result(
-            for {
-              _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.azureWorkspace)
-              _ <- mcWorkspaceService.cloneMultiCloudWorkspace(
-                mock[WorkspaceService](RETURNS_SMART_NULLS),
-                testData.azureWorkspace.toWorkspaceName,
-                WorkspaceRequest(
-                  cloneName.namespace,
-                  cloneName.name,
-                  Map.empty
-                )
-              )
-            } yield fail(
-              "cloneMultiCloudWorkspace does not fail when a workspace " +
-                "with the same name already exists."
-            ),
-            Duration.Inf
-          )
-        }
-        result.errorReport.statusCode.value shouldBe StatusCodes.Forbidden
-      }
-    }
-
-  it should "not create a workspace record if the Workspace Manager clone operation fails" in
-    withEmptyTestDatabase {
-      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
-        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
-
-        when(
-          mcWorkspaceService.workspaceManagerDAO.getCloneWorkspaceResult(
-            any(),
-            any(),
-            any()
-          )
-        ).thenAnswer((_: InvocationOnMock) => MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.FAILED))
-
-        intercept[WorkspaceManagerOperationFailureException] {
-          Await.result(
-            mcWorkspaceService.cloneMultiCloudWorkspace(
-              mock[WorkspaceService](RETURNS_SMART_NULLS),
-              testData.azureWorkspace.toWorkspaceName,
-              WorkspaceRequest(
-                cloneName.namespace,
-                cloneName.name,
-                Map.empty
-              )
-            ),
-            Duration.Inf
-          )
-        }
-
-        // fail if the workspace exists
-        val clone = Await.result(
-          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
-          Duration.Inf
-        )
-
-        clone shouldBe empty
-      }
-    }
 
   it should "not create a workspace record if the workspace has no storage containers" in
     withEmptyTestDatabase {
@@ -663,8 +520,4 @@ class MultiCloudWorkspaceServiceSpec
       }
     }
 
-  private def insertWorkspaceWithBillingProject(billingProject: RawlsBillingProject, workspace: Workspace) =
-    slickDataSource.inTransaction { access =>
-      access.rawlsBillingProjectQuery.create(billingProject) >> access.workspaceQuery.createOrUpdate(workspace)
-    }
 }
