@@ -161,11 +161,11 @@ class RawlsApiSpec
               descendantRoles.get("google-project") shouldBe Option(Set("owner"))
             case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("reader") =>
               actions should contain allElementsOf(List("read", "read_policy::owner", "read_auth_domain"))
-              actions should not contain allElementsOf(List("write", "compute"))
+              actions should contain noElementsOf(List("write", "compute"))
               descendantRoles.get("google-project") shouldBe Option(Set("pet-creator"))
             case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("writer") =>
               actions should contain allElementsOf(List("write", "read", "read_policy::owner", "read_auth_domain"))
-              actions should not contain allElementsOf(List("compute"))
+              actions should contain noElementsOf(List("compute"))
               descendantRoles.get("google-project") shouldBe Option(Set("pet-creator"))
             case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("can-compute") =>
               actions should contain allElementsOf(List("compute"))
