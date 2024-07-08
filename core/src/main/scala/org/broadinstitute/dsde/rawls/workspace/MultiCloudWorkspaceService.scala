@@ -212,21 +212,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   private def deleteMultiCloudWorkspace(workspace: Workspace): Future[WorkspaceDeletionResult] =
     for {
-      _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID).recover { case e: ApiException =>
-        if (e.getCode == StatusCodes.NotFound.intValue) {
-          // if the workspace is not present in WSM (likely already deleted), proceed with cleaning up rawls state
-          logger.warn(
-            s"Workspace not found in WSM for deletion, proceeding with deletion of Rawls state [workspaceId = ${workspace.workspaceId}]"
-          )
-        } else {
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unable to delete workspace [workspaceId=${workspace.workspaceId}]",
-                                      ErrorReport(e)
-            )
-          )
-        }
-      }
+      _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID)
       _ <- workspaceRepository.deleteWorkspace(workspace)
     } yield {
       deletedMultiCloudWorkspaceCounter.inc()
