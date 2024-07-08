@@ -697,6 +697,80 @@ class MultiCloudWorkspaceServiceCreateSpec
     verify(workspaceRepository).deleteWorkspace(workspace.toWorkspaceName)
   }
 
+  it should "pass the transformed policies to WSM when creating a workspace" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val billingProfile = new ProfileModel().id(UUID.randomUUID())
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(
+      workspaceRepository.createMCWorkspace(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(WorkspaceName(namespace, name)),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq(testContext),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future(defaultWorkspace))
+
+    val workspaceJobId = UUID.randomUUID()
+    val jobReport = new CreateWorkspaceV2Result()
+      .jobReport(new JobReport().id(workspaceJobId.toString).status(StatusEnum.SUCCEEDED))
+      .workspaceId(workspaceId)
+    val workspaceRequest = WorkspaceRequest(namespace, name, Map.empty, protectedData = Some(true))
+    when(
+      workspaceManagerDAO
+        .createWorkspaceWithSpendProfile(
+          ArgumentMatchers.eq(workspaceId),
+          ArgumentMatchers.eq(name),
+          ArgumentMatchers.eq(billingProfile.getId.toString),
+          ArgumentMatchers.eq(namespace),
+          any[Seq[String]],
+          ArgumentMatchers.eq(CloudPlatform.AZURE),
+          ArgumentMatchers.eq(MultiCloudWorkspaceService.buildPolicyInputs(workspaceRequest)),
+          ArgumentMatchers.eq(testContext)
+        )
+    ).thenReturn(jobReport)
+    when(workspaceManagerDAO.getCreateWorkspaceResult(workspaceJobId.toString, testContext)).thenReturn(jobReport)
+    val azureStorageContainerId = UUID.randomUUID()
+    val containerResult = new CreatedControlledAzureStorageContainer().resourceId(azureStorageContainerId)
+    when(workspaceManagerDAO.createAzureStorageContainer(any, any, any)).thenReturn(containerResult)
+    val leonardoDAO: LeonardoDAO = mock[LeonardoDAO]
+    doNothing().when(leonardoDAO).createWDSInstance(any(), any(), any())
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 60 seconds, 120 seconds), mock[AzureConfig]),
+      leonardoDAO,
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+
+    val result: Workspace = Await.result(
+      service.createMultiCloudWorkspaceInt(workspaceRequest, workspaceId, billingProfile, testContext),
+      Duration.Inf
+    )
+
+    result.name shouldBe name
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+    verify(workspaceManagerDAO)
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.eq(workspaceId),
+        ArgumentMatchers.eq(name),
+        ArgumentMatchers.eq(billingProfile.getId.toString),
+        ArgumentMatchers.eq(namespace),
+        any[Seq[String]],
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
+        ArgumentMatchers.eq(MultiCloudWorkspaceService.buildPolicyInputs(workspaceRequest)),
+        ArgumentMatchers.eq(testContext)
+      )
+  }
+
   behavior of "buildPolicyInputs"
 
   it should "transform the policy inputs from the request" in {
@@ -704,13 +778,10 @@ class MultiCloudWorkspaceServiceCreateSpec
       WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
       WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
     )
-    val request = WorkspaceRequest(
-      "namespace",
-      "fake_name",
-      Map.empty,
-      policies = Some(requestPolicies)
-    )
+    val request = WorkspaceRequest(namespace, name, Map.empty, policies = Some(requestPolicies))
+
     val policies = MultiCloudWorkspaceService.buildPolicyInputs(request)
+
     policies shouldBe Some(
       new WsmPolicyInputs()
         .inputs(
@@ -730,18 +801,13 @@ class MultiCloudWorkspaceServiceCreateSpec
           ).asJava
         )
     )
-
   }
 
   it should "create a policy for the protected data flag" in {
-    val request = WorkspaceRequest(
-      "namespace",
-      "fake_name",
-      Map.empty,
-      protectedData = Some(true)
-    )
+    val request = WorkspaceRequest(namespace, name, Map.empty, protectedData = Some(true))
 
     val policies = MultiCloudWorkspaceService.buildPolicyInputs(request)
+
     policies shouldBe Some(
       new WsmPolicyInputs()
         .inputs(
@@ -761,8 +827,8 @@ class MultiCloudWorkspaceServiceCreateSpec
       WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
     )
     val request = WorkspaceRequest(
-      "namespace",
-      "fake_name",
+      namespace,
+      name,
       Map.empty,
       policies = Some(requestPolicies),
       protectedData = Some(true)
