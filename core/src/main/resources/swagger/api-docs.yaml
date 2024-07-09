@@ -5851,7 +5851,8 @@ components:
         authorizationDomain:
           type: array
           description: The list of groups in the Authorization Domain (empty if no
-            AD is set)
+            AD is set). Not supported for Azure workspaces. To limit Azure workspace 
+            access to members of a set of Terra groups, use a group-constraint policy instead.
           items:
             $ref: '#/components/schemas/ManagedGroupRef'
         attributes:
