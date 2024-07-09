@@ -25,6 +25,8 @@ object Merging {
     case x if x.endsWith("kotlin_module")                => MergeStrategy.first
     case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.concat
     case x if x.endsWith("arrow-git.properties")         => MergeStrategy.concat
+    case x if x.endsWith("aot.factories")                => MergeStrategy.first
+    case x if x.endsWith("public-suffix-list.txt")       => MergeStrategy.first
     case x                                               => oldStrategy(x)
   }
 }

@@ -4,8 +4,8 @@ import bio.terra.bard.api.DefaultApi
 import bio.terra.bard.client.ApiClient
 import bio.terra.bard.model.EventsEventLogRequest
 import com.typesafe.scalalogging.LazyLogging
-import org.apache.http.impl.client.HttpClients
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
+import org.apache.hc.client5.http.impl.classic.HttpClients
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager
 import org.broadinstitute.dsde.rawls.metrics.logEvents.BardEvent
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory
