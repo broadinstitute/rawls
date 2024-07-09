@@ -54,7 +54,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doAnswer, doNothing, doReturn, never, spy, verify, when}
+import org.mockito.Mockito.{doNothing, doReturn, never, spy, verify, when}
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -63,7 +63,6 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.SeqHasAsJava
 import scala.language.postfixOps
@@ -137,7 +136,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       )
     }
 
-    result.workspace shouldBe (sourceWorkspace.toWorkspaceName.toString)
+    result.workspace shouldBe sourceWorkspace.toWorkspaceName.toString
   }
 
   it should "return forbidden if the user does not have the createWorkspace action for the billing project" in {
@@ -327,10 +326,11 @@ class MultiCloudWorkspaceServiceCloneSpec
       Duration.Inf
     )
 
-    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(clonedWorkspace,
-                                                             Some(Set.empty),
-                                                             useAttributes = true,
-                                                             Some(WorkspaceCloudPlatform.Gcp)
+    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(
+      clonedWorkspace,
+      Some(Set.empty),
+      true,
+      Some(WorkspaceCloudPlatform.Gcp)
     )
     verify(workspaceService).cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext)
   }
@@ -399,10 +399,11 @@ class MultiCloudWorkspaceServiceCloneSpec
       Duration.Inf
     )
 
-    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(clonedWorkspace,
-                                                             Some(Set.empty),
-                                                             useAttributes = true,
-                                                             Some(WorkspaceCloudPlatform.Gcp)
+    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(
+      clonedWorkspace,
+      Some(Set.empty),
+      useAttributes = true,
+      Some(WorkspaceCloudPlatform.Gcp)
     )
     verify(workspaceService).cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext)
   }
@@ -1029,7 +1030,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       billingProfileId = Some(billingProfileId.toString)
     )
     val billingProfile = mock[ProfileModel]
-    when(billingProfile.getCloudPlatform()).thenReturn(CloudPlatform.AZURE)
+    when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.AZURE)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     when(billingProfileManagerDAO.getBillingProfile(billingProfileId, testContext)).thenReturn(Some(billingProfile))
     val samDAO = mock[SamDAO]
@@ -1185,9 +1186,8 @@ class MultiCloudWorkspaceServiceCloneSpec
     val sourceWorkspace = defaultWorkspace
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    doAnswer(_ => throw new ApiException())
-      .when(workspaceManagerDAO)
-      .cloneWorkspace(any(), any(), any(), any(), any(), any(), any())
+    when(workspaceManagerDAO.cloneWorkspace(any(), any(), any(), any(), any(), any(), any()))
+      .thenAnswer(_ => throw new ApiException())
     val workspaceRepository = mock[WorkspaceRepository]
     val service = new MultiCloudWorkspaceService(
       testContext,
@@ -1283,15 +1283,13 @@ class MultiCloudWorkspaceServiceCloneSpec
         ArgumentMatchers.eq(Some(new WsmPolicyInputs().inputs(policies.map(p => p.toWsmPolicyInput()).asJava)))
       )
     ).thenReturn(wsmResult)
-
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    doAnswer { a =>
+    when(workspaceManagerResourceMonitorRecordDao.create(any())).thenAnswer { a =>
       val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
       record.userEmail shouldBe Some(testContext.userInfo.userEmail.value)
       record.jobType shouldBe JobType.CloneWorkspaceInit
       Future.successful()
-    }.when(workspaceManagerResourceMonitorRecordDao).create(any())
-
+    }
     val workspaceRepository = mock[WorkspaceRepository]
     val service = new MultiCloudWorkspaceService(
       testContext,
@@ -1353,12 +1351,12 @@ class MultiCloudWorkspaceServiceCloneSpec
     ).thenReturn(wsmResult)
 
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    doAnswer { a =>
+    when(workspaceManagerResourceMonitorRecordDao.create(any())).thenAnswer { a =>
       val record: WorkspaceManagerResourceMonitorRecord = a.getArgument(0)
       record.userEmail shouldBe Some("user-email")
       record.jobType shouldBe JobType.CloneWorkspaceInit
       Future.successful()
-    }.when(workspaceManagerResourceMonitorRecordDao).create(any())
+    }
     val workspaceRepository = mock[WorkspaceRepository]
     val service = new MultiCloudWorkspaceService(
       testContext,

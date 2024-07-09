@@ -31,8 +31,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.joda.time.DateTime
 import org.mockito.{ArgumentCaptor, ArgumentMatchers}
-import org.mockito.ArgumentMatchers.{any, anyString}
-import org.mockito.Mockito.{doAnswer, doReturn, spy, times, verify, when}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{doReturn, never, spy, times, verify, when}
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -40,7 +40,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -61,6 +60,8 @@ class MultiCloudWorkspaceServiceDeleteSpec
                                     RawlsUserSubjectId("123456789876543212345")
   )
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
+  val mcWorkspaceConfig: MultiCloudWorkspaceConfig =
+    MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig])
   val namespace: String = "fake-namespace"
   val name: String = "fake-name"
   val workspaceName: WorkspaceName = WorkspaceName(namespace, name)
@@ -75,7 +76,7 @@ class MultiCloudWorkspaceServiceDeleteSpec
     attributes = Map.empty,
     state = WorkspaceState.Ready
   )
-  val defaultRawlsWorkspace = Workspace(
+  val defaultRawlsWorkspace: Workspace = Workspace(
     namespace,
     name,
     workspaceId.toString,
@@ -398,13 +399,13 @@ class MultiCloudWorkspaceServiceDeleteSpec
     }
 
     verify(wsmDAO).getWorkspace(workspaceId, testContext)
-    verify(wsmDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
-    verify(workspaceRepository, times(0)).deleteWorkspace(workspace)
+    verify(wsmDAO, never).deleteWorkspaceV2(any, any, any)
+    verify(workspaceRepository, never).deleteWorkspace(workspace)
   }
 
   it should "delete the rawls record if the WSM record is not found" in {
     val samDAO = mock[SamDAO]
-    when(samDAO.getUserStatus(any())).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(samDAO.getUserStatus(any)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
     when(
       samDAO.userHasAction(SamResourceTypeNames.workspace,
                            workspaceId.toString,
@@ -436,7 +437,7 @@ class MultiCloudWorkspaceServiceDeleteSpec
 
     result shouldBe None
     verify(wsmDAO).getWorkspace(workspaceId, testContext)
-    verify(wsmDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
+    verify(wsmDAO, never).deleteWorkspaceV2(any, any, any)
     verify(workspaceRepository).deleteWorkspace(workspace)
   }
 
@@ -459,7 +460,7 @@ class MultiCloudWorkspaceServiceDeleteSpec
       wsmDAO,
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
+      mcWorkspaceConfig,
       mock[LeonardoDAO],
       "MultiCloudWorkspaceService-test",
       mock[WorkspaceManagerResourceMonitorRecordDao],
@@ -475,7 +476,7 @@ class MultiCloudWorkspaceServiceDeleteSpec
 
   it should "not attempt to delete a workspace if WSM returns a 403 when retrieving the workspace" in {
     val wsmDAO = mock[WorkspaceManagerDAO]
-    doAnswer(_ => throw new ApiException(403, "forbidden")).when(wsmDAO).getWorkspace(workspaceId, testContext)
+    when(wsmDAO.getWorkspace(workspaceId, testContext)).thenAnswer(_ => throw new ApiException(403, "forbidden"))
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
@@ -492,12 +493,12 @@ class MultiCloudWorkspaceServiceDeleteSpec
       Await.result(service.deleteWorkspaceInWSM(workspaceId), Duration.Inf)
     }
     result.errorReport.statusCode shouldEqual Some(StatusCodes.InternalServerError)
-    verify(wsmDAO, times(0)).deleteWorkspaceV2(any, any, any)
+    verify(wsmDAO, never).deleteWorkspaceV2(any, any, any)
   }
 
   it should "not throw an exception or attempt to delete a workspace that does not exist in WSM" in {
     val wsmDAO = mock[WorkspaceManagerDAO]
-    doAnswer(_ => throw new ApiException(404, "not found")).when(wsmDAO).getWorkspace(workspaceId, testContext)
+    when(wsmDAO.getWorkspace(workspaceId, testContext)).thenAnswer(_ => throw new ApiException(404, "not found"))
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
@@ -511,7 +512,7 @@ class MultiCloudWorkspaceServiceDeleteSpec
       mock[BillingRepository]
     )
     Await.result(service.deleteWorkspaceInWSM(workspaceId), Duration.Inf)
-    verify(wsmDAO, times(0)).deleteWorkspaceV2(any, any, any)
+    verify(wsmDAO, never).deleteWorkspaceV2(any, any, any)
   }
 
   it should "fail for errors when polling the deletion result the workspace in WSM" in {
@@ -521,15 +522,15 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val jobId = UUID.randomUUID().toString
     when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), ArgumentMatchers.eq(testContext)))
       .thenReturn(new JobResult().jobReport(new JobReport().id(jobId).status(StatusEnum.RUNNING)))
-    doAnswer(_ => throw new ApiException(StatusCodes.BadRequest.intValue, "failure"))
-      .when(wsmDAO)
-      .getDeleteWorkspaceV2Result(workspaceId, jobId, testContext)
+    when(wsmDAO.getDeleteWorkspaceV2Result(workspaceId, jobId, testContext)).thenAnswer { _ =>
+      throw new ApiException(StatusCodes.BadRequest.intValue, "failure")
+    }
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
+      mcWorkspaceConfig,
       mock[LeonardoDAO],
       "MultiCloudWorkspaceService-test",
       mock[WorkspaceManagerResourceMonitorRecordDao],
@@ -553,15 +554,15 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val jobId = UUID.randomUUID().toString
     when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), ArgumentMatchers.eq(testContext)))
       .thenReturn(new JobResult().jobReport(new JobReport().id(jobId).status(StatusEnum.RUNNING)))
-    doAnswer(_ => throw new Exception("non-api failure"))
-      .when(wsmDAO)
-      .getDeleteWorkspaceV2Result(workspaceId, jobId, testContext)
+    when(wsmDAO.getDeleteWorkspaceV2Result(workspaceId, jobId, testContext)).thenAnswer { _ =>
+      throw new Exception("non-api failure")
+    }
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
+      mcWorkspaceConfig,
       mock[LeonardoDAO],
       "MultiCloudWorkspaceService-test",
       mock[WorkspaceManagerResourceMonitorRecordDao],
@@ -594,7 +595,7 @@ class MultiCloudWorkspaceServiceDeleteSpec
       wsmDAO,
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
+      mcWorkspaceConfig,
       mock[LeonardoDAO],
       "MultiCloudWorkspaceService-test",
       mock[WorkspaceManagerResourceMonitorRecordDao],

@@ -43,8 +43,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.joda.time.DateTime
 import org.mockito.{ArgumentCaptor, ArgumentMatchers}
-import org.mockito.ArgumentMatchers.{any, anyString}
-import org.mockito.Mockito.{doAnswer, doNothing, never, times, verify, when}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{doNothing, never, verify, when}
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -55,7 +55,6 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import java.util.UUID
 import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
 import scala.language.postfixOps
 
 class MultiCloudWorkspaceServiceCreateSpec
@@ -191,22 +190,15 @@ class MultiCloudWorkspaceServiceCreateSpec
   it should "not delete the original workspace if a workspace with the same name already exists" in {
     val workspaceManagerDAO = mock[WorkspaceManagerDAO] // spy(new MockWorkspaceManagerDAO())
     val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
     val namespace = "fake"
     val name = "fake-name"
     val workspaceName = WorkspaceName(namespace, name)
     val workspaceRepository = mock[WorkspaceRepository]
-
-    doAnswer(_ =>
-      throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Workspace '$name' already exists"))
-    ).when(workspaceRepository)
-      .createMCWorkspace(
-        ArgumentMatchers.any(),
-        ArgumentMatchers.eq(workspaceName),
-        ArgumentMatchers.any(),
-        ArgumentMatchers.any(),
-        ArgumentMatchers.any()
-      )(ArgumentMatchers.any)
+    when(workspaceRepository.createMCWorkspace(any, ArgumentMatchers.eq(workspaceName), any, any, any)(any))
+      .thenAnswer { _ =>
+        throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Workspace '$name' already exists"))
+      }
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
@@ -227,8 +219,8 @@ class MultiCloudWorkspaceServiceCreateSpec
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
     // Make sure that the pre-existing workspace was not deleted.
-    verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), anyString(), any())
-    verify(workspaceRepository, times(0)).deleteWorkspace(workspaceName)
+    verify(workspaceManagerDAO, never).deleteWorkspaceV2(any, any, any)
+    verify(workspaceRepository, never).deleteWorkspace(workspaceName)
   }
 
   it should "throw an exception if the billing profile was created before 9/12/2023" in {
@@ -472,19 +464,19 @@ class MultiCloudWorkspaceServiceCreateSpec
       workspaceRepository.createMCWorkspace(
         ArgumentMatchers.eq(workspaceId),
         ArgumentMatchers.eq(WorkspaceName(namespace, name)),
-        ArgumentMatchers.any(),
+        any,
         ArgumentMatchers.eq(testContext),
-        ArgumentMatchers.any()
-      )(ArgumentMatchers.any())
+        any
+      )(any)
     ).thenReturn(Future(workspace))
     when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
     val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
     val wsmDAO = mock[WorkspaceManagerDAO]
     // The primary failure
-    doAnswer(_ => throw new ApiException(404, "i've never seen that workspace in my life"))
-      .when(wsmDAO)
-      .createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any())
+    when(wsmDAO.createWorkspaceWithSpendProfile(any, any, any, any, any, any, any, any)).thenAnswer { _ =>
+      throw new ApiException(404, "i've never seen that workspace in my life")
+    }
     val deleteJobId = UUID.randomUUID()
     when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any()))
       .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString)))
@@ -587,34 +579,30 @@ class MultiCloudWorkspaceServiceCreateSpec
       workspaceRepository.createMCWorkspace(
         ArgumentMatchers.eq(workspaceId),
         ArgumentMatchers.eq(WorkspaceName(namespace, name)),
-        ArgumentMatchers.any(),
+        any,
         ArgumentMatchers.eq(testContext),
-        ArgumentMatchers.any()
-      )(ArgumentMatchers.any())
+        any
+      )(any)
     ).thenReturn(Future(workspace))
     when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
     val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
     val wsmDAO = mock[WorkspaceManagerDAO]
     val createJobId = UUID.randomUUID()
-    when(wsmDAO.createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any()))
+    when(wsmDAO.createWorkspaceWithSpendProfile(any, any, any, any, any, any, any, any))
       .thenReturn(new CreateWorkspaceV2Result().jobReport(new JobReport().id(createJobId.toString)))
     when(wsmDAO.getCreateWorkspaceResult(createJobId.toString, testContext))
       .thenReturn(new CreateWorkspaceV2Result().jobReport(new JobReport().status(StatusEnum.SUCCEEDED)))
     val deleteJobId = UUID.randomUUID()
-    when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any(), any()))
+    when(wsmDAO.deleteWorkspaceV2(ArgumentMatchers.eq(workspaceId), any, any))
       .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString)))
     when(wsmDAO.getDeleteWorkspaceV2Result(workspaceId, deleteJobId.toString, testContext))
       .thenReturn(new JobResult().jobReport(new JobReport().id(deleteJobId.toString).status(StatusEnum.SUCCEEDED)))
     // The primary failure
-    doAnswer(_ => throw new ApiException(500, "what's a container?"))
-      .when(wsmDAO)
-      .createAzureStorageContainer(
-        workspaceId,
-        MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
-        testContext
-      )
-
+    val storageContainerName = MultiCloudWorkspaceService.getStorageContainerName(workspaceId)
+    when(wsmDAO.createAzureStorageContainer(workspaceId, storageContainerName, testContext)).thenAnswer { _ =>
+      throw new ApiException(500, "what's a container?")
+    }
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
@@ -660,14 +648,14 @@ class MultiCloudWorkspaceServiceCreateSpec
     ).thenReturn(Future(workspace))
     when(workspaceRepository.deleteWorkspace(workspace.toWorkspaceName)).thenReturn(Future(true))
     val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
     val wsmDAO = mock[WorkspaceManagerDAO]
-    doAnswer(_ => throw new ApiException(404, "i've never seen that workspace in my life"))
-      .when(wsmDAO)
-      .createWorkspaceWithSpendProfile(any(), any(), any(), any(), any(), any(), any(), any())
-    doAnswer(_ => throw new ApiException(404, "Workspace not found because it wasn't created successfully"))
-      .when(wsmDAO)
-      .deleteWorkspaceV2(any(), any(), any())
+    when(wsmDAO.createWorkspaceWithSpendProfile(any, any, any, any, any, any, any, any)).thenAnswer { _ =>
+      throw new ApiException(404, "i've never seen that workspace in my life")
+    }
+    when(wsmDAO.deleteWorkspaceV2(any, any, any)).thenAnswer { _ =>
+      throw new ApiException(404, "Workspace not found because it wasn't created successfully")
+    }
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
