@@ -661,7 +661,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   }
 
   private def validateWorkspaceRequest(request: WorkspaceRequest): Unit =
-    if (request.authorizationDomain.exists(authDomain => authDomain.nonEmpty)) {
+    if (request.authorizationDomain.exists(_.nonEmpty)) {
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(
           StatusCodes.BadRequest,
