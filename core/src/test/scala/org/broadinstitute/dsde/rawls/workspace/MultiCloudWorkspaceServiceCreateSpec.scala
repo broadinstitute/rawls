@@ -188,7 +188,7 @@ class MultiCloudWorkspaceServiceCreateSpec
   behavior of "createMultiCloudWorkspace"
 
   it should "not delete the original workspace if a workspace with the same name already exists" in {
-    val workspaceManagerDAO = mock[WorkspaceManagerDAO] // spy(new MockWorkspaceManagerDAO())
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
     val namespace = "fake"

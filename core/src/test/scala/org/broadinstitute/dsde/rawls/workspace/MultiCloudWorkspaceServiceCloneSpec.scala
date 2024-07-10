@@ -733,10 +733,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     result.errorReport.statusCode.value shouldBe StatusCodes.Forbidden
   }
 
-  it should "fail if the destination workspace already exists" in {
-    // This is covered in the tests for the workspace repository
-  }
-
   it should "clean up the dest workspace record if the request to Workspace Manager fails" in {
     val workspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map.empty)
     val billingProfile = new ProfileModel()
