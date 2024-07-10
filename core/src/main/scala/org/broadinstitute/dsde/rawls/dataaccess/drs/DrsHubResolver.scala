@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.RequestEntity
+import akka.http.scaladsl.model.{HttpHeader, RequestEntity}
 import akka.http.scaladsl.{Http, HttpExt}
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.dataaccess.DsdeHttpDAO
@@ -24,6 +24,10 @@ class DrsHubResolver(drsHubUrl: String)(implicit
 
   // the list of fields we want in DrsHub response. More info can be found here: https://github.com/broadinstitute/drsHub#drsHub-v3
   private val DrsHubRequestFieldsKey: Array[String] = Array("googleServiceAccount")
+  private val DrsHubHeaders: Seq[HttpHeader] = HttpHeader.parse("X-Terra-Service-ID", "rawls") match {
+    case HttpHeader.ParsingResult.Ok(header, _) => Seq(header)
+    case _                                      => Seq()
+  }
 
   val http: HttpExt = Http(system)
   val httpClientUtils: HttpClientUtilsStandard = HttpClientUtilsStandard()
@@ -34,7 +38,9 @@ class DrsHubResolver(drsHubUrl: String)(implicit
     val requestObj = DrsHubRequest(drsUrl, DrsHubRequestFieldsKey)
     Marshal(requestObj).to[RequestEntity] flatMap { entity =>
       retry[DrsHubMinimalResponse](when5xx) { () =>
-        executeRequestWithToken[DrsHubMinimalResponse](userInfo.accessToken)(Post(drsHubUrl, entity))
+        executeRequestWithToken[DrsHubMinimalResponse](userInfo.accessToken)(
+          Post(drsHubUrl, entity).withHeaders(DrsHubHeaders)
+        )
       }
     }
   }
