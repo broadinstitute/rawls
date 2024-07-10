@@ -346,6 +346,11 @@ trait WorkspaceComponent {
     def listByNames(workspaceNames: List[WorkspaceName]): ReadAction[Seq[Workspace]] =
       loadWorkspaces(findByNamesQuery(workspaceNames))
 
+    def findV2WorkspaceById(workspaceId: UUID,
+                            attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
+      loadWorkspace(findV2WorkspaceByIdQuery(workspaceId), attributeSpecs)
+
     def findV2WorkspaceByName(workspaceName: WorkspaceName,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =

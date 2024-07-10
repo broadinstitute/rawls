@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -36,6 +37,9 @@ class BucketMigrationServiceImpl(val dataSource: SlickDataSource, val samDAO: Sa
     with WorkspaceSupport
     with LazyLogging
     with BucketMigrationService {
+
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   /**
     * Helper functions to enforce appropriate authz and load workspace(s) if authz passes
