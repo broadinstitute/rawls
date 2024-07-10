@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import akka.http.scaladsl.model.StatusCodes.BadRequest
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
 import org.joda.time.DateTime
@@ -658,4 +659,14 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
   }
 
+
+  "toWSMPolicyInput" - {
+    "throws an exception for malformed additional fields" in {
+      val e = intercept[RawlsExceptionWithErrorReport] {
+        WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup", "otherInvalid" -> "other")))
+          .toWsmPolicyInput()
+      }
+      e.errorReport.statusCode shouldBe Some(BadRequest)
+    }
+  }
 }
