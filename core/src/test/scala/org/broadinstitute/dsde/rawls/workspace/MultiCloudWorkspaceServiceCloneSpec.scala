@@ -733,6 +733,38 @@ class MultiCloudWorkspaceServiceCloneSpec
     result.errorReport.statusCode.value shouldBe StatusCodes.Forbidden
   }
 
+  it should "throw an exception for an Azure workspace if the workspaceRequest contains a nonempty authorizationDomain" in {
+    val sourceWorkspace = defaultWorkspace
+    val destWorkspaceRequest = WorkspaceRequest("dest-namespace",
+                                                "dest-name",
+                                                Map(),
+                                                authorizationDomain =
+                                                  Option(Set(ManagedGroupRef(RawlsGroupName("authDomain"))))
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+    val billingProfile = mock[ProfileModel]
+    when(billingProfile.getCreatedDate).thenReturn(DateTime.now().toString)
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.cloneAzureWorkspace(sourceWorkspace, billingProfile, destWorkspaceRequest, testContext),
+                   Duration.Inf
+      )
+    }
+    thrown.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
   it should "clean up the dest workspace record if the request to Workspace Manager fails" in {
     val workspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map.empty)
     val billingProfile = new ProfileModel()
@@ -1258,6 +1290,38 @@ class MultiCloudWorkspaceServiceCloneSpec
     }
 
     verify(workspaceRepository, never()).deleteWorkspace(destWorkspace)
+  }
+
+  it should "throw an exception for an Azure workspace if workspaceRequest contains a nonempty authorizationDomain" in {
+    val sourceWorkspace = defaultWorkspace
+    val destWorkspaceRequest = WorkspaceRequest("dest-namespace",
+                                                "dest-name",
+                                                Map(),
+                                                authorizationDomain =
+                                                  Option(Set(ManagedGroupRef(RawlsGroupName("authDomain"))))
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      mock[BillingRepository]
+    )
+    val billingProfile = mock[ProfileModel]
+    when(billingProfile.getCreatedDate).thenReturn(DateTime.now().toString)
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.cloneAzureWorkspaceAsync(sourceWorkspace, billingProfile, destWorkspaceRequest, testContext),
+                   Duration.Inf
+      )
+    }
+    thrown.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }
 
   it should "create the async clone job from the result in WSM" in {

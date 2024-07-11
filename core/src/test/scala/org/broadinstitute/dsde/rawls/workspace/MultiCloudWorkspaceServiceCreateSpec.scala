@@ -26,8 +26,10 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   CreationStatuses,
   ErrorReport,
+  ManagedGroupRef,
   RawlsBillingProject,
   RawlsBillingProjectName,
+  RawlsGroupName,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -274,6 +276,37 @@ class MultiCloudWorkspaceServiceCreateSpec
     service.assertBillingProfileCreationDate(
       new ProfileModel().id(UUID.randomUUID()).createdDate("2023-09-12T22:20:48.949Z")
     ) shouldBe ()
+  }
+
+  it should "throw an exception for an Azure workspace if the workspaceRequest contains a nonempty authorizationDomain" in {
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      mock[WorkspaceManagerDAO],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      mock[MultiCloudWorkspaceConfig],
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      mock[WorkspaceRepository],
+      mock[BillingRepository]
+    )
+    val request = WorkspaceRequest(
+      "fake",
+      s"fake-name-${UUID.randomUUID().toString}",
+      Map.empty,
+      authorizationDomain = Option(Set(ManagedGroupRef(RawlsGroupName("authDomain"))))
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.createMultiCloudWorkspace(
+                     request,
+                     new ProfileModel().id(UUID.randomUUID()).createdDate("2023-09-14T22:20:48.949Z")
+                   ),
+                   Duration.Inf
+      )
+    }
+    thrown.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }
 
   it should "deploy a WDS instance during workspace creation" in {

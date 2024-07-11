@@ -388,6 +388,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   ): Future[Workspace] = {
 
     assertBillingProfileCreationDate(profile)
+    validateWorkspaceRequest(request)
     val workspaceId = UUID.randomUUID()
     // Merge together source workspace and destination request attributes
     val mergedAttributes = sourceWorkspace.attributes ++ request.attributes
@@ -499,6 +500,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   ): Future[Workspace] = {
 
     assertBillingProfileCreationDate(profile)
+    validateWorkspaceRequest(request)
 
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
     val workspaceId = UUID.randomUUID()
@@ -649,6 +651,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                 parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
     assertBillingProfileCreationDate(profile)
+    validateWorkspaceRequest(workspaceRequest)
 
     traceFutureWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
       createMultiCloudWorkspaceInt(workspaceRequest, UUID.randomUUID(), profile, s1) andThen { case Success(_) =>
@@ -656,6 +659,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
     )
   }
+
+  private def validateWorkspaceRequest(request: WorkspaceRequest): Unit =
+    if (request.authorizationDomain.exists(_.nonEmpty)) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          "Azure workspaces do not support authorization domains. To limit workspace access to members of a set of Terra groups, use a group-constraint policy."
+        )
+      )
+    }
 
   def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
     val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
