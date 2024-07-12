@@ -726,4 +726,67 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }
+
+  it should "not allow readers to have compute access but should allow writers for Rawls workspaces" in {
+    val projectOwnerEmail = "projectOwner@example.com"
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+
+    val samDAO = mockSamForAclTests()
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      Future.successful(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
+    )
+    when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
+
+    val workspaceId = UUID.randomUUID()
+    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
+    val mockFastPassService = mock[FastPassServiceImpl]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
+      .thenReturn(Future.successful())
+
+    val service = workspaceServiceConstructor(datasource, samDAO = samDAO, fastPassServiceConstructor = (_, _) => mockFastPassService)(defaultRequestContext)
+
+    val writerAclUpdate = Set(
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(false), Option(true))
+    )
+    Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), writerAclUpdate, true), Duration.Inf)
+
+    val readerAclUpdate = Set(
+      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(false), Option(true))
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), readerAclUpdate, true), Duration.Inf)
+    }
+    thrown.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  it should "allow readers with and without share access for Rawls workspaces" in {
+    val projectOwnerEmail = "projectOwner@example.com"
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+
+    val samDAO = mockSamForAclTests()
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      Future.successful(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
+    )
+    when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
+
+    val workspaceId = UUID.randomUUID()
+    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
+    val mockFastPassService = mock[FastPassServiceImpl]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
+      .thenReturn(Future.successful())
+
+    val service = workspaceServiceConstructor(datasource, samDAO = samDAO, fastPassServiceConstructor = (_, _) => mockFastPassService)(defaultRequestContext)
+
+    val aclUpdate = Set(
+      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false)),
+      WorkspaceACLUpdate("foo@bar.com", WorkspaceAccessLevels.Read, Option(false), Option(false))
+    )
+
+    Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+  }
 }

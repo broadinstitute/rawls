@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBi
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
-import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry, ResourceRole, ResourceType}
+import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry, ResourceActionPattern, ResourceRole, ResourceType}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
@@ -154,7 +154,7 @@ class RawlsApiSpec
       val resourceTypes = Sam.config.listResourceTypes()
 
       resourceTypes.collect {
-        case ResourceType(typeName, roles, _, _, _, _) if typeName.equals("workspace") =>
+        case ResourceType(typeName, roles, actionPatterns, _, _, _) if typeName.equals("workspace") =>
           roles.collect {
             case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("owner") =>
               actions should contain allElementsOf(List("share_policy::reader", "share_policy::share-reader", "share_policy::writer", "share_policy::share-writer", "share_policy::can-compute", "share_policy::owner", "write", "own", "compute", "delete", "read_auth_domain", "update_auth_domain"))
@@ -170,6 +170,10 @@ class RawlsApiSpec
             case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("can-compute") =>
               actions should contain allElementsOf(List("compute"))
               descendantRoles.get("google-project") shouldBe Option(Set("notebook-user"))
+          }
+          actionPatterns.collect {
+            case ResourceActionPattern(authDomainConstrainable, _, value) if value.equals("read") =>
+              authDomainConstrainable shouldBe true
           }
         case ResourceType(typeName, roles, _, _, _, _) if typeName.equals("billing-project") =>
           roles.collect {
