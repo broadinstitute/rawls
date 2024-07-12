@@ -2004,10 +2004,10 @@ class WorkspaceServiceSpec
     verify(services.samDAO).createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
       ArgumentMatchers.eq(workspace.googleProjectId.value),
-      any[Map[SamResourcePolicyName, SamPolicy]],
-      any[Set[String]],
+      ArgumentMatchers.eq(Map.empty),
+      ArgumentMatchers.eq(Set.empty),
       any[RawlsRequestContext],
-      any[Option[SamFullyQualifiedResourceId]]
+      ArgumentMatchers.eq(Option(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value)))
     )
   }
 
