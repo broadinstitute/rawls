@@ -24,19 +24,23 @@ jobs:
       release-branches: develop
     secrets: inherit
 
-  # Compile the Scala code to a jar.
-  # Build the docker image and push that image to GCR.
-  rawls-build-publish-job:
+  # Set the test-context: is this a merge to `develop` or is this a PR? Extract branch accordingly
+  init-github-context:
     runs-on: ubuntu-latest
-    needs: tag-job
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     outputs:
-      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+      log-results: ${{ steps.set-test-context.outputs.log-results }}
+      test-context: ${{ steps.set-test-context.outputs.test-context }}
+      ref: ${{ steps.extract-branch.outputs.ref }}
     steps:
-      - uses: 'actions/checkout@v4'
-
+      - name: Get test context
+        id: set-test-context
+        run: |-
+          echo 'log-results=true' >> $GITHUB_OUTPUT
+          if ${{ github.ref_name == 'develop' }}; then
+            echo 'test-context=dev-merge' >> $GITHUB_OUTPUT
+          else
+            echo 'test-context=pr-test' >> $GITHUB_OUTPUT
+          fi
       - name: Extract branch
         id: extract-branch
         run: |
@@ -55,6 +59,21 @@ jobs:
           echo "ref=$GITHUB_REF" >> $GITHUB_OUTPUT
           echo "name=$GITHUB_SHA" >> $GITHUB_OUTPUT
 
+  # Compile the Scala code to a jar.
+  # Build the docker image and push that image to GCR.
+  rawls-build-publish-job:
+    runs-on: ubuntu-latest
+    needs:
+      - tag-job
+      - init-github-context
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    outputs:
+      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+    steps:
+      - uses: 'actions/checkout@v4'
+
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
@@ -66,7 +85,7 @@ jobs:
           inputs: '{
             "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
             "repository": "${{ github.event.repository.full_name }}",
-            "ref": "${{ steps.extract-branch.outputs.ref }}",
+            "ref": "${{ needs.init-github-context.outputs.ref }}",
             "rawls-release-tag": "${{ needs.tag-job.outputs.tag }}"
           }'
 
@@ -79,22 +98,6 @@ jobs:
           echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ needs.tag-job.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
 
-  # Set the test-context: is this a merge to `develop` or is this a PR?
-  init-github-context:
-    runs-on: ubuntu-latest
-    outputs:
-      log-results: ${{ steps.set-test-context.outputs.log-results }}
-      test-context: ${{ steps.set-test-context.outputs.test-context }}
-    steps:
-      - name: Get test context
-        id: set-test-context
-        run: |-
-          echo 'log-results=true' >> $GITHUB_OUTPUT
-          if ${{ github.ref_name == 'develop' }}; then
-            echo 'test-context=dev-merge' >> $GITHUB_OUTPUT
-          else
-            echo 'test-context=pr-test' >> $GITHUB_OUTPUT
-          fi
 
   # Tell Broad DevOps Sherlock about the build version we just created.
   report-to-sherlock:
@@ -200,7 +203,8 @@ jobs:
             "ENV": "${{ matrix.testing-env }}",
             "test-group-name": "${{ matrix.test-group.group_name }}",
             "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
-            "test-context": "${{ env.test-context }}"
+            "test-context": "${{ env.test-context }}",
+            "ref": "${{ steps.init-github-context.outputs.ref }}",
           }'
 
   # Delete the BEE, now that swat tests are done.
