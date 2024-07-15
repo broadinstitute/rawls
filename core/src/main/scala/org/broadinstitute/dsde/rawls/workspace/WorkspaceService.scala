@@ -3009,8 +3009,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
         // if we get here, we passed all the hoops, otherwise an exception would have been thrown
-
-        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName)
+        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName).recoverWith {
+          // Throw with the status code of the google exception (for example 403 for invalid billing, 400 for requester pays)
+          // instead of a 500 to avoid Sentry notifications.
+          case t: GoogleJsonResponseException =>
+            val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
+        }
       }
     }
 
