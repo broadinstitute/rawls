@@ -204,7 +204,7 @@ jobs:
             "test-group-name": "${{ matrix.test-group.group_name }}",
             "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
             "test-context": "${{ env.test-context }}",
-            "ref": "${{ needs.init-github-context.outputs.ref }}",
+            "ref": "${{ needs.init-github-context.outputs.ref }}"
           }'
 
   # Delete the BEE, now that swat tests are done.
