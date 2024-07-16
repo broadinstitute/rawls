@@ -202,8 +202,8 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
         } yield Incomplete
       case LeoAppDeletionPoll =>
         for {
-          _ <- leoService.deleteRuntimes(workspace, ctx).recover {
-            case e: LeoException => logger.warn(s"No runtime found when deleting workspace ${workspace.workspaceId}", e)
+          _ <- leoService.deleteRuntimes(workspace, ctx).recover { case e: LeoException =>
+            logger.warn(s"No runtime found when deleting workspace ${workspace.workspaceId}", e)
           }
           _ <- monitorRecordDao.update(job.copy(jobType = LeoRuntimeDeletionPoll))
         } yield Incomplete

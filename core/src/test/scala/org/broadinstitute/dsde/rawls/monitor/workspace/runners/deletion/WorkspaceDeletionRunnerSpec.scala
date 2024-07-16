@@ -202,8 +202,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
     whenReady(
       runner.runStep(monitorRecord.copy(jobType = JobType.WorkspaceDeleteInit),
-        azureWorkspace,
-        RawlsRequestContext(null, null)
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
       )
     )(_ shouldBe Incomplete)
     verify(leoDeletion).deleteApps(any, any)(any)
@@ -259,8 +259,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
     whenReady(
       runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll),
-        azureWorkspace,
-        RawlsRequestContext(null, null)
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
       )
     )(_ shouldBe Incomplete)
     verify(leoDeletion).pollAppDeletion(any, any)(any)
