@@ -184,7 +184,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     }
   }
 
-  it should "return complete when leo returns a 404 for the workspace when deleting apps" in {
+  it should "continue on when leo returns a 404 for the workspace when deleting apps" in {
     val leoDeletion = mock[LeonardoService]
     when(leoDeletion.deleteApps(any, any)(any))
       .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
@@ -239,7 +239,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     verify(leoDeletion).deleteRuntimes(any(), any())(any[ExecutionContext]())
   }
 
-  it should "return complete when leo returns a 404 for the workspace when deleting runtimes or polling for app deletion" in {
+  it should "continue on when leo returns a 404 for the workspace when deleting runtimes or polling for app deletion" in {
     val leoDeletion = mock[LeonardoService]
     when(leoDeletion.pollAppDeletion(any, any)(any))
       .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
