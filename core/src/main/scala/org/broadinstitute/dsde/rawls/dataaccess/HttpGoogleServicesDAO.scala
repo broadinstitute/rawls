@@ -387,10 +387,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       maxResults.foreach(fetcher.setMaxResults(_))
       pageToken.foreach(fetcher.setPageToken)
 
-      retryWhen500orGoogleError { () =>
-        val result = executeGoogleRequest(fetcher)
-        (Option(result.getItems), Option(result.getNextPageToken))
-      } flatMap {
+      // Exclude retrying 404s to fail faster, which can happen if the project or bucket has been deleted
+      val itemsAndNextPageFuture: Future[(Option[java.util.List[StorageObject]], Option[String])] =
+        retryExponentially(when500orNon404GoogleError) { () =>
+          val result = Future(blocking(executeGoogleRequest(fetcher)))
+          result.map(r => (Option(r.getItems), Option(r.getNextPageToken)))
+        }
+
+      itemsAndNextPageFuture.flatMap {
         case (None, _) =>
           // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
