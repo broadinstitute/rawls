@@ -184,6 +184,32 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     }
   }
 
+  it should "continue on when leo returns a 404 for the workspace when deleting apps" in {
+    val leoDeletion = mock[LeonardoService]
+    when(leoDeletion.deleteApps(any, any)(any))
+      .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
+    val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    when(recordDao.update(any)).thenReturn(Future.successful(1))
+
+    val runner = new WorkspaceDeletionRunner(
+      mock[SamDAO],
+      mock[WorkspaceManagerDAO],
+      mock[WorkspaceRepository],
+      leoDeletion,
+      mock[WsmDeletionAction],
+      mock[GoogleServicesDAO],
+      recordDao
+    )
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.WorkspaceDeleteInit),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
+    verify(leoDeletion).deleteApps(any, any)(any)
+    verify(recordDao).update(any)
+  }
+
   behavior of "leo runtime deletion orchestration"
 
   it should "delete leo runtimes and update the job after leo apps are deleted" in {
@@ -211,6 +237,35 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     verify(leoDeletion).pollAppDeletion(any(), any())(any[ExecutionContext]())
     verify(recordDao).update(jobUpdate)
     verify(leoDeletion).deleteRuntimes(any(), any())(any[ExecutionContext]())
+  }
+
+  it should "continue on when leo returns a 404 for the workspace when deleting runtimes or polling for app deletion" in {
+    val leoDeletion = mock[LeonardoService]
+    when(leoDeletion.pollAppDeletion(any, any)(any))
+      .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
+    when(leoDeletion.deleteRuntimes(any, any)(any))
+      .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
+    val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    when(recordDao.update(any)).thenReturn(Future.successful(1))
+
+    val runner = new WorkspaceDeletionRunner(
+      mock[SamDAO],
+      mock[WorkspaceManagerDAO],
+      mock[WorkspaceRepository],
+      leoDeletion,
+      mock[WsmDeletionAction],
+      mock[GoogleServicesDAO],
+      recordDao
+    )
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
+    verify(leoDeletion).pollAppDeletion(any, any)(any)
+    verify(leoDeletion).deleteRuntimes(any, any)(any)
+    verify(recordDao).update(any)
   }
 
   it should "return incomplete when leo runtimes are not deleted" in {
