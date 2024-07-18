@@ -24,7 +24,7 @@ class DrsHubResolver(drsHubUrl: String)(implicit
 
   // the list of fields we want in DrsHub response. More info can be found here: https://github.com/broadinstitute/drsHub#drsHub-v3
   private val DrsHubRequestFieldsKey: Array[String] = Array("googleServiceAccount")
-  private val DrsHubHeaders: Seq[HttpHeader] = HttpHeader.parse("X-Terra-Service-ID", "rawls") match {
+  private val DrsHubHeaders: Seq[HttpHeader] = HttpHeader.parse("X-App-ID", "rawls") match {
     case HttpHeader.ParsingResult.Ok(header, _) => Seq(header)
     case _                                      => Seq()
   }
