@@ -1,29 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.Async
 import cats.effect.kernel.Resource
-import org.broadinstitute.dsde.rawls.model.{
-  GoogleProjectId,
-  RawlsRequestContext,
-  RawlsUser,
-  RawlsUserEmail,
-  SamCreateResourceResponse,
-  SamFullyQualifiedResourceId,
-  SamPolicy,
-  SamPolicySyncStatus,
-  SamPolicyWithNameAndEmail,
-  SamResourceAction,
-  SamResourceIdWithPolicyName,
-  SamResourcePolicyName,
-  SamResourceRole,
-  SamResourceTypeName,
-  SamUserResource,
-  SamUserStatusResponse,
-  SubsystemStatus,
-  SyncReportItem,
-  UserIdInfo,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsRequestContext, RawlsUser, RawlsUserEmail, RawlsUserSubjectId, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SamUserResource, SamUserStatusResponse, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
 import org.broadinstitute.dsde.workbench.model._
 
 import scala.concurrent.Future
@@ -152,6 +132,10 @@ trait SamDAO {
   ): Future[Seq[SamFullyQualifiedResourceId]]
 
   def admin: SamAdminDAO
+
+  def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""), None)
+  )
 }
 
 trait SamAdminDAO {
