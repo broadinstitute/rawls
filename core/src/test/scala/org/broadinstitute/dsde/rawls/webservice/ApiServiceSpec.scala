@@ -411,7 +411,7 @@ trait ApiServiceSpec
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
+    val sealedInstrumentedRoutes: Route = traceRequests { otelContext =>
       sealRoute(
         adminRoutes(otelContext) ~
           billingRoutesV2(otelContext) ~
