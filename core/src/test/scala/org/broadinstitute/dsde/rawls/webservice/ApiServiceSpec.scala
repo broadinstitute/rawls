@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.{
@@ -51,6 +52,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceRepository,
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
@@ -396,6 +398,21 @@ trait ApiServiceSpec
       leonardoDAO,
       workbenchMetricBaseName
     )
+
+    override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+      MethodConfigurationService.constructor(
+        slickDataSource,
+        samDAO,
+        new HttpMethodRepoDAO(
+          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+          workbenchMetricBaseName = workbenchMetricBaseName
+        ),
+        methodConfigResolver,
+        entityManager,
+        new WorkspaceRepository(slickDataSource),
+        workbenchMetricBaseName
+      ) _
 
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,

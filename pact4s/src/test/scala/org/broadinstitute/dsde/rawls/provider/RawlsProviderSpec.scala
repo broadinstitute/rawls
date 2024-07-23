@@ -3,14 +3,7 @@ package org.broadinstitute.dsde.rawls.provider
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.Materializer
-import bio.terra.workspace.model.{
-  CloningInstructionsEnum,
-  DataRepoSnapshotAttributes,
-  DataRepoSnapshotResource,
-  ResourceMetadata,
-  ResourceType,
-  StewardshipType
-}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceMetadata, ResourceType, StewardshipType}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.opentelemetry.context.Context
@@ -20,16 +13,7 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.model.{
-  ApplicationVersion,
-  NamedDataRepoSnapshot,
-  RawlsRequestContext,
-  SnapshotListResponse,
-  StatusCheckResponse,
-  SubsystemStatus,
-  Subsystems,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, NamedDataRepoSnapshot, RawlsRequestContext, SnapshotListResponse, StatusCheckResponse, SubsystemStatus, Subsystems, UserInfo}
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -58,6 +42,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.FiniteDuration
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
@@ -109,6 +94,10 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
     _ => mockWorkspaceService
   }
+  val mockMethodConfigServiceConstructor: RawlsRequestContext => MethodConfigurationService = {
+    lazy val mockMethodConfigService: MethodConfigurationService = mock[MethodConfigurationService]
+    _ => mockMethodConfigService
+  }
   val mockEntityServiceConstructor: RawlsRequestContext => EntityService = {
     lazy val mockEntityService: EntityService = mock[EntityService]
     _ => mockEntityService
@@ -158,6 +147,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     mockSpendReportingConstructor,
     mockBillingProjectOrchestratorConstructor,
     mockBucketMigrationServiceConstructor,
+    mockMethodConfigServiceConstructor,
     mockStatusServiceConstructor,
     mockExecutionServiceCluster,
     mockAppVersion,

@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
@@ -122,6 +123,7 @@ trait RawlsApiService
   val workbenchMetricBaseName: String
   val samDAO: SamDAO
   val openIDConnectConfiguration: OpenIDConnectConfiguration
+  val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService
 
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
@@ -219,6 +221,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
                           val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
                           val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
+                          val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,

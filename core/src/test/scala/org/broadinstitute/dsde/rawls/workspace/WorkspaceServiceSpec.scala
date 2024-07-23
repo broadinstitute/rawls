@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -135,6 +136,7 @@ class WorkspaceServiceSpec
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
+    lazy val methodConfigurationService: MethodConfigurationService = methodConfigurationServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
 
@@ -323,6 +325,21 @@ class WorkspaceServiceSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor
     ) _
+
+    override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+      MethodConfigurationService.constructor(
+        slickDataSource,
+        samDAO,
+        new HttpMethodRepoDAO(
+          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+          workbenchMetricBaseName = workbenchMetricBaseName
+        ),
+        methodConfigResolver,
+        entityManager,
+        new WorkspaceRepository(slickDataSource),
+        workbenchMetricBaseName
+      ) _
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
@@ -4208,7 +4225,7 @@ class WorkspaceServiceSpec
 
       // Overwrite the method configuration that was used for the submission. This forces it to generate a new version and soft-delete the old one
       Await.result(
-        services.workspaceService.overwriteMethodConfiguration(
+        services.methodConfigurationService.overwriteMethodConfiguration(
           workspaceName,
           originalMethodConfig.namespace,
           originalMethodConfig.name,

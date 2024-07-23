@@ -43,6 +43,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.BardService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
@@ -426,6 +427,17 @@ object Boot extends IOApp with LazyLogging {
         fastPassServiceConstructor
       )
 
+      val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+        MethodConfigurationService.constructor(
+          slickDataSource,
+          samDAO,
+          methodRepoDAO,
+          methodConfigResolver,
+          entityManager,
+          new WorkspaceRepository(slickDataSource),
+          workbenchMetricBaseName = metricsPrefix
+        )
+
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
@@ -498,6 +510,7 @@ object Boot extends IOApp with LazyLogging {
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,
         bucketMigrationServiceConstructor,
+        methodConfigurationServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
