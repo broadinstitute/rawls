@@ -98,7 +98,6 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
   private lazy val globalRequestCounter = ExpandedMetricBuilder.empty.asCounter("request")
   private lazy val globalRequestTimer = ExpandedMetricBuilder.empty.asTimer("latency")
 
-
   /**
     * Captures elapsed time of request and increments counter.
     * Important note: the route passed into this directive in test code must be sealed
