@@ -411,19 +411,21 @@ trait ApiServiceSpec
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
-      sealRoute(
-        adminRoutes(otelContext) ~
-          billingRoutesV2(otelContext) ~
-          billingRoutes(otelContext) ~
-          entityRoutes(otelContext) ~
-          methodConfigRoutes(otelContext) ~
-          notificationsRoutes ~
-          statusRoute ~
-          submissionRoutes(otelContext) ~
-          userRoutes(otelContext) ~
-          workspaceRoutes(otelContext)
-      )
+    val sealedInstrumentedRoutes: Route = captureRequestMetrics {
+      traceRequests { otelContext =>
+        sealRoute(
+          adminRoutes(otelContext) ~
+            billingRoutesV2(otelContext) ~
+            billingRoutes(otelContext) ~
+            entityRoutes(otelContext) ~
+            methodConfigRoutes(otelContext) ~
+            notificationsRoutes ~
+            statusRoute ~
+            submissionRoutes(otelContext) ~
+            userRoutes(otelContext) ~
+            workspaceRoutes(otelContext)
+        )
+      }
     }
 
     override val openIDConnectConfiguration = FakeOpenIDConnectConfiguration
