@@ -58,7 +58,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     withStatsD {
       Get("/admin/submissions") ~>
-        sealRoute(traceRequests(services.adminRoutes)) ~>
+        sealRoute(captureRequestMetrics(traceRequests(services.adminRoutes))) ~>
         check {
           assertResult(StatusCodes.OK) {
             status

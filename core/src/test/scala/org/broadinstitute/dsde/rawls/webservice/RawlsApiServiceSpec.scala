@@ -20,7 +20,7 @@ class RawlsApiServiceSpec extends ApiServiceSpec with VersionApiService {
   "RootRawlsApiService" should "get a version" in {
     withStatsD {
       Get("/version") ~>
-        sealRoute(traceRequests(_ => versionRoutes)) ~>
+        sealRoute(captureRequestMetrics(traceRequests(_ => versionRoutes))) ~>
         check {
           assertResult(StatusCodes.OK)(status)
           assertResult(appVersion)(responseAs[ApplicationVersion])
