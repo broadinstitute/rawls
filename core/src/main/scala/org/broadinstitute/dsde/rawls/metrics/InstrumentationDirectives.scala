@@ -98,6 +98,12 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
   private lazy val globalRequestCounter = ExpandedMetricBuilder.empty.asCounter("request")
   private lazy val globalRequestTimer = ExpandedMetricBuilder.empty.asTimer("latency")
 
+
+  /**
+    * Captures elapsed time of request and increments counter.
+    * Important note: the route passed into this directive in test code must be sealed
+    * otherwise exceptions escape and are not instrumented appropriately.
+    */
   def captureRequestMetrics: Directive0 = extractRequest.tflatMap { request =>
     val timeStamp = System.currentTimeMillis
     mapResponse { response =>
@@ -111,9 +117,7 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
   }
 
   /**
-    * Captures elapsed time of request and increments counter.
-    * Important note: the route passed into this directive in test code must be sealed
-    * otherwise exceptions escape and are not instrumented appropriately.
+    * Traces requests and provides the OpenTelemetry Context.
     */
   def traceRequests: Directive1[Context] =
     traceRequest.tflatMap(otelContext => provide(otelContext._1))
