@@ -3007,7 +3007,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] =
     // don't do the sam REST call inside the db transaction.
     getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
+      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.read) {
         // if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
         gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName)
