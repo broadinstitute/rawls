@@ -47,6 +47,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
@@ -137,6 +138,7 @@ class WorkspaceServiceSpec
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val methodConfigurationService: MethodConfigurationService = methodConfigurationServiceConstructor(ctx1)
+    lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
 
@@ -288,6 +290,8 @@ class WorkspaceServiceSpec
       terraBucketWriterRole
     ) _
 
+    val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -326,20 +330,42 @@ class WorkspaceServiceSpec
       fastPassServiceConstructor
     ) _
 
+    val methodRepoDAO = new HttpMethodRepoDAO(
+      MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+      workbenchMetricBaseName = workbenchMetricBaseName
+    )
+
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
       MethodConfigurationService.constructor(
         slickDataSource,
         samDAO,
-        new HttpMethodRepoDAO(
-          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-          workbenchMetricBaseName = workbenchMetricBaseName
-        ),
+        methodRepoDAO,
         methodConfigResolver,
         entityManager,
-        new WorkspaceRepository(slickDataSource),
+        workspaceRepository,
         workbenchMetricBaseName
       ) _
+
+    override val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService =
+      SubmissionsService.constructor(
+        slickDataSource,
+        entityManager,
+        methodRepoDAO,
+        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        executionServiceCluster,
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName,
+        submissionCostService,
+        genomicsServiceConstructor,
+        workspaceServiceConfig,
+        workspaceRepository
+      ) _
+
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
@@ -2952,7 +2978,8 @@ class WorkspaceServiceSpec
       verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProject), any[String])
   }
 
-  "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices {
+  behavior of "getSpendReportTableName"
+  it should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices {
     services =>
       val billingProjectName = RawlsBillingProjectName("test-project")
       val billingProject = RawlsBillingProject(
@@ -2970,7 +2997,7 @@ class WorkspaceServiceSpec
       )
       runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
-      val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+      val result = Await.result(services.submissionsService.getSpendReportTableName(billingProjectName), Duration.Inf)
 
       result shouldBe Some("foo.bar.baz")
   }
@@ -2991,7 +3018,7 @@ class WorkspaceServiceSpec
     )
     runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
-    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+    val result = Await.result(services.submissionsService.getSpendReportTableName(billingProjectName), Duration.Inf)
 
     result shouldBe None
   }
@@ -3001,7 +3028,7 @@ class WorkspaceServiceSpec
       val billingProjectName = RawlsBillingProjectName("test-project")
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+        Await.result(services.submissionsService.getSpendReportTableName(billingProjectName), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
@@ -4235,10 +4262,10 @@ class WorkspaceServiceSpec
       )
 
       val firstSubmission =
-        Await.result(services.workspaceService.listSubmissions(workspaceName, testContext), Duration.Inf).head
+        Await.result(services.submissionsService.listSubmissions(workspaceName, testContext), Duration.Inf).head
 
       val result = Await.result(
-        services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
+        services.submissionsService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
         Duration.Inf
       )
 

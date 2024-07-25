@@ -51,6 +51,7 @@ import org.broadinstitute.dsde.rawls.serviceFactory._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
@@ -438,6 +439,24 @@ object Boot extends IOApp with LazyLogging {
           workbenchMetricBaseName = metricsPrefix
         )
 
+      val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
+        slickDataSource,
+        entityManager,
+        methodRepoDAO,
+        cromiamDAO,
+        shardedExecutionServiceCluster,
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName = metricsPrefix,
+        submissionCostService,
+        genomicsServiceConstructor,
+        workspaceServiceConfig,
+        new WorkspaceRepository(slickDataSource)
+      )
+
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
@@ -511,6 +530,7 @@ object Boot extends IOApp with LazyLogging {
         billingProjectOrchestratorConstructor,
         bucketMigrationServiceConstructor,
         methodConfigurationServiceConstructor,
+        submissionsServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(

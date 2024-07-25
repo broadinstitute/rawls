@@ -45,6 +45,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 
 import java.io.File
 import scala.collection.immutable.Map
@@ -98,6 +99,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockMethodConfigService: MethodConfigurationService = mock[MethodConfigurationService]
     _ => mockMethodConfigService
   }
+  val mockSubmissionsServiceConstructor: RawlsRequestContext => SubmissionsService = _ => mock[SubmissionsService]
   val mockEntityServiceConstructor: RawlsRequestContext => EntityService = {
     lazy val mockEntityService: EntityService = mock[EntityService]
     _ => mockEntityService
@@ -148,6 +150,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     mockBillingProjectOrchestratorConstructor,
     mockBucketMigrationServiceConstructor,
     mockMethodConfigServiceConstructor,
+    mockSubmissionsServiceConstructor,
     mockStatusServiceConstructor,
     mockExecutionServiceCluster,
     mockAppVersion,

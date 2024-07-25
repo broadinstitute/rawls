@@ -46,6 +46,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
@@ -413,6 +414,28 @@ trait ApiServiceSpec
         new WorkspaceRepository(slickDataSource),
         workbenchMetricBaseName
       ) _
+
+    val submissionsServiceConstructor = SubmissionsService.constructor(
+      dataSource,
+      entityManager,
+      new HttpMethodRepoDAO(
+        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+        workbenchMetricBaseName = workbenchMetricBaseName
+      ),
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+      executionServiceCluster,
+      methodConfigResolver,
+      gcsDAO,
+      samDAO,
+      maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser,
+      workbenchMetricBaseName,
+      submissionCostService,
+      genomicsServiceConstructor,
+      workspaceServiceConfig,
+      new WorkspaceRepository(slickDataSource)
+    ) _
 
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,

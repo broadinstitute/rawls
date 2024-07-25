@@ -105,7 +105,6 @@ class FastPassMonitorSpec
   )(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
-      with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
