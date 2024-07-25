@@ -331,7 +331,7 @@ object Boot extends IOApp with LazyLogging {
         HealthMonitor.CheckAll
       )
 
-      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
+      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)()
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager)
 
@@ -391,25 +391,18 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
-        methodRepoDAO,
-        cromiamDAO,
         shardedExecutionServiceCluster,
-        appConfigManager.conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
         new LeonardoService(leonardoDAO),
-        methodConfigResolver,
         gcsDAO,
         samDAO,
         notificationDAO,
         userServiceConstructor,
-        genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
-        submissionCostService,
         workspaceServiceConfig,
         requesterPaysSetupService,
-        entityManager,
         resourceBufferService,
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,

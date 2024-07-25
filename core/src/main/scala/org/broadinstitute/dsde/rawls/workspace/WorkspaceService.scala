@@ -19,11 +19,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
-import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -64,27 +60,21 @@ import scala.util.{Failure, Success, Try}
  * Created by dvoet on 4/27/15.
  */
 //noinspection TypeAnnotation
+
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource,
-                  methodRepoDAO: MethodRepoDAO,
-                  cromiamDAO: ExecutionServiceDAO,
                   executionServiceCluster: ExecutionServiceCluster,
-                  execServiceBatchSize: Int,
                   workspaceManagerDAO: WorkspaceManagerDAO,
                   leonardoService: LeonardoService,
-                  methodConfigResolver: MethodConfigResolver,
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
                   notificationDAO: NotificationDAO,
                   userServiceConstructor: RawlsRequestContext => UserService,
-                  genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
                   maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int,
                   workbenchMetricBaseName: String,
-                  submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig,
                   requesterPaysSetupService: RequesterPaysSetupService,
-                  entityManager: EntityManager,
                   resourceBufferService: ResourceBufferService,
                   servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO,
@@ -102,23 +92,16 @@ object WorkspaceService {
     new WorkspaceService(
       ctx,
       dataSource,
-      entityManager,
-      methodRepoDAO,
-      cromiamDAO,
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
       leonardoService,
-      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       config,
       requesterPaysSetupService,
       resourceBufferService,
@@ -177,23 +160,16 @@ object WorkspaceService {
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
 class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val dataSource: SlickDataSource,
-                       val entityManager: EntityManager,
-                       val methodRepoDAO: MethodRepoDAO,
-                       cromiamDAO: ExecutionServiceDAO,
                        executionServiceCluster: ExecutionServiceCluster,
-                       execServiceBatchSize: Int,
                        val workspaceManagerDAO: WorkspaceManagerDAO,
                        val leonardoService: LeonardoService,
-                       val methodConfigResolver: MethodConfigResolver,
                        protected val gcsDAO: GoogleServicesDAO,
                        val samDAO: SamDAO,
                        notificationDAO: NotificationDAO,
                        userServiceConstructor: RawlsRequestContext => UserService,
-                       genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
                        maxActiveWorkflowsTotal: Int,
                        maxActiveWorkflowsPerUser: Int,
                        override val workbenchMetricBaseName: String,
-                       submissionCostService: SubmissionCostService,
                        config: WorkspaceServiceConfig,
                        requesterPaysSetupService: RequesterPaysSetupService,
                        resourceBufferService: ResourceBufferService,
@@ -1739,12 +1715,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
 
-  private def getEntityProviderForMethodConfig(workspaceContext: Workspace,
-                                               methodConfiguration: MethodConfiguration
-  ): Future[EntityProvider] =
-    entityManager.resolveProviderFuture(
-      EntityRequestArguments(workspaceContext, ctx, methodConfiguration.dataReferenceName, None)
-    )
 
   private def getGoogleBucketPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
     val googleRole = if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty) {
@@ -2039,26 +2009,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       }
     } yield instructions.flatten
-
-  def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[Option[JsObject]] =
-    // note that cromiam should only give back metadata if the user is authorized to see it
-    cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), ctx.userInfo).flatMap {
-      metadataJson =>
-        val operationIds: Iterable[String] = WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson)
-
-        val operationIdString = operationId.mkString("/")
-        // check that the requested operation id actually exists in the workflow
-        if (operationIds.toList.contains(operationIdString)) {
-          val genomicsServiceRef = genomicsServiceConstructor(ctx)
-          genomicsServiceRef.getOperation(operationIdString)
-        } else {
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")
-            )
-          )
-        }
-    }
 
   def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit] =
     for {
@@ -2644,35 +2594,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       case (None, Some(sourceBucketName)) =>
         gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
       case (None, None) => Future(Some(config.defaultLocation))
-    }
-
-  private def withWorkflowRecord[T](workspaceName: WorkspaceName,
-                                    submissionId: String,
-                                    workflowId: String,
-                                    dataAccess: DataAccess
-  )(op: (WorkflowRecord) => ReadWriteAction[T]): ReadWriteAction[T] =
-    dataAccess.workflowQuery
-      .findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(submissionId))
-      .result flatMap {
-      case Seq() =>
-        DBIO.failed(
-          new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(
-              StatusCodes.NotFound,
-              s"WorkflowRecord with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName}"
-            )
-          )
-        )
-      case Seq(one) => op(one)
-      case tooMany =>
-        DBIO.failed(
-          new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(
-              StatusCodes.InternalServerError,
-              s"found multiple WorkflowRecords with id ${workflowId} in submission ${submissionId} in workspace ${workspaceName}"
-            )
-          )
-        )
     }
 
 }
