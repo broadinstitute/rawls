@@ -1984,14 +1984,30 @@ class WorkspaceServiceSpec
     )
 
     val requestedPolicies = requestedPoliciesCaptor.getValue
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.projectOwner, fail("Missing project-owner policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.projectOwner, SamWorkspaceRoles.owner)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.owner, fail("Missing owner policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.owner)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.writer, fail("Missing writer policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.writer)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.reader, fail("Missing reader policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.reader)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.shareWriter, fail("Missing share-writer policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.shareWriter)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.shareReader, fail("Missing share-reader policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.shareReader)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.canCompute, fail("Missing can-compute policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCompute)
-    requestedPolicies.getOrElse(SamWorkspacePolicyNames.canCatalog, fail("Missing can-catalog policy")).roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCatalog)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.projectOwner, fail("Missing project-owner policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.projectOwner, SamWorkspaceRoles.owner)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.owner, fail("Missing owner policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.owner)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.writer, fail("Missing writer policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.writer)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.reader, fail("Missing reader policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.reader)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.shareWriter, fail("Missing share-writer policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.shareWriter)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.shareReader, fail("Missing share-reader policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.shareReader)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.canCompute, fail("Missing can-compute policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCompute)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.canCatalog, fail("Missing can-catalog policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCatalog)
   }
 
   it should "create Sam resource for google project" in withTestDataServices { services =>
@@ -2007,7 +2023,9 @@ class WorkspaceServiceSpec
       ArgumentMatchers.eq(Map.empty),
       ArgumentMatchers.eq(Set.empty),
       any[RawlsRequestContext],
-      ArgumentMatchers.eq(Option(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value)))
+      ArgumentMatchers.eq(
+        Option(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
+      )
     )
   }
 

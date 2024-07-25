@@ -659,7 +659,6 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
   }
 
-
   "toWSMPolicyInput" - {
     "throws an exception for malformed additional fields" in {
       val e = intercept[RawlsExceptionWithErrorReport] {
