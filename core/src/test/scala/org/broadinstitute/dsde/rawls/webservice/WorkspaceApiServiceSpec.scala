@@ -2654,19 +2654,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a reader-access user to request bucket usage" in withTestWorkspacesApiServicesAndUser(
-    "reader-access"
-  ) { services =>
-    Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-      sealRoute(services.workspaceRoutes()) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
-  for (access <- Seq("owner-access", "writer-access"))
+  for (access <- Seq("owner-access", "writer-access", "reader-access"))
     it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(
       access
     ) { services =>
