@@ -140,23 +140,22 @@ trait RawlsApiService
       servicePerimeterRoutes(otelContext) ~
       snapshotRoutes(otelContext)
 
-  val instrumentedRoutes = instrumentRequest(baseApiRoutes)
-
   def apiRoutes =
     options(complete(OK)) ~
       withExecutionContext(ExecutionContext.global) { // Serve real work off the global EC to free up the dispatcher to run more routes, including status
-        instrumentedRoutes
+        traceRequests(baseApiRoutes)
       }
 
-  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(
-    RawlsApiService.rejectionHandler
-  )) {
-    openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
-      openIDConnectConfiguration.oauth2Routes(materializer.system) ~
-      versionRoutes ~
-      statusRoute ~
-      pathPrefix("api")(apiRoutes)
-  }
+  def route: server.Route =
+    (logRequestResult & captureRequestMetrics & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(
+      RawlsApiService.rejectionHandler
+    )) {
+      openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
+        openIDConnectConfiguration.oauth2Routes(materializer.system) ~
+        versionRoutes ~
+        statusRoute ~
+        pathPrefix("api")(apiRoutes)
+    }
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests
   private def logRequestResult: Directive0 = {

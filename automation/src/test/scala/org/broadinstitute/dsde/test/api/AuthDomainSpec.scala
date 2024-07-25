@@ -1,16 +1,21 @@
 package org.broadinstitute.dsde.test.api
 
 import cats.implicits.catsSyntaxOptionId
-import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
+import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.{billingScopes, serviceAccountScopes}
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
-import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, RestException, WorkspaceAccessLevel}
+import org.broadinstitute.dsde.workbench.service.{AclEntry, Google, Orchestration, Rawls, RestException, WorkspaceAccessLevel}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.time.{Seconds, Span}
+import org.scalatest.time.{Minutes, Seconds, Span}
+import spray.json._
+
 
 @AuthDomainsTest
 class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures with GroupFixtures with Eventually {
@@ -64,54 +69,6 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
         }(groupOwnerToken)
       }(groupOwnerToken)
     }
-  }
-
-  it should "do the right security when auth domain membership changes" in {
-    val groupOwnerToken = groupOwner.makeAuthToken()
-
-    withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
-      withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
-        val realmGroup2Full = Orchestration.groups.getGroup(realmGroup2)(groupOwnerToken)
-        withGroup("ad3", List(realmGroup2Full.groupEmail)) { realmGroup3 =>
-          withTemporaryBillingProject(billingAccountId) { projectName =>
-            withWorkspace(projectName,
-                          "AuthDomains",
-                          Set(realmGroup, realmGroup3),
-                          List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))
-            ) { workspace =>
-              for (user <- Set(projectOwner, projectUser)) {
-                val userToken = user.makeAuthToken()
-
-                // user is in all the right groups, this should work
-                Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(userToken)
-
-                // remove user from realmGroup2 and they should lose access
-                Orchestration.groups.removeUserFromGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
-                eventually {
-                  intercept[RestException] {
-                    Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(userToken)
-                  }
-                }
-
-                // add user back to realmGroup2 and they should have access
-                Orchestration.groups.addUserToGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
-                Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(userToken)
-
-                // remove user from realmGroup and they should lose access
-                Orchestration.groups.removeUserFromGroup(realmGroup, user.email, GroupRole.Member)(groupOwnerToken)
-                eventually {
-                  intercept[RestException] {
-                    Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(userToken)
-                  }
-                }
-                // add user back so the cleanup part of withGroup doesn't have a fit
-                Orchestration.groups.addUserToGroup(realmGroup, user.email, GroupRole.Member)(groupOwnerToken)
-              }
-            }(projectOwner.makeAuthToken())
-          }(projectOwner.makeAuthToken(billingScopes))
-        }(groupOwnerToken)
-      }(groupOwnerToken)
-    }(groupOwnerToken)
   }
 
   it should "do the right security when access group membership changes and there is an access" in {
@@ -265,5 +222,42 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
         }(projectOwner.makeAuthToken(billingScopes))
       }(authToken)
     }(authToken)
+  }
+
+  it should "bucket should not be accessible to project owners via projectViewer Google role" in {
+
+    // It can take some time to propagate the permissions through Google's systems, so reconfigure the patience
+    implicit val patienceConfig =
+      PatienceConfig(timeout = scaled(Span(10, Minutes)), interval = scaled(Span(10, Seconds)))
+
+    val userA = UserPool.chooseProjectOwner // The project owner who can't see the workspace
+    val userB = UserPool.chooseAuthDomainUser // The user who owns the workspace
+
+    val userAToken: AuthToken = userA.makeAuthToken(serviceAccountScopes)
+    val userBToken: AuthToken = userB.makeAuthToken(serviceAccountScopes)
+
+    withGroup("AuthDomain") { authDomainName =>
+      withTemporaryBillingProject(billingAccountId, users = List(userB.email).some) { projectName =>
+        withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
+          val bucketName = Rawls.workspaces
+            .getWorkspaceDetails(projectName, workspaceName)(userBToken)
+            .parseJson
+            .convertTo[WorkspaceResponse]
+            .workspace
+            .bucketName
+
+          eventually {
+            // assert that userB receives 200 when trying to access bucket (to verify that bucket is set up correctly)
+            Google.storage.getBucket(bucketName)(userBToken).status.intValue() should be(200)
+          }
+
+          eventually {
+            // assert that userA receives 403 when trying to access bucket
+            Google.storage.getBucket(bucketName)(userAToken).status.intValue() should be(403)
+          }
+
+        }(userBToken)
+      }(userA.makeAuthToken(billingScopes))
+    }(userBToken)
   }
 }

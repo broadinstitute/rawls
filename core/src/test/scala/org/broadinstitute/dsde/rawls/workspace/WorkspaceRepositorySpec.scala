@@ -1,15 +1,48 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceState}
+import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceName, WorkspaceState}
 import org.joda.time.DateTime
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-class WorkspaceRepositorySpec extends AnyFlatSpec with TestDriverComponent {
+class WorkspaceRepositorySpec
+    extends AnyFlatSpec
+    with MockitoSugar
+    with ScalaFutures
+    with Matchers
+    with TestDriverComponent {
+
+  behavior of "createMCWorkspace"
+
+  it should "throw an exception if a workspace with the same name already exists" in {
+    val workspaceId = UUID.randomUUID()
+    val namespace = "fake"
+    val name = s"fake-name-${workspaceId.toString}"
+    val workspaceName = WorkspaceName(namespace, name)
+    val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
+    Await.result(workspaceRepository.createMCWorkspace(workspaceId, workspaceName, Map(), testContext), Duration.Inf)
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceRepository.createMCWorkspace(UUID.randomUUID(), workspaceName, Map(), testContext),
+                   Duration.Inf
+      )
+    }
+    thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+    Await
+      .result(slickDataSource.inTransaction(_.workspaceQuery.findByName(WorkspaceName(namespace, name))), Duration.Inf)
+      .get
+      .name shouldBe name
+  }
 
   behavior of "getWorkspace"
   def makeWorkspace(): Workspace = Workspace.buildReadyMcWorkspace("fake-ns",
