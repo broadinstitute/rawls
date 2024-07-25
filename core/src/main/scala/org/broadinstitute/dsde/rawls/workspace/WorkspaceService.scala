@@ -330,13 +330,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     AggregatedWorkspace(workspaceContext,
                                         Some(workspaceContext.googleProjectId),
                                         azureCloudContext = None,
-                                        policies = List.empty
+                                        policies = List.empty,
+                                        None
                     )
                   } else {
                     // bubble up an MC workspace exception
+                    logger.error("*** ERROR ", e)
                     throw e
                   }
               }
+
+            // TODO bake bucket name into workspace record (maybe?)
+            val bucketName = wsmContext.storageName match {
+              case Some(s) => s
+              case None    => workspaceContext.bucketName
+            }
+            val projectName = wsmContext.googleProjectId match {
+              case Some(s) => s
+              case None    => workspaceContext.googleProjectId
+            }
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -363,11 +375,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     case None =>
                       noFuture
                     case _ =>
-                      traceFutureWithParent("getBucketDetails", s1)(_ =>
+                      traceFutureWithParent("getBucketDetails", s1) { _ =>
                         gcsDAO
-                          .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
+                          .getBucketDetails(bucketName, projectName)
                           .map(Option(_))
-                      )
+                      }
+
                   }
                 } else {
                   noFuture
@@ -450,7 +463,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
                                                            authDomain,
                                                            useAttributes,
-                                                           wsmContext.getCloudPlatform
+                                                           wsmContext.getCloudPlatform,
+                                                           Some(projectName),
+                                                           Some(bucketName)
                   ),
                   stats,
                   bucketDetails,

@@ -65,7 +65,8 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
     val ws = AggregatedWorkspace(readyMcWorkspace,
                                  googleProjectId = None,
                                  Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
-                                 policies = List.empty
+                                 policies = List.empty,
+                                 None
     )
 
     val cp = ws.getCloudPlatform

@@ -273,6 +273,11 @@ class MockWorkspaceManagerDAO(
                                           ctx: RawlsRequestContext
   ): JobResult =
     new JobResult().jobReport(new JobReport().id(jobControlId).status(StatusEnum.SUCCEEDED))
+
+  override def createGcpStorageBucket(workspaceId: UUID,
+                                      storageBucketName: String,
+                                      ctx: RawlsRequestContext
+  ): CreatedControlledGcpGcsBucket = ???
 }
 
 object MockWorkspaceManagerDAO {

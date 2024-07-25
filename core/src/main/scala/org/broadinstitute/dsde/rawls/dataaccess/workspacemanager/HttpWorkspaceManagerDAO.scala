@@ -48,6 +48,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   private def getControlledAzureResourceApi(ctx: RawlsRequestContext) =
     apiClientProvider.getControlledAzureResourceApi(ctx)
 
+  private def getControlledGcpResourceApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getControlledGcpResourceApi(ctx)
+
   private def getLandingZonesApi(ctx: RawlsRequestContext) =
     apiClientProvider.getLandingZonesApi(ctx)
 
@@ -229,10 +232,24 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                            StewardshipType.REFERENCED
     )
 
+  override def createGcpStorageBucket(workspaceId: UUID,
+                                      storageBucketName: String,
+                                      ctx: RawlsRequestContext
+  ): CreatedControlledGcpGcsBucket = {
+    // TODO unhardcode location
+    val creationParams = new GcpGcsBucketCreationParameters().name(storageBucketName).location("us-central1")
+    val requestBody = new CreateControlledGcpGcsBucketRequestBody()
+      .common(
+        createCommonFields(storageBucketName).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      )
+      .gcsBucket(creationParams)
+    getControlledGcpResourceApi(ctx).createBucket(requestBody, workspaceId)
+
+  }
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
                                            ctx: RawlsRequestContext
-  ) = {
+  ): CreatedControlledAzureStorageContainer = {
     val creationParams =
       new AzureStorageContainerCreationParameters()
         .storageContainerName(storageContainerName)

@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model
+import bio.terra.workspace.model.{CloudPlatform => WsmCloudPlatform}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import cats.Apply
@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
@@ -259,14 +260,13 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           // "MultiCloud" workspaces are limited to azure-hosted workspaces for now.
           // This will likely change when the functionality for GCP workspaces gets moved out of Rawls
           Option(profileModel.getCloudPlatform)
-            .filter(_ == CloudPlatform.AZURE)
             .traverse { _ =>
               traceFutureWithParent("createMultiCloudWorkspace", parentContext) { s =>
                 createMultiCloudWorkspace(
                   workspaceRequest,
                   profileModel,
                   s
-                ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
+                ).map(workspace => (workspace, bpmCloudPlatformToRawlsCloudPlatform(profileModel.getCloudPlatform)))
               }
             }
         }
@@ -289,6 +289,18 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                                      useAttributes = true,
                                                      Some(cloudPlatform)
     )
+
+  private def bpmCloudPlatformToRawlsCloudPlatform(bpmCloudPlatform: CloudPlatform): WorkspaceCloudPlatform =
+    bpmCloudPlatform match {
+      case CloudPlatform.AZURE => WorkspaceCloudPlatform.Azure
+      case CloudPlatform.GCP   => WorkspaceCloudPlatform.Gcp
+    }
+
+  private def bpmCloudPlatformToWsmCloudPlatform(bpmCloudPlatform: CloudPlatform): WsmCloudPlatform =
+    bpmCloudPlatform match {
+      case CloudPlatform.AZURE => WsmCloudPlatform.AZURE
+      case CloudPlatform.GCP   => WsmCloudPlatform.GCP
+    }
 
   /**
     * Returns the billing profile associated with the billing project, if the billing project
@@ -559,6 +571,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
         // create a WDS application in Leo
         _ = createWdsAppInWorkspace(workspaceId,
+                                    bpmCloudPlatformToRawlsCloudPlatform(profile.getCloudPlatform),
                                     parentContext,
                                     Some(sourceWorkspace.workspaceIdAsUUID),
                                     request.attributes
@@ -781,7 +794,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             spendProfileId,
             workspaceRequest.namespace,
             Seq(wsmConfig.leonardoWsmApplicationId),
-            model.CloudPlatform.AZURE,
+            bpmCloudPlatformToWsmCloudPlatform(profile.getCloudPlatform),
             MultiCloudWorkspaceService.buildPolicyInputs(workspaceRequest),
             ctx
           )
@@ -802,21 +815,20 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      containerResult <- traceFutureWithParent("createStorageContainer", parentContext)(_ =>
-        Future(
-          workspaceManagerDAO.createAzureStorageContainer(
-            workspaceId,
-            MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
-            ctx
-          )
-        )
+      storageResourceId <- traceFutureWithParent("createWorkspaceStorage", parentContext)(_ =>
+        createWorkspaceStorage(workspaceId, profile.getCloudPlatform)
       )
       _ = logger.info(
-        s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
+        s"Created storage in WSM [workspaceId = ${workspaceId}, containerId = ${storageResourceId}]"
       )
 
       // create a WDS application in Leo
-      _ = createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+      _ = createWdsAppInWorkspace(workspaceId,
+                                  bpmCloudPlatformToRawlsCloudPlatform(profile.getCloudPlatform),
+                                  parentContext,
+                                  None,
+                                  workspaceRequest.attributes
+      )
 
     } yield savedWorkspace).recoverWith {
       case r: RawlsExceptionWithErrorReport if r.errorReport.statusCode.contains(StatusCodes.Conflict) =>
@@ -843,6 +855,31 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         }
     }
   }
+
+  private def createWorkspaceStorage(workspaceId: UUID, cloudPlatform: CloudPlatform): Future[UUID] =
+    // TODO tag bucket/container w/primary
+    cloudPlatform match {
+      case CloudPlatform.AZURE =>
+        Future(
+          workspaceManagerDAO
+            .createAzureStorageContainer(
+              workspaceId,
+              MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+              ctx
+            )
+            .getResourceId
+        )
+      case CloudPlatform.GCP =>
+        Future(
+          workspaceManagerDAO
+            .createGcpStorageBucket(
+              workspaceId,
+              MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+              ctx
+            )
+            .getResourceId
+        )
+    }
 
   private def getWorkspaceCreationStatus(_workspaceId: UUID, // Unused, but polling helper method passes it.
                                          jobControlId: String,
@@ -907,10 +944,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   }
 
   private def createWdsAppInWorkspace(workspaceId: UUID,
+                                      cloudPlatform: WorkspaceCloudPlatform,
                                       parentContext: RawlsRequestContext,
                                       sourceWorkspaceId: Option[UUID],
                                       workspaceAttributeMap: AttributeMap
-  ): Unit =
+  ): Unit = {
+    if (cloudPlatform.equals(WorkspaceCloudPlatform.Gcp)) {
+      logger.info("No WDS in GCP")
+      return
+    }
     workspaceAttributeMap.get(AttributeName.withDefaultNS("disableAutomaticAppCreation")) match {
       case Some(AttributeString("true")) | Some(AttributeBoolean(true)) =>
         // Skip WDS deployment for testing purposes.
@@ -927,6 +969,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           }.get
         )
     }
+  }
 
 }
 

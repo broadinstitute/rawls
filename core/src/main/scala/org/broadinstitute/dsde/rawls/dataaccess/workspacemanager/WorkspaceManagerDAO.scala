@@ -98,6 +98,11 @@ trait WorkspaceManagerDAO {
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
 
+  def createGcpStorageBucket(workspaceId: UUID,
+                             storageBucketName: String,
+                             ctx: RawlsRequestContext
+  ): CreatedControlledGcpGcsBucket
+
   /**
     * Clone the storage container from one workspace to another.
     *

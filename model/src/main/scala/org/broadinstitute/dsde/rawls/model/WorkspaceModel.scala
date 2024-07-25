@@ -957,13 +957,15 @@ object WorkspaceDetails {
   def fromWorkspaceAndOptions(workspace: Workspace,
                               optAuthorizationDomain: Option[Set[ManagedGroupRef]],
                               useAttributes: Boolean,
-                              cloudPlatform: Option[WorkspaceCloudPlatform] = None
+                              cloudPlatform: Option[WorkspaceCloudPlatform] = None,
+                              googleProjectId: Option[GoogleProjectId] = None,
+                              bucketName: Option[String] = None
   ): WorkspaceDetails =
     WorkspaceDetails(
       workspace.namespace,
       workspace.name,
       workspace.workspaceId,
-      workspace.bucketName,
+      bucketName.getOrElse(workspace.bucketName),
       workspace.workflowCollectionName,
       workspace.createdDate,
       workspace.lastModified,
@@ -972,7 +974,7 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProjectId,
+      googleProjectId.getOrElse(workspace.googleProjectId),
       workspace.googleProjectNumber,
       workspace.currentBillingAccountOnGoogleProject,
       workspace.errorMessage,

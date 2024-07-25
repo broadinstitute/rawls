@@ -25,7 +25,8 @@ case class AggregatedWorkspace(
   baseWorkspace: Workspace,
   googleProjectId: Option[GoogleProjectId],
   azureCloudContext: Option[AzureManagedAppCoordinates],
-  policies: List[WorkspacePolicy]
+  policies: List[WorkspacePolicy],
+  storageName: Option[String] = None
 ) {
 
   def getCloudPlatform: Option[WorkspaceCloudPlatform] = {
