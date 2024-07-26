@@ -745,7 +745,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
       .thenReturn(Future.successful())
 
-    val service = workspaceServiceConstructor(datasource, samDAO = samDAO, fastPassServiceConstructor = (_, _) => mockFastPassService)(defaultRequestContext)
+    val service = workspaceServiceConstructor(datasource,
+                                              samDAO = samDAO,
+                                              fastPassServiceConstructor = (_, _) => mockFastPassService
+    )(defaultRequestContext)
 
     val writerAclUpdate = Set(
       WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(false), Option(true))
@@ -780,7 +783,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
       .thenReturn(Future.successful())
 
-    val service = workspaceServiceConstructor(datasource, samDAO = samDAO, fastPassServiceConstructor = (_, _) => mockFastPassService)(defaultRequestContext)
+    val service = workspaceServiceConstructor(datasource,
+                                              samDAO = samDAO,
+                                              fastPassServiceConstructor = (_, _) => mockFastPassService
+    )(defaultRequestContext)
 
     val aclUpdate = Set(
       WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false)),
