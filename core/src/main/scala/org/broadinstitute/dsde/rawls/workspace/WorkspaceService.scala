@@ -114,7 +114,9 @@ object WorkspaceService {
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
-      fastPassServiceConstructor
+      fastPassServiceConstructor,
+      new WorkspaceRepository(dataSource),
+      new BillingRepository(dataSource)
     )
 
   val SECURITY_LABEL_KEY = "security"
@@ -158,35 +160,37 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val ctx: RawlsRequestContext,
-                       val dataSource: SlickDataSource,
-                       executionServiceCluster: ExecutionServiceCluster,
-                       val workspaceManagerDAO: WorkspaceManagerDAO,
-                       val leonardoService: LeonardoService,
-                       protected val gcsDAO: GoogleServicesDAO,
-                       val samDAO: SamDAO,
-                       notificationDAO: NotificationDAO,
-                       userServiceConstructor: RawlsRequestContext => UserService,
-                       maxActiveWorkflowsTotal: Int,
-                       maxActiveWorkflowsPerUser: Int,
-                       override val workbenchMetricBaseName: String,
-                       config: WorkspaceServiceConfig,
-                       requesterPaysSetupService: RequesterPaysSetupService,
-                       resourceBufferService: ResourceBufferService,
-                       servicePerimeterService: ServicePerimeterService,
-                       googleIamDao: GoogleIamDAO,
-                       val terraBillingProjectOwnerRole: String,
-                       val terraWorkspaceCanComputeRole: String,
-                       val terraWorkspaceNextflowRole: String,
-                       val terraBucketReaderRole: String,
-                       val terraBucketWriterRole: String,
-                       rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
+class WorkspaceService(
+  protected val ctx: RawlsRequestContext,
+  val dataSource: SlickDataSource,
+  executionServiceCluster: ExecutionServiceCluster,
+  val workspaceManagerDAO: WorkspaceManagerDAO,
+  val leonardoService: LeonardoService,
+  protected val gcsDAO: GoogleServicesDAO,
+  val samDAO: SamDAO,
+  notificationDAO: NotificationDAO,
+  userServiceConstructor: RawlsRequestContext => UserService,
+  maxActiveWorkflowsTotal: Int,
+  maxActiveWorkflowsPerUser: Int,
+  override val workbenchMetricBaseName: String,
+  config: WorkspaceServiceConfig,
+  requesterPaysSetupService: RequesterPaysSetupService,
+  resourceBufferService: ResourceBufferService,
+  servicePerimeterService: ServicePerimeterService,
+  googleIamDao: GoogleIamDAO,
+  val terraBillingProjectOwnerRole: String,
+  val terraWorkspaceCanComputeRole: String,
+  val terraWorkspaceNextflowRole: String,
+  val terraBucketReaderRole: String,
+  val terraBucketWriterRole: String,
+  rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
+  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+  val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
+  val workspaceRepository: WorkspaceRepository,
+  val billingRepository: BillingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
-    with FutureSupport
     with UserWiths
     with UserUtils
     with LazyLogging
@@ -194,17 +198,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     with JsonFilterUtils
     with WorkspaceSupport
     with BillingProjectSupport
-    with EntitySupport
     with AttributeSupport
     with StringValidationUtils {
 
   import dataSource.dataAccess.driver.api._
 
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
-
-  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
-  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
-  val billingRepository: BillingRepository = new BillingRepository(dataSource)
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext = ctx): Future[Workspace] =
     for {
@@ -1290,34 +1289,39 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       workspaceId <- loadV2WorkspaceId(workspaceName)
       results <- Future.traverse(input) {
         case WorkspaceCatalog(email, true) =>
-          toFutureTry(
-            samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
-                                   workspaceId,
-                                   SamWorkspacePolicyNames.canCatalog,
-                                   email,
-                                   ctx
+          samDAO
+            .addUserToPolicy(
+              SamResourceTypeNames.workspace,
+              workspaceId,
+              SamWorkspacePolicyNames.canCatalog,
+              email,
+              ctx
             )
-          ).map(
-            _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true))).recover {
-              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-                Left(email)
+            .map { _ =>
+              Success(Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true)))
             }
-          )
-
+            .recover {
+              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
+                Success(Left(email))
+              case t: Throwable => Failure(t)
+            }
         case WorkspaceCatalog(email, false) =>
-          toFutureTry(
-            samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
-                                        workspaceId,
-                                        SamWorkspacePolicyNames.canCatalog,
-                                        email,
-                                        ctx
+          samDAO
+            .removeUserFromPolicy(
+              SamResourceTypeNames.workspace,
+              workspaceId,
+              SamWorkspacePolicyNames.canCatalog,
+              email,
+              ctx
             )
-          ).map(
-            _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false))).recover {
-              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-                Left(email)
+            .map { _ =>
+              Success(Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false)))
             }
-          )
+            .recover {
+              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
+                Success(Left(email))
+              case t: Throwable => Failure(t)
+            }
       }
     } yield {
       val failures = results.collect { case Failure(regrets) =>
@@ -1714,7 +1718,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
    */
   private def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
-
 
   private def getGoogleBucketPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
     val googleRole = if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty) {
