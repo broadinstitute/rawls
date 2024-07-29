@@ -270,7 +270,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
           userType = getUserType(samUserInfo.userEmail)
           userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
           _ <- removeParentBucketReaderGrant(parentWorkspace, samUserInfo)
-          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader))
+          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader), ctx)
         } yield ()
       }
       .transform {
@@ -330,7 +330,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
           roles <- DBIO
             .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
 
-          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, roles)
+          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, roles, petCtx)
         } yield ()
       }
       .transform {
@@ -349,10 +349,11 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
   private def addFastPassGrantsForRoles(samUserInfo: SamUserInfo,
                                         userAndPet: UserAndPetEmails,
                                         workspace: Workspace,
-                                        roles: Set[SamResourceRole]
+                                        roles: Set[SamResourceRole],
+                                        rawlsRequestContext: RawlsRequestContext
   )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] =
-    DBIO.from(quotaAvailableForFastPassGrants(workspace, roles)).flatMap { quotaAvailable =>
-      if (quotaAvailable) {
+    DBIO.from(preConditionsSatisfied(workspace, roles, samUserInfo, rawlsRequestContext)).flatMap { preConditionsSatisfied =>
+      if (preConditionsSatisfied) {
         logger
           .info(
             s"Adding FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
@@ -384,10 +385,6 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
           case None => DBIO.successful()
         }
       } else {
-        logger.info(
-          s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
-        )
-        MetricsHelper.incrementFastPassQuotaExceededCounter().unsafeRunSync()
         DBIO.successful()
       }
     }
@@ -669,6 +666,30 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
       existingBucketReaderGrant = existingGrants.filter(predicate)
       _ <- removeFastPassGrantsInWorkspaceProject(existingBucketReaderGrant, parentWorkspace.googleProjectId)
     } yield ()
+  }
+
+  private def authDomainConstraintsSatisfied(workspace: Workspace, samUserInfo: SamUserInfo, rawlsRequestContext: RawlsRequestContext): Future[Boolean] = {
+    Future.successful(false)
+  }
+
+  private def preConditionsSatisfied(workspace: Workspace, roles: Set[SamResourceRole], samUserInfo: SamUserInfo, rawlsRequestContext: RawlsRequestContext): Future[Boolean] = {
+    for {
+      authDomainConstraintsSatisfied <- authDomainConstraintsSatisfied(workspace, samUserInfo, rawlsRequestContext)
+      quotaAvailable <- quotaAvailableForFastPassGrants(workspace, roles)
+    } yield {
+      val authDomainConstraintError = s"User ${samUserInfo.userEmail.value} does not satisfy auth domain constraints for workspace ${workspace.toWorkspaceName}"
+      val quotaUnavailableError = s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
+      (authDomainConstraintsSatisfied, quotaAvailable) match {
+        case (false, true) => logger.warn(authDomainConstraintError)
+        case (true, false) =>
+          logger.warn(quotaUnavailableError)
+          MetricsHelper.incrementFastPassQuotaExceededCounter().unsafeRunSync()
+        case (false, false) =>
+          logger.warn(s"${authDomainConstraintError} and ${quotaUnavailableError}")
+          MetricsHelper.incrementFastPassQuotaExceededCounter().unsafeRunSync()
+      }
+      authDomainConstraintsSatisfied && quotaAvailable
+    }
   }
 
   /*
