@@ -587,16 +587,21 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       callback.future.map(_.asScala.toSeq)
     }
 
-  override def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Boolean] =
-    retry(when401or5xx) { () => Future {
-      val response = resourcesApi(ctx).isAuthDomainV2SatisfiedWithHttpInfo(resourceTypeName.value, resourceId)
-      response.getStatusCode match {
-        case StatusCodes.OK.intValue => true
-        case StatusCodes.Forbidden.intValue => false
-        case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(response.getStatusCode, "Response not 200 or 403"))
+  override def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
+                                                resourceId: String,
+                                                ctx: RawlsRequestContext
+  ): Future[Boolean] =
+    retry(when401or5xx) { () =>
+      Future {
+        val response = resourcesApi(ctx).isAuthDomainV2SatisfiedWithHttpInfo(resourceTypeName.value, resourceId)
+        response.getStatusCode match {
+          case StatusCodes.OK.intValue        => true
+          case StatusCodes.Forbidden.intValue => false
+          case _ =>
+            throw new RawlsExceptionWithErrorReport(ErrorReport(response.getStatusCode, "Response not 200 or 403"))
+        }
       }
     }
-  }
 
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
                                         resourceId: String,

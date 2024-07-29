@@ -126,7 +126,8 @@ trait SamDAO {
 
   def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
                                        resourceId: String,
-                                       ctx: RawlsRequestContext): Future[Boolean]
+                                       ctx: RawlsRequestContext
+  ): Future[Boolean]
 
   def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]]
 
