@@ -3,15 +3,9 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSettingRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  RawlsRequestContext,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceState
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceSettings, WorkspaceState}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
@@ -99,4 +93,26 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       } yield newWorkspace
     }
 
+  def getWorkspaceSettings(workspaceId: UUID): Future[List[WorkspaceSettings]] =
+    dataSource.inTransaction { access =>
+      access.workspaceSettingQuery.listAllForWorkspace(workspaceId)
+    }
+
+  def overwriteWorkspaceSettings(workspaceId: UUID, workspaceSettings: List[WorkspaceSettings]): Future[List[WorkspaceSettings]] =
+    dataSource.inTransaction { access =>
+      access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings)
+    }
+
+  def markWorkspaceSettingsApplied(workspaceId: UUID, workspaceSettings: List[WorkspaceSettings])(implicit ex: ExecutionContext): Future[Int] =
+    dataSource.inTransaction { access =>
+      for {
+        _ <- access.workspaceSettingQuery.deleteSettingsForWorkspace(workspaceId, WorkspaceSettingRecord.SettingStatus.Applied)
+        res <- access.workspaceSettingQuery.updateStatuses(workspaceId, workspaceSettings.map(_.`type`), WorkspaceSettingRecord.SettingStatus.Applied)
+      } yield res
+    }
+
+  def removeUnappliedSettings(workspaceId: UUID): Future[Int] =
+    dataSource.inTransaction { access =>
+      access.workspaceSettingQuery.deleteSettingsForWorkspace(workspaceId, WorkspaceSettingRecord.SettingStatus.Applying)
+    }
 }

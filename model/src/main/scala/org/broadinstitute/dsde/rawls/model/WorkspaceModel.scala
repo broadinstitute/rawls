@@ -11,6 +11,8 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpLifecycleAction, GcpLifecycleCondition}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{GcpBucketLifecycle, WorkspaceSettingType}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -559,6 +561,31 @@ object WorkspaceState {
   case object UpdateFailed extends WorkspaceState
   case object Deleting extends WorkspaceState
   case object DeleteFailed extends WorkspaceState
+}
+
+case class WorkspaceSettings(`type`: WorkspaceSettingType, config: Option[WorkspaceSettingConfig])
+
+object WorkspaceSettingTypes {
+    sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
+        override def toString: String = getClass.getSimpleName.stripSuffix("$")
+        override def withName(name: String): WorkspaceSettingType = WorkspaceSettingTypes.withName(name)
+    }
+
+    def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
+        case "gcp_bucket_lifecycle" => GcpBucketLifecycle
+        case _                 => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
+    }
+
+    case object GcpBucketLifecycle extends WorkspaceSettingType
+}
+
+sealed trait WorkspaceSettingConfig
+object WorkspaceSettingConfig {
+  case class GcpBucketLifecycleConfig(rules: List[GcpBucketLifecycleRule]) extends WorkspaceSettingConfig
+
+  case class GcpBucketLifecycleRule(action: GcpLifecycleAction, conditions: GcpLifecycleCondition)
+  case class GcpLifecycleAction(`type`: String)
+  case class GcpLifecycleCondition(matchesPrefix: Set[String], age: Option[Int])
 }
 
 sealed trait MethodRepoMethod {
@@ -1162,6 +1189,47 @@ class WorkspaceJsonSupport extends JsonSupport {
           case None          => throw DeserializationException("unexpected version string")
         }
       case _ => throw DeserializationException("unexpected version json type")
+    }
+  }
+
+  implicit val GcpLifecycleConditionFormat: RootJsonFormat[GcpLifecycleCondition] = jsonFormat2(GcpLifecycleCondition.apply)
+  implicit val GcpLifecycleActionFormat: RootJsonFormat[GcpLifecycleAction] = jsonFormat1(GcpLifecycleAction.apply)
+  implicit val GcpBucketLifecycleRuleFormat: RootJsonFormat[GcpBucketLifecycleRule] = jsonFormat2(GcpBucketLifecycleRule.apply)
+  implicit val GcpBucketLifecycleConfigFormat: RootJsonFormat[GcpBucketLifecycleConfig] = jsonFormat1(GcpBucketLifecycleConfig.apply)
+
+  implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
+    override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): WorkspaceSettingType = json match {
+      case JsString(name) => WorkspaceSettingTypes.withName(name)
+      case _              => throw DeserializationException("unexpected json type")
+    }
+  }
+
+  implicit object WorkspaceSettingsConfigurationFormat extends RootJsonFormat[WorkspaceSettingConfig] {
+    def write(obj: WorkspaceSettingConfig): JsValue = obj match {
+      case config: GcpBucketLifecycleConfig => config.toJson
+    }
+
+    def read(json: JsValue): WorkspaceSettingConfig = {
+      throw DeserializationException("WorkspaceSettingsConfiguration cannot be read directly")
+    }
+  }
+
+  implicit object WorkspaceSettingsFormat extends RootJsonFormat[WorkspaceSettings] {
+    def write(ws: WorkspaceSettings): JsValue = JsObject(
+      "type" -> ws.`type`.toJson,
+      "config" -> ws.config.toJson
+    )
+
+    def read(json: JsValue): WorkspaceSettings = {
+      val fields = json.asJsObject.fields
+      val settingType = fields("type").convertTo[WorkspaceSettingType]
+      val configuration = settingType match {
+        case GcpBucketLifecycle => fields.get("config").map(_.convertTo[GcpBucketLifecycleConfig])
+        case _ => throw DeserializationException(s"unexpected setting type $settingType")
+      }
+      WorkspaceSettings(settingType, configuration)
     }
   }
 

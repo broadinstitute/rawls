@@ -86,6 +86,26 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                     }
                   }
                 }
+            } ~
+            pathPrefix("settings") {
+              pathEndOrSingleSlash {
+                get {
+                  complete {
+                    workspaceServiceConstructor(ctx)
+                      .getWorkspaceSettings(workspaceName)
+                      .map(StatusCodes.OK -> _)
+                  }
+                } ~
+                  put {
+                    entity(as[List[WorkspaceSettings]]) { settings =>
+                      complete {
+                        workspaceServiceConstructor(ctx)
+                          .setWorkspaceSettings(workspaceName, settings)
+                          .map(StatusCodes.OK -> _)
+                      }
+                    }
+                  }
+              }
             }
         } ~
           pathPrefix("bucketMigration") {

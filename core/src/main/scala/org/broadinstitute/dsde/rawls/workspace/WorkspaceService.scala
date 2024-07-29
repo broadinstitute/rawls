@@ -47,7 +47,10 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
 import cats.effect.unsafe.implicits.global
+import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleCondition, LifecycleAction}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketLifecycleConfig
 
 import java.io.IOException
 import java.util.UUID
@@ -2000,6 +2003,49 @@ class WorkspaceService(
         requesterPaysSetupService.revokeUserFromWorkspace(ctx.userInfo.userEmail, workspace)
       }
     } yield {}
+
+  def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSettings]] = {
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read).flatMap { workspace =>
+      workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+    }
+  }
+
+  def setWorkspaceSettings(workspaceName: WorkspaceName, workspaceSettings: List[WorkspaceSettings]): Future[List[WorkspaceSettings]] = {
+    def applySettings(workspace: Workspace, settings: WorkspaceSettings): Future[Unit] = {
+      settings match {
+        case WorkspaceSettings(WorkspaceSettingTypes.GcpBucketLifecycle, Some(GcpBucketLifecycleConfig(rules))) => {
+          val googleRules = rules.map { rule =>
+            val conditionBuilder = LifecycleCondition.newBuilder().setMatchesPrefix(rule.conditions.matchesPrefix.toList.asJava)
+            rule.conditions.age.map(age => conditionBuilder.setAge(age))
+
+            val action = rule.action.`type` match {
+              case actionType if actionType.equals("Delete") => LifecycleAction.newDeleteAction()
+              case _ => throw new RawlsException("unsupported lifecycle action")
+            }
+
+            new LifecycleRule(action, conditionBuilder.build())
+          }
+
+          gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
+        }
+        case _ => throw new RawlsException("unsupported workspace setting")
+      }
+    }
+
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own).flatMap { workspace =>
+      (for {
+        _ <- workspaceRepository.overwriteWorkspaceSettings(workspace.workspaceIdAsUUID, workspaceSettings)
+        _ <- workspaceSettings.traverse(s => applySettings(workspace, s)) // todo: maybe this should catch exceptions and keep track of which settings went through and which didn't. then it can roll back anything that failed.
+        _ <- workspaceRepository.markWorkspaceSettingsApplied(workspace.workspaceIdAsUUID, workspaceSettings)
+      } yield {
+        workspaceSettings
+      }).recoverWith { case e =>
+        workspaceRepository.removeUnappliedSettings(workspace.workspaceIdAsUUID).flatMap { _ =>
+          Future.failed(new RawlsException("Failed to apply workspace settings"))
+        }
+      }
+    }
+  }
 
   // helper methods
 
