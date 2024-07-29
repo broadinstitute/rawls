@@ -572,7 +572,7 @@ object WorkspaceSettingTypes {
     }
 
     def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
-        case "gcp_bucket_lifecycle" => GcpBucketLifecycle
+        case "gcpbucketlifecycle" => GcpBucketLifecycle
         case _                 => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
     }
 

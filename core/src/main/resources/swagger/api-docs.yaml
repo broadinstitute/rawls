@@ -4423,6 +4423,78 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/settings:
+    get:
+      tags:
+        - workspaces_v2
+      summary: Get workspace settings
+      description: Get the settings for a workspace
+      operationId: getWorkspaceSettings
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceSettings'
+        403:
+          description: User does not have access to requested workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    put:
+      tags:
+        - workspaces_v2
+      summary: Overwrite workspace settings
+      description: Overwrite the settings for a workspace
+      operationId: overwriteWorkspaceSettings
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+          description: New settings for the workspace
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceSettings'
+          required: true
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceSettings'
+        403:
+          description: User must be an owner of the workspace to overwrite settings
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
@@ -5818,6 +5890,62 @@ components:
             - Deleting
             - DeleteFailed
       description: ""
+    WorkspaceSettings:
+      required:
+        - type
+        - config
+      type: object
+      properties:
+        'type':
+          type: string
+          description: The type of the workspace setting
+          enum:
+            - GcpBucketLifecycle
+        config:
+          description: The configuration of the workspace setting
+          oneOf:
+            - $ref: '#/components/schemas/WorkspaceSettingGcpBucketLifecycleConfig'
+    WorkspaceSettingGcpBucketLifecycleConfig:
+      required:
+        - rules
+      type: object
+      properties:
+        rules:
+          type: array
+          description: The lifecycle rules for the workspace bucket
+          items:
+            $ref: '#/components/schemas/GcpBucketLifecycleRule'
+    GcpBucketLifecycleRule:
+      required:
+        - action
+        - conditions
+      type: object
+      properties:
+        action:
+          $ref: '#/components/schemas/GcpBucketLifecycleAction'
+        conditions:
+          $ref: '#/components/schemas/GcpBucketLifecycleCondition'
+    GcpBucketLifecycleAction:
+      required:
+        - type
+      type: object
+      properties:
+        "type":
+          type: string
+          description: The type of the lifecycle action
+          enum:
+            - Delete
+    GcpBucketLifecycleCondition:
+      type: object
+      properties:
+        age:
+          type: integer
+          description: The age of the object in days
+        matchesPrefix:
+          type: array
+          description: Object name prefixes that this rule applies to
+          items:
+            type: string
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount
