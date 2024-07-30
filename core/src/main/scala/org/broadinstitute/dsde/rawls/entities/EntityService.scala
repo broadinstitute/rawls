@@ -295,39 +295,41 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                         SamWorkspaceActions.read,
                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity =>
-              tryValuesByEntity match {
-                // parsing failure
-                case Failure(regret) =>
-                  throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                case Success(valuesByEntity) =>
-                  if (valuesByEntity.size != 1) {
-                    // wrong number of entities?!
-                    throw new RawlsException(
-                      s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                    )
-                  } else {
-                    assert(valuesByEntity.head._1 == entityName)
-                    valuesByEntity.head match {
-                      case (_, Success(result)) => result.toSeq
-                      case (_, Failure(regret)) =>
-                        throw new RawlsExceptionWithErrorReport(
-                          errorReport = ErrorReport(
-                            StatusCodes.BadRequest,
-                            "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                            ErrorReport(regret)
+      dataSource.inTransaction(
+        dataAccess =>
+          withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
+              evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity =>
+                tryValuesByEntity match {
+                  // parsing failure
+                  case Failure(regret) =>
+                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
+                  case Success(valuesByEntity) =>
+                    if (valuesByEntity.size != 1) {
+                      // wrong number of entities?!
+                      throw new RawlsException(
+                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
+                      )
+                    } else {
+                      assert(valuesByEntity.head._1 == entityName)
+                      valuesByEntity.head match {
+                        case (_, Success(result)) => result.toSeq
+                        case (_, Failure(regret)) =>
+                          throw new RawlsExceptionWithErrorReport(
+                            errorReport = ErrorReport(
+                              StatusCodes.BadRequest,
+                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
+                              ErrorReport(regret)
+                            )
                           )
-                        )
+                      }
                     }
-                  }
+                }
               }
             }
-          }
-        }
-      }
+          },
+        TransactionIsolation.ReadCommitted
+      )
     }
 
   def entityTypeMetadata(workspaceName: WorkspaceName,

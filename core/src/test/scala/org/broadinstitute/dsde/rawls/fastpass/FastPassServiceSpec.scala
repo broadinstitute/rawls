@@ -454,6 +454,36 @@ class FastPassServiceSpec
       )
   }
 
+  it should "not sync FastPass grants for a workspace if auth domain constraints are not satisfied" in withTestDataServices {
+    services =>
+      when(
+        services.fastPassMockSamDAO.getAuthDomainConstraintSatisfied(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.any[String],
+          ArgumentMatchers.any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(Future(false))
+      Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+      verify(services.googleIamDAO, never()).addRoles(
+        ArgumentMatchers.any[GoogleProject],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]]
+      )
+      verify(services.googleStorageDAO, never()).addIamRoles(
+        ArgumentMatchers.any[GcsBucketName],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]],
+        ArgumentMatchers.any[Option[GoogleProject]]
+      )
+  }
+
   it should "sync FastPass grants for a workspace with the current user context" in withTestDataServices { services =>
     verifyFastPassGrantsSynced(services)
   }

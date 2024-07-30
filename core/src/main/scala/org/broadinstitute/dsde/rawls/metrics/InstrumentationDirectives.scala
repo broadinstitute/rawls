@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Directives.provide
 import akka.http.scaladsl.server.PathMatchers.Segment
 import akka.http.scaladsl.server.directives.BasicDirectives.{extractRequest, mapResponse}
 import akka.http.scaladsl.server.directives.PathDirectives._
-import akka.http.scaladsl.server.{Directive1, PathMatcher, PathMatcher0}
+import akka.http.scaladsl.server.{Directive0, Directive1, PathMatcher, PathMatcher0}
 import io.opentelemetry.context.Context
 
 import java.util.concurrent.TimeUnit
@@ -103,16 +103,21 @@ trait InstrumentationDirectives extends RawlsInstrumented with TracingDirectives
     * Important note: the route passed into this directive in test code must be sealed
     * otherwise exceptions escape and are not instrumented appropriately.
     */
-  def instrumentRequest: Directive1[Context] =
-    (traceRequest & extractRequest).tflatMap { case (otelContext, request) =>
-      val timeStamp = System.currentTimeMillis
-      mapResponse { response =>
-        val elapsed = System.currentTimeMillis - timeStamp
-        globalRequestCounter.inc()
-        globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
-        httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
-        httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
-        response
-      } & provide(otelContext)
+  def captureRequestMetrics: Directive0 = extractRequest.tflatMap { request =>
+    val timeStamp = System.currentTimeMillis
+    mapResponse { response =>
+      val elapsed = System.currentTimeMillis - timeStamp
+      globalRequestCounter.inc()
+      globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
+      httpRequestCounter(ExpandedMetricBuilder.empty)(request._1, response).inc()
+      httpRequestTimer(ExpandedMetricBuilder.empty)(request._1, response).update(elapsed, TimeUnit.MILLISECONDS)
+      response
     }
+  }
+
+  /**
+    * Traces requests and provides the OpenTelemetry Context.
+    */
+  def traceRequests: Directive1[Context] =
+    traceRequest.tflatMap(otelContext => provide(otelContext._1))
 }
