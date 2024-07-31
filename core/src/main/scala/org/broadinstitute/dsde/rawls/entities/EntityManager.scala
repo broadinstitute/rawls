@@ -53,6 +53,9 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 //      throw new DataEntityException(
 //        s"This API is disabled for ${CloudPlatform.AZURE} workspaces. Contact support for alternatives."
 //      )
+
+
+
 //    }
 
     // soon: look up the reference name to ensure it exists.
