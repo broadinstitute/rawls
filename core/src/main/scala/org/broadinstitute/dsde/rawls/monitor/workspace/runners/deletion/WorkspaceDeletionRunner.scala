@@ -24,7 +24,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace, WorkspaceState}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.UserCtxCreator
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.RawlsSAContextCreator
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
@@ -53,7 +53,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
                               monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
-    with UserCtxCreator {
+    with RawlsSAContextCreator {
 
   override def apply(job: WorkspaceManagerResourceMonitorRecord)(implicit
     executionContext: ExecutionContext
@@ -96,7 +96,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
             )
           )
       }
-      ctx <- getUserCtx(userEmail)
+      ctx <- getRawlsSAContext()
 
       result <- runStep(job, workspace, ctx).recoverWith { case t: Throwable =>
         logger.error(

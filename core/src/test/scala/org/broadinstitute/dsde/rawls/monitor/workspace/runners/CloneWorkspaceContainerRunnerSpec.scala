@@ -141,7 +141,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     )
     doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
       .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+      .getRawlsSAContext()(ArgumentMatchers.any())
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
       errorMessage should include(workspaceId.toString)
@@ -175,7 +175,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -207,7 +207,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -240,7 +240,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]

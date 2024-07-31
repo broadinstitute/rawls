@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace, Workspace
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{never, spy, verify, when}
+import org.mockito.Mockito.{doReturn, never, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -188,12 +188,9 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
                                          ArgumentMatchers.any[String]
       )
     ).thenReturn(Future.successful(1))
-    val samDAO = mock[SamDAO]
-    when(samDAO.getUserArbitraryPetServiceAccountKey(userEmail))
-      .thenReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
     val runner = spy(
       new WorkspaceCloningRunner(
-        samDAO,
+        mock[SamDAO],
         mock[GoogleServicesDAO],
         mock[LeonardoDAO],
         mock[WorkspaceManagerDAO],
@@ -202,6 +199,9 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
       )
     )
 
+    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
+      .when(runner)
+      .getRawlsSAContext()(ArgumentMatchers.any())
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
 
     verify(workspaceRepository, never).setFailedState(

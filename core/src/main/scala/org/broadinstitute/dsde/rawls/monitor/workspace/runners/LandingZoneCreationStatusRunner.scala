@@ -26,7 +26,7 @@ class LandingZoneCreationStatusRunner(
   val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
-    with UserCtxCreator {
+    with RawlsSAContextCreator {
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
@@ -51,9 +51,9 @@ class LandingZoneCreationStatusRunner(
           .map(_ => Complete)
     }
 
-    getUserCtx(userEmail).transformWith {
+    getRawlsSAContext().transformWith {
       case Failure(t) =>
-        val msg = s"Unable to retrieve landing zone creation results: unable to retrieve request context for $userEmail"
+        val msg = s"Unable to retrieve landing zone creation results: unable to retrieve rawls SA context"
         logger.error(
           s"AzureLandingZoneResult job ${job.jobControlId} for billing project: $billingProjectName failed: $msg",
           t

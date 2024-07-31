@@ -489,7 +489,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
     doReturn(Future.successful(RawlsRequestContext(null, null)))
       .when(runner)
-      .getUserCtx(anyString())(ArgumentMatchers.any())
+      .getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll)))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(
@@ -532,7 +532,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
     doReturn(Future.successful(RawlsRequestContext(null, null)))
       .when(runner)
-      .getUserCtx(anyString())(ArgumentMatchers.any())
+      .getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(job))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(

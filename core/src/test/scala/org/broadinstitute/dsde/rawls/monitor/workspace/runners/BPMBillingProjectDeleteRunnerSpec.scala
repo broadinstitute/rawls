@@ -104,7 +104,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       )
     doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
       .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+      .getRawlsSAContext()(ArgumentMatchers.any())
     val monitorRecord: WorkspaceManagerResourceMonitorRecord =
       WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
                                             JobType.BpmBillingProjectDelete,
@@ -144,7 +144,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       )
     doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
       .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+      .getRawlsSAContext()(ArgumentMatchers.any())
     val createTime = Timestamp.from(Instant.now().minus(25, ChronoUnit.HOURS))
     val monitorRecord: WorkspaceManagerResourceMonitorRecord =
       WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
@@ -198,7 +198,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
@@ -249,7 +249,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -309,7 +309,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -367,7 +367,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -425,7 +425,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -469,7 +469,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
@@ -516,7 +516,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         billingProjectDeletion
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -571,7 +571,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         billingProjectDeletion
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -614,7 +614,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 

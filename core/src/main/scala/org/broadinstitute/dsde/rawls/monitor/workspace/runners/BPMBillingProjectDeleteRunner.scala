@@ -38,7 +38,7 @@ class BPMBillingProjectDeleteRunner(
   billingProjectDeletion: BillingProjectDeletion
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
-    with UserCtxCreator {
+    with RawlsSAContextCreator {
 
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
@@ -64,7 +64,7 @@ class BPMBillingProjectDeleteRunner(
           .map(_ => Complete)
     }
 
-    getUserCtx(userEmail).transformWith {
+    getRawlsSAContext().transformWith {
       case Success(userCtx) =>
         billingRepository.getLandingZoneId(projectName).flatMap {
           case Some(landingZoneId) =>
@@ -72,7 +72,7 @@ class BPMBillingProjectDeleteRunner(
           case None => billingProjectDeletion.finalizeDelete(projectName, userCtx).map(_ => Complete)
         }
       case Failure(t) =>
-        val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
+        val msg = s"Unable to complete billing project deletion: unable to retrieve rawls SA context"
         logger.error(s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg", t)
         job.retryOrTimeout(() => billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)))
     }

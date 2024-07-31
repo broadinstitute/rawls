@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceRequest,
   WorkspaceState
 }
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.UserCtxCreator
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.RawlsSAContextCreator
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.util.UUID
@@ -82,7 +82,7 @@ class WorkspaceCloningRunner(
   workspaceRepository: WorkspaceRepository
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
-    with UserCtxCreator {
+    with RawlsSAContextCreator {
 
   def cloneFail(wsId: UUID, message: String)(implicit executionContext: ExecutionContext): Future[Int] =
     workspaceRepository.setFailedState(wsId, WorkspaceState.CloningFailed, message)
@@ -116,10 +116,10 @@ class WorkspaceCloningRunner(
         return cloneFail(workspaceId, msg).map(_ => Complete)
     }
 
-    getUserCtx(userEmail).transformWith {
+    getRawlsSAContext().transformWith {
       case Failure(t) =>
         val msg =
-          s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve request context for $userEmail"
+          s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve rawls SA context"
         logFailure(msg, Some(t))
         job.retryOrTimeout(() => cloneFail(workspaceId, msg))
       case Success(userCtx) =>

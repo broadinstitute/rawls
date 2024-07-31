@@ -110,7 +110,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       )
     doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
       .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+      .getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(billingRepository, never).updateCreationStatus(
@@ -144,7 +144,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     }
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(billingRepository, never).updateCreationStatus(
@@ -179,7 +179,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     ).thenReturn(Future.successful(1))
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -205,7 +205,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     ).thenReturn(landingZoneResult)
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, mock[BillingRepository], mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     // since no methods are defined on the mock billing repository, any calls will throw an exception
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
@@ -240,7 +240,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
 
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -274,7 +274,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     ).thenReturn(Future.successful(1))
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(billingRepository).updateCreationStatus(
@@ -310,7 +310,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
     val ctx = mock[RawlsRequestContext]
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 

@@ -29,7 +29,7 @@ class CloneWorkspaceContainerRunner(
   val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
-    with UserCtxCreator {
+    with RawlsSAContextCreator {
 
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
@@ -62,10 +62,10 @@ class CloneWorkspaceContainerRunner(
         return cloneFail(workspaceId, msg).map(_ => Complete)
     }
 
-    getUserCtx(userEmail).transformWith {
+    getRawlsSAContext().transformWith {
       case Failure(t) =>
         val msg =
-          s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve request context for $userEmail"
+          s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve rawls SA context"
         logFailure(msg, Some(t))
         job.retryOrTimeout(() => cloneFail(workspaceId, msg))
       case Success(ctx) =>
