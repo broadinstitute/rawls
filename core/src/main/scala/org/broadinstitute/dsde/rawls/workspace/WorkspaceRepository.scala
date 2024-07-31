@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  GoogleProjectId,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
@@ -63,6 +64,16 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspaceName)
+    }
+
+  def updateWorkspaceGoogleProjectId(wsId: UUID, googleProjectId: GoogleProjectId) =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.updateGoogleProjectId(wsId, googleProjectId)
+    }
+
+  def updateWorkspaceGoogleBucket(wsId: UUID, googleBucket: String) =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.updateGoogleBucketName(wsId, googleBucket)
     }
 
   def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =

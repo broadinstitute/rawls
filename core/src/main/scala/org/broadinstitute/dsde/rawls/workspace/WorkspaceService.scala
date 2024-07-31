@@ -2786,15 +2786,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
 
-      _ <- workspace.workspaceType match {
-        case WorkspaceType.McWorkspace =>
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")
-            )
-          )
-        case WorkspaceType.RawlsWorkspace => Future.successful(())
-      }
+//      _ <- workspace.workspaceType match {
+//        case WorkspaceType.McWorkspace =>
+//          Future.failed(
+//            new RawlsExceptionWithErrorReport(
+//              ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")
+//            )
+//          )
+//        case WorkspaceType.RawlsWorkspace => Future.successful(())
+//      }
 
       workspaceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace,
                                                         workspace.workspaceIdAsUUID.toString,

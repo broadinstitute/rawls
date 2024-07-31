@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
   ErrorReport,
+  GoogleProjectId,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -822,6 +823,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         s"Created storage in WSM [workspaceId = ${workspaceId}, containerId = ${storageResourceId}]"
       )
 
+      _ <- traceFutureWithParent("updateWorkspaceRecordWithResources", parentContext)(_ =>
+        updateWorkspaceRecordWithResources(workspaceId, bpmCloudPlatformToRawlsCloudPlatform(profile.getCloudPlatform))
+      )
+
       // create a WDS application in Leo
       _ = createWdsAppInWorkspace(workspaceId,
                                   bpmCloudPlatformToRawlsCloudPlatform(profile.getCloudPlatform),
@@ -854,6 +859,37 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             )
         }
     }
+  }
+
+  private def updateWorkspaceRecordWithResources(uuid: UUID, cloudPlatform: WorkspaceCloudPlatform): Future[Unit] = {
+    if (cloudPlatform != WorkspaceCloudPlatform.Gcp) {
+      logger.info("No updates for non-GCP")
+      return Future.successful()
+    }
+
+    for {
+      maybeWorkspace <- workspaceRepository.getWorkspace(uuid)
+      workspace <- Future {
+        maybeWorkspace.getOrElse(throw new RuntimeException("Workspace not found"))
+      }
+      wsmWorkspace <- Future {
+        // TODO error handling
+        workspaceManagerDAO.getWorkspace(uuid, ctx)
+      }
+      bucket <- Future {
+        wsmWorkspace.getResources.getResources.asScala
+          .find(_.getMetadata.getResourceType.equals(ResourceType.GCS_BUCKET))
+          .getOrElse(throw new RuntimeException("No bucket found"))
+      }
+      _ <- Future {
+        workspaceRepository.updateWorkspaceGoogleBucket(workspace.workspaceIdAsUUID, bucket.getMetadata.getName)
+      }
+      _ <- Future {
+        workspaceRepository.updateWorkspaceGoogleProjectId(workspace.workspaceIdAsUUID,
+                                                           GoogleProjectId(wsmWorkspace.getGcpContext.getProjectId)
+        )
+      }
+    } yield {}
   }
 
   private def createWorkspaceStorage(workspaceId: UUID, cloudPlatform: CloudPlatform): Future[UUID] =
