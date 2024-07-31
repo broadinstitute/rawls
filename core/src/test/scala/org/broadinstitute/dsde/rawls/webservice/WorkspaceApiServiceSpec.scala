@@ -1264,6 +1264,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Set(
             WorkspaceListResponse(
               WorkspaceAccessLevels.Owner,
+              Some(true),
+              Some(true),
               WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime),
                                                        Option(Set.empty),
                                                        true,
@@ -1275,6 +1277,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             ),
             WorkspaceListResponse(
               WorkspaceAccessLevels.Owner,
+              Some(true),
+              Some(true),
               WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace2.copy(lastModified = dateTime),
                                                        Option(Set.empty),
                                                        true,
@@ -1343,6 +1347,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Set(
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(testData.workspace.copy(lastModified = dateTime),
                                                          Option(Set.empty),
                                                          true,
@@ -1354,6 +1360,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               ),
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(
                   testData.workspaceFailedSubmission.copy(lastModified = dateTime),
                   Option(Set.empty),
