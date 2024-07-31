@@ -48,12 +48,12 @@ import scala.util.{Failure, Try}
 class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]]) {
 
   def resolveProvider(requestArguments: EntityRequestArguments): Try[EntityProvider] = {
-
-    if (!WorkspaceType.RawlsWorkspace.equals(requestArguments.workspace.workspaceType)) {
-      throw new DataEntityException(
-        s"This API is disabled for ${CloudPlatform.AZURE} workspaces. Contact support for alternatives."
-      )
-    }
+//
+//    if (!WorkspaceType.RawlsWorkspace.equals(requestArguments.workspace.workspaceType)) {
+//      throw new DataEntityException(
+//        s"This API is disabled for ${CloudPlatform.AZURE} workspaces. Contact support for alternatives."
+//      )
+//    }
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
