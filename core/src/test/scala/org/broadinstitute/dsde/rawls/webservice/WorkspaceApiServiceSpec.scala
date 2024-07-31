@@ -11,7 +11,7 @@ import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, Job
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -22,8 +22,9 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{UserCommentUpdateOperation, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, RawlsWorkspaceAclManager}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -44,7 +45,6 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 //noinspection TypeAnnotation,TypeAnnotation,NameBooleanParameters,RedundantNewCaseClass,NameBooleanParameters
 class WorkspaceApiServiceSpec extends ApiServiceSpec {
   import driver.api._
-
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
     def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
@@ -2861,6 +2861,68 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
+      }
+  }
+
+  it should "return a 201 when a comment is updated" in {
+    val wsName = testData.wsName
+    val submissionId = UUID.randomUUID().toString
+    val submissionsService = mock[SubmissionsService]
+    val update = UserCommentUpdateOperation("user comment updated")
+    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update)).thenReturn(Future(1))
+    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
+
+    Patch(
+      s"${wsName.path}/submissions/$submissionId",
+      JsObject(
+        List("userComment" -> "user comment updated".toJson): _*
+      )
+    ) ~>
+      service.instrumentedRoutes ~>
+      check {
+        status should be(StatusCodes.NoContent)
+      }
+  }
+
+  it should "return a 404 when no submission was updated" in {
+    val wsName = testData.wsName
+    val submissionId = UUID.randomUUID().toString
+    val submissionsService = mock[SubmissionsService]
+    val update = UserCommentUpdateOperation("user comment updated")
+    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update)).thenReturn(Future(0))
+    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
+
+    Patch(
+      s"${wsName.path}/submissions/$submissionId",
+      JsObject(
+        List("userComment" -> "user comment updated".toJson): _*
+      )
+    ) ~>
+      service.instrumentedRoutes ~>
+      check {
+        status should be(StatusCodes.NotFound)
+      }
+  }
+
+  it should "return 403 when access is denied" in {
+    val wsName = testData.wsName
+    val submissionId = UUID.randomUUID().toString
+    val submissionsService = mock[SubmissionsService]
+    val update = UserCommentUpdateOperation("user comment updated")
+    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update))
+      .thenReturn(Future.failed(WorkspaceAccessDeniedException(wsName)))
+    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
+    Patch(
+      s"${wsName.path}/submissions/$submissionId",
+      JsObject(
+        List("userComment" -> "user comment updated".toJson): _*
+      )
+    ) ~>
+      service.instrumentedRoutes ~>
+      check { testResult: RouteTestResult =>
+        val response = responseAs[String]
+        status should be(StatusCodes.Forbidden)
+        response should include("insufficient permissions to perform operation on myNamespace/myWorkspace")
       }
   }
 
