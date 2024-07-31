@@ -155,7 +155,9 @@ trait ApiServiceSpec
       with SnapshotApiService
       with StatusApiService
       with UserApiService
-      with WorkspaceApiService {
+      with MethodConfigApiService
+      with WorkspaceApiService
+      with SubmissionApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
@@ -397,11 +399,7 @@ trait ApiServiceSpec
       MethodConfigurationService.constructor(
         slickDataSource,
         samDAO,
-        new HttpMethodRepoDAO(
-          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-          workbenchMetricBaseName = workbenchMetricBaseName
-        ),
+        methodRepoDAO,
         methodConfigResolver,
         entityManager,
         new WorkspaceRepository(slickDataSource),
