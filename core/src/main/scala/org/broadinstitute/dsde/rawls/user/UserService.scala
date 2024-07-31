@@ -667,7 +667,7 @@ class UserService(
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
         billingProfileId <- billingRepository.getBillingProfileId(projectName)
-        _ <- billingProfileId match {
+        _ = billingProfileId match {
           case Some(billingProfileId) =>
             billingProfileManagerDAO.deleteProfilePolicyMember(
               UUID.fromString(billingProfileId),
@@ -675,8 +675,7 @@ class UserService(
               projectAccessUpdate.email,
               ctx
             )
-            Future.successful()
-          case None => Future.successful()
+          case None => ()
         }
         _ <- removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
       } yield {}
