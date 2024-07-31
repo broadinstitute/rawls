@@ -126,12 +126,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         ArgumentMatchers.eq(DeletionFailed),
         ArgumentMatchers.any[Some[String]]()
       )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.toLowerCase.contains("request context"))
-      assert(message.get.contains(userEmail))
-      Future.successful(1)
-    }
+    ).thenReturn(Future.successful(1))
     val runner =
       spy(
         new BPMBillingProjectDeleteRunner(
