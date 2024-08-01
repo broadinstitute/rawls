@@ -92,6 +92,6 @@ trait WorkspaceSettingComponent {
       filter(record => record.workspaceId === workspaceId && record.status === status.toString).delete
 
     def listAllForWorkspace(workspaceId: UUID): ReadAction[List[WorkspaceSettings]] =
-      filter(_.workspaceId === workspaceId).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSettings).toList)
+      filter(rec => rec.workspaceId === workspaceId && rec.status === WorkspaceSettingRecord.SettingStatus.Applied.toString).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSettings).toList)
   }
 }
