@@ -3,16 +3,13 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.model.{AzureContext, GcpContext, IamRole, RoleBinding, RoleBindingList, WorkspaceDescription}
+import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -55,7 +52,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     )
 
-  val workspace = Workspace(
+  val workspace: Workspace = Workspace(
     "test-namespace",
     "test-name",
     "aWorkspaceId",
@@ -69,23 +66,16 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   def workspaceServiceConstructor(
     datasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-    methodRepoDAO: MethodRepoDAO = mock[MethodRepoDAO](RETURNS_SMART_NULLS),
-    cromiamDAO: ExecutionServiceDAO = mock[ExecutionServiceDAO](RETURNS_SMART_NULLS),
     executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
-    execServiceBatchSize: Int = 1,
     workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
     leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
-    methodConfigResolver: MethodConfigResolver = mock[MethodConfigResolver](RETURNS_SMART_NULLS),
     gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
     samDAO: SamDAO = mock[SamDAO],
     notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
     userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
-    maxActiveWorkflowsTotal: Int = 1,
-    maxActiveWorkflowsPerUser: Int = 1,
     workbenchMetricBaseName: String = "",
     config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
     requesterPaysSetupService: RequesterPaysSetupServiceImpl = mock[RequesterPaysSetupServiceImpl](RETURNS_SMART_NULLS),
-    entityManager: EntityManager = mock[EntityManager](RETURNS_SMART_NULLS),
     resourceBufferService: ResourceBufferServiceImpl = mock[ResourceBufferServiceImpl](RETURNS_SMART_NULLS),
     servicePerimeterService: ServicePerimeterServiceImpl = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS),
     googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
@@ -108,8 +98,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       config,
       requesterPaysSetupService,
@@ -352,7 +340,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val wsId = UUID.randomUUID().toString
     val azureWorkspace = Workspace.buildReadyMcWorkspace(
       namespace = "test-azure-bp",
-      name = s"test-azure-ws-${wsId}",
+      name = s"test-azure-ws-$wsId",
       workspaceId = wsId,
       createdDate = DateTime.now,
       lastModified = DateTime.now,

@@ -294,8 +294,6 @@ class WorkspaceServiceSpec
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       workspaceServiceConfig,
       requesterPaysSetupService,

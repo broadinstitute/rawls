@@ -398,8 +398,6 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         notificationDAO,
         userServiceConstructor,
-        maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
         workspaceServiceConfig,
         requesterPaysSetupService,

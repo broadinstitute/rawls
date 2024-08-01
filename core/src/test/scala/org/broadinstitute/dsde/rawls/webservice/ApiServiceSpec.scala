@@ -367,8 +367,6 @@ trait ApiServiceSpec
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       workspaceServiceConfig,
       requesterPaysSetupService,
@@ -409,11 +407,7 @@ trait ApiServiceSpec
     val submissionsServiceConstructor = SubmissionsService.constructor(
       dataSource,
       entityManager,
-      new HttpMethodRepoDAO(
-        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-        workbenchMetricBaseName = workbenchMetricBaseName
-      ),
+      methodRepoDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       methodConfigResolver,

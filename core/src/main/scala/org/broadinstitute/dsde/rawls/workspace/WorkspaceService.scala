@@ -70,8 +70,6 @@ object WorkspaceService {
                   samDAO: SamDAO,
                   notificationDAO: NotificationDAO,
                   userServiceConstructor: RawlsRequestContext => UserService,
-                  maxActiveWorkflowsTotal: Int,
-                  maxActiveWorkflowsPerUser: Int,
                   workbenchMetricBaseName: String,
                   config: WorkspaceServiceConfig,
                   requesterPaysSetupService: RequesterPaysSetupService,
@@ -99,8 +97,6 @@ object WorkspaceService {
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       config,
       requesterPaysSetupService,
@@ -170,8 +166,6 @@ class WorkspaceService(
   val samDAO: SamDAO,
   notificationDAO: NotificationDAO,
   userServiceConstructor: RawlsRequestContext => UserService,
-  maxActiveWorkflowsTotal: Int,
-  maxActiveWorkflowsPerUser: Int,
   override val workbenchMetricBaseName: String,
   config: WorkspaceServiceConfig,
   requesterPaysSetupService: RequesterPaysSetupService,
@@ -1490,7 +1484,7 @@ class WorkspaceService(
           _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
 
           // Sync FastPass grants once ACLs are updated
-          _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { case email =>
+          _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { email =>
             fastPassServiceConstructor(ctx, dataSource).syncFastPassesForUserInWorkspace(workspace, email)
           }
         } yield {
@@ -2207,7 +2201,6 @@ class WorkspaceService(
     * Project, do nothing
     *
     * @param billingProject
-    * @param span
     * @return Future[Unit]
     */
   private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject,

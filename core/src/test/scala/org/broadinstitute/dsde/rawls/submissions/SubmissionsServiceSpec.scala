@@ -271,8 +271,6 @@ class SubmissionsServiceSpec
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       workspaceServiceConfig,
       requesterPaysSetupService,

@@ -300,8 +300,6 @@ class FastPassServiceSpec
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       workspaceServiceConfig,
       requesterPaysSetupService,
