@@ -976,6 +976,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     val optionsExist = options.nonEmpty
     val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
     val attributesEnabled = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
+    val canComputeRequested = options.contains("canCompute")
+    val canShareRequested = options.contains("canShare")
 
     for {
       workspaceResources <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
@@ -1054,6 +1056,34 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 } else {
                   None
                 }
+                // only add canCompute and canShare if they were requested
+                val canCompute: Option[Boolean] = if (canComputeRequested) {
+                  wsmContext.getCloudPlatform match {
+                    case None => None
+                    case Some(WorkspaceCloudPlatform.Azure) =>
+                      Option(accessLevel >= WorkspaceAccessLevels.Write)
+                    case _ if accessLevel >= WorkspaceAccessLevels.Owner =>
+                      Option(true)
+                    case default =>
+                      val canCompute = workspaceSamResource.hasRole(SamWorkspaceRoles.canCompute)
+                      Option(canCompute)
+                  }
+                } else {
+                  None
+                }
+                val canShare: Option[Boolean] = if (canShareRequested) {
+                  accessLevel match {
+                    case _ if accessLevel < WorkspaceAccessLevels.Read => Option(false)
+                    case WorkspaceAccessLevels.Read =>
+                      Option(workspaceSamResource.hasRole(SamWorkspaceRoles.shareReader))
+                    case WorkspaceAccessLevels.Write =>
+                      Option(workspaceSamResource.hasRole(SamWorkspaceRoles.shareWriter))
+                    case default => Option(true)
+                  }
+                } else {
+                  None
+                }
+
                 // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
                 // cloud context will throw a WorkspaceAggregationException, which is handled below)
                 wsmContext.getCloudPlatform match {
@@ -1062,6 +1092,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     Option(
                       WorkspaceListResponse(
                         accessLevel,
+                        canShare,
+                        canCompute,
                         workspaceDetails,
                         submissionStats,
                         workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,

@@ -4036,6 +4036,171 @@ class WorkspaceServiceSpec
     matchingWorkspaces.size should be(1)
   }
 
+  it should "return canCompute and canShare for Azure and Google workspaces" in withTestDataServices { services =>
+    val service = services.workspaceService
+
+    // set up test data
+    val azureWriterWorkspace =
+      Workspace.buildReadyMcWorkspace("azureWriterNamespace",
+                                      "azureWriterWorkspace",
+                                      UUID.randomUUID().toString,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser1",
+                                      Map.empty
+      )
+    val azureShareReaderWorkspace =
+      Workspace.buildReadyMcWorkspace("azureReaderNamespace",
+                                      "azureReaderWorkspace",
+                                      UUID.randomUUID().toString,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser1",
+                                      Map.empty
+      )
+    val googleShareWriterNoComputeWorkspace = Workspace(
+      "googleWriterNoComputeNamespace",
+      "googleWriterNoComputeWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val googleWriterCanComputeWorkspace = Workspace(
+      "googleWriterCanComputeNamespace",
+      "googleWriterCanComputeWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val googleReaderWorkspace = Workspace(
+      "googleReaderNamespace",
+      "googleReaderWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val expected = List(
+      (azureShareReaderWorkspace.name, Some(false), Some(true)), // share-reader added
+      (azureWriterWorkspace.name, Some(true), Some(false)), // does not have share-writer
+      (googleReaderWorkspace.name, Some(false), Some(false)), // does not have share-reader
+      (googleShareWriterNoComputeWorkspace.name, Some(false), Some(true)), // share-writer added
+      (googleWriterCanComputeWorkspace.name, Some(true), Some(false)) // does not have share-writer
+    )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureShareReaderWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWriterWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleReaderWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleShareWriterNoComputeWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWriterCanComputeWorkspace)
+      } yield ()
+    }
+
+    // mock external calls
+    when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        new WorkspaceDescription()
+          .id(googleReaderWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(googleShareWriterNoComputeWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(googleWriterCanComputeWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(azureShareReaderWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          ),
+        new WorkspaceDescription()
+          .id(azureWriterWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          )
+      )
+    )
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            azureShareReaderWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.reader, SamWorkspaceRoles.shareReader), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            azureWriterWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleReaderWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.reader), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleShareWriterNoComputeWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.shareWriter), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleWriterCanComputeWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.canCompute), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    // actually call listWorkspaces to get result it returns given the mocked calls you set up
+    val result =
+      Await
+        .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+
+    // verify that the result is what you expect it to be
+    result.map(ws => (ws.workspace.name, ws.canCompute, ws.canShare)) should contain theSameElementsAs expected
+  }
+
   "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {
     services =>
       val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
