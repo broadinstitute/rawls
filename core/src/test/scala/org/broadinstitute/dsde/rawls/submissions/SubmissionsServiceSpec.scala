@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.submissions
 
-
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.StatusCodes
@@ -31,14 +30,19 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceRepository, WorkspaceService}
-import org.broadinstitute.dsde.rawls.{ RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceRepository,
+  WorkspaceService
+}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.mockito.{Mockito}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -51,22 +55,22 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
-
-class SubmissionsServiceSpec extends AnyFlatSpec
-  with ScalatestRouteTest
-  with Matchers
-  with TestDriverComponent
-  with RawlsTestUtils
-  with Eventually
-  with MockitoTestUtils
-  with RawlsStatsDTestUtils
-  with BeforeAndAfterAll
-  with TableDrivenPropertyChecks
-  with OptionValues {
+class SubmissionsServiceSpec
+    extends AnyFlatSpec
+    with ScalatestRouteTest
+    with Matchers
+    with TestDriverComponent
+    with RawlsTestUtils
+    with Eventually
+    with MockitoTestUtils
+    with RawlsStatsDTestUtils
+    with BeforeAndAfterAll
+    with TableDrivenPropertyChecks
+    with OptionValues {
 
   import driver.api._
 
-  val workspace = Workspace(
+  val workspace: Workspace = Workspace(
     testData.wsName.namespace,
     testData.wsName.name,
     "aWorkspaceId",
@@ -78,7 +82,7 @@ class SubmissionsServiceSpec extends AnyFlatSpec
     Map.empty
   )
 
-  val mockServer = RemoteServicesMockServer()
+  val mockServer: RemoteServicesMockServer = RemoteServicesMockServer()
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
@@ -94,11 +98,11 @@ class SubmissionsServiceSpec extends AnyFlatSpec
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
-                                                                        override val executionContext: ExecutionContext
+    override val executionContext: ExecutionContext
   ) extends WorkspaceApiService
-    with MethodConfigApiService
-    with SubmissionApiService
-    with MockUserInfoDirectivesWithUser {
+      with MethodConfigApiService
+      with SubmissionApiService
+      with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
@@ -111,14 +115,14 @@ class SubmissionsServiceSpec extends AnyFlatSpec
 
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
-    val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
-    val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
-    val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
-    val samDAO = Mockito.spy(new MockSamDAO(dataSource))
+    val googleAccessContextManagerDAO = spy(new MockGoogleAccessContextManagerDAO())
+    val gcsDAO = spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
+    val googleIamDAO: MockGoogleIamDAO = spy(new MockGoogleIamDAO)
+    val googleStorageDAO: MockGoogleStorageDAO = spy(new MockGoogleStorageDAO)
+    val samDAO = spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -127,7 +131,7 @@ class SubmissionsServiceSpec extends AnyFlatSpec
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
-    val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
+    val notificationDAO = spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
 
     val testConf = ConfigFactory.load()
 
@@ -229,7 +233,7 @@ class SubmissionsServiceSpec extends AnyFlatSpec
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = Mockito.spy(new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig))
+    val resourceBufferService = spy(new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig))
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -321,15 +325,14 @@ class SubmissionsServiceSpec extends AnyFlatSpec
         workspaceRepository
       ) _
 
-
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
   }
 
   class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(implicit
-                                                                                                  override val executionContext: ExecutionContext
+    override val executionContext: ExecutionContext
   ) extends TestApiService(dataSource, user) {
-    override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomizableMockSamDAO(dataSource))
+    override val samDAO: CustomizableMockSamDAO = spy(new CustomizableMockSamDAO(dataSource))
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -369,7 +372,6 @@ class SubmissionsServiceSpec extends AnyFlatSpec
       apiService.cleanupSupervisor
   }
 
-
   behavior of "getSpendReportTableName"
   it should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices {
     services =>
@@ -397,16 +399,16 @@ class SubmissionsServiceSpec extends AnyFlatSpec
   it should "return None if the spend report config is not set" in withTestDataServices { services =>
     val billingProjectName = RawlsBillingProjectName("test-project")
     val billingProject = RawlsBillingProject(billingProjectName,
-      CreationStatuses.Ready,
-      None,
-      None,
-      None,
-      None,
-      None,
-      false,
-      None,
-      None,
-      None
+                                             CreationStatuses.Ready,
+                                             None,
+                                             None,
+                                             None,
+                                             None,
+                                             None,
+                                             false,
+                                             None,
+                                             None,
+                                             None
     )
     runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
@@ -425,7 +427,6 @@ class SubmissionsServiceSpec extends AnyFlatSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
   }
-
 
   "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {
     services =>

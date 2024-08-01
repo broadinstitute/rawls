@@ -50,18 +50,10 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.google.{
-  GcsBucketName,
-  GoogleProject,
-  IamPermission
-}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._

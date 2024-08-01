@@ -1,4 +1,5 @@
 package org.broadinstitute.dsde.rawls.methods
+
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -37,7 +38,6 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import slick.dbio.DBIO
 import spray.json.JsonParser
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
