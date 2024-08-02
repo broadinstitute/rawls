@@ -5,7 +5,16 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceDAO, ExecutionServiceId, GoogleServicesDAO, MethodRepoDAO, SamDAO, SlickDataSource, SubmissionCostService}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  ExecutionServiceCluster,
+  ExecutionServiceDAO,
+  ExecutionServiceId,
+  GoogleServicesDAO,
+  MethodRepoDAO,
+  SamDAO,
+  SlickDataSource,
+  SubmissionCostService
+}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
@@ -16,13 +25,54 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{ActiveSubmission, AttributeEntityReference, AttributeString, AttributeValue, ErrorReport, ErrorReportSource, ExecutionServiceLogs, ExecutionServiceOutputs, ExternalEntityInfo, MetadataParams, MethodConfiguration, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RetriedSubmissionReport, SamWorkspaceActions, Submission, SubmissionListResponse, SubmissionReport, SubmissionRequest, SubmissionRetry, SubmissionStatuses, SubmissionValidationEntityInputs, SubmissionValidationHeader, SubmissionValidationInput, SubmissionValidationReport, TaskOutput, UserCommentUpdateOperation, Workflow, WorkflowCost, WorkflowFailureModes, WorkflowOutputs, WorkflowQueueStatusByUserResponse, WorkflowQueueStatusResponse, WorkflowStatuses, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  ActiveSubmission,
+  AttributeEntityReference,
+  AttributeString,
+  AttributeValue,
+  ErrorReport,
+  ErrorReportSource,
+  ExecutionServiceLogs,
+  ExecutionServiceOutputs,
+  ExternalEntityInfo,
+  MetadataParams,
+  MethodConfiguration,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  RetriedSubmissionReport,
+  SamWorkspaceActions,
+  Submission,
+  SubmissionListResponse,
+  SubmissionReport,
+  SubmissionRequest,
+  SubmissionRetry,
+  SubmissionStatuses,
+  SubmissionValidationEntityInputs,
+  SubmissionValidationHeader,
+  SubmissionValidationInput,
+  SubmissionValidationReport,
+  TaskOutput,
+  UserCommentUpdateOperation,
+  Workflow,
+  WorkflowCost,
+  WorkflowFailureModes,
+  WorkflowOutputs,
+  WorkflowQueueStatusByUserResponse,
+  WorkflowQueueStatusResponse,
+  WorkflowStatuses,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName
+}
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.extractOperationIdsFromCromwellMetadata
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
+import spray.json.DefaultJsonProtocol.jsonFormat1
 import spray.json.JsObject
 
 import java.util.UUID
@@ -68,6 +118,23 @@ object SubmissionsService {
       config,
       workspaceRepository
     )
+
+  def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
+    case class Call(jobId: Option[String])
+    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
+    implicit val callFormat = jsonFormat1(Call)
+    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
+
+    for {
+      calls <- metadataJson
+        .convertTo[OpMetadata]
+        .calls
+        .toList // toList on the Option makes the compiler like the for comp
+      call <- calls.values.flatten
+      jobId <- call.jobId
+    } yield jobId
+  }
+
 }
 
 class SubmissionsService(
@@ -99,16 +166,15 @@ class SubmissionsService(
 
   import dataSource.dataAccess.driver.api._
 
-
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
   def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[Option[JsObject]] =
-  // note that cromiam should only give back metadata if the user is authorized to see it
+    // note that cromiam should only give back metadata if the user is authorized to see it
     cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), ctx.userInfo).flatMap {
       metadataJson =>
-        val operationIds: Iterable[String] = WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson)
+        val operationIds: Iterable[String] = extractOperationIdsFromCromwellMetadata(metadataJson)
 
         val operationIdString = operationId.mkString("/")
         // check that the requested operation id actually exists in the workflow
@@ -174,10 +240,9 @@ class SubmissionsService(
       }
     }
 
-
   def getSubmissionMethodConfiguration(workspaceName: WorkspaceName,
                                        submissionId: String
-                                      ): Future[MethodConfiguration] =
+  ): Future[MethodConfiguration] =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery
@@ -190,14 +255,14 @@ class SubmissionsService(
                   case None =>
                     throw new RawlsExceptionWithErrorReport(
                       ErrorReport(StatusCodes.NotFound,
-                        s"The method configuration for submission ${submissionId} could not be found."
+                                  s"The method configuration for submission ${submissionId} could not be found."
                       )
                     )
                 }
               case None =>
                 throw new RawlsExceptionWithErrorReport(
                   ErrorReport(StatusCodes.NotFound,
-                    s"The method configuration for submission ${submissionId} could not be found."
+                              s"The method configuration for submission ${submissionId} could not be found."
                   )
                 )
             }
@@ -864,13 +929,12 @@ class SubmissionsService(
       }
     }
 
-
   /**
     * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
   private def mergeWorkflowOutputs(execOuts: ExecutionServiceOutputs,
                                    execLogs: ExecutionServiceLogs,
                                    workflowId: String
-                                  ): WorkflowOutputs = {
+  ): WorkflowOutputs = {
     val outs = execOuts.outputs
     val logs = execLogs.calls getOrElse Map()
 
@@ -898,15 +962,15 @@ class SubmissionsService(
             case (Failure(outputsFailure), Success(logs)) =>
               throw new RawlsExceptionWithErrorReport(
                 errorReport = ErrorReport(StatusCodes.BadGateway,
-                  s"Unable to get outputs for ${submissionId}.",
-                  executionServiceCluster.toErrorReport(outputsFailure)
+                                          s"Unable to get outputs for ${submissionId}.",
+                                          executionServiceCluster.toErrorReport(outputsFailure)
                 )
               )
             case (Success(outputs), Failure(logsFailure)) =>
               throw new RawlsExceptionWithErrorReport(
                 errorReport = ErrorReport(StatusCodes.BadGateway,
-                  s"Unable to get logs for ${submissionId}.",
-                  executionServiceCluster.toErrorReport(logsFailure)
+                                          s"Unable to get logs for ${submissionId}.",
+                                          executionServiceCluster.toErrorReport(logsFailure)
                 )
               )
             case (Failure(outputsFailure), Failure(logsFailure)) =>
@@ -915,7 +979,7 @@ class SubmissionsService(
                   StatusCodes.BadGateway,
                   s"Unable to get outputs and unable to get logs for ${submissionId}.",
                   Seq(executionServiceCluster.toErrorReport(outputsFailure),
-                    executionServiceCluster.toErrorReport(logsFailure)
+                      executionServiceCluster.toErrorReport(logsFailure)
                   )
                 )
               )
@@ -928,8 +992,7 @@ class SubmissionsService(
                                     submissionId: String,
                                     workflowId: String,
                                     dataAccess: DataAccess
-                                   )(op: (WorkflowRecord) => ReadWriteAction[T]): ReadWriteAction[T] =
-
+  )(op: (WorkflowRecord) => ReadWriteAction[T]): ReadWriteAction[T] =
     dataAccess.workflowQuery
       .findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(submissionId))
       .result flatMap {

@@ -121,22 +121,6 @@ object WorkspaceService {
 
   val BUCKET_GET_PERMISSION = "storage.buckets.get"
 
-  def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
-    case class Call(jobId: Option[String])
-    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
-    implicit val callFormat = jsonFormat1(Call)
-    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
-
-    for {
-      calls <- metadataJson
-        .convertTo[OpMetadata]
-        .calls
-        .toList // toList on the Option makes the compiler like the for comp
-      call <- calls.values.flatten
-      jobId <- call.jobId
-    } yield jobId
-  }
-
   def getTerminalStatusDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
     // find all workflows that have finished
     val terminalWorkflows =
