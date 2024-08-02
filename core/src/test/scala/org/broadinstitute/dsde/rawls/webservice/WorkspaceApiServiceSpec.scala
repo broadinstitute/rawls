@@ -2852,13 +2852,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testData.userWriter.userEmail.value
   ) { services =>
     Put(s"${testData.workspace.path}/enableRequesterPaysForLinkedServiceAccounts") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      services.baseApiRoutes(Context.root()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
 
     Put(s"${testData.workspace.path}/disableRequesterPaysForLinkedServiceAccounts") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      services.baseApiRoutes(Context.root()) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
@@ -2878,7 +2878,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         List("userComment" -> "user comment updated".toJson): _*
       )
     ) ~>
-      service.instrumentedRoutes ~>
+      service.baseApiRoutes(Context.root()) ~>
       check {
         status should be(StatusCodes.NoContent)
       }
@@ -2898,7 +2898,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         List("userComment" -> "user comment updated".toJson): _*
       )
     ) ~>
-      service.instrumentedRoutes ~>
+      service.baseApiRoutes(Context.root()) ~>
       check {
         status should be(StatusCodes.NotFound)
       }
@@ -2918,7 +2918,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         List("userComment" -> "user comment updated".toJson): _*
       )
     ) ~>
-      service.instrumentedRoutes ~>
+      service.baseApiRoutes(Context.root()) ~>
       check { testResult: RouteTestResult =>
         val response = responseAs[String]
         status should be(StatusCodes.Forbidden)

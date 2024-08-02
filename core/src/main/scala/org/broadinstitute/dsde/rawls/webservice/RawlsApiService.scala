@@ -118,7 +118,7 @@ trait RawlsApiService
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = (otelContext: Context) =>
+  val baseApiRoutes: Context => Route = (otelContext: Context) =>
     workspaceRoutesV2(otelContext) ~
       workspaceRoutes(otelContext) ~
       entityRoutes(otelContext) ~

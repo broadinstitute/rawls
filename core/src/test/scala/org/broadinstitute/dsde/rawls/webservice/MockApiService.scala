@@ -68,40 +68,7 @@ class MockApiService(
     with WorkspaceApiService
     with SubmissionApiService {
 
+
   override def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] = provide(userInfo)
-
-  val sealedRoutes: Route =  sealRoute(
-    workspaceRoutesV2() ~
-      workspaceRoutes() ~
-      entityRoutes() ~
-      methodConfigRoutes() ~
-      submissionRoutes() ~
-      adminRoutes() ~
-      userRoutes() ~
-      billingRoutesV2() ~
-      billingRoutes() ~
-      notificationsRoutes ~
-      servicePerimeterRoutes() ~
-      snapshotRoutes() ~
-      statusRoute
-  )
-
-  val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
-    sealRoute(
-      workspaceRoutesV2(otelContext) ~
-        workspaceRoutes(otelContext) ~
-        entityRoutes(otelContext) ~
-        methodConfigRoutes(otelContext) ~
-        submissionRoutes(otelContext) ~
-        adminRoutes(otelContext) ~
-        userRoutes(otelContext) ~
-        billingRoutesV2(otelContext) ~
-        billingRoutes(otelContext) ~
-        notificationsRoutes ~
-        servicePerimeterRoutes(otelContext) ~
-        snapshotRoutes(otelContext) ~
-        statusRoute
-    )
-  }
-
+  
 }
