@@ -65,7 +65,10 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceAttributeSpecs,
   WorkspaceName
 }
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.extractOperationIdsFromCromwellMetadata
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
+  extractOperationIdsFromCromwellMetadata,
+  getTerminalStatusDate
+}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
@@ -133,6 +136,23 @@ object SubmissionsService {
       call <- calls.values.flatten
       jobId <- call.jobId
     } yield jobId
+  }
+
+  def getTerminalStatusDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
+    // find all workflows that have finished
+    val terminalWorkflows =
+      submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
+    // optionally limit the list to a specific workflowID
+    val workflows = workflowID match {
+      case Some(_) => terminalWorkflows.filter(_.workflowId == workflowID)
+      case None    => terminalWorkflows
+    }
+    if (workflows.isEmpty) {
+      None
+    } else {
+      // use the latest date the workflow(s) reached a terminal status
+      Option(workflows.map(_.statusLastChangedDate).maxBy(_.getMillis))
+    }
   }
 
 }
@@ -339,7 +359,7 @@ class SubmissionsService(
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, ctx.userInfo, optExecId)
-      submissionDoneDate = WorkspaceService.getTerminalStatusDate(submission, Option(workflowId))
+      submissionDoneDate = getTerminalStatusDate(submission, Option(workflowId))
       costs <- submissionCostService.getWorkflowCost(workflowId,
                                                      workspace.googleProjectId,
                                                      submission.submissionDate,
@@ -411,7 +431,7 @@ class SubmissionsService(
     traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
+        val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
 
         getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
           toFutureTry(

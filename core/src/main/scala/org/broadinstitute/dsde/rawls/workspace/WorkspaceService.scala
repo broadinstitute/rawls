@@ -121,22 +121,6 @@ object WorkspaceService {
 
   val BUCKET_GET_PERMISSION = "storage.buckets.get"
 
-  def getTerminalStatusDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
-    // find all workflows that have finished
-    val terminalWorkflows =
-      submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
-    // optionally limit the list to a specific workflowID
-    val workflows = workflowID match {
-      case Some(_) => terminalWorkflows.filter(_.workflowId == workflowID)
-      case None    => terminalWorkflows
-    }
-    if (workflows.isEmpty) {
-      None
-    } else {
-      // use the latest date the workflow(s) reached a terminal status
-      Option(workflows.map(_.statusLastChangedDate).maxBy(_.getMillis))
-    }
-  }
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
