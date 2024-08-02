@@ -72,7 +72,7 @@ import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSe
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
-import spray.json.DefaultJsonProtocol.jsonFormat1
+import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
 
 import java.util.UUID

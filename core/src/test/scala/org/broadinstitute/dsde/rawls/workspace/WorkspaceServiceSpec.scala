@@ -1790,7 +1790,7 @@ class WorkspaceServiceSpec
 
     import spray.json._
     val metadataJson = jsonString.parseJson.asJsObject
-    WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson) should contain theSameElementsAs Seq(
+    SubmissionsService.extractOperationIdsFromCromwellMetadata(metadataJson) should contain theSameElementsAs Seq(
       "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
       "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
     )
