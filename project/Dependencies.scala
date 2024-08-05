@@ -65,7 +65,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.7"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.12.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.12.1"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.12.0"
@@ -77,7 +77,7 @@ object Dependencies {
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.16.1"
-  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.1"
+  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.4.0"
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
@@ -112,7 +112,7 @@ object Dependencies {
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
   val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.13.1"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.1"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.2"
 
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")

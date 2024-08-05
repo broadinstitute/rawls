@@ -9,13 +9,19 @@ import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
-import org.broadinstitute.dsde.workbench.service.{AclEntry, Google, Orchestration, Rawls, RestException, WorkspaceAccessLevel}
+import org.broadinstitute.dsde.workbench.service.{
+  AclEntry,
+  Google,
+  Orchestration,
+  Rawls,
+  RestException,
+  WorkspaceAccessLevel
+}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json._
-
 
 @AuthDomainsTest
 class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures with GroupFixtures with Eventually {
