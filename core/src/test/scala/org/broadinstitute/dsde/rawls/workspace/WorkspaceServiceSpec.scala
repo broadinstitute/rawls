@@ -36,29 +36,24 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.google.{
-  BigQueryDatasetName,
-  BigQueryTableName,
-  GcsBucketName,
-  GoogleProject,
-  IamPermission
-}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -77,7 +72,7 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
@@ -127,7 +122,7 @@ class WorkspaceServiceSpec
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
-    val executionContext: ExecutionContext
+    override val executionContext: ExecutionContext
   ) extends WorkspaceApiService
       with MethodConfigApiService
       with SubmissionApiService
@@ -135,6 +130,8 @@ class WorkspaceServiceSpec
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
+    lazy val methodConfigurationService: MethodConfigurationService = methodConfigurationServiceConstructor(ctx1)
+    lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
 
@@ -286,31 +283,20 @@ class WorkspaceServiceSpec
       terraBucketWriterRole
     ) _
 
+    val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(
-        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-        workbenchMetricBaseName = workbenchMetricBaseName
-      ),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
       leonardoService,
-      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager,
       resourceBufferService,
       servicePerimeterService,
       googleIamDAO,
@@ -323,6 +309,42 @@ class WorkspaceServiceSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor
     ) _
+
+    val methodRepoDAO = new HttpMethodRepoDAO(
+      MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+      workbenchMetricBaseName = workbenchMetricBaseName
+    )
+
+    override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+      MethodConfigurationService.constructor(
+        slickDataSource,
+        samDAO,
+        methodRepoDAO,
+        methodConfigResolver,
+        entityManager,
+        workspaceRepository,
+        workbenchMetricBaseName
+      ) _
+
+    override val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService =
+      SubmissionsService.constructor(
+        slickDataSource,
+        entityManager,
+        methodRepoDAO,
+        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        executionServiceCluster,
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName,
+        submissionCostService,
+        genomicsServiceConstructor,
+        workspaceServiceConfig,
+        workspaceRepository
+      ) _
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
@@ -1721,123 +1743,6 @@ class WorkspaceServiceSpec
       }
     }
 
-  "extractOperationIdsFromCromwellMetadata" should "parse workflow metadata" in {
-    val jsonString =
-      """{
-        |  "calls": {
-        |    "hello_and_goodbye.goodbye": [
-        |      {
-        |        "attempt": 1,
-        |        "backendLogs": {
-        |          "log": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye.log"
-        |        },
-        |        "backendStatus": "Success",
-        |        "end": "2019-04-24T13:57:48.998Z",
-        |        "executionStatus": "Done",
-        |        "jobId": "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
-        |        "shardIndex": -1,
-        |        "start": "2019-04-24T13:56:22.387Z",
-        |        "stderr": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye-stderr.log",
-        |        "stdout": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye-stdout.log"
-        |      }
-        |    ],
-        |    "hello_and_goodbye.hello": [
-        |      {
-        |        "attempt": 1,
-        |        "backendLogs": {
-        |          "log": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello.log"
-        |        },
-        |        "backendStatus": "Success",
-        |        "end": "2019-04-24T13:58:21.978Z",
-        |        "executionStatus": "Done",
-        |        "jobId": "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl",
-        |        "shardIndex": -1,
-        |        "start": "2019-04-24T13:56:22.387Z",
-        |        "stderr": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello-stderr.log",
-        |        "stdout": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello-stdout.log"
-        |      }
-        |    ]
-        |  },
-        |  "end": "2019-04-24T13:58:23.868Z",
-        |  "id": "0d6768b7-73b3-41c4-b292-de743657c5db",
-        |  "start": "2019-04-24T13:56:20.348Z",
-        |  "status": "Succeeded",
-        |  "workflowName": "sub.hello_and_goodbye",
-        |  "workflowRoot": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/"
-        |}""".stripMargin
-
-    import spray.json._
-    val metadataJson = jsonString.parseJson.asJsObject
-    WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson) should contain theSameElementsAs Seq(
-      "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
-      "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
-    )
-  }
-
-  behavior of "getTerminalStatusDate"
-
-  // test getTerminalStatusDate
-  private val workflowFinishingTomorrow =
-    testData.submissionMixed.workflows.head.copy(statusLastChangedDate = testDate.plusDays(1))
-  private val submissionMixedDates = testData.submissionMixed.copy(
-    workflows = workflowFinishingTomorrow +: testData.submissionMixed.workflows.tail
-  )
-  private val getTerminalStatusDateTests = Table(
-    ("description", "submission", "workflowId", "expectedOutput"),
-    ("submission containing one completed workflow, no workflowId input",
-     testData.submissionSuccessful1,
-     None,
-     Option(testDate)
-    ),
-    ("submission containing one completed workflow, with workflowId input",
-     testData.submissionSuccessful1,
-     testData.submissionSuccessful1.workflows.head.workflowId,
-     Option(testDate)
-    ),
-    ("submission containing one completed workflow, with nonexistent workflowId input",
-     testData.submissionSuccessful1,
-     Option("thisWorkflowIdDoesNotExist"),
-     None
-    ),
-    ("submission containing several workflows with one finishing tomorrow, no workflowId input",
-     submissionMixedDates,
-     None,
-     Option(testDate.plusDays(1))
-    ),
-    ("submission containing several workflows, with workflowId input for workflow finishing tomorrow",
-     submissionMixedDates,
-     submissionMixedDates.workflows.head.workflowId,
-     Option(testDate.plusDays(1))
-    ),
-    ("submission containing several workflows, with workflowId input for workflow finishing today",
-     submissionMixedDates,
-     submissionMixedDates.workflows(2).workflowId,
-     Option(testDate)
-    ),
-    ("submission containing several workflows, with workflowId input for workflow not finished",
-     submissionMixedDates,
-     submissionMixedDates.workflows.last.workflowId,
-     None
-    ),
-    ("aborted submission, no workflowId input", testData.submissionAborted1, None, Option(testDate)),
-    ("aborted submission, with workflowId input",
-     testData.submissionAborted1,
-     testData.submissionAborted1.workflows.head.workflowId,
-     Option(testDate)
-    ),
-    ("in progress submission, no workflowId input", testData.submissionSubmitted, None, None),
-    ("in progress submission, with workflowId input",
-     testData.submissionSubmitted,
-     testData.submissionSubmitted.workflows.head.workflowId,
-     None
-    )
-  )
-  forAll(getTerminalStatusDateTests) { (description, submission, workflowId, expectedOutput) =>
-    it should s"run getTerminalStatusDate test for $description" in {
-      assertResult(WorkspaceService.getTerminalStatusDate(submission, workflowId))(expectedOutput)
-    }
-  }
-
   behavior of "RequesterPays"
 
   it should "return Unit when adding linked service accounts to workspace" in withTestDataServices { services =>
@@ -2935,61 +2840,6 @@ class WorkspaceServiceSpec
       verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProject), any[String])
   }
 
-  "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices {
-    services =>
-      val billingProjectName = RawlsBillingProjectName("test-project")
-      val billingProject = RawlsBillingProject(
-        billingProjectName,
-        CreationStatuses.Ready,
-        None,
-        None,
-        None,
-        None,
-        None,
-        false,
-        Some(BigQueryDatasetName("bar")),
-        Some(BigQueryTableName("baz")),
-        Some(GoogleProject("foo"))
-      )
-      runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
-
-      val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
-
-      result shouldBe Some("foo.bar.baz")
-  }
-
-  it should "return None if the spend report config is not set" in withTestDataServices { services =>
-    val billingProjectName = RawlsBillingProjectName("test-project")
-    val billingProject = RawlsBillingProject(billingProjectName,
-                                             CreationStatuses.Ready,
-                                             None,
-                                             None,
-                                             None,
-                                             None,
-                                             None,
-                                             false,
-                                             None,
-                                             None,
-                                             None
-    )
-    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
-
-    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
-
-    result shouldBe None
-  }
-
-  it should "throw a RawlsExceptionWithErrorReport if the billing project does not exist" in withTestDataServices {
-    services =>
-      val billingProjectName = RawlsBillingProjectName("test-project")
-
-      val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
-      }
-
-      actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
-  }
-
   behavior of "sendChangeNotifications"
 
   it should "send a workspace changed notification to all users" in withTestDataServices { services =>
@@ -4036,45 +3886,169 @@ class WorkspaceServiceSpec
     matchingWorkspaces.size should be(1)
   }
 
-  "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {
-    services =>
-      val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
-      val originalMethodConfig = testData.agoraMethodConfig
+  it should "return canCompute and canShare for Azure and Google workspaces" in withTestDataServices { services =>
+    val service = services.workspaceService
 
-      // Overwrite the method configuration that was used for the submission. This forces it to generate a new version and soft-delete the old one
-      Await.result(
-        services.workspaceService.overwriteMethodConfiguration(
-          workspaceName,
-          originalMethodConfig.namespace,
-          originalMethodConfig.name,
-          originalMethodConfig.copy(inputs = Map("i1" -> AttributeString("input_updated")))
-        ),
-        Duration.Inf
+    // set up test data
+    val azureWriterWorkspace =
+      Workspace.buildReadyMcWorkspace("azureWriterNamespace",
+                                      "azureWriterWorkspace",
+                                      UUID.randomUUID().toString,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser1",
+                                      Map.empty
       )
-
-      val firstSubmission =
-        Await.result(services.workspaceService.listSubmissions(workspaceName, testContext), Duration.Inf).head
-
-      val result = Await.result(
-        services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
-        Duration.Inf
+    val azureShareReaderWorkspace =
+      Workspace.buildReadyMcWorkspace("azureReaderNamespace",
+                                      "azureReaderWorkspace",
+                                      UUID.randomUUID().toString,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser1",
+                                      Map.empty
       )
+    val googleShareWriterNoComputeWorkspace = Workspace(
+      "googleWriterNoComputeNamespace",
+      "googleWriterNoComputeWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val googleWriterCanComputeWorkspace = Workspace(
+      "googleWriterCanComputeNamespace",
+      "googleWriterCanComputeWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val googleReaderWorkspace = Workspace(
+      "googleReaderNamespace",
+      "googleReaderWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val expected = List(
+      (azureShareReaderWorkspace.name, Some(false), Some(true)), // share-reader added
+      (azureWriterWorkspace.name, Some(true), Some(false)), // does not have share-writer
+      (googleReaderWorkspace.name, Some(false), Some(false)), // does not have share-reader
+      (googleShareWriterNoComputeWorkspace.name, Some(false), Some(true)), // share-writer added
+      (googleWriterCanComputeWorkspace.name, Some(true), Some(false)) // does not have share-writer
+    )
 
-      // None of the following attributes of a method config change when it is soft-deleted
-      assertResult(originalMethodConfig.namespace)(result.namespace)
-      assertResult(originalMethodConfig.inputs)(result.inputs)
-      assertResult(originalMethodConfig.outputs)(result.outputs)
-      assertResult(originalMethodConfig.prerequisites)(result.prerequisites)
-      assertResult(originalMethodConfig.methodConfigVersion)(result.methodConfigVersion)
-      assertResult(originalMethodConfig.methodRepoMethod)(result.methodRepoMethod)
-      assertResult(originalMethodConfig.rootEntityType)(result.rootEntityType)
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureShareReaderWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWriterWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleReaderWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleShareWriterNoComputeWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWriterCanComputeWorkspace)
+      } yield ()
+    }
 
-      // The following attributes are modified when it is soft-deleted
-      assert(
-        result.name.startsWith(originalMethodConfig.name)
-      ) // a random suffix is added in this case, should be something like "testConfig1_HoQyHjLZ"
-      assert(result.deleted)
-      assert(result.deletedDate.isDefined)
+    // mock external calls
+    when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        new WorkspaceDescription()
+          .id(googleReaderWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(googleShareWriterNoComputeWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(googleWriterCanComputeWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(azureShareReaderWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          ),
+        new WorkspaceDescription()
+          .id(azureWriterWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          )
+      )
+    )
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            azureShareReaderWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.reader, SamWorkspaceRoles.shareReader), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            azureWriterWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleReaderWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.reader), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleShareWriterNoComputeWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.shareWriter), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleWriterCanComputeWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.canCompute), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    // actually call listWorkspaces to get result it returns given the mocked calls you set up
+    val result =
+      Await
+        .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+
+    // verify that the result is what you expect it to be
+    result.map(ws => (ws.workspace.name, ws.canCompute, ws.canShare)) should contain theSameElementsAs expected
   }
 
   "checkWorkspaceCloudPermissions" should "use workspace pet for > reader" in withTestDataServices { services =>

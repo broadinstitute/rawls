@@ -77,7 +77,7 @@ object Dependencies {
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.16.1"
-  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.1"
+  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.4.0"
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
@@ -112,7 +112,7 @@ object Dependencies {
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
   val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.13.1"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.1"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.2"
 
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
@@ -134,7 +134,7 @@ object Dependencies {
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
   val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.557-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-70fda75")
+  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.264")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
 
   // OpenTelemetry
