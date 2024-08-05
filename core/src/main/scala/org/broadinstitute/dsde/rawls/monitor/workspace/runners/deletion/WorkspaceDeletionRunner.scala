@@ -4,6 +4,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+
+import org.broadinstitute.dsde.workbench.client.leonardo.{ApiException => LeoException}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   LeoAppDeletionPoll,
   LeoRuntimeDeletionPoll,
@@ -121,6 +123,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
       case WorkspaceDeleteInit => completeStep(job, workspace, ctx)
       case LeoAppDeletionPoll =>
         leoService.pollAppDeletion(workspace, ctx).transformWith {
+          case Failure(e: LeoException) if e.getCode == 404 => completeStep(job, workspace, ctx)
           case Failure(t) =>
             Future.failed(
               new WorkspaceDeletionException(
@@ -133,6 +136,7 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
         }
       case LeoRuntimeDeletionPoll =>
         leoService.pollRuntimeDeletion(workspace, ctx).transformWith {
+          case Failure(e: LeoException) if e.getCode == 404 => completeStep(job, workspace, ctx)
           case Failure(t) =>
             Future.failed(
               new WorkspaceDeletionException(
@@ -190,12 +194,17 @@ class WorkspaceDeletionRunner(val samDAO: SamDAO,
     job.jobType match {
       case WorkspaceDeleteInit =>
         for {
-          _ <- leoService.deleteApps(workspace, ctx)
+          _ <- leoService.deleteApps(workspace, ctx).recover {
+            case e: LeoException if e.getCode == 404 =>
+              logger.warn(s"No runtime found when deleting workspace ${workspace.workspaceId}", e)
+          }
           _ <- monitorRecordDao.update(job.copy(jobType = LeoAppDeletionPoll))
         } yield Incomplete
       case LeoAppDeletionPoll =>
         for {
-          _ <- leoService.deleteRuntimes(workspace, ctx)
+          _ <- leoService.deleteRuntimes(workspace, ctx).recover { case e: LeoException =>
+            logger.warn(s"No runtime found when deleting workspace ${workspace.workspaceId}", e)
+          }
           _ <- monitorRecordDao.update(job.copy(jobType = LeoRuntimeDeletionPoll))
         } yield Incomplete
       case LeoRuntimeDeletionPoll =>

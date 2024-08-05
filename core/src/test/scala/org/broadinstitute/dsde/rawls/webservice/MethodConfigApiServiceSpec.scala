@@ -263,14 +263,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
                                                 Map(),
                                                 AgoraMethod("dsde", "method_doesnt_exist", 1)
       )
-
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
-        check {
+        check { testResult: RouteTestResult =>
           assertResult(StatusCodes.NotFound) {
             status
           }
         }
+
   }
 
   it should "not allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices {

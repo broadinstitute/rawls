@@ -8,4 +8,4 @@ Added:
 - Support 2.13
 - ExecutionModel classes moved from core to model
 
-SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "1824ef0eb"`
+SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "339209ac"`
