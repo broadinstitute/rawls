@@ -77,7 +77,7 @@ object Dependencies {
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.16.1"
-  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.1"
+  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.4.0"
   // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
