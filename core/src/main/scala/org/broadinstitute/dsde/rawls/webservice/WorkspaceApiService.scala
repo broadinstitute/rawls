@@ -48,10 +48,14 @@ trait WorkspaceApiService extends UserInfoDirectives {
             parameterSeq { allParams =>
               parameter("stringAttributeMaxLength".as[Int].withDefault(-1)) { stringAttributeMaxLength =>
                 complete {
-                  throw new SQLException("Super Secret Message")
-                  //workspaceServiceConstructor(ctx).listWorkspaces(
-                   // WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
-                    //stringAttributeMaxLength
+                  val fields =  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+                  val fieldParams = fields.fields.getOrElse(Set.empty)
+                  if(fieldParams.contains("testException")) {
+                    throw new SQLException("Super Secret Message")
+                  }
+                  workspaceServiceConstructor(ctx).listWorkspaces(
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                    stringAttributeMaxLength
                   )
                 }
               }
