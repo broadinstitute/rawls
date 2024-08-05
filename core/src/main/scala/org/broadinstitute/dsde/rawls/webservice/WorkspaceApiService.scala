@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
 
+import java.sql.SQLException
 import scala.concurrent.ExecutionContext
 
 /**
@@ -47,9 +48,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
             parameterSeq { allParams =>
               parameter("stringAttributeMaxLength".as[Int].withDefault(-1)) { stringAttributeMaxLength =>
                 complete {
-                  workspaceServiceConstructor(ctx).listWorkspaces(
-                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
-                    stringAttributeMaxLength
+                  throw new SQLException("Super Secret Message")
+                  //workspaceServiceConstructor(ctx).listWorkspaces(
+                   // WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                    //stringAttributeMaxLength
                   )
                 }
               }

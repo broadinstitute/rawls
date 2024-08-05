@@ -35,7 +35,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 
-import java.sql.SQLTransactionRollbackException
+import java.sql.{SQLException, SQLTransactionRollbackException}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -61,6 +61,14 @@ object RawlsApiService extends LazyLogging {
         )
         Sentry.captureException(rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
+      case sql: SQLException =>
+        val sentryId = Sentry.captureException(sql)
+        logger.error(
+          s"Unhandled SQL exception with sentry id [$sentryId]: ${sql.getMessage} [${sql.getErrorCode} ${sql.getSQLState}] ${sql.getNextException}",
+          sql
+        )
+        val message = s"Internal server exception with sentry id: [${sentryId.toString}]"
+        complete(StatusCodes.InternalServerError -> ErrorReport(message))
       case wsmApiException: ApiException =>
         if (wsmApiException.getCode >= 500) {
           Sentry.captureException(wsmApiException)
