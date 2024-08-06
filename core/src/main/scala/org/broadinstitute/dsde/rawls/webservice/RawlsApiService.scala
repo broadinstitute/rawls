@@ -67,7 +67,7 @@ object RawlsApiService extends LazyLogging {
           s"Unhandled SQL exception with sentry id [$sentryId]: ${sql.getMessage} [${sql.getErrorCode} ${sql.getSQLState}] ${sql.getNextException}",
           sql
         )
-        val message = s"Internal server exception with sentry id: [${sentryId.toString}]"
+        val message = s"Internal server exception [sentryId=${sentryId.toString}]"
         complete(StatusCodes.InternalServerError -> ErrorReport(message))
       case wsmApiException: ApiException =>
         if (wsmApiException.getCode >= 500) {
