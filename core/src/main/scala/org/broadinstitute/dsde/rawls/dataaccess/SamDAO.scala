@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.Async
 import cats.effect.kernel.Resource
 import org.broadinstitute.dsde.rawls.model.{
@@ -7,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RawlsUser,
   RawlsUserEmail,
+  RawlsUserSubjectId,
   SamCreateResourceResponse,
   SamFullyQualifiedResourceId,
   SamPolicy,
@@ -29,8 +31,8 @@ import org.broadinstitute.dsde.workbench.model._
 import scala.concurrent.Future
 
 /**
-  * Created by mbemis on 9/11/17.
-  */
+ * Created by mbemis on 9/11/17.
+ */
 trait SamDAO {
   val errorReportSource = ErrorReportSource("sam")
 
@@ -137,8 +139,8 @@ trait SamDAO {
   ): Future[Set[UserIdInfo]]
 
   /**
-    * @return a json blob
-    */
+   * @return a json blob
+   */
   def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String]
 
   def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String]
@@ -157,6 +159,12 @@ trait SamDAO {
   ): Future[Seq[SamFullyQualifiedResourceId]]
 
   def admin: SamAdminDAO
+
+  def getRawlsIdentityEmail: Option[String] = None
+
+  def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""), None)
+  )
 }
 
 trait SamAdminDAO {

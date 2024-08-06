@@ -10,9 +10,8 @@ trait UserCtxCreator {
   val samDAO: SamDAO
   val gcsDAO: GoogleServicesDAO
 
-  def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
-    petKey <- samDAO.getUserArbitraryPetServiceAccountKey(userEmail)
-    userInfo <- gcsDAO.getUserInfoUsingJson(petKey)
-  } yield RawlsRequestContext(userInfo)
+  def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = Future(
+    samDAO.rawlsSAContext
+  )
 
 }

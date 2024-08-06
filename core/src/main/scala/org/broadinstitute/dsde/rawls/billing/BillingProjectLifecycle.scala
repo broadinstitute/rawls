@@ -8,9 +8,9 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, ProjectAccessUpdate, ProjectRoles, RawlsRequestContext}
 
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 
 /**
  * Handles provisioning and deleting billing projects with external providers. Implementors of this trait are not concerned
@@ -63,7 +63,10 @@ trait BillingProjectLifecycle extends LazyLogging {
                                  createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): Future[Set[Unit]] = {
-    val members = createProjectRequest.members.getOrElse(Set.empty)
+    val members = createProjectRequest.members.getOrElse(Set.empty) ++ samDAO.getRawlsIdentityEmail.map {
+      email =>
+        ProjectAccessUpdate(email, ProjectRoles.Owner)
+    }
     Future.traverse(members) { member =>
       Future(blocking {
         billingProfileManagerDAO.addProfilePolicyMember(profileModel.getId,
