@@ -241,6 +241,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                        parentContext: RawlsRequestContext = ctx
   ): Future[WorkspaceDetails] =
     for {
+      // get the billing project and ensure we have the needed permissions to create a workspace in it
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext) { s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       }
@@ -249,31 +250,35 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         requireCreateWorkspaceAction(billingProject.projectName, childContext)
       }
 
+      // get the billing _profile_ from BPM; this holds the cloud billing account information related to the billing
+      // project (like the cloud platform and the billing account id.) A billing _profile_ is not guaranteed to be
+      // present for a given billing project, but if it is, we'll use it to determine whether to create a multi-cloud
+      // workspace or a rawls workspace
       billingProfileOpt <- traceFutureWithParent("getBillingProfile", parentContext) { s =>
         getBillingProfile(billingProject, s)
       }
 
-      workspaceOpt <- Apply[Option]
-        .product(Option(multiCloudWorkspaceConfig.azureConfig), billingProfileOpt)
-        .traverse { case (azureConfig, profileModel) =>
-          // "MultiCloud" workspaces are limited to azure-hosted workspaces for now.
-          // This will likely change when the functionality for GCP workspaces gets moved out of Rawls
-          Option(profileModel.getCloudPlatform)
-            .filter(_ == CloudPlatform.AZURE)
-            .traverse { _ =>
-              traceFutureWithParent("createMultiCloudWorkspace", parentContext) { s =>
-                createMultiCloudWorkspace(
-                  workspaceRequest,
-                  profileModel,
-                  s
-                ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
-              }
+      workspaceOpt <-
+        if (isMcGcpWorkspaceRequest(workspaceRequest)) {
+          billingProfileOpt
+            .traverse { profileModel =>
+              Option(profileModel.getCloudPlatform)
+                .traverse { _ =>
+                  traceFutureWithParent("createMultiCloudWorkspace", parentContext) { s =>
+                    createMultiCloudWorkspace(
+                      workspaceRequest,
+                      profileModel,
+                      s
+                    ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
+                  }
+                }
             }
+        } else {
+          Future.successful(None)
         }
 
       // Default to the legacy implementation if no workspace was been created
       // This can happen if there's
-      // - no azure config
       // - no billing profile or the billing profile's cloud platform is GCP
       (workspace, cloudPlatform) <- workspaceOpt.flatten
         .map(Future.successful)
@@ -289,6 +294,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                                      useAttributes = true,
                                                      Some(cloudPlatform)
     )
+
+
+  private def isMcGcpWorkspaceRequest(workspaceRequest: WorkspaceRequest): Boolean = {
+    workspaceRequest.attributes.contains(AttributeName.withDefaultNS("mc_gcp"))
+  }
 
   /**
     * Returns the billing profile associated with the billing project, if the billing project
@@ -781,7 +791,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             spendProfileId,
             workspaceRequest.namespace,
             Seq(wsmConfig.leonardoWsmApplicationId),
-            model.CloudPlatform.AZURE,
+            bpmCloudPlatformToWsmCloudPlatform(profile.getCloudPlatform),
             MultiCloudWorkspaceService.buildPolicyInputs(workspaceRequest),
             ctx
           )
@@ -815,8 +825,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
 
-      // create a WDS application in Leo
-      _ = createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+      // create a WDS application in Leo if it's azure
+      _ = profile.getCloudPlatform match {
+        case CloudPlatform.AZURE => createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+        case _ => Future.successful()
+      }
 
     } yield savedWorkspace).recoverWith {
       case r: RawlsExceptionWithErrorReport if r.errorReport.statusCode.contains(StatusCodes.Conflict) =>
@@ -858,6 +871,13 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             result.getJobReport.getStatus
           )
         )
+    }
+  }
+
+  private def bpmCloudPlatformToWsmCloudPlatform(cloudPlatform: CloudPlatform) = {
+    cloudPlatform match {
+      case CloudPlatform.GCP => model.CloudPlatform.GCP
+      case CloudPlatform.AZURE => model.CloudPlatform.AZURE
     }
   }
 
