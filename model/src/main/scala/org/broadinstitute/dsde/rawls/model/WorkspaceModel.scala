@@ -591,6 +591,8 @@ object WorkspaceSettingConfig {
   case class GcpLifecycleCondition(matchesPrefix: Set[String], age: Option[Int])
 }
 
+case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
+
 sealed trait MethodRepoMethod {
 
   def methodUri: String
@@ -1477,6 +1479,8 @@ class WorkspaceJsonSupport extends JsonSupport {
       jsonFormat(ErrorReport.apply, "source", "message", "statusCode", "causes", "stackTrace", "exceptionClass")
     )
   )
+
+  implicit val WorkspaceSettingResponseFormat: RootJsonFormat[WorkspaceSettingResponse] = jsonFormat2(WorkspaceSettingResponse)
 
   implicit val ApplicationVersionFormat: RootJsonFormat[ApplicationVersion] = jsonFormat3(ApplicationVersion)
 }

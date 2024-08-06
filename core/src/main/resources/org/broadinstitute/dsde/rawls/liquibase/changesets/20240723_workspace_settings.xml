@@ -26,9 +26,5 @@
                 <constraints nullable="false"/>
             </column>
         </createTable>
-        <addUniqueConstraint
-                tableName="WORKSPACE_SETTINGS"
-                columnNames="WORKSPACE_ID, TYPE, STATUS"
-                constraintName="unique_applied_setting_type"/>
     </changeSet>
 </databaseChangeLog>

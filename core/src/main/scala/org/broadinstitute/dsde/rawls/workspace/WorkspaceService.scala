@@ -49,7 +49,7 @@ import spray.json._
 import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.storage.BucketInfo.LifecycleRule
-import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleCondition, LifecycleAction}
+import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
 
@@ -2005,29 +2005,34 @@ class WorkspaceService(
       }
     } yield {}
 
-  def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] = {
+  def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read).flatMap { workspace =>
       workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
     }
-  }
 
-  def setWorkspaceSettings(workspaceName: WorkspaceName, workspaceSettings: List[WorkspaceSetting]): Future[List[WorkspaceSetting]] = {
+  def setWorkspaceSettings(workspaceName: WorkspaceName,
+                           workspaceSettings: List[WorkspaceSetting]
+  ): Future[WorkspaceSettingResponse] = {
+
     /** Apply a setting to a workspace. If the setting is successfully applied, update the database
       * and return None. If the setting fails to apply, remove the failed setting from the database
       * and return the setting type with an error report. If the setting is not supported, throw an
       * exception. We make more trips to the database here than necessary, but we support a small
       * number of setting types and it's easier to reason about this way.
       */
-    def applySetting(workspace: Workspace, setting: WorkspaceSetting): Future[Option[(WorkspaceSettingType, ErrorReport)]] = {
+    def applySetting(workspace: Workspace,
+                     setting: WorkspaceSetting
+    ): Future[Option[(WorkspaceSettingType, ErrorReport)]] =
       (setting match {
-        case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, Some(GcpBucketLifecycleConfig(rules))) => {
+        case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, Some(GcpBucketLifecycleConfig(rules))) =>
           val googleRules = rules.map { rule =>
-            val conditionBuilder = LifecycleCondition.newBuilder().setMatchesPrefix(rule.conditions.matchesPrefix.toList.asJava)
+            val conditionBuilder =
+              LifecycleCondition.newBuilder().setMatchesPrefix(rule.conditions.matchesPrefix.toList.asJava)
             rule.conditions.age.map(age => conditionBuilder.setAge(age))
 
             val action = rule.action.`type` match {
               case actionType if actionType.equals("Delete") => LifecycleAction.newDeleteAction()
-              case _ => throw new RawlsException("unsupported lifecycle action")
+              case _                                         => throw new RawlsException("unsupported lifecycle action")
             }
 
             new LifecycleRule(action, conditionBuilder.build())
@@ -2037,17 +2042,20 @@ class WorkspaceService(
             _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
             _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting)
           } yield None
-        }
         case _ => throw new RawlsException("unsupported workspace setting")
-      }).recoverWith { case e => // todo: filter out workspace repository exceptions?
-        workspaceRepository.removeUnappliedSetting(workspace.workspaceIdAsUUID, setting).map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e))))
+      }).recoverWith { case e =>
+        workspaceRepository
+          .removePendingSetting(workspace.workspaceIdAsUUID, setting)
+          .map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
       }
-    }
 
     /** Iterate over existing settings. If an existing setting type is included in the
       * requestedSettings, use the requested setting. If it isn't, use the setting type's default
       * config to restore the workspace to the default state. */
-    def computeNewSettings(workspace: Workspace, requestedSettings: List[WorkspaceSetting], existingSettings: List[WorkspaceSetting]): List[WorkspaceSetting] = {
+    def computeNewSettings(workspace: Workspace,
+                           requestedSettings: List[WorkspaceSetting],
+                           existingSettings: List[WorkspaceSetting]
+    ): List[WorkspaceSetting] = {
       val requestedSettingsMap = requestedSettings.map(s => s.`type` -> s.config).toMap
       existingSettings.map { case WorkspaceSetting(settingType, _) =>
         WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
@@ -2059,13 +2067,14 @@ class WorkspaceService(
       currentSettings <- workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
       newSettings = computeNewSettings(workspace, workspaceSettings, currentSettings)
       _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID, workspaceSettings)
-      applyFailures <- workspaceSettings.traverse(s => applySetting(workspace, s)) // todo: what do we do with the failed setting errors? return them?
+      applyFailures <- workspaceSettings.traverse(s => applySetting(workspace, s))
     } yield {
-      workspaceSettings.filterNot { s =>
-        applyFailures.flatten.exists {
-          case (failedSettingType, _) => failedSettingType == s.`type`
+      val successes = workspaceSettings.filterNot { s =>
+        applyFailures.flatten.exists { case (failedSettingType, _) =>
+          failedSettingType == s.`type`
         }
       }
+      WorkspaceSettingResponse(successes, applyFailures.flatten.toMap)
     }
   }
 

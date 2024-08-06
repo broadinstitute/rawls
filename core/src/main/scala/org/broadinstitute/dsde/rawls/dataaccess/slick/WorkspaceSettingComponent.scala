@@ -19,8 +19,9 @@ case class WorkspaceSettingRecord(`type`: String,
 object WorkspaceSettingRecord {
   object SettingStatus extends SlickEnum {
     type SettingStatus = Value
-    val Applying: Value = Value("Applying")
+    val Pending: Value = Value("Pending")
     val Applied: Value = Value("Applied")
+    val Deleted: Value = Value("Deleted")
   }
 
   def toWorkspaceSettingRecord(workspaceId: UUID, workspaceSettings: WorkspaceSetting): WorkspaceSettingRecord = {
@@ -33,7 +34,7 @@ object WorkspaceSettingRecord {
     WorkspaceSettingRecord(workspaceSettings.`type`.toString,
                            workspaceId,
                            Option(configString),
-                           WorkspaceSettingRecord.SettingStatus.Applying.toString,
+                           WorkspaceSettingRecord.SettingStatus.Pending.toString,
                            currentTime,
                            currentTime
     )
@@ -70,7 +71,9 @@ trait WorkspaceSettingComponent {
   }
 
   object workspaceSettingQuery extends TableQuery(new WorkspaceSettingTable(_)) {
-    def saveAll(workspaceId: UUID, workspaceSettings: List[WorkspaceSetting]): ReadWriteAction[List[WorkspaceSetting]] = {
+    def saveAll(workspaceId: UUID,
+                workspaceSettings: List[WorkspaceSetting]
+    ): ReadWriteAction[List[WorkspaceSetting]] = {
       val records = workspaceSettings.map(WorkspaceSettingRecord.toWorkspaceSettingRecord(workspaceId, _))
       (workspaceSettingQuery ++= records).map(_ => workspaceSettings)
     }
@@ -89,15 +92,22 @@ trait WorkspaceSettingComponent {
     def deleteSettingsForWorkspace(workspaceId: UUID,
                                    status: WorkspaceSettingRecord.SettingStatus.SettingStatus
     ): ReadWriteAction[Int] =
-      filter(record => record.workspaceId === workspaceId && record.status === status.toString).delete
+      filter(record => record.workspaceId === workspaceId && record.status === status.toString)
+        .map(_.status)
+        .update(WorkspaceSettingRecord.SettingStatus.Deleted.toString)
 
-    def deleteSettingsForWorkspaceByTypeAndStatus(workspaceId: UUID,
-                                                  settingType: List[WorkspaceSettingType],
-                                                  status: WorkspaceSettingRecord.SettingStatus.SettingStatus
+    def deleteSettingTypeForWorkspaceByStatus(workspaceId: UUID,
+                                              settingType: WorkspaceSettingType,
+                                              status: WorkspaceSettingRecord.SettingStatus.SettingStatus
     ): ReadWriteAction[Int] =
-      filter(record => record.workspaceId === workspaceId && record.`type` === settingType.toString && record.status === status.toString).delete
+      filter(record =>
+        record.workspaceId === workspaceId && record.`type` === settingType.toString && record.status === status.toString
+      ).map(_.status).update(WorkspaceSettingRecord.SettingStatus.Deleted.toString)
 
-    def listAllForWorkspace(workspaceId: UUID): ReadAction[List[WorkspaceSetting]] =
-      filter(rec => rec.workspaceId === workspaceId && rec.status === WorkspaceSettingRecord.SettingStatus.Applied.toString).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSettings).toList)
+    def listSettingsForWorkspaceByStatus(workspaceId: UUID,
+                                         status: WorkspaceSettingRecord.SettingStatus.SettingStatus
+    ): ReadAction[List[WorkspaceSetting]] =
+      filter(rec => rec.workspaceId === workspaceId && rec.status === status.toString).result
+        .map(_.map(WorkspaceSettingRecord.toWorkspaceSettings).toList)
   }
 }
