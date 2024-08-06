@@ -23,7 +23,7 @@ object WorkspaceSettingRecord {
     val Applied: Value = Value("Applied")
   }
 
-  def toWorkspaceSettingRecord(workspaceId: UUID, workspaceSettings: WorkspaceSettings): WorkspaceSettingRecord = {
+  def toWorkspaceSettingRecord(workspaceId: UUID, workspaceSettings: WorkspaceSetting): WorkspaceSettingRecord = {
     import spray.json._
     import DefaultJsonProtocol._
     import WorkspaceJsonSupport._
@@ -39,7 +39,7 @@ object WorkspaceSettingRecord {
     )
   }
 
-  def toWorkspaceSettings(workspaceSettingRecord: WorkspaceSettingRecord): WorkspaceSettings = {
+  def toWorkspaceSettings(workspaceSettingRecord: WorkspaceSettingRecord): WorkspaceSetting = {
     import spray.json._
 
     val settingType = WorkspaceSettingTypes.withName(workspaceSettingRecord.`type`)
@@ -48,7 +48,7 @@ object WorkspaceSettingRecord {
         case WorkspaceSettingTypes.GcpBucketLifecycle => configuration.parseJson.convertTo[GcpBucketLifecycleConfig]
       }
     }
-    WorkspaceSettings(settingType, settingConfig)
+    WorkspaceSetting(settingType, settingConfig)
   }
 }
 
@@ -70,7 +70,7 @@ trait WorkspaceSettingComponent {
   }
 
   object workspaceSettingQuery extends TableQuery(new WorkspaceSettingTable(_)) {
-    def saveAll(workspaceId: UUID, workspaceSettings: List[WorkspaceSettings]): ReadWriteAction[List[WorkspaceSettings]] = {
+    def saveAll(workspaceId: UUID, workspaceSettings: List[WorkspaceSetting]): ReadWriteAction[List[WorkspaceSetting]] = {
       val records = workspaceSettings.map(WorkspaceSettingRecord.toWorkspaceSettingRecord(workspaceId, _))
       (workspaceSettingQuery ++= records).map(_ => workspaceSettings)
     }
@@ -91,7 +91,13 @@ trait WorkspaceSettingComponent {
     ): ReadWriteAction[Int] =
       filter(record => record.workspaceId === workspaceId && record.status === status.toString).delete
 
-    def listAllForWorkspace(workspaceId: UUID): ReadAction[List[WorkspaceSettings]] =
+    def deleteSettingsForWorkspaceByTypeAndStatus(workspaceId: UUID,
+                                                  settingType: List[WorkspaceSettingType],
+                                                  status: WorkspaceSettingRecord.SettingStatus.SettingStatus
+    ): ReadWriteAction[Int] =
+      filter(record => record.workspaceId === workspaceId && record.`type` === settingType.toString && record.status === status.toString).delete
+
+    def listAllForWorkspace(workspaceId: UUID): ReadAction[List[WorkspaceSetting]] =
       filter(rec => rec.workspaceId === workspaceId && rec.status === WorkspaceSettingRecord.SettingStatus.Applied.toString).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSettings).toList)
   }
 }

@@ -5,8 +5,9 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSettingRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceSettings, WorkspaceState}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceSetting, WorkspaceState}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
 
@@ -93,26 +94,26 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       } yield newWorkspace
     }
 
-  def getWorkspaceSettings(workspaceId: UUID): Future[List[WorkspaceSettings]] =
+  def getWorkspaceSettings(workspaceId: UUID): Future[List[WorkspaceSetting]] =
     dataSource.inTransaction { access =>
       access.workspaceSettingQuery.listAllForWorkspace(workspaceId)
     }
 
-  def overwriteWorkspaceSettings(workspaceId: UUID, workspaceSettings: List[WorkspaceSettings]): Future[List[WorkspaceSettings]] =
+  def createWorkspaceSettingsRecords(workspaceId: UUID, workspaceSettings: List[WorkspaceSetting]): Future[List[WorkspaceSetting]] =
     dataSource.inTransaction { access =>
       access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings)
     }
 
-  def markWorkspaceSettingsApplied(workspaceId: UUID, workspaceSettings: List[WorkspaceSettings])(implicit ex: ExecutionContext): Future[Int] =
+  def markWorkspaceSettingApplied(workspaceId: UUID, workspaceSetting: WorkspaceSetting)(implicit ec: ExecutionContext): Future[Int] =
     dataSource.inTransaction { access =>
       for {
-        _ <- access.workspaceSettingQuery.deleteSettingsForWorkspace(workspaceId, WorkspaceSettingRecord.SettingStatus.Applied)
-        res <- access.workspaceSettingQuery.updateStatuses(workspaceId, workspaceSettings.map(_.`type`), WorkspaceSettingRecord.SettingStatus.Applied)
+        _ <- access.workspaceSettingQuery.deleteSettingsForWorkspaceByTypeAndStatus(workspaceId, List(workspaceSetting.`type`), WorkspaceSettingRecord.SettingStatus.Applied)
+        res <- access.workspaceSettingQuery.updateStatuses(workspaceId, List(workspaceSetting.`type`), WorkspaceSettingRecord.SettingStatus.Applied)
       } yield res
     }
 
-  def removeUnappliedSettings(workspaceId: UUID): Future[Int] =
+  def removeUnappliedSetting(workspaceId: UUID, workspaceSetting: WorkspaceSetting): Future[Int] =
     dataSource.inTransaction { access =>
-      access.workspaceSettingQuery.deleteSettingsForWorkspace(workspaceId, WorkspaceSettingRecord.SettingStatus.Applying)
+      access.workspaceSettingQuery.deleteSettingsForWorkspaceByTypeAndStatus(workspaceId, List(workspaceSetting.`type`), WorkspaceSettingRecord.SettingStatus.Applying)
     }
 }

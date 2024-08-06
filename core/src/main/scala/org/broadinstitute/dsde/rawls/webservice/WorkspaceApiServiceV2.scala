@@ -97,7 +97,7 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                   }
                 } ~
                   put {
-                    entity(as[List[WorkspaceSettings]]) { settings =>
+                    entity(as[List[WorkspaceSetting]]) { settings =>
                       complete {
                         workspaceServiceConstructor(ctx)
                           .setWorkspaceSettings(workspaceName, settings)

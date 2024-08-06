@@ -7,6 +7,7 @@ import com.google.api.services.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
+import com.google.cloud.storage.BucketInfo
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -122,6 +123,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(new Project().setProjectNumber(Random.nextLong()).setLabels(mockLabelsFromRbs.asJava))
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
+
+  override def setBucketLifecycle(bucketName: String, lifecycle: List[BucketInfo.LifecycleRule]): Future[Unit] = ???
 
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext

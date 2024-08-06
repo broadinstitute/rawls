@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -50,7 +51,7 @@ import cats.effect.unsafe.implicits.global
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleCondition, LifecycleAction}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketLifecycleConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
 
 import java.io.IOException
 import java.util.UUID
@@ -2004,16 +2005,22 @@ class WorkspaceService(
       }
     } yield {}
 
-  def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSettings]] = {
+  def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] = {
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read).flatMap { workspace =>
       workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
     }
   }
 
-  def setWorkspaceSettings(workspaceName: WorkspaceName, workspaceSettings: List[WorkspaceSettings]): Future[List[WorkspaceSettings]] = {
-    def applySettings(workspace: Workspace, settings: WorkspaceSettings): Future[Unit] = {
-      settings match {
-        case WorkspaceSettings(WorkspaceSettingTypes.GcpBucketLifecycle, Some(GcpBucketLifecycleConfig(rules))) => {
+  def setWorkspaceSettings(workspaceName: WorkspaceName, workspaceSettings: List[WorkspaceSetting]): Future[List[WorkspaceSetting]] = {
+    /** Apply a setting to a workspace. If the setting is successfully applied, update the database
+      * and return None. If the setting fails to apply, remove the failed setting from the database
+      * and return the setting type with an error report. If the setting is not supported, throw an
+      * exception. We make more trips to the database here than necessary, but we support a small
+      * number of setting types and it's easier to reason about this way.
+      */
+    def applySetting(workspace: Workspace, setting: WorkspaceSetting): Future[Option[(WorkspaceSettingType, ErrorReport)]] = {
+      (setting match {
+        case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, Some(GcpBucketLifecycleConfig(rules))) => {
           val googleRules = rules.map { rule =>
             val conditionBuilder = LifecycleCondition.newBuilder().setMatchesPrefix(rule.conditions.matchesPrefix.toList.asJava)
             rule.conditions.age.map(age => conditionBuilder.setAge(age))
@@ -2026,22 +2033,37 @@ class WorkspaceService(
             new LifecycleRule(action, conditionBuilder.build())
           }
 
-          gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
+          for {
+            _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
+            _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting)
+          } yield None
         }
         case _ => throw new RawlsException("unsupported workspace setting")
+      }).recoverWith { case e => // todo: filter out workspace repository exceptions?
+        workspaceRepository.removeUnappliedSetting(workspace.workspaceIdAsUUID, setting).map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e))))
       }
     }
 
-    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own).flatMap { workspace =>
-      (for {
-        _ <- workspaceRepository.overwriteWorkspaceSettings(workspace.workspaceIdAsUUID, workspaceSettings)
-        _ <- workspaceSettings.traverse(s => applySettings(workspace, s)) // todo: maybe this should catch exceptions and keep track of which settings went through and which didn't. then it can roll back anything that failed.
-        _ <- workspaceRepository.markWorkspaceSettingsApplied(workspace.workspaceIdAsUUID, workspaceSettings)
-      } yield {
-        workspaceSettings
-      }).recoverWith { case e =>
-        workspaceRepository.removeUnappliedSettings(workspace.workspaceIdAsUUID).flatMap { _ =>
-          Future.failed(new RawlsException("Failed to apply workspace settings"))
+    /** Iterate over existing settings. If an existing setting type is included in the
+      * requestedSettings, use the requested setting. If it isn't, use the setting type's default
+      * config to restore the workspace to the default state. */
+    def computeNewSettings(workspace: Workspace, requestedSettings: List[WorkspaceSetting], existingSettings: List[WorkspaceSetting]): List[WorkspaceSetting] = {
+      val requestedSettingsMap = requestedSettings.map(s => s.`type` -> s.config).toMap
+      existingSettings.map { case WorkspaceSetting(settingType, _) =>
+        WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
+      }
+    }
+
+    for {
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
+      currentSettings <- workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+      newSettings = computeNewSettings(workspace, workspaceSettings, currentSettings)
+      _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID, workspaceSettings)
+      applyFailures <- workspaceSettings.traverse(s => applySetting(workspace, s)) // todo: what do we do with the failed setting errors? return them?
+    } yield {
+      workspaceSettings.filterNot { s =>
+        applyFailures.flatten.exists {
+          case (failedSettingType, _) => failedSettingType == s.`type`
         }
       }
     }
