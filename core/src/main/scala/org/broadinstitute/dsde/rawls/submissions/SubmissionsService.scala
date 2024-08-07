@@ -37,6 +37,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ExternalEntityInfo,
   MetadataParams,
   MethodConfiguration,
+  PreparedSubmission,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -505,15 +506,15 @@ class SubmissionsService(
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] =
     for {
-      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot) <-
-        prepareSubmission(workspaceName, submissionRequest)
-      submission <- saveSubmission(workspaceContext,
-                                   submissionId,
-                                   submissionRequest,
-                                   submissionRoot,
-                                   submissionParameters,
-                                   workflowFailureMode,
-                                   header
+      ps <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(
+        ps.workspace,
+        ps.id,
+        submissionRequest,
+        ps.submissionRoot,
+        ps.inputs,
+        ps.failureMode,
+        ps.header
       )
     } yield SubmissionReport(
       submissionRequest,
@@ -521,19 +522,13 @@ class SubmissionsService(
       submission.submissionDate,
       ctx.userInfo.userEmail.value,
       submission.status,
-      header,
-      submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty))
+      ps.header,
+      ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
 
-  private def prepareSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[
-    (Workspace,
-     UUID,
-     Stream[SubmissionValidationEntityInputs],
-     Option[WorkflowFailureMode],
-     SubmissionValidationHeader,
-     String
-    )
-  ] = {
+  private def prepareSubmission(workspaceName: WorkspaceName,
+                                submissionRequest: SubmissionRequest
+  ): Future[PreparedSubmission] = {
 
     val submissionId: UUID = UUID.randomUUID()
 
@@ -592,7 +587,14 @@ class SubmissionsService(
         gatherInputsResult,
         workspaceExpressionResults
       )
-    } yield (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot)
+    } yield PreparedSubmission(
+      workspaceContext,
+      submissionId,
+      submissionParameters,
+      workflowFailureMode,
+      header,
+      submissionRoot
+    )
   }
 
   def updateSubmissionUserComment(workspaceName: WorkspaceName,
@@ -925,10 +927,10 @@ class SubmissionsService(
                          submissionRequest: SubmissionRequest
   ): Future[SubmissionValidationReport] =
     for {
-      (_, _, submissionParameters, _, header, _) <- prepareSubmission(workspaceName, submissionRequest)
+      ps <- prepareSubmission(workspaceName, submissionRequest)
     } yield {
-      val (failed, succeeded) = submissionParameters.partition(_.inputResolutions.exists(_.error.isDefined))
-      SubmissionValidationReport(submissionRequest, header, succeeded, failed)
+      val (failed, succeeded) = ps.inputs.partition(_.inputResolutions.exists(_.error.isDefined))
+      SubmissionValidationReport(submissionRequest, ps.header, succeeded, failed)
     }
 
   private def evaluateWorkspaceExpressions(workspace: Workspace,
