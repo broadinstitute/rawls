@@ -57,6 +57,8 @@ class HttpWorkspaceManagerDAOSpec
 
     override def getReferencedGcpResourceApi(ctx: RawlsRequestContext): ReferencedGcpResourceApi =
       referencedGcpResourceApi
+
+    override def getControlledGcpResourceApi(ctx: RawlsRequestContext): ControlledGcpResourceApi = ???
   }
 
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
@@ -10,6 +11,7 @@ import bio.terra.workspace.model.{
   CloudPlatform,
   CreateWorkspaceV2Result,
   CreatedControlledAzureStorageContainer,
+  CreatedControlledGcpGcsBucket,
   JobReport,
   JobResult,
   WsmPolicyInput,
@@ -37,6 +39,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   UserInfo,
   Workspace,
+  WorkspaceCloudPlatform,
   WorkspaceName,
   WorkspacePolicy,
   WorkspaceRequest,
@@ -189,6 +192,94 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   behavior of "createMultiCloudWorkspace"
 
+  it should "create a GCP workspace if the billing profile is GCP and the proper flag is supplied" in {
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val billingProject = RawlsBillingProject(
+      RawlsBillingProjectName("gcp-billing-project"),
+      CreationStatuses.Ready,
+      None,
+      None,
+      billingProfileId = Some(UUID.randomUUID().toString)
+    )
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(any())).thenReturn(Future(Some(billingProject)))
+    val mcConfig =
+      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 60 seconds, 120 seconds), mock[AzureConfig])
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
+    val namespace = "fake"
+    val name = "fake-name"
+    val workspaceName = WorkspaceName(namespace, name)
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.createMCWorkspace(any, ArgumentMatchers.eq(workspaceName), any, any, any)(any))
+      .thenReturn(Future(defaultWorkspace))
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.GCP)
+    when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Some(billingProfile))
+    val workspaceJobId = UUID.randomUUID()
+
+    val jobReport = new CreateWorkspaceV2Result()
+      .jobReport(new JobReport().id(workspaceJobId.toString).status(StatusEnum.SUCCEEDED))
+      .workspaceId(workspaceId)
+    when(
+      workspaceManagerDAO
+        .createWorkspaceWithSpendProfile(
+          any(),
+          any(),
+          any(),
+          any(),
+          any(),
+          ArgumentMatchers.eq(CloudPlatform.GCP),
+          any(),
+          any()
+        )
+    ).thenReturn(jobReport)
+    when(workspaceManagerDAO.getCreateWorkspaceResult(workspaceJobId.toString, testContext)).thenReturn(jobReport)
+    when(
+      workspaceManagerDAO.createGcpStorageBucket(
+        any(),
+        any(),
+        any(),
+        any()
+      )
+    ).thenReturn(new CreatedControlledGcpGcsBucket().resourceId(UUID.randomUUID()))
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      workspaceManagerDAO,
+      bpmDAO,
+      samDAO,
+      mcConfig,
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      billingRepository
+    )
+
+    val request = WorkspaceRequest(namespace,
+                                   name,
+                                   Map(AttributeName("system", "mc_gcp") -> AttributeBoolean(true)),
+                                   bucketLocation = Some("us-central1")
+    )
+    val legacyService = mock[WorkspaceService]
+    val result =
+      Await.result(service.createMultiCloudOrRawlsWorkspace(request, legacyService, testContext), Duration.Inf)
+
+    result.state shouldBe WorkspaceState.Ready
+    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    verify(legacyService, never).createWorkspace(any, any)
+    verify(workspaceManagerDAO).createWorkspaceWithSpendProfile(any,
+                                                                any,
+                                                                ArgumentMatchers.eq(billingProfile.getId.toString),
+                                                                any,
+                                                                any,
+                                                                ArgumentMatchers.eq(CloudPlatform.GCP),
+                                                                any,
+                                                                any
+    )
+    verify(workspaceManagerDAO).createGcpStorageBucket(any, any, any, any)
+  }
+
   it should "not delete the original workspace if a workspace with the same name already exists" in {
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val samDAO = mock[SamDAO]
@@ -203,7 +294,7 @@ class MultiCloudWorkspaceServiceCreateSpec
       }
     val service = new MultiCloudWorkspaceService(
       testContext,
-      mock[WorkspaceManagerDAO],
+      workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
@@ -309,11 +400,11 @@ class MultiCloudWorkspaceServiceCreateSpec
     thrown.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }
 
-  it should "deploy a WDS instance during workspace creation" in {
+  it should "deploy a WDS instance during workspace creation for Azure workspaces" in {
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    val billingProfile = new ProfileModel().id(UUID.randomUUID())
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
     val workspaceRepository = mock[WorkspaceRepository]
     val workspaceIdCaptor = ArgumentCaptor.forClass(classOf[UUID])
     when(
@@ -396,7 +487,7 @@ class MultiCloudWorkspaceServiceCreateSpec
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    val billingProfile = new ProfileModel().id(UUID.randomUUID())
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
     val workspaceRepository = mock[WorkspaceRepository]
     val attributes = Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
     val workspace = defaultWorkspace
@@ -533,7 +624,7 @@ class MultiCloudWorkspaceServiceCreateSpec
         service.createMultiCloudWorkspaceInt(
           WorkspaceRequest(namespace, name, Map.empty),
           workspaceId,
-          new ProfileModel().id(UUID.randomUUID()),
+          new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE),
           testContext
         ),
         Duration.Inf
@@ -592,7 +683,7 @@ class MultiCloudWorkspaceServiceCreateSpec
         service.createMultiCloudWorkspaceInt(
           WorkspaceRequest(namespace, name, Map.empty),
           workspaceId,
-          new ProfileModel().id(UUID.randomUUID()),
+          new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE),
           testContext
         ),
         Duration.Inf
@@ -654,7 +745,7 @@ class MultiCloudWorkspaceServiceCreateSpec
         service.createMultiCloudWorkspaceInt(
           WorkspaceRequest(namespace, name, Map.empty),
           workspaceId,
-          new ProfileModel().id(UUID.randomUUID()),
+          new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE),
           testContext
         ),
         Duration.Inf
@@ -707,7 +798,7 @@ class MultiCloudWorkspaceServiceCreateSpec
         service.createMultiCloudWorkspaceInt(
           WorkspaceRequest(namespace, name, Map.empty),
           workspaceId,
-          new ProfileModel().id(UUID.randomUUID()),
+          new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE),
           testContext
         ),
         Duration.Inf
@@ -722,7 +813,7 @@ class MultiCloudWorkspaceServiceCreateSpec
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future(true))
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    val billingProfile = new ProfileModel().id(UUID.randomUUID())
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
     val workspaceRepository = mock[WorkspaceRepository]
     when(
       workspaceRepository.createMCWorkspace(

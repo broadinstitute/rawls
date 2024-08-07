@@ -48,6 +48,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   private def getControlledAzureResourceApi(ctx: RawlsRequestContext) =
     apiClientProvider.getControlledAzureResourceApi(ctx)
 
+  private def getControlledGcpResourceApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getControlledGcpResourceApi(ctx)
+
   private def getLandingZonesApi(ctx: RawlsRequestContext) =
     apiClientProvider.getLandingZonesApi(ctx)
 
@@ -247,6 +250,24 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       .createAzureStorageContainer(requestBody, workspaceId)
   }
 
+  override def createGcpStorageBucket(workspaceId: UUID,
+                                      storageBucketName: String,
+                                      location: String,
+                                      ctx: RawlsRequestContext
+  ): CreatedControlledGcpGcsBucket = {
+    val creationParams =
+      new GcpGcsBucketCreationParameters().name(storageBucketName).location(location)
+
+    val requestBody = new CreateControlledGcpGcsBucketRequestBody()
+      .common(
+        createCommonFields(storageBucketName).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      )
+      .gcsBucket(creationParams)
+
+    getControlledGcpResourceApi(ctx)
+      .createBucket(requestBody, workspaceId)
+  }
+
   override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
                                           destinationWorkspaceId: UUID,
                                           sourceContainerId: UUID,
@@ -335,12 +356,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): AzureLandingZone =
     getLandingZonesApi(ctx).getAzureLandingZone(landingZoneId)
 
-  /**
-    *
-    * @param landingZoneId
-    * @param ctx
-    * @return
-    */
   override def deleteLandingZone(landingZoneId: UUID,
                                  ctx: RawlsRequestContext
   ): Option[DeleteAzureLandingZoneResult] = {

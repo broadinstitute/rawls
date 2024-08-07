@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import bio.terra.common.tracing.JakartaTracingFilter
 import bio.terra.workspace.api.{
   ControlledAzureResourceApi,
+  ControlledGcpResourceApi,
   JobsApi,
   LandingZonesApi,
   ReferencedGcpResourceApi,
@@ -28,6 +29,8 @@ trait WorkspaceManagerApiClientProvider {
   def getJobsApi(ctx: RawlsRequestContext): JobsApi
 
   def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi
+
+  def getControlledGcpResourceApi(ctx: RawlsRequestContext): ControlledGcpResourceApi
 
   def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi
 
@@ -77,4 +80,7 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
     client.setBasePath(baseWorkspaceManagerUrl)
     new UnauthenticatedApi(client)
   }
+
+  override def getControlledGcpResourceApi(ctx: RawlsRequestContext): ControlledGcpResourceApi =
+    new ControlledGcpResourceApi(getApiClient(ctx))
 }

@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
@@ -110,8 +111,9 @@ object MultiCloudWorkspaceService {
 }
 
 /**
-  * This service knows how to provision a new "multi-cloud" workspace, a workspace managed by terra-workspace-manager.
-  */
+ * This service is responsible for managing the lifecycle of workspaces. It exposes methods for creating, cloning, and
+ * deletion. It delegates to the legacy WorkspaceService class for requests that are not for multi-cloud workspaces.
+ */
 class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  val workspaceManagerDAO: WorkspaceManagerDAO,
                                  billingProfileManagerDAO: BillingProfileManagerDAO,
@@ -128,6 +130,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with Retry
     with WorkspaceSupport
     with BillingProjectSupport {
+
+  // This is a temporary flag to indicate that a GCP workspace request should be carried out via the
+  // MC infrastructure instead of the legacy WorkspaceService codepaths.
+  val GCP_MC_FLAG = "mc_gcp"
 
   /**
     * Deletes a workspace. For legacy "rawls" workspaces,
@@ -259,7 +265,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
 
       workspaceOpt <-
-        if (isMcGcpWorkspaceRequest(workspaceRequest)) {
+        if (isMcRequest(workspaceRequest, billingProfileOpt)) {
           billingProfileOpt
             .traverse { profileModel =>
               Option(profileModel.getCloudPlatform)
@@ -269,7 +275,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                       workspaceRequest,
                       profileModel,
                       s
-                    ).map(workspace => (workspace, WorkspaceCloudPlatform.Azure))
+                    ).map(workspace => (workspace, rawlsCloudPlatformFromBpm(profileModel)))
                   }
                 }
             }
@@ -279,7 +285,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
       // Default to the legacy implementation if no workspace was been created
       // This can happen if there's
-      // - no billing profile or the billing profile's cloud platform is GCP
+      // - no billing profile or the request is not for a multi-cloud workspace
       (workspace, cloudPlatform) <- workspaceOpt.flatten
         .map(Future.successful)
         .getOrElse(
@@ -295,17 +301,29 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                                      Some(cloudPlatform)
     )
 
+  private def rawlsCloudPlatformFromBpm(profile: ProfileModel): WorkspaceCloudPlatform =
+    profile.getCloudPlatform match {
+      case CloudPlatform.AZURE => WorkspaceCloudPlatform.Azure
+      case CloudPlatform.GCP   => WorkspaceCloudPlatform.Gcp
+    }
 
-  private def isMcGcpWorkspaceRequest(workspaceRequest: WorkspaceRequest): Boolean = {
-    workspaceRequest.attributes.contains(AttributeName.withDefaultNS("mc_gcp"))
-  }
+  private def isMcRequest(workspaceRequest: WorkspaceRequest, billingProfileOpt: Option[ProfileModel]): Boolean =
+    billingProfileOpt match {
+      case Some(profile) =>
+        // all azure requests are MC, GCP requests with a billing profile and that provide the GCP_MC_FLAG are MC
+        // all others are legacy
+        profile.getCloudPlatform.eq(CloudPlatform.AZURE) ||
+        (profile.getCloudPlatform.equals(CloudPlatform.GCP) &&
+          workspaceRequest.attributes.contains(AttributeName(AttributeName.systemNamespace, GCP_MC_FLAG)))
+      case None => false
+    }
 
   /**
     * Returns the billing profile associated with the billing project, if the billing project
     * has one. Fails if the billing profile id is specified and is malformed or does not exist.
     */
-  def getBillingProfile(billingProject: RawlsBillingProject,
-                        parentContext: RawlsRequestContext = ctx
+  private def getBillingProfile(billingProject: RawlsBillingProject,
+                                parentContext: RawlsRequestContext = ctx
   ): Future[Option[ProfileModel]] =
     billingProject.billingProfileId.traverse { profileIdString =>
       for {
@@ -341,6 +359,20 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       } yield profileModel
     }
 
+  /**
+   * Clones a workspace. For legacy "rawls" workspaces, delegates to the WorkspaceService codepath.
+   * For MC workspaces, an initial workspace record will be created, and then 
+   * an async job will start to  handle the bulk of the cloning process. 
+   * 
+   * Clients should poll on the state of the workspace to determine when the clone is complete. For MC workspaces,
+   * the workspace will initially be in "Cloning"; the cloning process is complete when the workspace enters the "Ready"
+   * state. 
+   * 
+   * @param wsService WorkspaceService instance used for cloning Rawls workspaces
+   * @param sourceWorkspaceName Name and namespace of the source workspace
+   * @param destWorkspaceRequest Metadata for the destination workspace
+   * @return The workspace details of the cloned workspace. 
+   */
   def cloneMultiCloudWorkspaceAsync(
     wsService: WorkspaceService,
     sourceWorkspaceName: WorkspaceName,
@@ -391,10 +423,21 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       Some(cloudPlatform)
     )
 
-  def cloneAzureWorkspaceAsync(sourceWorkspace: Workspace,
-                               profile: ProfileModel,
-                               request: WorkspaceRequest,
-                               parentContext: RawlsRequestContext
+  /**
+   * Initiates the cloning of a workspace in WSM, first creating a record in the Rawls DB in state "Cloning". Clients
+   * should poll on this workspace to introspect cloning progress. The clone is complete when the workspace enters
+   * the "Ready" state.
+   * 
+   * @param sourceWorkspace Source workspace to clone
+   * @param profile Billing profile against which the destination workspace will be linked
+   * @param request Metadata for the destination workspace
+   * @param parentContext Tracing context for this request
+   * @return The workspace record of the cloned workspace
+   */
+  private[workspace] def cloneAzureWorkspaceAsync(sourceWorkspace: Workspace,
+                                                  profile: ProfileModel,
+                                                  request: WorkspaceRequest,
+                                                  parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
     assertBillingProfileCreationDate(profile)
@@ -457,6 +500,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     } yield newWorkspace
   }
 
+  /**
+   * Clones a workspace, delegating to the legacy WorkspaceService class if the workspace is not MC. 
+   * @param wsService WorkspaceService instance used for cloning Rawls workspaces
+   * @param sourceWorkspaceName Name and namespace of the source workspace
+   * @param destWorkspaceRequest Metadata for the destination workspace
+   * @return The workspace record of the cloned workspace
+   * 
+   * @deprecated This is a synchronous cloning method. For MC workspace cloning, use the cloneMultiCloudWorkspaceAsync method.
+   */
   def cloneMultiCloudWorkspace(wsService: WorkspaceService,
                                sourceWorkspaceName: WorkspaceName,
                                destWorkspaceRequest: WorkspaceRequest
@@ -503,10 +555,14 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       Some(cloudPlatform)
     )
 
-  def cloneAzureWorkspace(sourceWorkspace: Workspace,
-                          profile: ProfileModel,
-                          request: WorkspaceRequest,
-                          parentContext: RawlsRequestContext
+  /**
+   * @deprecated This is legacy codepath that clones a workspace synchronously. It is left for API compatiblity but
+   *             furture users should leverage cloneAzureWorkspaceAsync
+   */
+  private[workspace] def cloneAzureWorkspace(sourceWorkspace: Workspace,
+                                             profile: ProfileModel,
+                                             request: WorkspaceRequest,
+                                             parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
     assertBillingProfileCreationDate(profile)
@@ -605,10 +661,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     } yield newWorkspace
   }
 
-  def cloneWorkspaceStorageContainer(sourceWorkspaceId: UUID,
-                                     destinationWorkspaceId: UUID,
-                                     prefixToClone: Option[String],
-                                     ctx: RawlsRequestContext
+  private[workspace] def cloneWorkspaceStorageContainer(sourceWorkspaceId: UUID,
+                                                        destinationWorkspaceId: UUID,
+                                                        prefixToClone: Option[String],
+                                                        ctx: RawlsRequestContext
   ): Future[CloneControlledAzureStorageContainerResult] = {
 
     val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
@@ -656,9 +712,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * @param parentContext       Rawls request context
     * @return Future containing the created Workspace's information
     */
-  def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest,
-                                profile: ProfileModel,
-                                parentContext: RawlsRequestContext = ctx
+  private[workspace] def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest,
+                                                   profile: ProfileModel,
+                                                   parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
     assertBillingProfileCreationDate(profile)
     validateWorkspaceRequest(workspaceRequest)
@@ -680,7 +736,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
     }
 
-  def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
+  private[workspace] def assertBillingProfileCreationDate(profile: ProfileModel): Unit = {
     val previewDate = new DateTime(2023, 9, 12, 0, 0, DateTimeZone.UTC)
     val isTestProfile = profile.getCreatedDate == null || profile.getCreatedDate == ""
     if (!isTestProfile && DateTime.parse(profile.getCreatedDate).isBefore(previewDate)) {
@@ -698,7 +754,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * @param workspaceId
     * @return
     */
-  def deleteWorkspaceInWSM(workspaceId: UUID): Future[Unit] = {
+  private[workspace] def deleteWorkspaceInWSM(workspaceId: UUID): Future[Unit] = {
     def getWorkspaceFromWsm(workspaceId: UUID, ctx: RawlsRequestContext): Option[WorkspaceDescription] =
       Try(workspaceManagerDAO.getWorkspace(workspaceId, ctx)) match {
         case Success(w) => Some(w)
@@ -764,10 +820,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   }
 
   // visible so it can be called directly for testing
-  def createMultiCloudWorkspaceInt(workspaceRequest: WorkspaceRequest,
-                                   workspaceId: UUID,
-                                   profile: ProfileModel,
-                                   parentContext: RawlsRequestContext
+  private[workspace] def createMultiCloudWorkspaceInt(workspaceRequest: WorkspaceRequest,
+                                                      workspaceId: UUID,
+                                                      profile: ProfileModel,
+                                                      parentContext: RawlsRequestContext
   ): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
     val spendProfileId = profile.getId.toString
@@ -812,22 +868,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      containerResult <- traceFutureWithParent("createStorageContainer", parentContext)(_ =>
-        Future(
-          workspaceManagerDAO.createAzureStorageContainer(
-            workspaceId,
-            MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
-            ctx
-          )
-        )
+      storageResourceId <- traceFutureWithParent("createStorageResource", parentContext)(_ =>
+        createStorage(profile.getCloudPlatform, workspaceId, workspaceRequest.bucketLocation)
       )
       _ = logger.info(
-        s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
+        s"Created storage resource in WSM [workspaceId = ${workspaceId}, resourceId = ${storageResourceId}]"
       )
 
       // create a WDS application in Leo if it's azure
       _ = profile.getCloudPlatform match {
-        case CloudPlatform.AZURE => createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
+        case CloudPlatform.AZURE =>
+          createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
         case _ => Future.successful()
       }
 
@@ -857,6 +908,34 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
+  private def createStorage(cloudPlatform: CloudPlatform,
+                            workspaceId: UUID,
+                            location: Option[String] = None
+  ): Future[UUID] =
+    cloudPlatform match {
+      case CloudPlatform.AZURE =>
+        Future(
+          workspaceManagerDAO
+            .createAzureStorageContainer(
+              workspaceId,
+              MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+              ctx
+            )
+            .getResourceId
+        )
+      case CloudPlatform.GCP =>
+        Future.successful(
+          workspaceManagerDAO
+            .createGcpStorageBucket(
+              workspaceId,
+              MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+              location.getOrElse(throw new RuntimeException("Location required when creating GCP bucket")),
+              ctx
+            )
+            .getResourceId
+        )
+    }
+
   private def getWorkspaceCreationStatus(_workspaceId: UUID, // Unused, but polling helper method passes it.
                                          jobControlId: String,
                                          localCtx: RawlsRequestContext
@@ -874,12 +953,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def bpmCloudPlatformToWsmCloudPlatform(cloudPlatform: CloudPlatform) = {
+  private def bpmCloudPlatformToWsmCloudPlatform(cloudPlatform: CloudPlatform) =
     cloudPlatform match {
-      case CloudPlatform.GCP => model.CloudPlatform.GCP
+      case CloudPlatform.GCP   => model.CloudPlatform.GCP
       case CloudPlatform.AZURE => model.CloudPlatform.AZURE
     }
-  }
 
   private def getWorkspaceCloneStatus(workspaceId: UUID,
                                       jobControlId: String,
