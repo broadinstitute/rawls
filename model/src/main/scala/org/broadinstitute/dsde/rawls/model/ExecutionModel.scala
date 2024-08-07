@@ -44,7 +44,7 @@ case class SubmissionRequest(
 case class PreparedSubmission(
   workspace: Workspace,
   id: UUID,
-  inputs: Stream[SubmissionValidationEntityInputs],
+  inputs: LazyList[SubmissionValidationEntityInputs],
   failureMode: Option[WorkflowFailureMode],
   header: SubmissionValidationHeader,
   submissionRoot: String
