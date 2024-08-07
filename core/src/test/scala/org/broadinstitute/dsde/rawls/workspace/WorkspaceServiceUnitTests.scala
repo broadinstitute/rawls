@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
@@ -55,7 +55,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   val workspace: Workspace = Workspace(
     "test-namespace",
     "test-name",
-    "aWorkspaceId",
+    UUID.randomUUID().toString,
     "aBucket",
     Some("workflow-collection"),
     new DateTime(),
@@ -87,9 +87,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
     fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassServiceImpl = (_, _) =>
-      mock[FastPassServiceImpl](RETURNS_SMART_NULLS)
+      mock[FastPassServiceImpl](RETURNS_SMART_NULLS),
+    workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+    billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
-    WorkspaceService.constructor(
+    new WorkspaceService(
+      info,
       datasource,
       executionServiceCluster,
       workspaceManagerDAO,
@@ -111,8 +114,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       terraBucketWriterRole,
       new RawlsWorkspaceAclManager(samDAO),
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource),
-      fastPassServiceConstructor
-    )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
+      fastPassServiceConstructor,
+      workspaceRepository,
+      billingRepository
+    )(scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
     val datasource = mock[SlickDataSource]
@@ -771,5 +776,40 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+  }
+
+  "getWorkspaceSettings" should "return the workspace settings" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val workspaceSettings = List(
+      WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
+                       WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+      )
+    )
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(workspaceSettings))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.read),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val service =
+      workspaceServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)(defaultRequestContext)
+
+    val returnedSettings = Await.result(service.getWorkspaceSettings(workspaceName), Duration.Inf)
+    returnedSettings shouldEqual workspaceSettings
+    verify(samDAO).userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                 ArgumentMatchers.eq(workspaceId.toString),
+                                 ArgumentMatchers.eq(SamWorkspaceActions.read),
+                                 any()
+    )
   }
 }
