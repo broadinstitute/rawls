@@ -114,7 +114,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     dataSource.inTransaction { access =>
       for {
         _ <- access.workspaceSettingQuery.deleteSettingTypeForWorkspaceByStatus(workspaceId, workspaceSetting.`type`, WorkspaceSettingRecord.SettingStatus.Applied)
-        res <- access.workspaceSettingQuery.updateStatuses(workspaceId, List(workspaceSetting.`type`), WorkspaceSettingRecord.SettingStatus.Applied)
+        res <- access.workspaceSettingQuery.updateStatuses(workspaceId, List(workspaceSetting.`type`), WorkspaceSettingRecord.SettingStatus.Pending, WorkspaceSettingRecord.SettingStatus.Applied)
       } yield res
     }
 

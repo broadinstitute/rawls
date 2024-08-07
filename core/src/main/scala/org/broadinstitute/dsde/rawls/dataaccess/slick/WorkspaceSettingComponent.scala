@@ -10,7 +10,7 @@ import java.util.{Date, UUID}
 
 case class WorkspaceSettingRecord(`type`: String,
                                   workspaceId: UUID,
-                                  config: Option[String],
+                                  config: String,
                                   status: String,
                                   createdTime: Timestamp,
                                   lastUpdated: Timestamp
@@ -33,7 +33,7 @@ object WorkspaceSettingRecord {
     val configString = workspaceSettings.config.toJson.compactPrint
     WorkspaceSettingRecord(workspaceSettings.`type`.toString,
                            workspaceId,
-                           Option(configString),
+                           configString,
                            WorkspaceSettingRecord.SettingStatus.Pending.toString,
                            currentTime,
                            currentTime
@@ -44,11 +44,10 @@ object WorkspaceSettingRecord {
     import spray.json._
 
     val settingType = WorkspaceSettingTypes.withName(workspaceSettingRecord.`type`)
-    val settingConfig = workspaceSettingRecord.config.map { configuration =>
-      settingType match {
-        case WorkspaceSettingTypes.GcpBucketLifecycle => configuration.parseJson.convertTo[GcpBucketLifecycleConfig]
-      }
+    val settingConfig = settingType match {
+      case WorkspaceSettingTypes.GcpBucketLifecycle => workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig]
     }
+
     WorkspaceSetting(settingType, settingConfig)
   }
 }
@@ -60,7 +59,7 @@ trait WorkspaceSettingComponent {
   class WorkspaceSettingTable(tag: Tag) extends Table[WorkspaceSettingRecord](tag, "WORKSPACE_SETTINGS") {
     def `type` = column[String]("type", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
-    def config = column[Option[String]]("config")
+    def config = column[String]("config")
     def status = column[String]("status", O.Length(254))
     def createdTime = column[Timestamp]("created_time")
     def lastUpdated = column[Timestamp]("last_updated")
@@ -80,21 +79,15 @@ trait WorkspaceSettingComponent {
 
     def updateStatuses(workspaceId: UUID,
                        workspaceSettingTypes: List[WorkspaceSettingType],
-                       status: WorkspaceSettingRecord.SettingStatus.SettingStatus
+                       currentStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus,
+                       newStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus
     ): ReadWriteAction[Int] =
       workspaceSettingQuery
         .filter(record =>
-          record.workspaceId === workspaceId && record.`type`.inSetBind(workspaceSettingTypes.map(_.toString))
+          record.workspaceId === workspaceId && record.`type`.inSetBind(workspaceSettingTypes.map(_.toString)) && record.status === currentStatus.toString
         )
         .map(_.status)
-        .update(status.toString)
-
-    def deleteSettingsForWorkspace(workspaceId: UUID,
-                                   status: WorkspaceSettingRecord.SettingStatus.SettingStatus
-    ): ReadWriteAction[Int] =
-      filter(record => record.workspaceId === workspaceId && record.status === status.toString)
-        .map(_.status)
-        .update(WorkspaceSettingRecord.SettingStatus.Deleted.toString)
+        .update(newStatus.toString)
 
     def deleteSettingTypeForWorkspaceByStatus(workspaceId: UUID,
                                               settingType: WorkspaceSettingType,

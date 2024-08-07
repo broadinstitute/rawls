@@ -563,13 +563,13 @@ object WorkspaceState {
   case object DeleteFailed extends WorkspaceState
 }
 
-case class WorkspaceSetting(`type`: WorkspaceSettingType, config: Option[WorkspaceSettingConfig])
+case class WorkspaceSetting(`type`: WorkspaceSettingType, config: WorkspaceSettingConfig)
 
 object WorkspaceSettingTypes {
     sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
       override def toString: String = getClass.getSimpleName.stripSuffix("$")
       override def withName(name: String): WorkspaceSettingType = WorkspaceSettingTypes.withName(name)
-      def defaultConfig(): Option[WorkspaceSettingConfig]
+      def defaultConfig(): WorkspaceSettingConfig
     }
 
     def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
@@ -578,7 +578,7 @@ object WorkspaceSettingTypes {
     }
 
     case object GcpBucketLifecycle extends WorkspaceSettingType {
-      override def defaultConfig(): Option[WorkspaceSettingConfig] = Some(GcpBucketLifecycleConfig(List.empty))
+      override def defaultConfig(): WorkspaceSettingConfig = GcpBucketLifecycleConfig(List.empty)
     }
 }
 
@@ -1231,7 +1231,7 @@ class WorkspaceJsonSupport extends JsonSupport {
       val fields = json.asJsObject.fields
       val settingType = fields("type").convertTo[WorkspaceSettingType]
       val configuration = settingType match {
-        case GcpBucketLifecycle => fields.get("config").map(_.convertTo[GcpBucketLifecycleConfig])
+        case GcpBucketLifecycle => fields("config").convertTo[GcpBucketLifecycleConfig]
         case _ => throw DeserializationException(s"unexpected setting type $settingType")
       }
       WorkspaceSetting(settingType, configuration)

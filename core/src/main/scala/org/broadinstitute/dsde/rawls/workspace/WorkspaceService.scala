@@ -2013,8 +2013,47 @@ class WorkspaceService(
   def setWorkspaceSettings(workspaceName: WorkspaceName,
                            workspaceSettings: List[WorkspaceSetting]
   ): Future[WorkspaceSettingResponse] = {
+    /**
+      * Perform basic validation checks on requested settings.
+      */
+    def validateSettings(requestedSettings: List[WorkspaceSetting]): Unit = {
+      val validationErrors = requestedSettings.flatMap {
+        case WorkspaceSetting(settingType@WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(rules)) =>
+          rules.flatMap { rule =>
+            rule.conditions.age.collect { case age if age < 0 =>
+              ErrorReport(s"invalid $settingType configuration: age must be a non-negative integer.")
+            }
+          }
+      }
 
-    /** Apply a setting to a workspace. If the setting is successfully applied, update the database
+      if (validationErrors.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "invalid settings requested", validationErrors)
+        )
+      }
+    }
+
+    /**
+      * Iterate over existing settings. If an existing setting type is included in the
+      * requestedSettings, use the requested setting. If it isn't, use the setting type's default
+      * config to restore the workspace to the default state.
+      */
+    def computeNewSettings(workspace: Workspace,
+                           requestedSettings: List[WorkspaceSetting],
+                           existingSettings: List[WorkspaceSetting]
+                          ): List[WorkspaceSetting] = {
+      if (existingSettings.isEmpty) {
+        requestedSettings
+      } else {
+        val requestedSettingsMap = requestedSettings.map(s => s.`type` -> s.config).toMap
+        existingSettings.map { case WorkspaceSetting(settingType, _) =>
+          WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
+        }
+      }
+    }
+
+    /**
+      * Apply a setting to a workspace. If the setting is successfully applied, update the database
       * and return None. If the setting fails to apply, remove the failed setting from the database
       * and return the setting type with an error report. If the setting is not supported, throw an
       * exception. We make more trips to the database here than necessary, but we support a small
@@ -2024,7 +2063,7 @@ class WorkspaceService(
                      setting: WorkspaceSetting
     ): Future[Option[(WorkspaceSettingType, ErrorReport)]] =
       (setting match {
-        case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, Some(GcpBucketLifecycleConfig(rules))) =>
+        case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(rules)) =>
           val googleRules = rules.map { rule =>
             val conditionBuilder =
               LifecycleCondition.newBuilder().setMatchesPrefix(rule.conditions.matchesPrefix.toList.asJava)
@@ -2049,27 +2088,15 @@ class WorkspaceService(
           .map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
       }
 
-    /** Iterate over existing settings. If an existing setting type is included in the
-      * requestedSettings, use the requested setting. If it isn't, use the setting type's default
-      * config to restore the workspace to the default state. */
-    def computeNewSettings(workspace: Workspace,
-                           requestedSettings: List[WorkspaceSetting],
-                           existingSettings: List[WorkspaceSetting]
-    ): List[WorkspaceSetting] = {
-      val requestedSettingsMap = requestedSettings.map(s => s.`type` -> s.config).toMap
-      existingSettings.map { case WorkspaceSetting(settingType, _) =>
-        WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
-      }
-    }
-
+    validateSettings(workspaceSettings)
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
       currentSettings <- workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
       newSettings = computeNewSettings(workspace, workspaceSettings, currentSettings)
       _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID, workspaceSettings)
-      applyFailures <- workspaceSettings.traverse(s => applySetting(workspace, s))
+      applyFailures <- newSettings.traverse(s => applySetting(workspace, s))
     } yield {
-      val successes = workspaceSettings.filterNot { s =>
+      val successes = newSettings.filterNot { s =>
         applyFailures.flatten.exists { case (failedSettingType, _) =>
           failedSettingType == s.`type`
         }
