@@ -37,6 +37,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ExternalEntityInfo,
   MetadataParams,
   MethodConfiguration,
+  PreparedSubmission,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -67,7 +68,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
   extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate
+  getTerminalStatusDate,
+  submissionRootPath
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
@@ -155,6 +157,8 @@ object SubmissionsService {
     }
   }
 
+  def submissionRootPath(workspace: Workspace, id: UUID) =
+    s"gs://${workspace.bucketName}/submissions/$id"
 }
 
 class SubmissionsService(
@@ -469,7 +473,6 @@ class SubmissionsService(
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           val newSubmissionId = UUID.randomUUID()
-          val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${newSubmissionId}"
           val filterWorkFlows = submissionRetry.retryType.filterWorkflows(submission.workflows)
           if (filterWorkFlows.isEmpty) {
             throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "no workflows to retry"))
@@ -480,7 +483,7 @@ class SubmissionsService(
           val newSubmission = submission.copy(
             submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
-            submissionRoot = newSubmissionRoot,
+            submissionRoot = submissionRootPath(workspaceContext, newSubmissionId),
             workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted,
             userComment =
@@ -505,15 +508,15 @@ class SubmissionsService(
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] =
     for {
-      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot) <-
-        prepareSubmission(workspaceName, submissionRequest)
-      submission <- saveSubmission(workspaceContext,
-                                   submissionId,
-                                   submissionRequest,
-                                   submissionRoot,
-                                   submissionParameters,
-                                   workflowFailureMode,
-                                   header
+      ps <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(
+        ps.workspace,
+        ps.id,
+        submissionRequest,
+        ps.submissionRoot,
+        ps.inputs,
+        ps.failureMode,
+        ps.header
       )
     } yield SubmissionReport(
       submissionRequest,
@@ -521,19 +524,13 @@ class SubmissionsService(
       submission.submissionDate,
       ctx.userInfo.userEmail.value,
       submission.status,
-      header,
-      submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty))
+      ps.header,
+      ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
 
-  private def prepareSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[
-    (Workspace,
-     UUID,
-     Stream[SubmissionValidationEntityInputs],
-     Option[WorkflowFailureMode],
-     SubmissionValidationHeader,
-     String
-    )
-  ] = {
+  private def prepareSubmission(workspaceName: WorkspaceName,
+                                submissionRequest: SubmissionRequest
+  ): Future[PreparedSubmission] = {
 
     val submissionId: UUID = UUID.randomUUID()
 
@@ -545,7 +542,7 @@ class SubmissionsService(
 
       workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
 
-      submissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
+      submissionRoot = submissionRootPath(workspaceContext, submissionId)
 
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext,
@@ -592,7 +589,14 @@ class SubmissionsService(
         gatherInputsResult,
         workspaceExpressionResults
       )
-    } yield (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot)
+    } yield PreparedSubmission(
+      workspaceContext,
+      submissionId,
+      submissionParameters,
+      workflowFailureMode,
+      header,
+      submissionRoot
+    )
   }
 
   def updateSubmissionUserComment(workspaceName: WorkspaceName,
@@ -925,10 +929,10 @@ class SubmissionsService(
                          submissionRequest: SubmissionRequest
   ): Future[SubmissionValidationReport] =
     for {
-      (_, _, submissionParameters, _, header, _) <- prepareSubmission(workspaceName, submissionRequest)
+      ps <- prepareSubmission(workspaceName, submissionRequest)
     } yield {
-      val (failed, succeeded) = submissionParameters.partition(_.inputResolutions.exists(_.error.isDefined))
-      SubmissionValidationReport(submissionRequest, header, succeeded, failed)
+      val (failed, succeeded) = ps.inputs.partition(_.inputResolutions.exists(_.error.isDefined))
+      SubmissionValidationReport(submissionRequest, ps.header, succeeded, failed)
     }
 
   private def evaluateWorkspaceExpressions(workspace: Workspace,
