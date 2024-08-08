@@ -228,7 +228,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[Stream[SubmissionValidationEntityInputs]] =
+  ): Future[LazyList[SubmissionValidationEntityInputs]] =
     dataSource.inTransaction(
       dataAccess =>
         withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>

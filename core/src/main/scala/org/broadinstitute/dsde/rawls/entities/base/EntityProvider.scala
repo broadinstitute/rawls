@@ -61,7 +61,7 @@ trait EntityProvider {
   def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                           gatherInputsResult: GatherInputsResult,
                           workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[Stream[SubmissionValidationEntityInputs]]
+  ): Future[LazyList[SubmissionValidationEntityInputs]]
 
   def expressionValidator: ExpressionValidator
 
