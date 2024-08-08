@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpLifecycleAction, GcpLifecycleCondition}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpBucketLifecycleAction, GcpBucketLifecycleCondition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{GcpBucketLifecycle, WorkspaceSettingType}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
@@ -586,9 +586,9 @@ sealed trait WorkspaceSettingConfig
 object WorkspaceSettingConfig {
   case class GcpBucketLifecycleConfig(rules: List[GcpBucketLifecycleRule]) extends WorkspaceSettingConfig
 
-  case class GcpBucketLifecycleRule(action: GcpLifecycleAction, conditions: GcpLifecycleCondition)
-  case class GcpLifecycleAction(`type`: String)
-  case class GcpLifecycleCondition(matchesPrefix: Set[String], age: Option[Int])
+  case class GcpBucketLifecycleRule(action: GcpBucketLifecycleAction, conditions: GcpBucketLifecycleCondition)
+  case class GcpBucketLifecycleAction(`type`: String)
+  case class GcpBucketLifecycleCondition(matchesPrefix: Set[String], age: Option[Int])
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1197,8 +1197,8 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val GcpLifecycleConditionFormat: RootJsonFormat[GcpLifecycleCondition] = jsonFormat2(GcpLifecycleCondition.apply)
-  implicit val GcpLifecycleActionFormat: RootJsonFormat[GcpLifecycleAction] = jsonFormat1(GcpLifecycleAction.apply)
+  implicit val GcpLifecycleConditionFormat: RootJsonFormat[GcpBucketLifecycleCondition] = jsonFormat2(GcpBucketLifecycleCondition.apply)
+  implicit val GcpLifecycleActionFormat: RootJsonFormat[GcpBucketLifecycleAction] = jsonFormat1(GcpBucketLifecycleAction.apply)
   implicit val GcpBucketLifecycleRuleFormat: RootJsonFormat[GcpBucketLifecycleRule] = jsonFormat2(GcpBucketLifecycleRule.apply)
   implicit val GcpBucketLifecycleConfigFormat: RootJsonFormat[GcpBucketLifecycleConfig] = jsonFormat1(GcpBucketLifecycleConfig.apply)
 
@@ -1216,6 +1216,8 @@ class WorkspaceJsonSupport extends JsonSupport {
       case config: GcpBucketLifecycleConfig => config.toJson
     }
 
+    // We prevent reading WorkspaceSettingConfig directly because we need
+    // the corresponding WorkspaceSettingType to know how to read it
     def read(json: JsValue): WorkspaceSettingConfig = {
       throw DeserializationException("WorkspaceSettingConfig cannot be read directly")
     }

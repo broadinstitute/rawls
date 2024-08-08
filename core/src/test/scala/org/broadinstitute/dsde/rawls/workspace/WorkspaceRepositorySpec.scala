@@ -6,8 +6,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule,
-  GcpLifecycleAction,
-  GcpLifecycleCondition
+  GcpBucketLifecycleAction,
+  GcpBucketLifecycleCondition
 }
 import org.broadinstitute.dsde.rawls.model.{
   Workspace,
@@ -138,7 +138,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("applied"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("applied"), Some(30)))
         )
       )
     )
@@ -146,7 +146,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("pending"), Some(31)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("pending"), Some(31)))
         )
       )
     )
@@ -182,7 +182,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("newSetting"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("newSetting"), Some(30)))
         )
       )
     )
@@ -208,7 +208,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("newSetting"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("newSetting"), Some(30)))
         )
       )
     )
@@ -233,7 +233,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("applied"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("applied"), Some(30)))
         )
       )
     )
@@ -241,7 +241,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("pending"), Some(31)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("pending"), Some(31)))
         )
       )
     )
@@ -299,7 +299,7 @@ class WorkspaceRepositorySpec
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("newSetting"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("newSetting"), Some(30)))
         )
       )
     )
