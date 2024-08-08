@@ -2,8 +2,20 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceName, WorkspaceState}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceSettingRecord}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule,
+  GcpLifecycleAction,
+  GcpLifecycleCondition
+}
+import org.broadinstitute.dsde.rawls.model.{
+  Workspace,
+  WorkspaceName,
+  WorkspaceSetting,
+  WorkspaceSettingTypes,
+  WorkspaceState
+}
 import org.joda.time.DateTime
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -114,5 +126,215 @@ class WorkspaceRepositorySpec
 
     assertResult(readback)(None)
     assertResult(result)(true)
+  }
+
+  behavior of "getWorkspaceSettings"
+
+  it should "return the applied workspace settings" in {
+    val repo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(repo.createWorkspace(ws), Duration.Inf)
+    val appliedSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("applied"), Some(30)))
+        )
+      )
+    )
+    val pendingSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("pending"), Some(31)))
+        )
+      )
+    )
+
+    Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        for {
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(appliedSetting))
+          _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+            ws.workspaceIdAsUUID,
+            WorkspaceSettingTypes.GcpBucketLifecycle,
+            WorkspaceSettingRecord.SettingStatus.Pending,
+            WorkspaceSettingRecord.SettingStatus.Applied
+          )
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(pendingSetting))
+        } yield ()
+      },
+      Duration.Inf
+    )
+
+    val result = Await.result(repo.getWorkspaceSettings(ws.workspaceIdAsUUID), Duration.Inf)
+
+    assertResult(result)(List(appliedSetting))
+  }
+
+  behavior of "createWorkspaceSettingsRecords"
+
+  it should "create pending workspace settings" in {
+    val repo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(repo.createWorkspace(ws), Duration.Inf)
+    val setting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("newSetting"), Some(30)))
+        )
+      )
+    )
+
+    val result = Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting)), Duration.Inf)
+
+    val newSettings = Await.result(
+      slickDataSource.inTransaction(
+        _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,
+                                                                 WorkspaceSettingRecord.SettingStatus.Pending
+        )
+      ),
+      Duration.Inf
+    )
+    assertResult(newSettings)(List(setting))
+  }
+
+  it should "throw an exception if there are already pending settings" in {
+    val repo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(repo.createWorkspace(ws), Duration.Inf)
+    val setting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("newSetting"), Some(30)))
+        )
+      )
+    )
+
+    Await.result(slickDataSource.inTransaction(_.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(setting))),
+                 Duration.Inf
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting)), Duration.Inf)
+    }
+    thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+  }
+
+  behavior of "markWorkspaceSettingApplied"
+
+  it should "mark Pending settings as Applied and Applied settings as Deleted" in {
+    val repo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(repo.createWorkspace(ws), Duration.Inf)
+    val appliedSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("applied"), Some(30)))
+        )
+      )
+    )
+    val pendingSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("pending"), Some(31)))
+        )
+      )
+    )
+
+    Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        for {
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(appliedSetting))
+          _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+            ws.workspaceIdAsUUID,
+            WorkspaceSettingTypes.GcpBucketLifecycle,
+            WorkspaceSettingRecord.SettingStatus.Pending,
+            WorkspaceSettingRecord.SettingStatus.Applied
+          )
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(pendingSetting))
+        } yield ()
+      },
+      Duration.Inf
+    )
+
+    Await.result(repo.markWorkspaceSettingApplied(ws.workspaceIdAsUUID, WorkspaceSettingTypes.GcpBucketLifecycle),
+                 Duration.Inf
+    )
+
+    // existing settings should now be deleted
+    val deletedSettings = Await.result(
+      slickDataSource.inTransaction(
+        _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,
+                                                                 WorkspaceSettingRecord.SettingStatus.Deleted
+        )
+      ),
+      Duration.Inf
+    )
+    assertResult(deletedSettings)(List(appliedSetting))
+
+    // new settings should now be applied
+    val appliedSettings = Await.result(
+      slickDataSource.inTransaction(
+        _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,
+                                                                 WorkspaceSettingRecord.SettingStatus.Applied
+        )
+      ),
+      Duration.Inf
+    )
+    assertResult(appliedSettings)(List(pendingSetting))
+  }
+
+  behavior of "removePendingSetting"
+
+  it should "delete the pending workspace setting" in {
+    val repo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(repo.createWorkspace(ws), Duration.Inf)
+    val setting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("newSetting"), Some(30)))
+        )
+      )
+    )
+
+    Await.result(slickDataSource.inTransaction(_.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(setting))),
+                 Duration.Inf
+    )
+
+    Await.result(repo.removePendingSetting(ws.workspaceIdAsUUID, WorkspaceSettingTypes.GcpBucketLifecycle),
+                 Duration.Inf
+    )
+
+    Await.result(
+      slickDataSource.inTransaction(
+        _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,
+                                                                 WorkspaceSettingRecord.SettingStatus.Deleted
+        )
+      ),
+      Duration.Inf
+    ) shouldBe empty
+    Await.result(
+      slickDataSource.inTransaction(
+        _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,
+                                                                 WorkspaceSettingRecord.SettingStatus.Applied
+        )
+      ),
+      Duration.Inf
+    ) shouldBe empty
+    Await.result(
+      slickDataSource.inTransaction(
+        _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,
+                                                                 WorkspaceSettingRecord.SettingStatus.Pending
+        )
+      ),
+      Duration.Inf
+    ) shouldBe empty
   }
 }
