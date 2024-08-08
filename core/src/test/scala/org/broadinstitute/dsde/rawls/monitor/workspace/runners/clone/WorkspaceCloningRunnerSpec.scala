@@ -179,36 +179,4 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
       ArgumentMatchers.any[String]
     )
   }
-
-  it should "return Incomplete when the user context cannot be created" in {
-    val workspaceRepository = mock[WorkspaceRepository]
-    when(
-      workspaceRepository.setFailedState(ArgumentMatchers.eq(workspaceId),
-                                         ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-                                         ArgumentMatchers.any[String]
-      )
-    ).thenReturn(Future.successful(1))
-    val runner = spy(
-      new WorkspaceCloningRunner(
-        mock[SamDAO],
-        mock[GoogleServicesDAO],
-        mock[LeonardoDAO],
-        mock[WorkspaceManagerDAO],
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceRepository
-      )
-    )
-
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getRawlsSAContext()(ArgumentMatchers.any())
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-
-    verify(workspaceRepository, never).setFailedState(
-      ArgumentMatchers.eq(workspaceId),
-      ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-      ArgumentMatchers.any[String]
-    )
-  }
-
 }

@@ -487,9 +487,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(RawlsRequestContext(null, null)))
-      .when(runner)
-      .getRawlsSAContext()(ArgumentMatchers.any())
+
+    when(runner.samDAO.rawlsSAContext).thenReturn(RawlsRequestContext(null, null))
 
     whenReady(runner(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll)))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(
@@ -530,9 +529,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(RawlsRequestContext(null, null)))
-      .when(runner)
-      .getRawlsSAContext()(ArgumentMatchers.any())
+
+    when(runner.samDAO.rawlsSAContext).thenReturn(RawlsRequestContext(null, null))
 
     whenReady(runner(job))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(

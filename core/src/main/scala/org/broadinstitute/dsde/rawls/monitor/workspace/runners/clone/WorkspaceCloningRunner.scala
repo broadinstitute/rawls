@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceRequest,
   WorkspaceState
 }
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.RawlsSAContextCreator
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.util.UUID
@@ -81,8 +80,7 @@ class WorkspaceCloningRunner(
   monitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
   workspaceRepository: WorkspaceRepository
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging
-    with RawlsSAContextCreator {
+    with LazyLogging {
 
   def cloneFail(wsId: UUID, message: String)(implicit executionContext: ExecutionContext): Future[Int] =
     workspaceRepository.setFailedState(wsId, WorkspaceState.CloningFailed, message)
@@ -107,25 +105,8 @@ class WorkspaceCloningRunner(
         return Future.successful(Complete)
     }
 
-    val userEmail = job.userEmail match {
-      case Some(email) => email
-      case None =>
-        val msg =
-          s"Unable to update clone status for workspace $workspaceId because no user email set on monitoring job"
-        logFailure(msg)
-        return cloneFail(workspaceId, msg).map(_ => Complete)
-    }
-
-    getRawlsSAContext().transformWith {
-      case Failure(t) =>
-        val msg =
-          s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve rawls SA context"
-        logFailure(msg, Some(t))
-        job.retryOrTimeout(() => cloneFail(workspaceId, msg))
-      case Success(userCtx) =>
-        val step = getStep(job, workspaceId)
-        step.runStep(userCtx)
-    }
+    val step = getStep(job, workspaceId)
+    step.runStep(samDAO.rawlsSAContext)
   }
 
   def getStep(job: WorkspaceManagerResourceMonitorRecord, workspaceId: UUID)(implicit

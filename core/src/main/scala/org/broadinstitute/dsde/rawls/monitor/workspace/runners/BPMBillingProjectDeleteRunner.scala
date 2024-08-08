@@ -37,8 +37,7 @@ class BPMBillingProjectDeleteRunner(
   billingRepository: BillingRepository,
   billingProjectDeletion: BillingProjectDeletion
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging
-    with RawlsSAContextCreator {
+    with LazyLogging {
 
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
@@ -51,30 +50,12 @@ class BPMBillingProjectDeleteRunner(
         )
         return Future.successful(Complete) // nothing more this runner can do with it
     }
-    val userEmail = job.userEmail match {
-      case Some(email) => email
-      case None =>
-        logger.error(
-          s"Job to monitor ${job.jobType} $projectName created with id ${job.jobControlId} but no user email set"
-        )
-        val errorMsg =
-          s"Unable to update ${projectName.value} with landing zone deletion status because no user email is stored on monitoring job"
-        return billingRepository
-          .updateCreationStatus(projectName, DeletionFailed, Some(errorMsg))
-          .map(_ => Complete)
-    }
 
-    getRawlsSAContext().transformWith {
-      case Success(userCtx) =>
-        billingRepository.getLandingZoneId(projectName).flatMap {
-          case Some(landingZoneId) =>
-            handleLandingZoneDeletion(job, projectName, UUID.fromString(landingZoneId), userCtx)
-          case None => billingProjectDeletion.finalizeDelete(projectName, userCtx).map(_ => Complete)
-        }
-      case Failure(t) =>
-        val msg = s"Unable to complete billing project deletion: unable to retrieve rawls SA context"
-        logger.error(s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg", t)
-        job.retryOrTimeout(() => billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)))
+    val rawlsSAContext = samDAO.rawlsSAContext
+    billingRepository.getLandingZoneId(projectName).flatMap {
+      case Some(landingZoneId) =>
+        handleLandingZoneDeletion(job, projectName, UUID.fromString(landingZoneId), rawlsSAContext)
+      case None => billingProjectDeletion.finalizeDelete(projectName, rawlsSAContext).map(_ => Complete)
     }
   }
 

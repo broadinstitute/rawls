@@ -130,32 +130,6 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
 
   }
 
-  it should "return Incomplete when the if the user context cannot be created" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getRawlsSAContext()(ArgumentMatchers.any())
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include(workspaceId.toString)
-      errorMessage should include(userEmail)
-      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
-    }.when(runner)
-      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(runner, never).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(
-      ArgumentMatchers.any[ExecutionContext]()
-    )
-  }
-
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -175,7 +149,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -207,7 +181,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -240,7 +214,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]

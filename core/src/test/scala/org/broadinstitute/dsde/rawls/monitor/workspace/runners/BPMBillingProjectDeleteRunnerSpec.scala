@@ -90,74 +90,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
 
   }
 
-  it should "return job as incomplete if the user context cannot be created before timeout" in {
-    val billingRepository = mock[BillingRepository]
-    val runner =
-      spy(
-        new BPMBillingProjectDeleteRunner(
-          mock[SamDAO],
-          mock[GoogleServicesDAO],
-          mock[WorkspaceManagerDAO],
-          billingRepository,
-          mock[BillingProjectDeletion]
-        )
-      )
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getRawlsSAContext()(ArgumentMatchers.any())
-    val monitorRecord: WorkspaceManagerResourceMonitorRecord =
-      WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
-                                            JobType.BpmBillingProjectDelete,
-                                            None,
-                                            Some(billingProjectName.value),
-                                            Some(userEmail),
-                                            Timestamp.from(Instant.now())
-      )
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-
-  }
-
-  it should "set an error in the billing project and return job as complete if the user context cannot be created after timing out" in {
-    val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(DeletionFailed),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenReturn(Future.successful(1))
-    val runner =
-      spy(
-        new BPMBillingProjectDeleteRunner(
-          mock[SamDAO],
-          mock[GoogleServicesDAO],
-          mock[WorkspaceManagerDAO],
-          billingRepository,
-          mock[BillingProjectDeletion]
-        )
-      )
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getRawlsSAContext()(ArgumentMatchers.any())
-    val createTime = Timestamp.from(Instant.now().minus(25, ChronoUnit.HOURS))
-    val monitorRecord: WorkspaceManagerResourceMonitorRecord =
-      WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
-                                            JobType.BpmBillingProjectDelete,
-                                            None,
-                                            Some(billingProjectName.value),
-                                            Some(userEmail),
-                                            createTime
-      )
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
-    verify(billingRepository).updateCreationStatus(
-      ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(DeletionFailed),
-      ArgumentMatchers.any[Some[String]]()
-    )
-  }
-
   it should "return incomplete when landing zone call returns 500 before the timeout" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -193,7 +125,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
@@ -244,7 +176,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -304,7 +236,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -362,7 +294,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -420,7 +352,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -464,7 +396,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         mock[BillingProjectDeletion]
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
@@ -511,7 +443,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         billingProjectDeletion
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -566,7 +498,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
         billingProjectDeletion
       )
     )
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -609,7 +541,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getRawlsSAContext()(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 

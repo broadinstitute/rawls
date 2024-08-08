@@ -28,8 +28,7 @@ class CloneWorkspaceContainerRunner(
   dataSource: SlickDataSource,
   val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging
-    with RawlsSAContextCreator {
+    with LazyLogging {
 
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
@@ -53,48 +52,30 @@ class CloneWorkspaceContainerRunner(
         return Future.successful(Complete) // nothing more this runner can do with it
     }
 
-    val userEmail = job.userEmail match {
-      case Some(email) => email
-      case None =>
-        val msg =
-          s"Unable to update clone status for workspace $workspaceId because no user email set on monitoring job"
-        logFailure(msg)
-        return cloneFail(workspaceId, msg).map(_ => Complete)
-    }
-
-    getRawlsSAContext().transformWith {
-      case Failure(t) =>
-        val msg =
-          s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve rawls SA context"
-        logFailure(msg, Some(t))
-        job.retryOrTimeout(() => cloneFail(workspaceId, msg))
-      case Success(ctx) =>
-        Try(workspaceManagerDAO.getJob(job.jobControlId.toString, ctx)) match {
-          case Success(result) => handleCloneResult(workspaceId, result)
-          case Failure(e: ApiException) =>
-            e.getMessage
-            e.getCode match {
-              case 500 =>
-                val msg = s"Clone Container operation with jobId ${job.jobControlId} failed: ${e.getMessage}"
-                cloneFail(workspaceId, msg).map(_ => Complete)
-              case 404 =>
-                val msg = s"Unable to find jobId ${job.jobControlId} in WSM for clone container operation"
-                cloneFail(workspaceId, msg).map(_ => Complete)
-              case 401 =>
-                val msg = s"Unable to get job result, user is unauthed with jobId ${job.jobControlId}: ${e.getMessage}"
-                cloneFail(workspaceId, msg).map(_ => Complete)
-              case code =>
-                val msg = s"API call to get clone result failed with status code $code: ${e.getMessage}"
-                logFailure(msg)
-                job.retryOrTimeout(() => cloneFail(workspaceId, msg))
-            }
-          case Failure(t) =>
-            val msg = s"API call to get clone result from workspace manager failed with: ${t.getMessage}"
-            logFailure(msg, Some(t))
+    Try(workspaceManagerDAO.getJob(job.jobControlId.toString, samDAO.rawlsSAContext)) match {
+      case Success(result) => handleCloneResult(workspaceId, result)
+      case Failure(e: ApiException) =>
+        e.getMessage
+        e.getCode match {
+          case 500 =>
+            val msg = s"Clone Container operation with jobId ${job.jobControlId} failed: ${e.getMessage}"
+            cloneFail(workspaceId, msg).map(_ => Complete)
+          case 404 =>
+            val msg = s"Unable to find jobId ${job.jobControlId} in WSM for clone container operation"
+            cloneFail(workspaceId, msg).map(_ => Complete)
+          case 401 =>
+            val msg = s"Unable to get job result, user is unauthed with jobId ${job.jobControlId}: ${e.getMessage}"
+            cloneFail(workspaceId, msg).map(_ => Complete)
+          case code =>
+            val msg = s"API call to get clone result failed with status code $code: ${e.getMessage}"
+            logFailure(msg)
             job.retryOrTimeout(() => cloneFail(workspaceId, msg))
         }
+      case Failure(t) =>
+        val msg = s"API call to get clone result from workspace manager failed with: ${t.getMessage}"
+        logFailure(msg, Some(t))
+        job.retryOrTimeout(() => cloneFail(workspaceId, msg))
     }
-
   }
 
   def handleCloneResult(workspaceId: UUID, result: JobReport)(implicit
