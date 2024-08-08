@@ -76,31 +76,6 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
   }
 
-  it should "return a completed status if the user email is None" in {
-    val wsRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(wsRepo.getWorkspace(any[UUID])).thenAnswer(_ => Future(Some(azureWorkspace)))
-    when(wsRepo.setFailedState(any[UUID], any[WorkspaceState], any[String])).thenAnswer(_ => Future.successful(1))
-
-    val runner = new WorkspaceDeletionRunner(
-      mock[SamDAO](RETURNS_SMART_NULLS),
-      mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
-      wsRepo,
-      mock[LeonardoService](RETURNS_SMART_NULLS),
-      mock[WsmDeletionAction](RETURNS_SMART_NULLS),
-      mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
-      mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
-    )
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(wsRepo).setFailedState(
-      monitorRecord.workspaceId.get,
-      WorkspaceState.DeleteFailed,
-      s"Job to monitor workspace deletion for workspace id = ${monitorRecord.workspaceId.get} created with id ${monitorRecord.jobControlId} but no user email set"
-    )
-  }
-
   it should "throw an exception if called with a job type that is not WorkspaceDelete" in {
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
@@ -487,9 +462,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(RawlsRequestContext(null, null)))
-      .when(runner)
-      .getUserCtx(anyString())(ArgumentMatchers.any())
+
+    when(runner.samDAO.rawlsSAContext).thenReturn(RawlsRequestContext(null, null))
 
     whenReady(runner(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll)))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(
@@ -530,9 +504,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(RawlsRequestContext(null, null)))
-      .when(runner)
-      .getUserCtx(anyString())(ArgumentMatchers.any())
+
+    when(runner.samDAO.rawlsSAContext).thenReturn(RawlsRequestContext(null, null))
 
     whenReady(runner(job))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(
