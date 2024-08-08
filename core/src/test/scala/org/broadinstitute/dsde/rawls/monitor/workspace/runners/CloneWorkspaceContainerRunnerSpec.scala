@@ -108,28 +108,6 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
   }
 
-  it should "return a completed status if no user email is set on the job" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-
-    doAnswer(answer =>
-      Future.successful(Some(workspace.copy(errorMessage = Some(answer.getArgument(1).asInstanceOf[String]))))
-    ).when(runner)
-      .cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-  }
-
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]

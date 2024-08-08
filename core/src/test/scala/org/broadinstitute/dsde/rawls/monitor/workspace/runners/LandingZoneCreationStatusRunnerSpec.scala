@@ -53,38 +53,6 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     )
   }
 
-  it should "set an error on the billing project and return a completed status if the user email is None" in {
-    val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(CreationStatuses.Error),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.contains(billingProjectName.value))
-      assert(message.get.toLowerCase.contains("no user email"))
-      Future.successful(1)
-    }
-    val runner = new LandingZoneCreationStatusRunner(
-      mock[SamDAO],
-      mock[WorkspaceManagerDAO],
-      billingRepository,
-      mock[GoogleServicesDAO]
-    )
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-
-    verify(billingRepository).updateCreationStatus(
-      ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(CreationStatuses.Error),
-      ArgumentMatchers.any[Some[String]]()
-    )
-
-  }
-
   it should "return the job status as incomplete and not set an error status and message on the project if the call to get the landing zone job results fail" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]

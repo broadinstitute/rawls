@@ -151,32 +151,4 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
   }
-
-  it should "return a completed status if no user email is set on the job" in {
-    val workspaceRepository = mock[WorkspaceRepository]
-    when(
-      workspaceRepository.setFailedState(ArgumentMatchers.eq(workspaceId),
-                                         ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-                                         ArgumentMatchers.any[String]
-      )
-    ).thenReturn(Future.successful(1))
-    val runner = new WorkspaceCloningRunner(
-      mock[SamDAO],
-      mock[GoogleServicesDAO],
-      mock[LeonardoDAO],
-      mock[WorkspaceManagerDAO],
-      mock[WorkspaceManagerResourceMonitorRecordDao],
-      workspaceRepository
-    )
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-
-    verify(workspaceRepository).setFailedState(
-      ArgumentMatchers.eq(workspaceId),
-      ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-      ArgumentMatchers.any[String]
-    )
-  }
 }

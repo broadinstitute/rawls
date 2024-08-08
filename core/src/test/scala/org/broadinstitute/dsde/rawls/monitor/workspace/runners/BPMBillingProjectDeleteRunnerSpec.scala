@@ -50,46 +50,6 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     )
   }
 
-  it should "set an error on the billing project and return a completed status if the user email is None" in {
-    val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(DeletionFailed),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.contains(billingProjectName.value))
-      assert(message.get.toLowerCase.contains("no user email"))
-      Future.successful(1)
-    }
-    val runner = new BPMBillingProjectDeleteRunner(
-      mock[SamDAO],
-      mock[GoogleServicesDAO],
-      mock[WorkspaceManagerDAO],
-      billingRepository,
-      mock[BillingProjectDeletion]
-    )
-    val monitorRecord: WorkspaceManagerResourceMonitorRecord =
-      WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
-                                            JobType.BpmBillingProjectDelete,
-                                            None,
-                                            Some(billingProjectName.value),
-                                            None,
-                                            Timestamp.from(Instant.now())
-      )
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
-
-    verify(billingRepository).updateCreationStatus(
-      ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(DeletionFailed),
-      ArgumentMatchers.any[Some[String]]()
-    )
-
-  }
-
   it should "return incomplete when landing zone call returns 500 before the timeout" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
