@@ -108,54 +108,6 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
   }
 
-  it should "return a completed status if no user email is set on the job" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-
-    doAnswer(answer =>
-      Future.successful(Some(workspace.copy(errorMessage = Some(answer.getArgument(1).asInstanceOf[String]))))
-    ).when(runner)
-      .cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-  }
-
-  it should "return Incomplete when the if the user context cannot be created" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include(workspaceId.toString)
-      errorMessage should include(userEmail)
-      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
-    }.when(runner)
-      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(runner, never).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(
-      ArgumentMatchers.any[ExecutionContext]()
-    )
-  }
-
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -175,7 +127,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -207,7 +159,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -240,7 +192,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]

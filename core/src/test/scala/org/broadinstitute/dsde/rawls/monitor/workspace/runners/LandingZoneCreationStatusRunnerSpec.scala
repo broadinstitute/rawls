@@ -53,73 +53,6 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     )
   }
 
-  it should "set an error on the billing project and return a completed status if the user email is None" in {
-    val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(CreationStatuses.Error),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.contains(billingProjectName.value))
-      assert(message.get.toLowerCase.contains("no user email"))
-      Future.successful(1)
-    }
-    val runner = new LandingZoneCreationStatusRunner(
-      mock[SamDAO],
-      mock[WorkspaceManagerDAO],
-      billingRepository,
-      mock[GoogleServicesDAO]
-    )
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-
-    verify(billingRepository).updateCreationStatus(
-      ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(CreationStatuses.Error),
-      ArgumentMatchers.any[Some[String]]()
-    )
-
-  }
-
-  it should "return the job status as incomplete and not set an error status and message on the project if the user context cannot be created" in {
-    val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(CreationStatuses.Error),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.toLowerCase.contains("request context"))
-      assert(message.get.contains(userEmail))
-      Future.successful(1)
-    }
-    val runner =
-      spy(
-        new LandingZoneCreationStatusRunner(
-          mock[SamDAO],
-          mock[WorkspaceManagerDAO],
-          billingRepository,
-          mock[GoogleServicesDAO]
-        )
-      )
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(billingRepository, never).updateCreationStatus(
-      ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(CreationStatuses.Error),
-      ArgumentMatchers.any[Some[String]]()
-    )
-  }
-
   it should "return the job status as incomplete and not set an error status and message on the project if the call to get the landing zone job results fail" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -144,7 +77,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     }
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(billingRepository, never).updateCreationStatus(
@@ -179,7 +112,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     ).thenReturn(Future.successful(1))
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -205,7 +138,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     ).thenReturn(landingZoneResult)
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, mock[BillingRepository], mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     // since no methods are defined on the mock billing repository, any calls will throw an exception
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
@@ -240,7 +173,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
 
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
@@ -274,7 +207,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     ).thenReturn(Future.successful(1))
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(billingRepository).updateCreationStatus(
@@ -310,7 +243,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
     val ctx = mock[RawlsRequestContext]
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 

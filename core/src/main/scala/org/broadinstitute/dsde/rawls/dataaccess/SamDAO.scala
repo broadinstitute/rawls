@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.Async
 import cats.effect.kernel.Resource
 import org.broadinstitute.dsde.rawls.model.{
@@ -7,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RawlsUser,
   RawlsUserEmail,
+  RawlsUserSubjectId,
   SamCreateResourceResponse,
   SamFullyQualifiedResourceId,
   SamPolicy,
@@ -157,6 +159,10 @@ trait SamDAO {
   ): Future[Seq[SamFullyQualifiedResourceId]]
 
   def admin: SamAdminDAO
+
+  def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""), None)
+  )
 }
 
 trait SamAdminDAO {

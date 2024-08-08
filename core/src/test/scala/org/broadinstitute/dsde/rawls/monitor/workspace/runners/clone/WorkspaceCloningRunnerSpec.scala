@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace, Workspace
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{never, spy, verify, when}
+import org.mockito.Mockito.{doReturn, never, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -151,64 +151,4 @@ class WorkspaceCloningRunnerSpec extends AnyFlatSpecLike with MockitoSugar with 
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
   }
-
-  it should "return a completed status if no user email is set on the job" in {
-    val workspaceRepository = mock[WorkspaceRepository]
-    when(
-      workspaceRepository.setFailedState(ArgumentMatchers.eq(workspaceId),
-                                         ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-                                         ArgumentMatchers.any[String]
-      )
-    ).thenReturn(Future.successful(1))
-    val runner = new WorkspaceCloningRunner(
-      mock[SamDAO],
-      mock[GoogleServicesDAO],
-      mock[LeonardoDAO],
-      mock[WorkspaceManagerDAO],
-      mock[WorkspaceManagerResourceMonitorRecordDao],
-      workspaceRepository
-    )
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-
-    verify(workspaceRepository).setFailedState(
-      ArgumentMatchers.eq(workspaceId),
-      ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-      ArgumentMatchers.any[String]
-    )
-  }
-
-  it should "return Incomplete when the user context cannot be created" in {
-    val workspaceRepository = mock[WorkspaceRepository]
-    when(
-      workspaceRepository.setFailedState(ArgumentMatchers.eq(workspaceId),
-                                         ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-                                         ArgumentMatchers.any[String]
-      )
-    ).thenReturn(Future.successful(1))
-    val samDAO = mock[SamDAO]
-    when(samDAO.getUserArbitraryPetServiceAccountKey(userEmail))
-      .thenReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-    val runner = spy(
-      new WorkspaceCloningRunner(
-        samDAO,
-        mock[GoogleServicesDAO],
-        mock[LeonardoDAO],
-        mock[WorkspaceManagerDAO],
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceRepository
-      )
-    )
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-
-    verify(workspaceRepository, never).setFailedState(
-      ArgumentMatchers.eq(workspaceId),
-      ArgumentMatchers.eq(WorkspaceState.CloningFailed),
-      ArgumentMatchers.any[String]
-    )
-  }
-
 }
