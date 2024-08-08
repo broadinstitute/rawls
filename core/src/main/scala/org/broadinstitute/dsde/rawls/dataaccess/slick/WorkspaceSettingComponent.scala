@@ -87,8 +87,8 @@ trait WorkspaceSettingComponent {
         .filter(record =>
           record.workspaceId === workspaceId && record.`type` === workspaceSettingType.toString && record.status === currentStatus.toString
         )
-        .map(_.status)
-        .update(newStatus.toString)
+        .map(rec => (rec.status, rec.lastUpdated))
+        .update((newStatus.toString, new Timestamp(new Date().getTime)))
 
     def deleteSettingTypeForWorkspaceByStatus(workspaceId: UUID,
                                               settingType: WorkspaceSettingType,

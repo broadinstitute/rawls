@@ -14,7 +14,7 @@
                 <constraints nullable="false"/>
             </column>
             <column name="CONFIG" type="JSON">
-                <constraints nullable="true"/>
+                <constraints nullable="false"/>
             </column>
             <column name="CREATED_TIME" type="DATETIME(6)" defaultValueComputed="NOW(6)">
                 <constraints nullable="false"/>
