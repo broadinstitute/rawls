@@ -4,12 +4,22 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
+import org.broadinstitute.dsde.rawls
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule,
+  GcpLifecycleAction,
+  GcpLifecycleCondition
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -31,6 +41,7 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.OptionValues
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.must.Matchers.{contain, include}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import spray.json.{JsObject, JsString}
 
@@ -474,7 +485,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
 
-    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO)(defaultRequestContext)
+    val service =
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO)(defaultRequestContext)
     val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
 
     val expected = WorkspaceACL(
@@ -499,7 +511,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val samDAO = mockSamForAclTests()
     val service =
-      workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
 
     val expected = WorkspaceACL(
       Map(
@@ -540,10 +555,11 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       .thenReturn(Future.successful())
 
     val service =
-      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
-                                  samDAO = samDAO,
-                                  requesterPaysSetupService = requesterPaysSetupService,
-                                  fastPassServiceConstructor = (_, _) => mockFastPassService
+      workspaceServiceConstructor(
+        workspaceRepository = workspaceRepository,
+        samDAO = samDAO,
+        requesterPaysSetupService = requesterPaysSetupService,
+        fastPassServiceConstructor = (_, _) => mockFastPassService
       )(
         defaultRequestContext
       )
@@ -607,11 +623,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
         )
       )
     val service =
-      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
-                                  samDAO = samDAO,
-                                  workspaceManagerDAO = wsmDAO,
-                                  aclManagerDatasource = aclManagerDatasource,
-                                  fastPassServiceConstructor = (_, _) => mockFastPassService
+      workspaceServiceConstructor(
+        workspaceRepository = workspaceRepository,
+        samDAO = samDAO,
+        workspaceManagerDAO = wsmDAO,
+        aclManagerDatasource = aclManagerDatasource,
+        fastPassServiceConstructor = (_, _) => mockFastPassService
       )(defaultRequestContext)
 
     val aclUpdates = Set(
@@ -655,7 +672,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val service =
-      workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
@@ -678,7 +698,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val service =
-      workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
@@ -701,7 +724,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val service =
-      workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
@@ -786,6 +812,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                        WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
       )
     )
+
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
     when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(workspaceSettings))
@@ -811,5 +838,322 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                  ArgumentMatchers.eq(SamWorkspaceActions.read),
                                  any()
     )
+  }
+
+  it should "handle a workspace with no settings" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.read),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val service =
+      workspaceServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)(defaultRequestContext)
+
+    val returnedSettings = Await.result(service.getWorkspaceSettings(workspaceName), Duration.Inf)
+    returnedSettings shouldEqual List.empty
+    verify(samDAO).userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                 ArgumentMatchers.eq(workspaceId.toString),
+                                 ArgumentMatchers.eq(SamWorkspaceActions.read),
+                                 any()
+    )
+  }
+
+  it should "return an error if the user does not have read access to the workspace" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.read),
+                           any()
+      )
+    ).thenReturn(Future.successful(false))
+    val service =
+      workspaceServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)(defaultRequestContext)
+
+    assertThrows[NoSuchWorkspaceException] {
+      Await.result(service.getWorkspaceSettings(workspaceName), Duration.Inf)
+    }
+  }
+
+  "setWorkspaceSettings" should "set the workspace settings if there aren't any set" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val workspaceSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
+                                            WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+    )
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List(workspaceSetting)))
+      .thenReturn(Future.successful(List(workspaceSetting)))
+    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.`type`))
+      .thenReturn(Future.successful(1))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val gcsDAO = mock[GoogleServicesDAO]
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List())).thenReturn(Future.successful())
+
+    val service = workspaceServiceConstructor(samDAO = samDAO,
+                                              workspaceRepository = workspaceRepository,
+                                              gcsDAO = gcsDAO
+    )(defaultRequestContext)
+
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, List(workspaceSetting)), Duration.Inf)
+    res.successes should contain theSameElementsAs List(workspaceSetting)
+    res.failures shouldEqual Map.empty
+  }
+
+  it should "overwrite existing settings" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val existingSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("prefixToMatch"), Some(30)))
+        )
+      )
+    )
+    val newSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("muchBetterPrefix"), Some(31)))
+        )
+      )
+    )
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List(newSetting)))
+      .thenReturn(Future.successful(List(newSetting)))
+    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, newSetting.`type`))
+      .thenReturn(Future.successful(1))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val gcsDAO = mock[GoogleServicesDAO]
+    val newSettingGoogleRule = new LifecycleRule(
+      LifecycleAction.newDeleteAction(),
+      LifecycleCondition.newBuilder().setMatchesPrefix(List("muchBetterPrefix").asJava).setAge(31).build()
+    )
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule))).thenReturn(Future.successful())
+
+    val service = workspaceServiceConstructor(samDAO = samDAO,
+                                              workspaceRepository = workspaceRepository,
+                                              gcsDAO = gcsDAO
+    )(defaultRequestContext)
+
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+    res.successes should contain theSameElementsAs List(newSetting)
+    res.failures shouldEqual Map.empty
+  }
+
+  it should "remove existing settings if no settings are specified" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val existingSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("prefixToMatch"), Some(30)))
+        )
+      )
+    )
+    val defaultSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
+                                          WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+    )
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List.empty))
+      .thenReturn(Future.successful(List.empty))
+    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, defaultSetting.`type`))
+      .thenReturn(Future.successful(1))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val gcsDAO = mock[GoogleServicesDAO]
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List())).thenReturn(Future.successful())
+
+    val service = workspaceServiceConstructor(samDAO = samDAO,
+                                              workspaceRepository = workspaceRepository,
+                                              gcsDAO = gcsDAO
+    )(defaultRequestContext)
+
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, List.empty), Duration.Inf)
+    res.successes should contain theSameElementsAs List(defaultSetting)
+    res.failures shouldEqual Map.empty
+  }
+
+  it should "report errors while applying settings and remove pending settings" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val existingSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("prefixToMatch"), Some(30)))
+        )
+      )
+    )
+    val newSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("muchBetterPrefix"), Some(31)))
+        )
+      )
+    )
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List(newSetting)))
+      .thenReturn(Future.successful(List(newSetting)))
+    when(workspaceRepository.removePendingSetting(workspaceId, newSetting.`type`)).thenReturn(Future.successful(1))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val gcsDAO = mock[GoogleServicesDAO]
+    val newSettingGoogleRule = new LifecycleRule(
+      LifecycleAction.newDeleteAction(),
+      LifecycleCondition.newBuilder().setMatchesPrefix(List("muchBetterPrefix").asJava).setAge(31).build()
+    )
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule)))
+      .thenReturn(Future.failed(new Exception("failed to apply settings")))
+
+    val service = workspaceServiceConstructor(samDAO = samDAO,
+                                              workspaceRepository = workspaceRepository,
+                                              gcsDAO = gcsDAO
+    )(defaultRequestContext)
+
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+    res.successes shouldEqual List.empty
+    res.failures(WorkspaceSettingTypes.GcpBucketLifecycle) shouldEqual ErrorReport(StatusCodes.InternalServerError,
+                                                                                   "failed to apply settings"
+    )
+    verify(workspaceRepository).removePendingSetting(workspaceId, newSetting.`type`)
+  }
+
+  it should "be limited to owners" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val newSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
+                                      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+    )
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(false))
+    // Rawls confirms a user has at least read access to the workspace after a failed authz check
+    // to determine if it should throw a 403 or 404
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.read),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val service =
+      workspaceServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)(defaultRequestContext)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+  }
+
+  it should "validate requested settings" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val newSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpLifecycleAction("Delete"), GcpLifecycleCondition(Set("prefixToMatch"), Some(-1)))
+        )
+      )
+    )
+
+    val service = workspaceServiceConstructor()(defaultRequestContext)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("invalid settings requested")
   }
 }

@@ -5,7 +5,15 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSettingRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceSetting, WorkspaceState}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsRequestContext,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName,
+  WorkspaceSetting,
+  WorkspaceState
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
@@ -96,30 +104,53 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
 
   def getWorkspaceSettings(workspaceId: UUID): Future[List[WorkspaceSetting]] =
     dataSource.inTransaction { access =>
-      access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(workspaceId, WorkspaceSettingRecord.SettingStatus.Applied)
+      access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(workspaceId,
+                                                                    WorkspaceSettingRecord.SettingStatus.Applied
+      )
     }
 
-  def createWorkspaceSettingsRecords(workspaceId: UUID, workspaceSettings: List[WorkspaceSetting])(implicit ec: ExecutionContext): Future[List[WorkspaceSetting]] =
+  def createWorkspaceSettingsRecords(workspaceId: UUID, workspaceSettings: List[WorkspaceSetting])(implicit
+    ec: ExecutionContext
+  ): Future[List[WorkspaceSetting]] =
     dataSource.inTransaction { access =>
       for {
-        pendingSettingsForWorkspace <- access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(workspaceId, WorkspaceSettingRecord.SettingStatus.Pending)
+        pendingSettingsForWorkspace <- access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(
+          workspaceId,
+          WorkspaceSettingRecord.SettingStatus.Pending
+        )
         _ = if (pendingSettingsForWorkspace.nonEmpty) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Workspace $workspaceId already has pending settings"))
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.Conflict, s"Workspace $workspaceId already has pending settings")
+          )
         }
         _ <- access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings)
       } yield workspaceSettings
     }
 
-  def markWorkspaceSettingApplied(workspaceId: UUID, workspaceSetting: WorkspaceSetting)(implicit ec: ExecutionContext): Future[Int] =
+  // Transition old Applied settings to Deleted and Pending settings to Applied
+  def markWorkspaceSettingApplied(workspaceId: UUID, workspaceSettingType: WorkspaceSettingType)(implicit
+    ec: ExecutionContext
+  ): Future[Int] =
     dataSource.inTransaction { access =>
       for {
-        _ <- access.workspaceSettingQuery.deleteSettingTypeForWorkspaceByStatus(workspaceId, workspaceSetting.`type`, WorkspaceSettingRecord.SettingStatus.Applied)
-        res <- access.workspaceSettingQuery.updateStatuses(workspaceId, List(workspaceSetting.`type`), WorkspaceSettingRecord.SettingStatus.Pending, WorkspaceSettingRecord.SettingStatus.Applied)
+        _ <- access.workspaceSettingQuery.updateSettingStatus(workspaceId,
+                                                              workspaceSettingType,
+                                                              WorkspaceSettingRecord.SettingStatus.Applied,
+                                                              WorkspaceSettingRecord.SettingStatus.Deleted
+        )
+        res <- access.workspaceSettingQuery.updateSettingStatus(workspaceId,
+                                                                workspaceSettingType,
+                                                                WorkspaceSettingRecord.SettingStatus.Pending,
+                                                                WorkspaceSettingRecord.SettingStatus.Applied
+        )
       } yield res
     }
 
-  def removePendingSetting(workspaceId: UUID, workspaceSetting: WorkspaceSetting): Future[Int] =
+  def removePendingSetting(workspaceId: UUID, workspaceSettingType: WorkspaceSettingType): Future[Int] =
     dataSource.inTransaction { access =>
-      access.workspaceSettingQuery.deleteSettingTypeForWorkspaceByStatus(workspaceId, workspaceSetting.`type`, WorkspaceSettingRecord.SettingStatus.Pending)
+      access.workspaceSettingQuery.deleteSettingTypeForWorkspaceByStatus(workspaceId,
+                                                                         workspaceSettingType,
+                                                                         WorkspaceSettingRecord.SettingStatus.Pending
+      )
     }
 }

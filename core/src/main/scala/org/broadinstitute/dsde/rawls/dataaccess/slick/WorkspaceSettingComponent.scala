@@ -45,7 +45,8 @@ object WorkspaceSettingRecord {
 
     val settingType = WorkspaceSettingTypes.withName(workspaceSettingRecord.`type`)
     val settingConfig = settingType match {
-      case WorkspaceSettingTypes.GcpBucketLifecycle => workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig]
+      case WorkspaceSettingTypes.GcpBucketLifecycle =>
+        workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig]
     }
 
     WorkspaceSetting(settingType, settingConfig)
@@ -77,14 +78,14 @@ trait WorkspaceSettingComponent {
       (workspaceSettingQuery ++= records).map(_ => workspaceSettings)
     }
 
-    def updateStatuses(workspaceId: UUID,
-                       workspaceSettingTypes: List[WorkspaceSettingType],
-                       currentStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus,
-                       newStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus
+    def updateSettingStatus(workspaceId: UUID,
+                            workspaceSettingType: WorkspaceSettingType,
+                            currentStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus,
+                            newStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus
     ): ReadWriteAction[Int] =
       workspaceSettingQuery
         .filter(record =>
-          record.workspaceId === workspaceId && record.`type`.inSetBind(workspaceSettingTypes.map(_.toString)) && record.status === currentStatus.toString
+          record.workspaceId === workspaceId && record.`type` === workspaceSettingType.toString && record.status === currentStatus.toString
         )
         .map(_.status)
         .update(newStatus.toString)
@@ -95,7 +96,7 @@ trait WorkspaceSettingComponent {
     ): ReadWriteAction[Int] =
       filter(record =>
         record.workspaceId === workspaceId && record.`type` === settingType.toString && record.status === status.toString
-      ).map(_.status).update(WorkspaceSettingRecord.SettingStatus.Deleted.toString)
+      ).delete
 
     def listSettingsForWorkspaceByStatus(workspaceId: UUID,
                                          status: WorkspaceSettingRecord.SettingStatus.SettingStatus

@@ -2013,15 +2013,19 @@ class WorkspaceService(
   def setWorkspaceSettings(workspaceName: WorkspaceName,
                            workspaceSettings: List[WorkspaceSetting]
   ): Future[WorkspaceSettingResponse] = {
+
     /**
       * Perform basic validation checks on requested settings.
       */
     def validateSettings(requestedSettings: List[WorkspaceSetting]): Unit = {
       val validationErrors = requestedSettings.flatMap {
-        case WorkspaceSetting(settingType@WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(rules)) =>
+        case WorkspaceSetting(settingType @ WorkspaceSettingTypes.GcpBucketLifecycle,
+                              GcpBucketLifecycleConfig(rules)
+            ) =>
           rules.flatMap { rule =>
-            rule.conditions.age.collect { case age if age < 0 =>
-              ErrorReport(s"invalid $settingType configuration: age must be a non-negative integer.")
+            rule.conditions.age.collect {
+              case age if age < 0 =>
+                ErrorReport(s"invalid $settingType configuration: age must be a non-negative integer.")
             }
           }
       }
@@ -2041,7 +2045,7 @@ class WorkspaceService(
     def computeNewSettings(workspace: Workspace,
                            requestedSettings: List[WorkspaceSetting],
                            existingSettings: List[WorkspaceSetting]
-                          ): List[WorkspaceSetting] = {
+    ): List[WorkspaceSetting] =
       if (existingSettings.isEmpty) {
         requestedSettings
       } else {
@@ -2050,7 +2054,6 @@ class WorkspaceService(
           WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
         }
       }
-    }
 
     /**
       * Apply a setting to a workspace. If the setting is successfully applied, update the database
@@ -2079,12 +2082,12 @@ class WorkspaceService(
 
           for {
             _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
-            _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting)
+            _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting.`type`)
           } yield None
         case _ => throw new RawlsException("unsupported workspace setting")
       }).recoverWith { case e =>
         workspaceRepository
-          .removePendingSetting(workspace.workspaceIdAsUUID, setting)
+          .removePendingSetting(workspace.workspaceIdAsUUID, setting.`type`)
           .map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
       }
 
