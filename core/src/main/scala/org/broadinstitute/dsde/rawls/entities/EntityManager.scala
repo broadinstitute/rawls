@@ -49,7 +49,12 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 
   def resolveProvider(requestArguments: EntityRequestArguments): Try[EntityProvider] = {
 
-    if (!WorkspaceType.RawlsWorkspace.equals(requestArguments.workspace.workspaceType)) {
+    // Azure workspaces use a WDS application in the data plane, Rawls entity service requests are not supported.
+    if (
+      WorkspaceType.McWorkspace.eq(
+        requestArguments.workspace.workspaceType
+      ) && requestArguments.workspace.googleProjectId == null
+    ) {
       throw new DataEntityException(
         s"This API is disabled for ${CloudPlatform.AZURE} workspaces. Contact support for alternatives."
       )

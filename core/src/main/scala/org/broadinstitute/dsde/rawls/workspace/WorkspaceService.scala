@@ -1736,11 +1736,16 @@ class WorkspaceService(
 
       _ <- workspace.workspaceType match {
         case WorkspaceType.McWorkspace =>
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")
+          // google project ID is present and MC workspace means this is an MC GCP workspace
+          if (workspace.googleProjectId == null) {
+            Future.failed(
+              new RawlsExceptionWithErrorReport(
+                ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")
+              )
             )
-          )
+          } else {
+            Future.successful()
+          }
         case WorkspaceType.RawlsWorkspace => Future.successful(())
       }
 

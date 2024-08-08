@@ -4,6 +4,7 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.profile.model
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{
@@ -1351,7 +1352,10 @@ class WorkspaceServiceSpec
     )
 
     val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      services.mcWorkspaceService.createMultiCloudWorkspace(
+        workspaceRequest,
+        new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
+      ),
       Duration.Inf
     )
     assertResult(Option(workspace.toWorkspaceName)) {
@@ -2955,7 +2959,10 @@ class WorkspaceServiceSpec
     )
 
     val createdWorkspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      services.mcWorkspaceService.createMultiCloudWorkspace(
+        workspaceRequest,
+        new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
+      ),
       Duration.Inf
     )
 
@@ -3243,8 +3250,9 @@ class WorkspaceServiceSpec
         throw new ApiException(StatusCodes.NotFound.intValue, "not found")
       )
       val workspace = Await.result(
-        services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
-                                                              new ProfileModel().id(UUID.randomUUID())
+        services.mcWorkspaceService.createMultiCloudWorkspace(
+          workspaceRequest,
+          new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
         ),
         Duration.Inf
       )
@@ -3274,7 +3282,10 @@ class WorkspaceServiceSpec
       new WorkspaceDescription().stage(WorkspaceStageModel.MC_WORKSPACE) // no azureContext, should be an error
     )
     val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      services.mcWorkspaceService.createMultiCloudWorkspace(
+        workspaceRequest,
+        new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.AZURE)
+      ),
       Duration.Inf
     )
 

@@ -420,6 +420,12 @@ trait WorkspaceComponent {
     def updateGoogleProjectNumber(workspaceIds: Seq[UUID], googleProjectNumber: GoogleProjectNumber): WriteAction[Int] =
       findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))
 
+    def updateGoogleProjectId(workspaceId: UUID, googleProjectId: GoogleProjectId): WriteAction[Int] =
+      findByIdQuery(workspaceId).map(_.googleProjectId).update(googleProjectId.value)
+
+    def updateBucketName(workspaceId: UUID, bucketName: String): WriteAction[Int] =
+      findByIdQuery(workspaceId).map(_.bucketName).update(bucketName.value)
+
     def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
 

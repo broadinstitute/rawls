@@ -12,8 +12,10 @@ import bio.terra.workspace.model.{
   CreateWorkspaceV2Result,
   CreatedControlledAzureStorageContainer,
   CreatedControlledGcpGcsBucket,
+  GcpContext,
   JobReport,
   JobResult,
+  WorkspaceDescription,
   WsmPolicyInput,
   WsmPolicyInputs,
   WsmPolicyPair
@@ -192,6 +194,113 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   behavior of "createMultiCloudWorkspace"
 
+  it should "create a 'legacy' GCP workspace if no billing profile is present" in {
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val billingProject = RawlsBillingProject(
+      RawlsBillingProjectName("gcp-billing-project"),
+      CreationStatuses.Ready,
+      None,
+      None,
+      billingProfileId = None
+    )
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(any())).thenReturn(Future(Some(billingProject)))
+    val mcConfig =
+      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 60 seconds, 120 seconds), mock[AzureConfig])
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
+    val workspaceRepository = mock[WorkspaceRepository]
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      mcConfig,
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      billingRepository
+    )
+
+    val request = WorkspaceRequest(namespace, name, Map.empty, bucketLocation = Some("us-central1"))
+    val legacyService = mock[WorkspaceService]
+    when(legacyService.createWorkspace(any, any)).thenReturn(Future(defaultWorkspace))
+
+    val result =
+      Await.result(service.createMultiCloudOrRawlsWorkspace(request, legacyService, testContext), Duration.Inf)
+
+    result.state shouldBe WorkspaceState.Ready
+    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    verify(legacyService).createWorkspace(any, any)
+    verify(workspaceManagerDAO, never).createWorkspaceWithSpendProfile(
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any
+    )
+    verify(workspaceManagerDAO, never).createGcpStorageBucket(any, any, any, any)
+  }
+
+  it should "create a 'legacy' GCP workspace if the billing profile is GCP and no flag is supplied" in {
+    val workspaceManagerDAO = mock[WorkspaceManagerDAO]
+    val billingProject = RawlsBillingProject(
+      RawlsBillingProjectName("gcp-billing-project"),
+      CreationStatuses.Ready,
+      None,
+      None,
+      billingProfileId = Some(UUID.randomUUID().toString)
+    )
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(any())).thenReturn(Future(Some(billingProject)))
+    val mcConfig =
+      MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 60 seconds, 120 seconds), mock[AzureConfig])
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any, any, any, any)).thenReturn(Future(true))
+    val workspaceRepository = mock[WorkspaceRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.GCP)
+    when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Some(billingProfile))
+    val service = new MultiCloudWorkspaceService(
+      testContext,
+      workspaceManagerDAO,
+      bpmDAO,
+      samDAO,
+      mcConfig,
+      mock[LeonardoDAO],
+      "MultiCloudWorkspaceService-test",
+      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceRepository,
+      billingRepository
+    )
+
+    val request = WorkspaceRequest(namespace, name, Map.empty, bucketLocation = Some("us-central1"))
+    val legacyService = mock[WorkspaceService]
+    when(legacyService.createWorkspace(any, any)).thenReturn(Future(defaultWorkspace))
+
+    val result =
+      Await.result(service.createMultiCloudOrRawlsWorkspace(request, legacyService, testContext), Duration.Inf)
+
+    result.state shouldBe WorkspaceState.Ready
+    result.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    verify(legacyService).createWorkspace(any, any)
+    verify(workspaceManagerDAO, never).createWorkspaceWithSpendProfile(
+      any,
+      any,
+      ArgumentMatchers.eq(billingProfile.getId.toString),
+      any,
+      any,
+      ArgumentMatchers.eq(CloudPlatform.GCP),
+      any,
+      any
+    )
+    verify(workspaceManagerDAO, never).createGcpStorageBucket(any, any, any, any)
+  }
+
   it should "create a GCP workspace if the billing profile is GCP and the proper flag is supplied" in {
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
     val billingProject = RawlsBillingProject(
@@ -213,6 +322,7 @@ class MultiCloudWorkspaceServiceCreateSpec
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.createMCWorkspace(any, ArgumentMatchers.eq(workspaceName), any, any, any)(any))
       .thenReturn(Future(defaultWorkspace))
+    when(workspaceRepository.getWorkspace(any[UUID])).thenReturn(Future.successful(Some(defaultWorkspace)))
     val bpmDAO = mock[BillingProfileManagerDAO]
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.GCP)
     when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Some(billingProfile))
@@ -243,6 +353,9 @@ class MultiCloudWorkspaceServiceCreateSpec
         any()
       )
     ).thenReturn(new CreatedControlledGcpGcsBucket().resourceId(UUID.randomUUID()))
+    when(workspaceManagerDAO.getWorkspace(any[UUID], any()))
+      .thenReturn(new WorkspaceDescription().gcpContext(new GcpContext().projectId("fake-project-id")))
+
     val service = new MultiCloudWorkspaceService(
       testContext,
       workspaceManagerDAO,

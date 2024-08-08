@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  GoogleProjectId,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
@@ -99,4 +100,13 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       } yield newWorkspace
     }
 
+  def updateGoogleProjectId(workspaceId: UUID, googleProjectId: GoogleProjectId): Future[Int] =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.updateGoogleProjectId(workspaceId, googleProjectId)
+    }
+
+  def updateBucketName(workspaceId: UUID, googleStorageBucket: String): Future[Int] =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.updateBucketName(workspaceId, googleStorageBucket)
+    }
 }
