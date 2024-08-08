@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsString, PrettyPrinter}
@@ -23,7 +24,7 @@ import scala.concurrent.duration.FiniteDuration
 trait SubmissionApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService
   val submissionTimeout: FiniteDuration
 
   def submissionRoutes(otelContext: Context = Context.root()): server.Route = {
@@ -32,14 +33,14 @@ trait SubmissionApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(ctx).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName), ctx)
+            submissionsServiceConstructor(ctx).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName), ctx)
           }
         }
       } ~
         path("workspaces" / Segment / Segment / "submissionsCount") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
-              workspaceServiceConstructor(ctx).countSubmissions(WorkspaceName(workspaceNamespace, workspaceName))
+              submissionsServiceConstructor(ctx).countSubmissions(WorkspaceName(workspaceNamespace, workspaceName))
             }
           }
         } ~
@@ -47,7 +48,7 @@ trait SubmissionApiService extends UserInfoDirectives {
           post {
             entity(as[SubmissionRequest]) { submission =>
               complete {
-                workspaceServiceConstructor(ctx)
+                submissionsServiceConstructor(ctx)
                   .createSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission)
                   .map(StatusCodes.Created -> _)
               }
@@ -59,9 +60,9 @@ trait SubmissionApiService extends UserInfoDirectives {
             post {
               entity(as[SubmissionRetry]) { retry =>
                 complete {
-                  workspaceServiceConstructor(ctx).retrySubmission(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                   retry,
-                                                                   submissionId
+                  submissionsServiceConstructor(ctx).retrySubmission(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                     retry,
+                                                                     submissionId
                   )
                 }
               }
@@ -71,8 +72,8 @@ trait SubmissionApiService extends UserInfoDirectives {
           post {
             entity(as[SubmissionRequest]) { submission =>
               complete {
-                workspaceServiceConstructor(ctx).validateSubmission(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                    submission
+                submissionsServiceConstructor(ctx).validateSubmission(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                      submission
                 )
               }
             }
@@ -82,9 +83,9 @@ trait SubmissionApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, submissionId) =>
             get {
               complete {
-                workspaceServiceConstructor(ctx).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                     submissionId,
-                                                                     ctx
+                submissionsServiceConstructor(ctx).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                       submissionId,
+                                                                       ctx
                 )
               }
             }
@@ -94,7 +95,7 @@ trait SubmissionApiService extends UserInfoDirectives {
             patch {
               entity(as[UserCommentUpdateOperation]) { newComment =>
                 complete {
-                  workspaceServiceConstructor(ctx)
+                  submissionsServiceConstructor(ctx)
                     .updateSubmissionUserComment(WorkspaceName(workspaceNamespace, workspaceName),
                                                  submissionId,
                                                  newComment
@@ -117,7 +118,7 @@ trait SubmissionApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, submissionId) =>
             delete {
               complete {
-                workspaceServiceConstructor(ctx)
+                submissionsServiceConstructor(ctx)
                   .abortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
                   .map { count =>
                     if (count == 1) StatusCodes.NoContent -> None
@@ -133,10 +134,10 @@ trait SubmissionApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, submissionId) =>
             get {
               complete {
-                workspaceServiceConstructor(ctx).getSubmissionMethodConfiguration(WorkspaceName(workspaceNamespace,
-                                                                                                workspaceName
-                                                                                  ),
-                                                                                  submissionId
+                submissionsServiceConstructor(ctx).getSubmissionMethodConfiguration(WorkspaceName(workspaceNamespace,
+                                                                                                  workspaceName
+                                                                                    ),
+                                                                                    submissionId
                 )
               }
             }
@@ -149,13 +150,13 @@ trait SubmissionApiService extends UserInfoDirectives {
                          "expandSubWorkflows".as[Boolean] ? false
               ) { (includes, excludes, expandSubWorkflows) =>
                 complete {
-                  workspaceServiceConstructor(ctx).workflowMetadata(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                    submissionId,
-                                                                    workflowId,
-                                                                    MetadataParams(includes.toSet,
-                                                                                   excludes.toSet,
-                                                                                   expandSubWorkflows
-                                                                    )
+                  submissionsServiceConstructor(ctx).workflowMetadata(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                      submissionId,
+                                                                      workflowId,
+                                                                      MetadataParams(includes.toSet,
+                                                                                     excludes.toSet,
+                                                                                     expandSubWorkflows
+                                                                      )
                   )
                 }
               }
@@ -165,9 +166,9 @@ trait SubmissionApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, submissionId, workflowId) =>
             get {
               complete {
-                workspaceServiceConstructor(ctx).workflowOutputs(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                 submissionId,
-                                                                 workflowId
+                submissionsServiceConstructor(ctx).workflowOutputs(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                   submissionId,
+                                                                   workflowId
                 )
               }
             }
@@ -176,9 +177,9 @@ trait SubmissionApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, submissionId, workflowId) =>
             get {
               complete {
-                workspaceServiceConstructor(ctx).workflowCost(WorkspaceName(workspaceNamespace, workspaceName),
-                                                              submissionId,
-                                                              workflowId
+                submissionsServiceConstructor(ctx).workflowCost(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                submissionId,
+                                                                workflowId
                 )
               }
             }
@@ -186,7 +187,7 @@ trait SubmissionApiService extends UserInfoDirectives {
         path("workflows" / Segment / "genomics" / Segments) { (workflowId, operationId) =>
           get {
             complete {
-              workspaceServiceConstructor(ctx).getGenomicsOperationV2(workflowId, operationId).map {
+              submissionsServiceConstructor(ctx).getGenomicsOperationV2(workflowId, operationId).map {
                 case Some(jsobj) =>
                   implicit val printer = PrettyPrinter
                   StatusCodes.OK -> jsobj
@@ -198,7 +199,7 @@ trait SubmissionApiService extends UserInfoDirectives {
         path("submissions" / "queueStatus") {
           get {
             complete {
-              workspaceServiceConstructor(ctx).workflowQueueStatus
+              submissionsServiceConstructor(ctx).workflowQueueStatus
             }
           }
         }

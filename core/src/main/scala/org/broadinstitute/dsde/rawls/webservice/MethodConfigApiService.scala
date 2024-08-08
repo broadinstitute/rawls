@@ -5,12 +5,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -22,7 +22,7 @@ import scala.concurrent.ExecutionContext
 trait MethodConfigApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService
 
   def methodConfigRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
@@ -32,13 +32,13 @@ trait MethodConfigApiService extends UserInfoDirectives {
           parameters("allRepos".as[Boolean] ? false) { allRepos =>
             if (allRepos) {
               complete {
-                workspaceServiceConstructor(ctx).listMethodConfigurations(
+                methodConfigurationServiceConstructor(ctx).listMethodConfigurations(
                   WorkspaceName(workspaceNamespace, workspaceName)
                 )
               }
             } else {
               complete {
-                workspaceServiceConstructor(ctx).listAgoraMethodConfigurations(
+                methodConfigurationServiceConstructor(ctx).listAgoraMethodConfigurations(
                   WorkspaceName(workspaceNamespace, workspaceName)
                 )
               }
@@ -49,7 +49,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
             entity(as[MethodConfiguration]) { methodConfiguration =>
               addLocationHeader(methodConfiguration.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  workspaceServiceConstructor(ctx)
+                  methodConfigurationServiceConstructor(ctx)
                     .createMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfiguration)
                     .map(StatusCodes.Created -> _)
                 }
@@ -61,11 +61,11 @@ trait MethodConfigApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
             get {
               complete {
-                workspaceServiceConstructor(ctx).getMethodConfiguration(WorkspaceName(workspaceNamespace,
-                                                                                      workspaceName
-                                                                        ),
-                                                                        methodConfigurationNamespace,
-                                                                        methodConfigName
+                methodConfigurationServiceConstructor(ctx).getMethodConfiguration(WorkspaceName(workspaceNamespace,
+                                                                                                workspaceName
+                                                                                  ),
+                                                                                  methodConfigurationNamespace,
+                                                                                  methodConfigName
                 )
               }
             } ~
@@ -73,12 +73,11 @@ trait MethodConfigApiService extends UserInfoDirectives {
                 entity(as[MethodConfiguration]) { newMethodConfiguration =>
                   addLocationHeader(newMethodConfiguration.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                     complete {
-                      workspaceServiceConstructor(ctx).overwriteMethodConfiguration(WorkspaceName(workspaceNamespace,
-                                                                                                  workspaceName
-                                                                                    ),
-                                                                                    methodConfigurationNamespace,
-                                                                                    methodConfigName,
-                                                                                    newMethodConfiguration
+                      methodConfigurationServiceConstructor(ctx).overwriteMethodConfiguration(
+                        WorkspaceName(workspaceNamespace, workspaceName),
+                        methodConfigurationNamespace,
+                        methodConfigName,
+                        newMethodConfiguration
                       )
                     }
                   }
@@ -87,19 +86,18 @@ trait MethodConfigApiService extends UserInfoDirectives {
               post {
                 entity(as[MethodConfiguration]) { newMethodConfiguration =>
                   complete {
-                    workspaceServiceConstructor(ctx).updateMethodConfiguration(WorkspaceName(workspaceNamespace,
-                                                                                             workspaceName
-                                                                               ),
-                                                                               methodConfigurationNamespace,
-                                                                               methodConfigName,
-                                                                               newMethodConfiguration
+                    methodConfigurationServiceConstructor(ctx).updateMethodConfiguration(
+                      WorkspaceName(workspaceNamespace, workspaceName),
+                      methodConfigurationNamespace,
+                      methodConfigName,
+                      newMethodConfiguration
                     )
                   }
                 }
               } ~
               delete {
                 complete {
-                  workspaceServiceConstructor(ctx)
+                  methodConfigurationServiceConstructor(ctx)
                     .deleteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName),
                                                methodConfigurationNamespace,
                                                methodConfigName
@@ -112,11 +110,10 @@ trait MethodConfigApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
             get {
               complete {
-                workspaceServiceConstructor(ctx).getAndValidateMethodConfiguration(WorkspaceName(workspaceNamespace,
-                                                                                                 workspaceName
-                                                                                   ),
-                                                                                   methodConfigurationNamespace,
-                                                                                   methodConfigName
+                methodConfigurationServiceConstructor(ctx).getAndValidateMethodConfiguration(
+                  WorkspaceName(workspaceNamespace, workspaceName),
+                  methodConfigurationNamespace,
+                  methodConfigName
                 )
               }
             }
@@ -126,7 +123,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
             post {
               entity(as[MethodConfigurationName]) { newName =>
                 complete {
-                  workspaceServiceConstructor(ctx)
+                  methodConfigurationServiceConstructor(ctx)
                     .renameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName),
                                                methodConfigurationNamespace,
                                                methodConfigurationName,
@@ -140,12 +137,15 @@ trait MethodConfigApiService extends UserInfoDirectives {
         path("methodconfigs" / "copy") {
           post {
             entity(as[MethodConfigurationNamePair]) { confNames =>
-              onSuccess(workspaceServiceConstructor(ctx).copyMethodConfiguration(confNames)) { validatedMethodConfig =>
-                addLocationHeader(validatedMethodConfig.methodConfiguration.path(confNames.destination.workspaceName)) {
-                  complete {
-                    StatusCodes.Created -> validatedMethodConfig
+              onSuccess(methodConfigurationServiceConstructor(ctx).copyMethodConfiguration(confNames)) {
+                validatedMethodConfig =>
+                  addLocationHeader(
+                    validatedMethodConfig.methodConfiguration.path(confNames.destination.workspaceName)
+                  ) {
+                    complete {
+                      StatusCodes.Created -> validatedMethodConfig
+                    }
                   }
-                }
               }
             }
           }
@@ -153,7 +153,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
         path("methodconfigs" / "copyFromMethodRepo") {
           post {
             entity(as[MethodRepoConfigurationImport]) { query =>
-              onSuccess(workspaceServiceConstructor(ctx).copyMethodConfigurationFromMethodRepo(query)) {
+              onSuccess(methodConfigurationServiceConstructor(ctx).copyMethodConfigurationFromMethodRepo(query)) {
                 validatedMethodConfig =>
                   addLocationHeader(validatedMethodConfig.methodConfiguration.path(query.destination.workspaceName)) {
                     complete {
@@ -168,7 +168,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
           post {
             entity(as[MethodRepoConfigurationExport]) { query =>
               complete {
-                workspaceServiceConstructor(ctx).copyMethodConfigurationToMethodRepo(query)
+                methodConfigurationServiceConstructor(ctx).copyMethodConfigurationToMethodRepo(query)
               }
             }
           }
@@ -177,7 +177,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
           post {
             entity(as[MethodRepoMethod]) { methodRepoMethod =>
               complete {
-                workspaceServiceConstructor(ctx).createMethodConfigurationTemplate(methodRepoMethod)
+                methodConfigurationServiceConstructor(ctx).createMethodConfigurationTemplate(methodRepoMethod)
               }
             }
           }
@@ -186,7 +186,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
           post {
             entity(as[MethodRepoMethod]) { methodRepoMethod =>
               complete {
-                workspaceServiceConstructor(ctx).getMethodInputsOutputs(userInfo, methodRepoMethod)
+                methodConfigurationServiceConstructor(ctx).getMethodInputsOutputs(userInfo, methodRepoMethod)
               }
             }
           }
