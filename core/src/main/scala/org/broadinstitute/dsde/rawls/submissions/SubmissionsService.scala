@@ -5,16 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  ExecutionServiceCluster,
-  ExecutionServiceDAO,
-  ExecutionServiceId,
-  GoogleServicesDAO,
-  MethodRepoDAO,
-  SamDAO,
-  SlickDataSource,
-  SubmissionCostService
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceDAO, ExecutionServiceId, GoogleServicesDAO, MethodRepoDAO, SamDAO, SlickDataSource, SubmissionCostService}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
@@ -25,51 +16,8 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{
-  ActiveSubmission,
-  AttributeEntityReference,
-  AttributeString,
-  AttributeValue,
-  ErrorReport,
-  ErrorReportSource,
-  ExecutionServiceLogs,
-  ExecutionServiceOutputs,
-  ExternalEntityInfo,
-  MetadataParams,
-  MethodConfiguration,
-  PreparedSubmission,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RetriedSubmissionReport,
-  SamWorkspaceActions,
-  Submission,
-  SubmissionListResponse,
-  SubmissionReport,
-  SubmissionRequest,
-  SubmissionRetry,
-  SubmissionStatuses,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationHeader,
-  SubmissionValidationInput,
-  SubmissionValidationReport,
-  TaskOutput,
-  UserCommentUpdateOperation,
-  Workflow,
-  WorkflowCost,
-  WorkflowFailureModes,
-  WorkflowOutputs,
-  WorkflowQueueStatusByUserResponse,
-  WorkflowQueueStatusResponse,
-  WorkflowStatuses,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName
-}
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
-  extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate
-}
+import org.broadinstitute.dsde.rawls.model.{ActiveSubmission, AttributeEntityReference, AttributeString, AttributeValue, ErrorReport, ErrorReportSource, ExecutionServiceLogs, ExecutionServiceOutputs, ExternalEntityInfo, MetadataParams, MethodConfiguration, PreparedSubmission, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RetriedSubmissionReport, SamWorkspaceActions, Submission, SubmissionListResponse, SubmissionReport, SubmissionRequest, SubmissionRetry, SubmissionStatuses, SubmissionValidationEntityInputs, SubmissionValidationHeader, SubmissionValidationInput, SubmissionValidationReport, TaskOutput, UserCommentUpdateOperation, Workflow, WorkflowCost, WorkflowFailureModes, WorkflowOutputs, WorkflowQueueStatusByUserResponse, WorkflowQueueStatusResponse, WorkflowStatuses, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{extractOperationIdsFromCromwellMetadata, getTerminalStatusDate, submissionRootPath}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
@@ -156,6 +104,8 @@ object SubmissionsService {
     }
   }
 
+  def submissionRootPath(workspace: Workspace, id: UUID) =
+    s"gs://${workspace.bucketName}/submissions/$id"
 }
 
 class SubmissionsService(
@@ -470,7 +420,6 @@ class SubmissionsService(
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           val newSubmissionId = UUID.randomUUID()
-          val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${newSubmissionId}"
           val filterWorkFlows = submissionRetry.retryType.filterWorkflows(submission.workflows)
           if (filterWorkFlows.isEmpty) {
             throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "no workflows to retry"))
@@ -481,7 +430,7 @@ class SubmissionsService(
           val newSubmission = submission.copy(
             submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
-            submissionRoot = newSubmissionRoot,
+            submissionRoot = submissionRootPath(workspaceContext, newSubmissionId),
             workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted,
             userComment =
@@ -540,7 +489,7 @@ class SubmissionsService(
 
       workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
 
-      submissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
+      submissionRoot = submissionRootPath(workspaceContext, submissionId)
 
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext,
