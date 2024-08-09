@@ -2034,7 +2034,12 @@ class WorkspaceService(
               case age if age < 0 =>
                 validationErrorReport(settingType, "age must be a non-negative integer")
             }
-            actionValidation ++ ageValidation
+            val atLeastOneConditionValidation = (rule.conditions.age, rule.conditions.matchesPrefix) match {
+              case (None, None) =>
+                Some(validationErrorReport(settingType, "at least one condition must be specified"))
+              case _ => None
+            }
+            actionValidation ++ ageValidation ++ atLeastOneConditionValidation
           }
       }
 
@@ -2076,16 +2081,18 @@ class WorkspaceService(
       (setting match {
         case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(rules)) =>
           val googleRules = rules.map { rule =>
-            val conditionBuilder =
-              LifecycleCondition.newBuilder().setMatchesPrefix(rule.conditions.matchesPrefix.toList.asJava)
+            val conditionBuilder = LifecycleCondition.newBuilder()
+            rule.conditions.matchesPrefix.map(prefixes => conditionBuilder.setMatchesPrefix(prefixes.toList.asJava))
             rule.conditions.age.map(age => conditionBuilder.setAge(age))
 
             val action = rule.action.`type` match {
               case actionType if actionType.equals("Delete") => LifecycleAction.newDeleteAction()
+
+              // validated earlier but needed for completeness
               case _ =>
                 throw new RawlsException(
                   "unsupported lifecycle action"
-                ) // validated earlier but needed for completeness
+                )
             }
 
             new LifecycleRule(action, conditionBuilder.build())
@@ -2097,6 +2104,10 @@ class WorkspaceService(
           } yield None
         case _ => throw new RawlsException("unsupported workspace setting")
       }).recoverWith { case e =>
+        logger.error(
+          s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.`type`}]",
+          e
+        )
         workspaceRepository
           .removePendingSetting(workspace.workspaceIdAsUUID, setting.`type`)
           .map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
@@ -2107,7 +2118,10 @@ class WorkspaceService(
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
       currentSettings <- workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
       newSettings = computeNewSettings(workspace, workspaceSettings, currentSettings)
-      _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID, workspaceSettings)
+      _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID,
+                                                              workspaceSettings,
+                                                              ctx.userInfo.userSubjectId
+      )
       applyFailures <- newSettings.traverse(s => applySetting(workspace, s))
     } yield {
       val successes = newSettings.filterNot { s =>

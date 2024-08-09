@@ -25,6 +25,9 @@
             <column name="STATUS" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
+            <column name="USER_ID" type="varchar(254)">
+                <constraints nullable="false"/>
+            </column>
         </createTable>
     </changeSet>
 </databaseChangeLog>

@@ -139,7 +139,7 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("applied"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("applied")), Some(30))
           )
         )
       )
@@ -149,7 +149,7 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("pending"), Some(31))
+                                 GcpBucketLifecycleCondition(Some(Set("pending")), Some(31))
           )
         )
       )
@@ -158,14 +158,20 @@ class WorkspaceRepositorySpec
     Await.result(
       slickDataSource.inTransaction { dataAccess =>
         for {
-          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(appliedSetting))
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(appliedSetting),
+                                                        userInfo.userSubjectId
+          )
           _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
             ws.workspaceIdAsUUID,
             WorkspaceSettingTypes.GcpBucketLifecycle,
             WorkspaceSettingRecord.SettingStatus.Pending,
             WorkspaceSettingRecord.SettingStatus.Applied
           )
-          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(pendingSetting))
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(pendingSetting),
+                                                        userInfo.userSubjectId
+          )
         } yield ()
       },
       Duration.Inf
@@ -187,13 +193,15 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("newSetting"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("newSetting")), Some(30))
           )
         )
       )
     )
 
-    Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting)), Duration.Inf)
+    Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting), userInfo.userSubjectId),
+                 Duration.Inf
+    )
 
     val newSettings = Await.result(
       slickDataSource.inTransaction(
@@ -215,18 +223,22 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("newSetting"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("newSetting")), Some(30))
           )
         )
       )
     )
 
-    Await.result(slickDataSource.inTransaction(_.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(setting))),
+    Await.result(slickDataSource.inTransaction(
+                   _.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(setting), userInfo.userSubjectId)
+                 ),
                  Duration.Inf
     )
 
     val thrown = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting)), Duration.Inf)
+      Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting), userInfo.userSubjectId),
+                   Duration.Inf
+      )
     }
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
@@ -242,7 +254,7 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("applied"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("applied")), Some(30))
           )
         )
       )
@@ -252,7 +264,7 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("pending"), Some(31))
+                                 GcpBucketLifecycleCondition(Some(Set("pending")), Some(31))
           )
         )
       )
@@ -261,14 +273,17 @@ class WorkspaceRepositorySpec
     Await.result(
       slickDataSource.inTransaction { dataAccess =>
         for {
-          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(existingSetting))
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(existingSetting),
+                                                        userInfo.userSubjectId
+          )
           _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
             ws.workspaceIdAsUUID,
             WorkspaceSettingTypes.GcpBucketLifecycle,
             WorkspaceSettingRecord.SettingStatus.Pending,
             WorkspaceSettingRecord.SettingStatus.Applied
           )
-          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(newSetting))
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(newSetting), userInfo.userSubjectId)
         } yield ()
       },
       Duration.Inf
@@ -312,13 +327,15 @@ class WorkspaceRepositorySpec
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("newSetting"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("newSetting")), Some(30))
           )
         )
       )
     )
 
-    Await.result(slickDataSource.inTransaction(_.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(setting))),
+    Await.result(slickDataSource.inTransaction(
+                   _.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(setting), userInfo.userSubjectId)
+                 ),
                  Duration.Inf
     )
 

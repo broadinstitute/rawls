@@ -903,7 +903,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
     when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
-    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List(workspaceSetting)))
+    when(
+      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                         List(workspaceSetting),
+                                                         defaultRequestContext.userInfo.userSubjectId
+      )
+    )
       .thenReturn(Future.successful(List(workspaceSetting)))
     when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.`type`))
       .thenReturn(Future.successful(1))
@@ -940,7 +945,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("prefixToMatch")), Some(30))
           )
         )
       )
@@ -950,7 +955,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("muchBetterPrefix"), Some(31))
+                                 GcpBucketLifecycleCondition(Some(Set("muchBetterPrefix")), Some(31))
           )
         )
       )
@@ -959,7 +964,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
     when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
-    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List(newSetting)))
+    when(
+      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                         List(newSetting),
+                                                         defaultRequestContext.userInfo.userSubjectId
+      )
+    )
       .thenReturn(Future.successful(List(newSetting)))
     when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, newSetting.`type`))
       .thenReturn(Future.successful(1))
@@ -1000,7 +1010,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("prefixToMatch")), Some(30))
           )
         )
       )
@@ -1012,7 +1022,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
     when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
-    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List.empty))
+    when(
+      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                         List.empty,
+                                                         defaultRequestContext.userInfo.userSubjectId
+      )
+    )
       .thenReturn(Future.successful(List.empty))
     when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, defaultSetting.`type`))
       .thenReturn(Future.successful(1))
@@ -1049,7 +1064,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30))
+                                 GcpBucketLifecycleCondition(Some(Set("prefixToMatch")), Some(30))
           )
         )
       )
@@ -1059,7 +1074,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
-                                 GcpBucketLifecycleCondition(Set("muchBetterPrefix"), Some(31))
+                                 GcpBucketLifecycleCondition(Some(Set("muchBetterPrefix")), Some(31))
           )
         )
       )
@@ -1068,7 +1083,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
     when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
-    when(workspaceRepository.createWorkspaceSettingsRecords(workspaceId, List(newSetting)))
+    when(
+      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                         List(newSetting),
+                                                         defaultRequestContext.userInfo.userSubjectId
+      )
+    )
       .thenReturn(Future.successful(List(newSetting)))
     when(workspaceRepository.removePendingSetting(workspaceId, newSetting.`type`)).thenReturn(Future.successful(1))
 
@@ -1150,7 +1170,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"),
-                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(-1))
+                                 GcpBucketLifecycleCondition(Some(Set("prefixToMatch")), Some(-1))
           )
         )
       )

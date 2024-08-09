@@ -589,11 +589,12 @@ object WorkspaceSettingTypes {
 
 sealed trait WorkspaceSettingConfig
 object WorkspaceSettingConfig {
+  type Days = Int
   case class GcpBucketLifecycleConfig(rules: List[GcpBucketLifecycleRule]) extends WorkspaceSettingConfig
 
   case class GcpBucketLifecycleRule(action: GcpBucketLifecycleAction, conditions: GcpBucketLifecycleCondition)
   case class GcpBucketLifecycleAction(`type`: String)
-  case class GcpBucketLifecycleCondition(matchesPrefix: Set[String], age: Option[Int])
+  case class GcpBucketLifecycleCondition(matchesPrefix: Option[Set[String]], age: Option[Days])
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])

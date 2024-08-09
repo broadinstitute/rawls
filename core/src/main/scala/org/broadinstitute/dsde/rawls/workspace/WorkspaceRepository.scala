@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsRequestContext,
+  RawlsUserSubjectId,
   Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceName,
@@ -18,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
+import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -102,6 +104,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       } yield newWorkspace
     }
 
+  // Return all applied settings for a workspace. Deleted and pending settings are not returned.
   def getWorkspaceSettings(workspaceId: UUID): Future[List[WorkspaceSetting]] =
     dataSource.inTransaction { access =>
       access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(workspaceId,
@@ -109,23 +112,32 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       )
     }
 
-  def createWorkspaceSettingsRecords(workspaceId: UUID, workspaceSettings: List[WorkspaceSetting])(implicit
+  // Create new settings for a workspace as pending. If there are any existing pending settings, throw an exception.
+  def createWorkspaceSettingsRecords(workspaceId: UUID,
+                                     workspaceSettings: List[WorkspaceSetting],
+                                     user: RawlsUserSubjectId
+  )(implicit
     ec: ExecutionContext
   ): Future[List[WorkspaceSetting]] =
-    dataSource.inTransaction { access =>
-      for {
-        pendingSettingsForWorkspace <- access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(
-          workspaceId,
-          WorkspaceSettingRecord.SettingStatus.Pending
-        )
-        _ = if (pendingSettingsForWorkspace.nonEmpty) {
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.Conflict, s"Workspace $workspaceId already has pending settings")
+    dataSource.inTransaction(
+      access =>
+        for {
+          pendingSettingsForWorkspace <- access.workspaceSettingQuery.listSettingsForWorkspaceByStatus(
+            workspaceId,
+            WorkspaceSettingRecord.SettingStatus.Pending
           )
-        }
-        _ <- access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings)
-      } yield workspaceSettings
-    }
+          _ = if (pendingSettingsForWorkspace.nonEmpty) {
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Conflict, s"Workspace $workspaceId already has pending settings")
+            )
+          }
+          _ <- access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings, user)
+        } yield workspaceSettings
+      // We use Serializable here to ensure that concurrent transactions to create settings
+      // for the same workspace are committed in order and do not interfere with each other
+      ,
+      TransactionIsolation.Serializable
+    )
 
   // Transition old Applied settings to Deleted and Pending settings to Applied
   def markWorkspaceSettingApplied(workspaceId: UUID, workspaceSettingType: WorkspaceSettingType)(implicit
@@ -146,6 +158,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       } yield res
     }
 
+  // Fully remove all pending records for a workspace from database. Does not transition records to Deleted.
   def removePendingSetting(workspaceId: UUID, workspaceSettingType: WorkspaceSettingType): Future[Int] =
     dataSource.inTransaction { access =>
       access.workspaceSettingQuery.deleteSettingTypeForWorkspaceByStatus(workspaceId,

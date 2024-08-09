@@ -13,7 +13,8 @@ case class WorkspaceSettingRecord(`type`: String,
                                   config: String,
                                   status: String,
                                   createdTime: Timestamp,
-                                  lastUpdated: Timestamp
+                                  lastUpdated: Timestamp,
+                                  user: String
 )
 
 object WorkspaceSettingRecord {
@@ -24,7 +25,10 @@ object WorkspaceSettingRecord {
     val Deleted: Value = Value("Deleted")
   }
 
-  def toWorkspaceSettingRecord(workspaceId: UUID, workspaceSettings: WorkspaceSetting): WorkspaceSettingRecord = {
+  def toWorkspaceSettingRecord(workspaceId: UUID,
+                               workspaceSettings: WorkspaceSetting,
+                               user: RawlsUserSubjectId
+  ): WorkspaceSettingRecord = {
     import spray.json._
     import DefaultJsonProtocol._
     import WorkspaceJsonSupport._
@@ -36,7 +40,8 @@ object WorkspaceSettingRecord {
                            configString,
                            WorkspaceSettingRecord.SettingStatus.Pending.toString,
                            currentTime,
-                           currentTime
+                           currentTime,
+                           user.value
     )
   }
 
@@ -64,17 +69,19 @@ trait WorkspaceSettingComponent {
     def status = column[String]("status", O.Length(254))
     def createdTime = column[Timestamp]("created_time")
     def lastUpdated = column[Timestamp]("last_updated")
+    def user = column[String]("user", O.Length(254))
 
-    def * = (`type`, workspaceId, config, status, createdTime, lastUpdated) <> (WorkspaceSettingRecord.tupled,
-                                                                                WorkspaceSettingRecord.unapply
+    def * = (`type`, workspaceId, config, status, createdTime, lastUpdated, user) <> (WorkspaceSettingRecord.tupled,
+                                                                                      WorkspaceSettingRecord.unapply
     )
   }
 
   object workspaceSettingQuery extends TableQuery(new WorkspaceSettingTable(_)) {
     def saveAll(workspaceId: UUID,
-                workspaceSettings: List[WorkspaceSetting]
+                workspaceSettings: List[WorkspaceSetting],
+                user: RawlsUserSubjectId
     ): ReadWriteAction[List[WorkspaceSetting]] = {
-      val records = workspaceSettings.map(WorkspaceSettingRecord.toWorkspaceSettingRecord(workspaceId, _))
+      val records = workspaceSettings.map(WorkspaceSettingRecord.toWorkspaceSettingRecord(workspaceId, _, user))
       (workspaceSettingQuery ++= records).map(_ => workspaceSettings)
     }
 
