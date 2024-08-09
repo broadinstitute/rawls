@@ -187,7 +187,7 @@ class WorkspaceRepositorySpec
       )
     )
 
-    val result = Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting)), Duration.Inf)
+    Await.result(repo.createWorkspaceSettingsRecords(ws.workspaceIdAsUUID, List(setting)), Duration.Inf)
 
     val newSettings = Await.result(
       slickDataSource.inTransaction(
@@ -229,7 +229,7 @@ class WorkspaceRepositorySpec
     val repo = new WorkspaceRepository(slickDataSource)
     val ws: Workspace = makeWorkspace()
     Await.result(repo.createWorkspace(ws), Duration.Inf)
-    val appliedSetting = WorkspaceSetting(
+    val existingSetting = WorkspaceSetting(
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
@@ -237,7 +237,7 @@ class WorkspaceRepositorySpec
         )
       )
     )
-    val pendingSetting = WorkspaceSetting(
+    val newSetting = WorkspaceSetting(
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
@@ -249,14 +249,14 @@ class WorkspaceRepositorySpec
     Await.result(
       slickDataSource.inTransaction { dataAccess =>
         for {
-          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(appliedSetting))
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(existingSetting))
           _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
             ws.workspaceIdAsUUID,
             WorkspaceSettingTypes.GcpBucketLifecycle,
             WorkspaceSettingRecord.SettingStatus.Pending,
             WorkspaceSettingRecord.SettingStatus.Applied
           )
-          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(pendingSetting))
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(newSetting))
         } yield ()
       },
       Duration.Inf
@@ -275,7 +275,7 @@ class WorkspaceRepositorySpec
       ),
       Duration.Inf
     )
-    assertResult(deletedSettings)(List(appliedSetting))
+    assertResult(deletedSettings)(List(existingSetting))
 
     // new settings should now be applied
     val appliedSettings = Await.result(
@@ -286,7 +286,7 @@ class WorkspaceRepositorySpec
       ),
       Duration.Inf
     )
-    assertResult(appliedSettings)(List(pendingSetting))
+    assertResult(appliedSettings)(List(newSetting))
   }
 
   behavior of "removePendingSetting"
@@ -312,6 +312,7 @@ class WorkspaceRepositorySpec
                  Duration.Inf
     )
 
+    // There should be no workspace settings in the database. Failed pending settings are not kept.
     Await.result(
       slickDataSource.inTransaction(
         _.workspaceSettingQuery.listSettingsForWorkspaceByStatus(ws.workspaceIdAsUUID,

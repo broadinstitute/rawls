@@ -2,12 +2,9 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.Materializer
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
-import org.broadinstitute.dsde.rawls
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -1137,13 +1134,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   }
 
   it should "validate requested settings" in {
-    val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
     val newSetting = WorkspaceSetting(
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(-1)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"), GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(-1)))
         )
       )
     )
@@ -1154,6 +1150,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-    exception.errorReport.message should include("invalid settings requested")
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes should contain theSameElementsAs List(
+      ErrorReport("Invalid GcpBucketLifecycle configuration: age must be a non-negative integer."),
+      ErrorReport("Invalid GcpBucketLifecycle configuration: unsupported lifecycle action SetStorageClass.")
+    )
   }
 }

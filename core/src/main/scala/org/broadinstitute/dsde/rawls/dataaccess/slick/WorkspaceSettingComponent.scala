@@ -40,7 +40,7 @@ object WorkspaceSettingRecord {
     )
   }
 
-  def toWorkspaceSettings(workspaceSettingRecord: WorkspaceSettingRecord): WorkspaceSetting = {
+  def toWorkspaceSetting(workspaceSettingRecord: WorkspaceSettingRecord): WorkspaceSetting = {
     import spray.json._
 
     val settingType = WorkspaceSettingTypes.withName(workspaceSettingRecord.`type`)
@@ -79,13 +79,13 @@ trait WorkspaceSettingComponent {
     }
 
     def updateSettingStatus(workspaceId: UUID,
-                            workspaceSettingType: WorkspaceSettingType,
+                            settingType: WorkspaceSettingType,
                             currentStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus,
                             newStatus: WorkspaceSettingRecord.SettingStatus.SettingStatus
     ): ReadWriteAction[Int] =
       workspaceSettingQuery
         .filter(record =>
-          record.workspaceId === workspaceId && record.`type` === workspaceSettingType.toString && record.status === currentStatus.toString
+          record.workspaceId === workspaceId && record.`type` === settingType.toString && record.status === currentStatus.toString
         )
         .map(rec => (rec.status, rec.lastUpdated))
         .update((newStatus.toString, new Timestamp(new Date().getTime)))
@@ -102,6 +102,6 @@ trait WorkspaceSettingComponent {
                                          status: WorkspaceSettingRecord.SettingStatus.SettingStatus
     ): ReadAction[List[WorkspaceSetting]] =
       filter(rec => rec.workspaceId === workspaceId && rec.status === status.toString).result
-        .map(_.map(WorkspaceSettingRecord.toWorkspaceSettings).toList)
+        .map(_.map(WorkspaceSettingRecord.toWorkspaceSetting).toList)
   }
 }

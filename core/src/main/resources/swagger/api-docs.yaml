@@ -4481,6 +4481,12 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceSettings'
+        400:
+          description: Invalid settings
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         403:
           description: User must be an owner of the workspace to overwrite settings
           content:

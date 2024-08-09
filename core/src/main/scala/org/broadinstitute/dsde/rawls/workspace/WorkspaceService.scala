@@ -2018,21 +2018,27 @@ class WorkspaceService(
       * Perform basic validation checks on requested settings.
       */
     def validateSettings(requestedSettings: List[WorkspaceSetting]): Unit = {
+      def validationErrorReport(settingType: WorkspaceSettingType, reason: String): ErrorReport = ErrorReport(s"Invalid $settingType configuration: $reason.")
       val validationErrors = requestedSettings.flatMap {
         case WorkspaceSetting(settingType @ WorkspaceSettingTypes.GcpBucketLifecycle,
                               GcpBucketLifecycleConfig(rules)
             ) =>
           rules.flatMap { rule =>
-            rule.conditions.age.collect {
-              case age if age < 0 =>
-                ErrorReport(s"invalid $settingType configuration: age must be a non-negative integer.")
+            val actionValidation = rule.action.`type` match {
+              case actionType if actionType.equals("Delete") => None
+              case actionType                                         => Some(validationErrorReport(settingType, s"unsupported lifecycle action $actionType"))
             }
+            val ageValidation = rule.conditions.age.collect {
+              case age if age < 0 =>
+                validationErrorReport(settingType, "age must be a non-negative integer")
+            }
+            actionValidation ++ ageValidation
           }
       }
 
       if (validationErrors.nonEmpty) {
         throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest, "invalid settings requested", validationErrors)
+          ErrorReport(StatusCodes.BadRequest, "Invalid settings requested.", validationErrors)
         )
       }
     }
@@ -2074,7 +2080,7 @@ class WorkspaceService(
 
             val action = rule.action.`type` match {
               case actionType if actionType.equals("Delete") => LifecycleAction.newDeleteAction()
-              case _                                         => throw new RawlsException("unsupported lifecycle action")
+              case _                                         => throw new RawlsException("unsupported lifecycle action") // validated earlier but needed for completeness
             }
 
             new LifecycleRule(action, conditionBuilder.build())

@@ -1197,8 +1197,8 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val GcpLifecycleConditionFormat: RootJsonFormat[GcpBucketLifecycleCondition] = jsonFormat2(GcpBucketLifecycleCondition.apply)
-  implicit val GcpLifecycleActionFormat: RootJsonFormat[GcpBucketLifecycleAction] = jsonFormat1(GcpBucketLifecycleAction.apply)
+  implicit val GcpBucketLifecycleConditionFormat: RootJsonFormat[GcpBucketLifecycleCondition] = jsonFormat2(GcpBucketLifecycleCondition.apply)
+  implicit val GcpBucketLifecycleActionFormat: RootJsonFormat[GcpBucketLifecycleAction] = jsonFormat1(GcpBucketLifecycleAction.apply)
   implicit val GcpBucketLifecycleRuleFormat: RootJsonFormat[GcpBucketLifecycleRule] = jsonFormat2(GcpBucketLifecycleRule.apply)
   implicit val GcpBucketLifecycleConfigFormat: RootJsonFormat[GcpBucketLifecycleConfig] = jsonFormat1(GcpBucketLifecycleConfig.apply)
 
