@@ -2018,7 +2018,9 @@ class WorkspaceService(
       * Perform basic validation checks on requested settings.
       */
     def validateSettings(requestedSettings: List[WorkspaceSetting]): Unit = {
-      def validationErrorReport(settingType: WorkspaceSettingType, reason: String): ErrorReport = ErrorReport(s"Invalid $settingType configuration: $reason.")
+      def validationErrorReport(settingType: WorkspaceSettingType, reason: String): ErrorReport = ErrorReport(
+        s"Invalid $settingType configuration: $reason."
+      )
       val validationErrors = requestedSettings.flatMap {
         case WorkspaceSetting(settingType @ WorkspaceSettingTypes.GcpBucketLifecycle,
                               GcpBucketLifecycleConfig(rules)
@@ -2026,7 +2028,7 @@ class WorkspaceService(
           rules.flatMap { rule =>
             val actionValidation = rule.action.`type` match {
               case actionType if actionType.equals("Delete") => None
-              case actionType                                         => Some(validationErrorReport(settingType, s"unsupported lifecycle action $actionType"))
+              case actionType => Some(validationErrorReport(settingType, s"unsupported lifecycle action $actionType"))
             }
             val ageValidation = rule.conditions.age.collect {
               case age if age < 0 =>
@@ -2080,7 +2082,10 @@ class WorkspaceService(
 
             val action = rule.action.`type` match {
               case actionType if actionType.equals("Delete") => LifecycleAction.newDeleteAction()
-              case _                                         => throw new RawlsException("unsupported lifecycle action") // validated earlier but needed for completeness
+              case _ =>
+                throw new RawlsException(
+                  "unsupported lifecycle action"
+                ) // validated earlier but needed for completeness
             }
 
             new LifecycleRule(action, conditionBuilder.build())

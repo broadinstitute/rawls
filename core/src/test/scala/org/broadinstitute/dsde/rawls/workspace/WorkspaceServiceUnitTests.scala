@@ -12,10 +12,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
-  GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule,
   GcpBucketLifecycleAction,
-  GcpBucketLifecycleCondition
+  GcpBucketLifecycleCondition,
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
@@ -939,7 +939,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30))
+          )
         )
       )
     )
@@ -947,7 +949,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("muchBetterPrefix"), Some(31)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                 GcpBucketLifecycleCondition(Set("muchBetterPrefix"), Some(31))
+          )
         )
       )
     )
@@ -995,7 +999,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30))
+          )
         )
       )
     )
@@ -1042,7 +1048,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(30))
+          )
         )
       )
     )
@@ -1050,7 +1058,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Set("muchBetterPrefix"), Some(31)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                 GcpBucketLifecycleCondition(Set("muchBetterPrefix"), Some(31))
+          )
         )
       )
     )
@@ -1139,7 +1149,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"), GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(-1)))
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"),
+                                 GcpBucketLifecycleCondition(Set("prefixToMatch"), Some(-1))
+          )
         )
       )
     )
