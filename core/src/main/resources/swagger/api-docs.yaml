@@ -5898,11 +5898,11 @@ components:
       description: ""
     WorkspaceSettings:
       required:
-        - type
+        - settingType
         - config
       type: object
       properties:
-        'type':
+        settingType:
           type: string
           description: The type of the workspace setting
           enum:
@@ -5933,10 +5933,10 @@ components:
           $ref: '#/components/schemas/GcpBucketLifecycleCondition'
     GcpBucketLifecycleAction:
       required:
-        - type
+        - actionType
       type: object
       properties:
-        "type":
+        actionType:
           type: string
           description: The type of the lifecycle action
           enum:

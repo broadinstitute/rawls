@@ -2026,7 +2026,7 @@ class WorkspaceService(
                               GcpBucketLifecycleConfig(rules)
             ) =>
           rules.flatMap { rule =>
-            val actionValidation = rule.action.`type` match {
+            val actionValidation = rule.action.actionType match {
               case actionType if actionType.equals("Delete") => None
               case actionType => Some(validationErrorReport(settingType, s"unsupported lifecycle action $actionType"))
             }
@@ -2034,6 +2034,7 @@ class WorkspaceService(
               case age if age < 0 =>
                 validationErrorReport(settingType, "age must be a non-negative integer")
             }
+            // todo: what if matches prefix is defined, but it's an empty list?
             val atLeastOneConditionValidation = (rule.conditions.age, rule.conditions.matchesPrefix) match {
               case (None, None) =>
                 Some(validationErrorReport(settingType, "at least one condition must be specified"))
@@ -2062,7 +2063,8 @@ class WorkspaceService(
       if (existingSettings.isEmpty) {
         requestedSettings
       } else {
-        val requestedSettingsMap = requestedSettings.map(s => s.`type` -> s.config).toMap
+        // todo: protect against identical settings
+        val requestedSettingsMap = requestedSettings.map(s => s.settingType -> s.config).toMap
         existingSettings.map { case WorkspaceSetting(settingType, _) =>
           WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
         }
@@ -2085,7 +2087,7 @@ class WorkspaceService(
             rule.conditions.matchesPrefix.map(prefixes => conditionBuilder.setMatchesPrefix(prefixes.toList.asJava))
             rule.conditions.age.map(age => conditionBuilder.setAge(age))
 
-            val action = rule.action.`type` match {
+            val action = rule.action.actionType match {
               case actionType if actionType.equals("Delete") => LifecycleAction.newDeleteAction()
 
               // validated earlier but needed for completeness
@@ -2100,17 +2102,17 @@ class WorkspaceService(
 
           for {
             _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
-            _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting.`type`)
+            _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting.settingType)
           } yield None
         case _ => throw new RawlsException("unsupported workspace setting")
       }).recoverWith { case e =>
         logger.error(
-          s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.`type`}]",
+          s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.settingType}]",
           e
         )
         workspaceRepository
-          .removePendingSetting(workspace.workspaceIdAsUUID, setting.`type`)
-          .map(_ => Some((setting.`type`, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
+          .removePendingSetting(workspace.workspaceIdAsUUID, setting.settingType)
+          .map(_ => Some((setting.settingType, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
       }
 
     validateSettings(workspaceSettings)
@@ -2126,7 +2128,7 @@ class WorkspaceService(
     } yield {
       val successes = newSettings.filterNot { s =>
         applyFailures.flatten.exists { case (failedSettingType, _) =>
-          failedSettingType == s.`type`
+          failedSettingType == s.settingType
         }
       }
       WorkspaceSettingResponse(successes, applyFailures.flatten.toMap)

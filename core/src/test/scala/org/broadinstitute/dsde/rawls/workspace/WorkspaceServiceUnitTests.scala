@@ -910,7 +910,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
       .thenReturn(Future.successful(List(workspaceSetting)))
-    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.`type`))
+    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.settingType))
       .thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
@@ -971,7 +971,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
       .thenReturn(Future.successful(List(newSetting)))
-    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, newSetting.`type`))
+    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, newSetting.settingType))
       .thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
@@ -1029,7 +1029,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
       .thenReturn(Future.successful(List.empty))
-    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, defaultSetting.`type`))
+    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, defaultSetting.settingType))
       .thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
@@ -1090,7 +1090,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
       .thenReturn(Future.successful(List(newSetting)))
-    when(workspaceRepository.removePendingSetting(workspaceId, newSetting.`type`)).thenReturn(Future.successful(1))
+    when(workspaceRepository.removePendingSetting(workspaceId, newSetting.settingType)).thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(any()))
@@ -1121,7 +1121,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     res.failures(WorkspaceSettingTypes.GcpBucketLifecycle) shouldEqual ErrorReport(StatusCodes.InternalServerError,
                                                                                    "failed to apply settings"
     )
-    verify(workspaceRepository).removePendingSetting(workspaceId, newSetting.`type`)
+    verify(workspaceRepository).removePendingSetting(workspaceId, newSetting.settingType)
   }
 
   it should "be limited to owners" in {

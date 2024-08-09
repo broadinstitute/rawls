@@ -679,7 +679,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     "throws an exception for invalid workspace setting type" in {
       val fakeSetting =
         """{
-          |    "type": "FakeWorkspaceSetting",
+          |    "settingType": "FakeWorkspaceSetting",
           |    "config": {
           |      "rules": []
           |    }
@@ -694,7 +694,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "parses lifecycle settings with matchesPrefix and age" in {
         val lifecycleSetting =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": [
             |        {
@@ -731,7 +731,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "parses lifecycle settings with no prefixes" in {
         val lifecycleSettingNoPrefixes =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": [
             |        {
@@ -765,7 +765,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "parses lifecycle settings with no age" in {
         val lifecycleSettingNoAge =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": [
             |        {
@@ -801,7 +801,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "parses lifecycle settings with no rules" in {
         val lifecycleSettingNoRules =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": []
             |    }
@@ -816,7 +816,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "throws an exception for missing config" in {
         val lifecycleSettingNoConfig =
           """{
-            |    "type": "GcpBucketLifecycle"
+            |    "settingType": "GcpBucketLifecycle"
             |  }""".stripMargin.parseJson
         intercept[NoSuchElementException] {
           WorkspaceSettingFormat.read(lifecycleSettingNoConfig)
@@ -826,7 +826,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "throws an exception for incorrect format" in {
         val lifecycleSettingBadConfig =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": "not a list"
             |    }
@@ -839,7 +839,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "throws an exception for missing rules" in {
         val lifecycleSettingNoRules =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {}
             |  }""".stripMargin.parseJson
         intercept[DeserializationException] {
@@ -850,7 +850,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "throws an exception for missing rule action" in {
         val lifecycleSettingNoAction =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": [
             |        {
@@ -873,7 +873,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       "throws an exception for missing rule conditions" in {
         val lifecycleSettingNoConditions =
           """{
-            |    "type": "GcpBucketLifecycle",
+            |    "settingType": "GcpBucketLifecycle",
             |    "config": {
             |      "rules": [
             |        {

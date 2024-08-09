@@ -568,7 +568,7 @@ object WorkspaceState {
   case object DeleteFailed extends WorkspaceState
 }
 
-case class WorkspaceSetting(`type`: WorkspaceSettingType, config: WorkspaceSettingConfig)
+case class WorkspaceSetting(settingType: WorkspaceSettingType, config: WorkspaceSettingConfig)
 
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
@@ -593,7 +593,7 @@ object WorkspaceSettingConfig {
   case class GcpBucketLifecycleConfig(rules: List[GcpBucketLifecycleRule]) extends WorkspaceSettingConfig
 
   case class GcpBucketLifecycleRule(action: GcpBucketLifecycleAction, conditions: GcpBucketLifecycleCondition)
-  case class GcpBucketLifecycleAction(`type`: String)
+  case class GcpBucketLifecycleAction(actionType: String)
   case class GcpBucketLifecycleCondition(matchesPrefix: Option[Set[String]], age: Option[Days])
 }
 
@@ -1221,7 +1221,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): WorkspaceSettingType = json match {
       case JsString(name) => WorkspaceSettingTypes.withName(name)
-      case _              => throw DeserializationException("unexpected json type")
+      case _              => throw DeserializationException("unexpected setting type $settingType")
     }
   }
 
@@ -1238,13 +1238,13 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit object WorkspaceSettingFormat extends RootJsonFormat[WorkspaceSetting] {
     def write(ws: WorkspaceSetting): JsValue = JsObject(
-      "type" -> ws.`type`.toJson,
+      "settingType" -> ws.settingType.toJson,
       "config" -> ws.config.toJson
     )
 
     def read(json: JsValue): WorkspaceSetting = {
       val fields = json.asJsObject.fields
-      val settingType = fields("type").convertTo[WorkspaceSettingType]
+      val settingType = fields("settingType").convertTo[WorkspaceSettingType]
       val configuration = settingType match {
         case GcpBucketLifecycle => fields("config").convertTo[GcpBucketLifecycleConfig]
         case _                  => throw DeserializationException(s"unexpected setting type $settingType")

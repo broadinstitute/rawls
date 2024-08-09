@@ -10,7 +10,7 @@
             <column name="WORKSPACE_ID" type="BINARY(16)">
                 <constraints nullable="false" referencedTableName="WORKSPACE" referencedColumnNames="id" foreignKeyName="FK_WSETTINGS_WORKSPACE_ID" deleteCascade="true"/>
             </column>
-            <column name="TYPE" type="VARCHAR(254)">
+            <column name="SETTING_TYPE" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
             <column name="CONFIG" type="JSON">
