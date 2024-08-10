@@ -177,7 +177,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             context,
             AttributeEntityReference("Sample", "nonexistent"),
             Map(AttributeName.withDefaultNS("newAttribute") -> AttributeNumber(2)),
-            Seq(AttributeName.withDefaultNS("type")),
             RawlsTracingContext(None)
           )
         )
@@ -185,25 +184,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       // make sure we get the _right_ RawlsException:
       // "saveEntityPatch looked up $entityRef expecting 1 record, got 0 instead"
       caught.getMessage should include("expecting")
-    }
-  }
-
-  it should "fail to saveEntityPatch if you try to delete and upsert the same attribute" in withConstantTestDatabase {
-    withWorkspaceContext(constantData.workspace) { context =>
-      val caught = intercept[RawlsException] {
-        runAndWait(
-          entityQuery.saveEntityPatch(
-            context,
-            AttributeEntityReference("Sample", "sample1"),
-            Map(AttributeName.withDefaultNS("type") -> AttributeNumber(2)),
-            Seq(AttributeName.withDefaultNS("type")),
-            RawlsTracingContext(None)
-          )
-        )
-      }
-      // make sure we get the _right_ RawlsException:
-      // "Can't saveEntityPatch on $entityRef because upserts and deletes share attributes <blah>"
-      caught.getMessage should include("share")
     }
   }
 
@@ -235,15 +215,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("c"), AttributeString("d"))),
         AttributeName.withDefaultNS("quot1") -> testData.aliquot2.toReference // jerk move
       )
-      val deletes = Seq(AttributeName.withDefaultNS("whatsit"), AttributeName.withDefaultNS("nonexistent"))
-
-      val expected = testData.sample1.attributes ++ inserts ++ updates -- deletes
+      val expected = testData.sample1.attributes ++ inserts ++ updates
 
       runAndWait {
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts ++ updates,
-                                    deletes,
                                     RawlsTracingContext(None)
         )
       }
@@ -271,6 +248,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  // TODO AJ-1027
   it should "update attribute list values" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       // insert new attribute 'myNewList' which is a list with 3 elements
@@ -290,7 +268,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts,
-                                    Seq.empty[AttributeName],
                                     RawlsTracingContext(None)
         )
       )
@@ -316,7 +293,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     updates,
-                                    Seq.empty[AttributeName],
                                     RawlsTracingContext(None)
         )
       )
@@ -326,6 +302,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  // TODO AJ-1027
   it should "reflect changes in attribute when attribute value list size increases" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       // insert new attribute 'newEntityList' which is a list with 1 element
@@ -338,7 +315,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts,
-                                    Seq.empty[AttributeName],
                                     RawlsTracingContext(None)
         )
       )
@@ -365,7 +341,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     updates,
-                                    Seq.empty[AttributeName],
                                     RawlsTracingContext(None)
         )
       )
@@ -375,6 +350,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  // TODO AJ-1027
   it should "reflect changes in attribute when attribute value list size decreases" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       // insert new attribute 'anotherList' which is a list with 3 elements
@@ -394,7 +370,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     inserts,
-                                    Seq.empty[AttributeName],
                                     RawlsTracingContext(None)
         )
       )
@@ -412,7 +387,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         entityQuery.saveEntityPatch(context,
                                     AttributeEntityReference("Sample", "sample1"),
                                     updates,
-                                    Seq.empty[AttributeName],
                                     RawlsTracingContext(None)
         )
       )
@@ -1622,37 +1596,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       ) {
         recWithAttrs.map(_.withoutAllAttributeValues)
       }
-    }
-  }
-
-  it should "delete all values in an attribute list" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { wsctx =>
-      val entityToSave = Entity(
-        "testName",
-        "testType",
-        Map(
-          AttributeName.withDefaultNS("attributeListToDelete") -> AttributeValueList(
-            List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3), AttributeNumber(4), AttributeNumber(5))
-          )
-        )
-      )
-
-      runAndWait(entityQuery.save(wsctx, entityToSave))
-
-      val initialResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
-      assert(initialResult.get.attributes.nonEmpty)
-
-      runAndWait(
-        entityQuery.saveEntityPatch(wsctx,
-                                    entityToSave.toReference,
-                                    Map.empty,
-                                    List(AttributeName.withDefaultNS("attributeListToDelete")),
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      val updatedResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
-      assert(updatedResult.get.attributes.isEmpty)
     }
   }
 

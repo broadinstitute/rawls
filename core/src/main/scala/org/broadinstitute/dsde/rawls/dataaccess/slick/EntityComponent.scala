@@ -1071,7 +1071,6 @@ trait EntityComponent {
     private def applyEntityPatch(workspaceContext: Workspace,
                                  entityRecord: EntityRecord,
                                  upserts: AttributeMap,
-                                 deletes: Traversable[AttributeName],
                                  tracingContext: RawlsTracingContext
     ) = {
       traceDBIOWithParent("applyEntityPatch", tracingContext) { span =>
@@ -1149,11 +1148,6 @@ trait EntityComponent {
             val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) // re-add the current entity
             val refsToIds = allTheEntityRefs.map(e => e.toReference -> e.id).toMap
 
-            // get ids that need to be deleted from db
-            val deleteIds = (for {
-              attributeName <- deletes
-            } yield existingAttrsToRecordIds.get(attributeName)).flatten.flatten
-
             val (insertRecs: Seq[EntityAttributeRecord],
                  updateRecs: Seq[EntityAttributeRecord],
                  extraDeleteIds: Seq[Long]
@@ -1173,12 +1167,10 @@ trait EntityComponent {
                   (insert1 ++ insert2, update1 ++ update2, delete1 ++ delete2)
               }
 
-            val totalDeleteIds = deleteIds ++ extraDeleteIds
-
             entityAttributeShardQuery(workspaceContext).patchAttributesAction(
               insertRecs,
               updateRecs,
-              totalDeleteIds,
+              extraDeleteIds,
               entityAttributeTempQuery.insertScratchAttributes,
               span
             )
@@ -1191,7 +1183,6 @@ trait EntityComponent {
     def saveEntityPatch(workspaceContext: Workspace,
                         entityRef: AttributeEntityReference,
                         upserts: AttributeMap,
-                        deletes: Traversable[AttributeName],
                         tracingContext: RawlsTracingContext
     ) =
       traceDBIOWithParent("saveEntityPatch", tracingContext) { span =>
@@ -1200,16 +1191,8 @@ trait EntityComponent {
         setTraceSpanAttribute(span, AttributeKey.stringKey("entityType"), entityRef.entityType)
         setTraceSpanAttribute(span, AttributeKey.stringKey("entityName"), entityRef.entityName)
         setTraceSpanAttribute(span, AttributeKey.longKey("numUpserts"), java.lang.Long.valueOf(upserts.size))
-        setTraceSpanAttribute(span, AttributeKey.longKey("numDeletes"), java.lang.Long.valueOf(deletes.size))
-        val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
-        if (upserts.isEmpty && deletes.isEmpty) {
+        if (upserts.isEmpty) {
           DBIO.successful(()) // no-op
-        } else if (deleteIntersectUpsert.nonEmpty) {
-          DBIO.failed(
-            new RawlsException(
-              s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"
-            )
-          )
         } else {
           traceDBIOWithParent("getEntityRecords", span)(_ =>
             getEntityRecords(workspaceContext.workspaceIdAsUUID, Set(entityRef))
@@ -1227,7 +1210,7 @@ trait EntityComponent {
             }
 
             for {
-              _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes, span)
+              _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, span)
               updatedEntities <- traceDBIOWithParent("getEntities", span)(_ =>
                 entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, Seq(entityRecord.id))
               )

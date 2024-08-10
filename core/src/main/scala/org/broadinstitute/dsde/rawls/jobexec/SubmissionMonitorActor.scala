@@ -708,7 +708,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         traceDBIOWithParent("saveEntityPatchSequence", span) { innerSpan =>
           DBIO.sequence(entityUpdates map { entityUpd =>
             dataAccess.entityQuery
-              .saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq(), innerSpan)
+              .saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, innerSpan)
               .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
           })
         }
