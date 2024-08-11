@@ -705,7 +705,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       if (entityUpdates.isEmpty) {
         DBIO.successful(())
       } else {
-        traceDBIOWithParent("saveEntities", span) { innerSpan =>
+        traceDBIOWithParent("saveEntityPatchSequence", span) { innerSpan =>
           // apply the workflow outputs to the original entities
           val updatedEntities = entityUpdates map { entityUpd =>
             val updatedAttrs = entityUpd.entity.attributes ++ entityUpd.upserts
