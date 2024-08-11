@@ -170,7 +170,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 
 }
 
-//A map of writebacks to apply to the given entity reference
+//A map of writebacks to apply to the given entity
 case class WorkflowEntityUpdate(entity: Entity, upserts: AttributeMap)
 
 //noinspection ScalaDocMissingParameterDescription,RedundantBlock,TypeAnnotation,ReplaceWithFlatten,ScalaUnnecessaryParentheses,ScalaUnusedSymbol,DuplicatedCode
@@ -708,7 +708,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         traceDBIOWithParent("saveEntities", span) { innerSpan =>
           // apply the workflow outputs to the original entities
           val updatedEntities = entityUpdates map { entityUpd =>
-            val updatedAttrs = entityUpd.entity.attributes ++ entityUpd.upserts.toMap
+            val updatedAttrs = entityUpd.entity.attributes ++ entityUpd.upserts
             entityUpd.entity.copy(attributes = updatedAttrs)
           }
 
