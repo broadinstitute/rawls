@@ -339,7 +339,7 @@ jobs:
 
       - id: run-rawls-swat-tests
         name: 'Run Rawls Swat tests'
-        uses: ./.github/actions/run-swat-tests
+        uses: broadinstitute/dsp-reusable-workflows/.github/actions/run-swat-tests@DDO-3838-swat-test-move
         with:
           service_repo: ${{ env.SERVICE_REPO }}
           ref: ${{ inputs.ref }}
