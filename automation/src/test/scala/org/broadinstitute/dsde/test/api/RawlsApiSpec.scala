@@ -160,7 +160,7 @@ class RawlsApiSpec
       val resourceTypes = Sam.config.listResourceTypes()
 
       resourceTypes.collect {
-        case ResourceType(typeName, roles, actionPatterns, _, _, _) if typeName.equals("workspace") =>
+        case ResourceType(typeName, roles, actionPatterns, _, _, allowLeaving) if typeName.equals("workspace") =>
           roles.collect {
             case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("owner") =>
               actions should contain allElementsOf (List(
@@ -194,7 +194,8 @@ class RawlsApiSpec
             case ResourceActionPattern(authDomainConstrainable, _, value) if value.equals("read") =>
               authDomainConstrainable shouldBe true
           }
-        case ResourceType(typeName, roles, _, _, _, _) if typeName.equals("billing-project") =>
+          allowLeaving shouldBe true
+        case ResourceType(typeName, roles, _, _, _, allowLeaving) if typeName.equals("billing-project") =>
           roles.collect {
             case ResourceRole(roleName, actions, _, _) if roleName.equals("owner") =>
               actions should contain allElementsOf (List(
@@ -213,7 +214,8 @@ class RawlsApiSpec
             case ResourceRole(roleName, actions, _, _) if roleName.equals("batch-compute-user") =>
               actions should contain allElementsOf (List("launch_batch_compute"))
           }
-        case ResourceType(typeName, roles, _, _, _, _) if typeName.equals("google-project") =>
+          allowLeaving shouldBe true
+        case ResourceType(typeName, roles, _, _, _, allowLeaving) if typeName.equals("google-project") =>
           roles.collect {
             case ResourceRole(roleName, actions, _, includedRoles) if roleName.equals("owner") =>
               actions should contain allElementsOf (List("delete", "set_parent", "read_policies"))
@@ -224,6 +226,7 @@ class RawlsApiSpec
             case ResourceRole(roleName, actions, _, _) if roleName.equals("pet-creator") =>
               actions should contain allElementsOf (List("create-pet"))
           }
+          allowLeaving shouldBe true
       }
     }
 
