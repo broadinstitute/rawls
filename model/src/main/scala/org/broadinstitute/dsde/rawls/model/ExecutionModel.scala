@@ -88,8 +88,8 @@ case class ExecutionServiceCallLogs(
 // https://cromwell.readthedocs.io/en/stable/wf_options/Google/
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
-  final_workflow_outputs_dir: String,
-  final_workflow_outputs_mode: String,
+  final_workflow_outputs_dir: Option[String],
+  final_workflow_outputs_mode: Option[String],
   google_project: String,
   account_name: String,
   google_compute_service_account: String,
