@@ -2034,10 +2034,15 @@ class WorkspaceService(
               case age if age < 0 =>
                 validationErrorReport(settingType, "age must be a non-negative integer")
             }
-            // todo: what if matches prefix is defined, but it's an empty list?
             val atLeastOneConditionValidation = (rule.conditions.age, rule.conditions.matchesPrefix) match {
               case (None, None) =>
                 Some(validationErrorReport(settingType, "at least one condition must be specified"))
+              case (None, Some(prefixes)) if prefixes.isEmpty =>
+                Some(
+                  validationErrorReport(settingType,
+                                        "at least one prefix must be specified if matchesPrefix is the only condition"
+                  )
+                )
               case _ => None
             }
             actionValidation ++ ageValidation ++ atLeastOneConditionValidation
@@ -2050,25 +2055,6 @@ class WorkspaceService(
         )
       }
     }
-
-    /**
-      * Iterate over existing settings. If an existing setting type is included in the
-      * requestedSettings, use the requested setting. If it isn't, use the setting type's default
-      * config to restore the workspace to the default state.
-      */
-    def computeNewSettings(workspace: Workspace,
-                           requestedSettings: List[WorkspaceSetting],
-                           existingSettings: List[WorkspaceSetting]
-    ): List[WorkspaceSetting] =
-      if (existingSettings.isEmpty) {
-        requestedSettings
-      } else {
-        // todo: protect against identical settings
-        val requestedSettingsMap = requestedSettings.map(s => s.settingType -> s.config).toMap
-        existingSettings.map { case WorkspaceSetting(settingType, _) =>
-          WorkspaceSetting(settingType, requestedSettingsMap.getOrElse(settingType, settingType.defaultConfig()))
-        }
-      }
 
     /**
       * Apply a setting to a workspace. If the setting is successfully applied, update the database
@@ -2119,9 +2105,9 @@ class WorkspaceService(
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
       currentSettings <- workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
-      newSettings = computeNewSettings(workspace, workspaceSettings, currentSettings)
+      newSettings = workspaceSettings.filterNot(currentSettings.contains(_))
       _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID,
-                                                              workspaceSettings,
+                                                              newSettings,
                                                               ctx.userInfo.userSubjectId
       )
       applyFailures <- newSettings.traverse(s => applySetting(workspace, s))

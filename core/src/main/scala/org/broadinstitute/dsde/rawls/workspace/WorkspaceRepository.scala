@@ -115,7 +115,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   // Create new settings for a workspace as pending. If there are any existing pending settings, throw an exception.
   def createWorkspaceSettingsRecords(workspaceId: UUID,
                                      workspaceSettings: List[WorkspaceSetting],
-                                     user: RawlsUserSubjectId
+                                     userId: RawlsUserSubjectId
   )(implicit
     ec: ExecutionContext
   ): Future[List[WorkspaceSetting]] =
@@ -131,7 +131,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
               ErrorReport(StatusCodes.Conflict, s"Workspace $workspaceId already has pending settings")
             )
           }
-          _ <- access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings, user)
+          _ <- access.workspaceSettingQuery.saveAll(workspaceId, workspaceSettings, userId)
         } yield workspaceSettings
       // We use Serializable here to ensure that concurrent transactions to create settings
       // for the same workspace are committed in order and do not interfere with each other
