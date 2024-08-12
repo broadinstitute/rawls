@@ -79,6 +79,8 @@ trait BillingProfileManagerDAO {
                                 ctx: RawlsRequestContext
   ): Unit
 
+  def leaveProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
+
   def getStatus(): SystemStatus
 
   @throws(classOf[BpmAzureSpendReportApiException])
@@ -279,6 +281,11 @@ class BillingProfileManagerDAOImpl(
         policy.toString,
         memberEmail
       )
+
+  def leaveProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
+    apiClientProvider
+      .getProfileApi(ctx)
+      .leaveProfile(billingProfileId)
 
   override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
 
