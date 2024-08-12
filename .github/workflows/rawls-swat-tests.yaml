@@ -219,26 +219,6 @@ jobs:
           tlsSkipVerify: true
           exportToken: true
           secrets: |
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json auth_provider_x509_cert_url | FIRECLOUD_ACCOUNT_AUTH_CERT_URL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json auth_uri | FIRECLOUD_ACCOUNT_AUTH_URI;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json client_email | FIRECLOUD_ACCOUNT_CLIENT_EMAIL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json client_id | FIRECLOUD_ACCOUNT_CLIENT_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json client_x509_cert_url | FIRECLOUD_ACCOUNT_CLIENT_CERT_URL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json private_key | FIRECLOUD_ACCOUNT_PVT_KEY;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json private_key_id | FIRECLOUD_ACCOUNT_PVT_KEY_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json project_id | FIRECLOUD_ACCOUNT_PROJECT_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json token_uri | FIRECLOUD_ACCOUNT_TOKEN_URI;
-            secret/dsde/firecloud/${{ inputs.ENV }}/common/firecloud-account.json type | FIRECLOUD_ACCOUNT_TYPE;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json auth_provider_x509_cert_url | RAWLS_ACCOUNT_AUTH_CERT_URL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json auth_uri | RAWLS_ACCOUNT_AUTH_URI;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json client_email | RAWLS_ACCOUNT_CLIENT_EMAIL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json client_id | RAWLS_ACCOUNT_CLIENT_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json client_x509_cert_url | RAWLS_ACCOUNT_CLIENT_CERT_URL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json private_key | RAWLS_ACCOUNT_PVT_KEY;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json private_key_id | RAWLS_ACCOUNT_PVT_KEY_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json project_id | RAWLS_ACCOUNT_PROJECT_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json token_uri | RAWLS_ACCOUNT_TOKEN_URI;
-            secret/dsde/firecloud/${{ inputs.ENV }}/rawls/rawls-account.json type | RAWLS_ACCOUNT_TYPE;
             secret/dsde/firecloud/${{ inputs.ENV }}/common/secrets firecloud_id | FIRECLOUD_ID;
             secret/dsde/firecloud/${{ inputs.ENV }}/common/users automation_users_passwd | AUTOMATION_USERS_PASSWD;
             secret/dsde/firecloud/${{ inputs.ENV }}/common/users billing_acct | BILLING_ACCT;
@@ -246,16 +226,7 @@ jobs:
             secret/dsde/firecloud/${{ inputs.ENV }}/common/users service_acct_email | SERVICE_ACCT_EMAIL;
             secret/dsde/firecloud/${{ inputs.ENV }}/common/users users | USERS;
             secret/dsde/firecloud/${{ inputs.ENV }}/common/users users_passwd | USERS_PASSWD;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json auth_provider_x509_cert_url | SAM_FIRESTORE_ACCOUNT_AUTH_CERT_URL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json auth_uri | SAM_FIRESTORE_ACCOUNT_AUTH_URI;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json client_email | SAM_FIRESTORE_ACCOUNT_CLIENT_EMAIL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json client_id | SAM_FIRESTORE_ACCOUNT_CLIENT_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json client_x509_cert_url | SAM_FIRESTORE_ACCOUNT_CLIENT_CERT_URL;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json private_key | SAM_FIRESTORE_ACCOUNT_PVT_KEY;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json private_key_id | SAM_FIRESTORE_ACCOUNT_PVT_KEY_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json project_id | SAM_FIRESTORE_ACCOUNT_PROJECT_ID;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json token_uri | SAM_FIRESTORE_ACCOUNT_TOKEN_URI;
-            secret/dsde/firecloud/${{ inputs.ENV }}/sam/sam-firestore-account.json type | SAM_FIRESTORE_ACCOUNT_TYPE;
+
 
       - id: prepare-secrets
         name: Prepare secrets
@@ -265,27 +236,6 @@ jobs:
           echo firecloud-secrets='{"firecloud_id":"${{ env.FIRECLOUD_ID }}"}' >> $GITHUB_OUTPUT
           echo firecloud-users='{"automation_users_passwd":"${{ env.AUTOMATION_USERS_PASSWD }}","billing_acct":"${{ env.BILLING_ACCT }}","qa_users_passwd":"${{ env.QA_USERS_PASSWD }}","service_acct_email":"${{ env.SERVICE_ACCT_EMAIL }}","users":${{ toJSON(env.USERS) }},"users_passwd":"${{ env.USERS_PASSWD }}"}' >> $GITHUB_OUTPUT
           echo sam-firestore-json='{"auth_provider_x509_cert_url":"${{ env.SAM_FIRESTORE_ACCOUNT_AUTH_CERT_URL }}","auth_uri":"${{ env.SAM_FIRESTORE_ACCOUNT_AUTH_URI }}","client_email":"${{ env.SAM_FIRESTORE_ACCOUNT_CLIENT_EMAIL }}","client_id":"${{ env.SAM_FIRESTORE_ACCOUNT_CLIENT_ID }}","client_x509_cert_url":"${{ env.SAM_FIRESTORE_ACCOUNT_CLIENT_CERT_URL }}","private_key":${{ toJSON(env.SAM_FIRESTORE_ACCOUNT_PVT_KEY) }},"private_key_id":"${{ env.SAM_FIRESTORE_ACCOUNT_PVT_KEY_ID }}","project_id":"${{ env.SAM_FIRESTORE_ACCOUNT_PROJECT_ID }}","token_uri":"${{ env.SAM_FIRESTORE_ACCOUNT_TOKEN_URI }}","type":"${{ env.SAM_FIRESTORE_ACCOUNT_TYPE }}"}' >> $GITHUB_OUTPUT
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_AUTH_CERT_URL }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_AUTH_URI }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_AUTH_CERT_URL }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_AUTH_URI }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_CLIENT_EMAIL }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_CLIENT_ID }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_CLIENT_CERT_URL }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_PVT_KEY }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_PVT_KEY_ID }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_PROJECT_ID }}"
-          echo "::add-mask::${{ env.FIRECLOUD_ACCOUNT_TOKEN_URI }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_AUTH_CERT_URL }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_AUTH_URI }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_CLIENT_EMAIL }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_CLIENT_ID }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_CLIENT_CERT_URL }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_PVT_KEY }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_PVT_KEY_ID }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_PROJECT_ID }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_TOKEN_URI }}"
-          echo "::add-mask::${{ env.RAWLS_ACCOUNT_TYPE }}"
           echo "::add-mask::${{ env.FIRECLOUD_ID }}"
           echo "::add-mask::${{ env.AUTOMATION_USERS_PASSWD }}"
           echo "::add-mask::${{ env.BILLING_ACCT }}"
@@ -293,36 +243,19 @@ jobs:
           echo "::add-mask::${{ env.SERVICE_ACCT_EMAIL }}"
           echo "::add-mask::${{ env.USERS }}"
           echo "::add-mask::${{ env.USERS_PASSWD }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_AUTH_CERT_URL }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_AUTH_URI }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_CLIENT_EMAIL }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_CLIENT_ID }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_CLIENT_CERT_URL }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_PVT_KEY }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_PVT_KEY_ID }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_PROJECT_ID }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_TOKEN_URI }}"
-          echo "::add-mask::${{ env.SAM_FIRESTORE_ACCOUNT_TYPE }}"
 
       - id: render-secrets
         name: Render secrets
         run: |
-          FIRECLOUD_JSON_KEY_B64=$(printf '%s' ${{ toJSON(steps.prepare-secrets.outputs.firecloud-json) }} | base64 -w0)
-          RAWLS_JSON_KEY_B64=$(printf '%s' ${{ toJSON(steps.prepare-secrets.outputs.rawls-json) }} | base64 -w0)
+          FIRECLOUD_JSON_KEY_B64=$(printf '%s' ${{ toJSON( secrets.FIRECLOUD_JSON_KEY ) }} | base64 -w0)
+          RAWLS_JSON_KEY_B64=$(printf '%s' ${{ toJSON( secrets.RAWLS_JSON_KEY ) }} | base64 -w0)
           FIRECLOUD_SECRETS_B64=$(printf '%s' ${{ toJSON(steps.prepare-secrets.outputs.firecloud-secrets) }} | base64 -w0)
           FIRECLOUD_USERS_B64=$(printf '%s' ${{ toJSON(steps.prepare-secrets.outputs.firecloud-users) }} | base64 -w0)
-          SAM_FIRESTORE_JSON_KEY_B64=$(printf '%s' ${{ toJSON(steps.prepare-secrets.outputs.sam-firestore-json) }} | base64 -w0)
 
-          echo "::add-mask::$FIRECLOUD_JSON_KEY_B64"
-          echo firecloud-json-key-b64=$FIRECLOUD_JSON_KEY_B64 >> $GITHUB_OUTPUT
-          echo "::add-mask::$RAWLS_JSON_KEY_B64"
-          echo rawls-json-key-b64=$RAWLS_JSON_KEY_B64 >> $GITHUB_OUTPUT
           echo "::add-mask::$FIRECLOUD_SECRETS_B64"
           echo firecloud-secrets-b64=$FIRECLOUD_SECRETS_B64 >> $GITHUB_OUTPUT
           echo "::add-mask::$FIRECLOUD_USERS_B64"
           echo firecloud-users-b64=$FIRECLOUD_USERS_B64 >> $GITHUB_OUTPUT
-          echo "::add-mask::$SAM_FIRESTORE_JSON_KEY_B64"
-          echo sam-firestore-json-key-b64=$SAM_FIRESTORE_JSON_KEY_B64 >> $GITHUB_OUTPUT
 
       - id: render-secrets-v2
         name: Render secrets v2 (eventually replacing render-secrets and getting rid of reliance on sensitive SA keys)
