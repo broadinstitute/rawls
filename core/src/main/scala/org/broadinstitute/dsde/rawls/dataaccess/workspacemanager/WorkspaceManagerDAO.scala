@@ -14,40 +14,46 @@ trait WorkspaceManagerDAO {
 
   def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
   def listWorkspaces(ctx: RawlsRequestContext, batchSize: Int = 100): List[WorkspaceDescription]
-  def createWorkspace(workspaceId: UUID, workspaceType: WorkspaceType, ctx: RawlsRequestContext): CreatedWorkspace
+  def createWorkspace(workspaceId: UUID,
+                      workspaceType: WorkspaceType,
+                      policyInputs: Option[WsmPolicyInputs],
+                      ctx: RawlsRequestContext
+  ): CreatedWorkspace
   def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                       displayName: String,
                                       spendProfileId: String,
                                       billingProjectNamespace: String,
                                       applicationIds: Seq[String],
+                                      cloudPlatform: CloudPlatform,
                                       policyInputs: Option[WsmPolicyInputs],
                                       ctx: RawlsRequestContext
-  ): CreatedWorkspace
+  ): CreateWorkspaceV2Result
+
+  def getCreateWorkspaceResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result
 
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
                      displayName: String,
-                     spendProfile: ProfileModel,
+                     spendProfile: Option[ProfileModel],
                      billingProjectNamespace: String,
                      ctx: RawlsRequestContext,
-                     location: Option[String] = None
+                     additionalPolicyInputs: Option[WsmPolicyInputs] = None
   ): CloneWorkspaceResult
 
   def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport
 
   def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
 
-  def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
-
-  def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                           jobControlId: String,
-                                           ctx: RawlsRequestContext
-  ): CreateCloudContextResult
   def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
 
   def deleteWorkspaceV2(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
 
   def getDeleteWorkspaceV2Result(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
+
+  def updateWorkspacePolicies(workspaceId: UUID,
+                              policyInputs: WsmPolicyInputs,
+                              ctx: RawlsRequestContext
+  ): WsmPolicyUpdateResult
 
   def createDataRepoSnapshotReference(workspaceId: UUID,
                                       snapshotId: UUID,
@@ -55,6 +61,7 @@ trait WorkspaceManagerDAO {
                                       description: Option[DataReferenceDescriptionField],
                                       instanceName: String,
                                       cloningInstructions: CloningInstructionsEnum,
+                                      properties: Option[Map[String, String]],
                                       ctx: RawlsRequestContext
   ): DataRepoSnapshotResource
   def updateDataRepoSnapshotReference(workspaceId: UUID,
@@ -153,6 +160,8 @@ trait WorkspaceManagerDAO {
   ): CreateLandingZoneResult
 
   def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
+
+  def getLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): AzureLandingZone
 
   /**
    * Initiate deletion of a landing zone.

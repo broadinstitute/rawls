@@ -6,6 +6,7 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsTestUtils}
 
+import java.nio.charset.StandardCharsets
 import java.sql.SQLException
 import java.util.UUID
 
@@ -168,44 +169,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(0)(activeAttributeCount4)
   }
 
-  it should "fail to saveEntityPatch for a nonexistent entity" in withConstantTestDatabase {
-    withWorkspaceContext(constantData.workspace) { context =>
-      val caught = intercept[RawlsException] {
-        runAndWait(
-          entityQuery.saveEntityPatch(
-            context,
-            AttributeEntityReference("Sample", "nonexistent"),
-            Map(AttributeName.withDefaultNS("newAttribute") -> AttributeNumber(2)),
-            Seq(AttributeName.withDefaultNS("type")),
-            RawlsTracingContext(None)
-          )
-        )
-      }
-      // make sure we get the _right_ RawlsException:
-      // "saveEntityPatch looked up $entityRef expecting 1 record, got 0 instead"
-      caught.getMessage should include("expecting")
-    }
-  }
-
-  it should "fail to saveEntityPatch if you try to delete and upsert the same attribute" in withConstantTestDatabase {
-    withWorkspaceContext(constantData.workspace) { context =>
-      val caught = intercept[RawlsException] {
-        runAndWait(
-          entityQuery.saveEntityPatch(
-            context,
-            AttributeEntityReference("Sample", "sample1"),
-            Map(AttributeName.withDefaultNS("type") -> AttributeNumber(2)),
-            Seq(AttributeName.withDefaultNS("type")),
-            RawlsTracingContext(None)
-          )
-        )
-      }
-      // make sure we get the _right_ RawlsException:
-      // "Can't saveEntityPatch on $entityRef because upserts and deletes share attributes <blah>"
-      caught.getMessage should include("share")
-    }
-  }
-
   it should "return false if the entity type does not exist" in withMinimalTestDatabase { _ =>
     withWorkspaceContext(testData.workspace) { context =>
       val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
@@ -220,204 +183,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val pair2EntityTypeExistsAfterUpdate = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
       assert(pair2EntityTypeExistsAfterUpdate)
 
-    }
-  }
-
-  it should "saveEntityPatch" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      val inserts = Map(
-        AttributeName.withDefaultNS("totallyNew") -> AttributeNumber(2),
-        AttributeName.withDefaultNS("quot2") -> testData.aliquot2.toReference
-      )
-      val updates = Map(
-        AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
-        AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("c"), AttributeString("d"))),
-        AttributeName.withDefaultNS("quot1") -> testData.aliquot2.toReference // jerk move
-      )
-      val deletes = Seq(AttributeName.withDefaultNS("whatsit"), AttributeName.withDefaultNS("nonexistent"))
-
-      val expected = testData.sample1.attributes ++ inserts ++ updates -- deletes
-
-      runAndWait {
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    inserts ++ updates,
-                                    deletes,
-                                    RawlsTracingContext(None)
-        )
-      }
-
-      assertSameElements(
-        expected,
-        runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-      )
-
-      // check that the all_attribute_values field was filled in correctly by searching on the new attributes and making sure one filtered result is found
-      assertResult(1) {
-        runAndWait(
-          entityQuery.loadEntityPageCounts(context,
-                                           "Sample",
-                                           model.EntityQuery(1,
-                                                             10,
-                                                             "name",
-                                                             SortDirections.Ascending,
-                                                             Option("sample1 2 tumor aliquot2 aliquot1 aliquot2 itsfoo")
-                                           ),
-                                           testContext
-          )
-        )._2
-      }
-    }
-  }
-
-  it should "update attribute list values" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      // insert new attribute 'myNewList' which is a list with 3 elements
-      val inserts = Map(
-        AttributeName.withDefaultNS("myNewList") -> AttributeValueList(
-          Seq(
-            AttributeString("abc"),
-            AttributeString("def"),
-            AttributeString("xyz")
-          )
-        )
-      )
-
-      val expectedAfterInsertion = testData.sample1.attributes ++ inserts
-
-      runAndWait(
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    inserts,
-                                    Seq.empty[AttributeName],
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      assertSameElements(expectedAfterInsertion,
-                         runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-      )
-
-      // update values in the list
-      val updates = Map(
-        AttributeName.withDefaultNS("myNewList") -> AttributeValueList(
-          Seq(
-            AttributeString("123"),
-            AttributeString("456"),
-            AttributeString("789")
-          )
-        )
-      )
-
-      val expectedAfterUpdate = testData.sample1.attributes ++ updates
-
-      runAndWait(
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    updates,
-                                    Seq.empty[AttributeName],
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      // check that the 'myNewList' attribute has updated values
-      assertSameElements(expectedAfterUpdate, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
-    }
-  }
-
-  it should "reflect changes in attribute when attribute value list size increases" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      // insert new attribute 'newEntityList' which is a list with 1 element
-      val inserts =
-        Map(AttributeName.withDefaultNS("newEntityList") -> AttributeValueList(Seq(AttributeString("abc1"))))
-
-      val expectedAfterInsertion = testData.sample1.attributes ++ inserts
-
-      runAndWait(
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    inserts,
-                                    Seq.empty[AttributeName],
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      assertSameElements(expectedAfterInsertion,
-                         runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-      )
-
-      // update 'newEntityList' to contain 4 elements
-      val updates = Map(
-        AttributeName.withDefaultNS("newEntityList") -> AttributeValueList(
-          Seq(
-            AttributeString("abc2"),
-            AttributeString("def"),
-            AttributeString("abc12"),
-            AttributeString("xyz")
-          )
-        )
-      )
-
-      val expectedAfterUpdate = testData.sample1.attributes ++ updates
-
-      runAndWait(
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    updates,
-                                    Seq.empty[AttributeName],
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      // check that the 'newEntityList' attribute has 4 values now
-      assertSameElements(expectedAfterUpdate, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
-    }
-  }
-
-  it should "reflect changes in attribute when attribute value list size decreases" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      // insert new attribute 'anotherList' which is a list with 3 elements
-      val inserts = Map(
-        AttributeName.withDefaultNS("anotherList") -> AttributeValueList(
-          Seq(
-            AttributeString("abc1"),
-            AttributeString("abc2"),
-            AttributeString("abc3")
-          )
-        )
-      )
-
-      val expectedAfterInsertion = testData.sample1.attributes ++ inserts
-
-      runAndWait(
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    inserts,
-                                    Seq.empty[AttributeName],
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      assertSameElements(expectedAfterInsertion,
-                         runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-      )
-
-      // update 'anotherList' to contain 1 element
-      val updates = Map(AttributeName.withDefaultNS("anotherList") -> AttributeValueList(Seq(AttributeString("1234"))))
-
-      val expectedAfterUpdate = testData.sample1.attributes ++ updates
-
-      runAndWait(
-        entityQuery.saveEntityPatch(context,
-                                    AttributeEntityReference("Sample", "sample1"),
-                                    updates,
-                                    Seq.empty[AttributeName],
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      // check that the 'anotherList' attribute has 1 value now
-      assertSameElements(expectedAfterUpdate, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
     }
   }
 
@@ -567,11 +332,28 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(testWorkspace) {
     dataSource =>
-      // it'll be longer than this (and thus will need trimming) because it'll get the entity name too
-      val veryLongString = "a" * EntityComponent.allAttributeValuesColumnSize
-      val sample1 = Entity("sample1",
-                           "Sample",
-                           Map(AttributeName.withDefaultNS("veryLongString") -> AttributeString(veryLongString))
+      /*
+       Create a long string composed of the recycle-symbol emoji. This string has 65534/4 characters in it, and we
+       will insert four copies of it into separate string attributes.
+
+       The recycle symbol used here is a triple-byte character. This means that each string is ~49151 bytes long.
+
+       Both the all_attributes_value and attribute_string columns in the db have a max byte length of 65535. We use
+       four separate attributes to ensure we will not overflow the attribute_string column ... but when concatenated
+       together, the value WOULD overflow all_attribute_values unless our trimming logic came into play.
+
+       This test verifies the all_attribute_values trimming logic.
+       */
+      val veryLongString = "♲" * (EntityComponent.allAttributeValuesColumnSize / 4)
+      val sample1 = Entity(
+        "sample1",
+        "Sample",
+        Map(
+          AttributeName.withDefaultNS("veryLongString1") -> AttributeString(veryLongString),
+          AttributeName.withDefaultNS("veryLongString2") -> AttributeString(veryLongString),
+          AttributeName.withDefaultNS("veryLongString3") -> AttributeString(veryLongString),
+          AttributeName.withDefaultNS("veryLongString4") -> AttributeString(veryLongString)
+        )
       )
       withWorkspaceContext(testWorkspace.workspace) { context =>
         runAndWait(entityQuery.save(context, sample1))
@@ -583,8 +365,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
               .result
           )
         )
+        // measure the byte size of the actual value is exactly what we specified
         assertResult(EntityComponent.allAttributeValuesColumnSize) {
-          entityRec.get.allAttributeValues.get.length
+          entityRec.get.allAttributeValues.get.getBytes(StandardCharsets.UTF_8).length
         }
       }
   }
@@ -1603,37 +1386,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       ) {
         recWithAttrs.map(_.withoutAllAttributeValues)
       }
-    }
-  }
-
-  it should "delete all values in an attribute list" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { wsctx =>
-      val entityToSave = Entity(
-        "testName",
-        "testType",
-        Map(
-          AttributeName.withDefaultNS("attributeListToDelete") -> AttributeValueList(
-            List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3), AttributeNumber(4), AttributeNumber(5))
-          )
-        )
-      )
-
-      runAndWait(entityQuery.save(wsctx, entityToSave))
-
-      val initialResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
-      assert(initialResult.get.attributes.nonEmpty)
-
-      runAndWait(
-        entityQuery.saveEntityPatch(wsctx,
-                                    entityToSave.toReference,
-                                    Map.empty,
-                                    List(AttributeName.withDefaultNS("attributeListToDelete")),
-                                    RawlsTracingContext(None)
-        )
-      )
-
-      val updatedResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
-      assert(updatedResult.get.attributes.isEmpty)
     }
   }
 

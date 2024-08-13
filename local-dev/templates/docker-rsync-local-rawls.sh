@@ -96,8 +96,8 @@ start_server () {
     -e JAVA_OPTS="$JAVA_OPTS" \
     -e GOOGLE_APPLICATION_CREDENTIALS='/etc/rawls-account.json' \
     -e GIT_HASH=$GIT_HASH \
-    hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 \
-    sbt clean \~reStart
+    sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 \
+    bash -c "git config --global --add safe.directory /app && sbt clean \~reStart"
 
     docker cp config/rawls-account.pem rawls-sbt:/etc/rawls-account.pem
     docker cp config/rawls-account.json rawls-sbt:/etc/rawls-account.json
@@ -177,10 +177,6 @@ fi
 
 #Configure a trap to enable proper cleanup if script exits prematurely.
 trap clean_up EXIT HUP INT QUIT PIPE TERM 0 20
-
-#ensure git secrets hooks in place
-cp -r ./hooks/ ./.git/hooks/
-chmod 755 ./.git/hooks/apply-git-secrets.sh
 
 echo "Creating shared volumes if they don't exist..."
 docker volume create --name rawls-shared-source

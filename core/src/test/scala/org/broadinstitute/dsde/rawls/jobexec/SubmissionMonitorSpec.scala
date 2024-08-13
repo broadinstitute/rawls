@@ -446,7 +446,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         Left(
           Some(
             WorkflowEntityUpdate(
-              entity.toReference,
+              entity,
               Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"),
                   AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")
               )
@@ -500,7 +500,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       Left(
         Some(
           WorkflowEntityUpdate(
-            entity.toReference,
+            entity,
             Map(AttributeName("library", "bar") -> AttributeString("hello world!"),
                 AttributeName("library", "baz") -> AttributeString("hello world.")
             )
@@ -554,7 +554,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         Left(
           Some(
             WorkflowEntityUpdate(
-              entity.toReference,
+              entity,
               Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"),
                   AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")
               )
@@ -598,7 +598,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
     )
 
-    assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map.empty)), None))) {
+    assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity, Map.empty)), None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
@@ -638,9 +638,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       Seq(
         Left(
           (Some(
-             WorkflowEntityUpdate(entity.toReference,
-                                  Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello"))
-             )
+             WorkflowEntityUpdate(entity, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello")))
            ),
            None
           )
@@ -680,7 +678,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
     )
 
-    assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map())), None))) {
+    assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity, Map())), None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
@@ -1902,7 +1900,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         mockGoogleServicesDAO,
         mockNotificationDAO,
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
-        new Builder().build(),
         config,
         ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
         "test"

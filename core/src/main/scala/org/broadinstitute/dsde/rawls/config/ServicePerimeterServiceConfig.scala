@@ -14,8 +14,7 @@ final case class ServicePerimeterServiceConfig(
 )
 
 case object ServicePerimeterServiceConfig {
-  def apply[T <: ServicePerimeterServiceConfig](conf: Config): ServicePerimeterServiceConfig = {
-    val gcsConfig = conf.getConfig("gcs")
+  def apply[T <: ServicePerimeterServiceConfig](gcsConfig: Config): ServicePerimeterServiceConfig = {
     val staticProjectConfig = gcsConfig.getConfig("servicePerimeters.staticProjects")
 
     val mappings: Map[ServicePerimeterName, Seq[GoogleProjectNumber]] = staticProjectConfig

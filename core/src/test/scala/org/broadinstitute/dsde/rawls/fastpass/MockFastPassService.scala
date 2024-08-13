@@ -43,7 +43,7 @@ object MockFastPassService {
             terraBucketWriterRole: String
   )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
     executionContext: ExecutionContext
-  ): (FastPassService, GoogleServicesDAO, SamDAO) = {
+  ): (FastPassServiceImpl, GoogleServicesDAO, SamDAO) = {
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
 
     val mockGcsDAO = spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
@@ -51,7 +51,7 @@ object MockFastPassService {
 
     setupUsers(user, testUsers, mockSamDAO, mockGcsDAO)
     (spy(
-       new FastPassService(
+       new FastPassServiceImpl(
          ctx,
          dataSource,
          config,

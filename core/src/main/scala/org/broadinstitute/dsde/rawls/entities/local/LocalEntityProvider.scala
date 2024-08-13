@@ -228,19 +228,21 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[Stream[SubmissionValidationEntityInputs]] =
-    dataSource.inTransaction { dataAccess =>
-      withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
-        // Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-        evaluateExpressionsInternal(workspaceContext,
-                                    gatherInputsResult.processableInputs,
-                                    jobEntityRecs,
-                                    dataAccess
-        ) map { valuesByEntity =>
-          createSubmissionValidationEntityInputs(valuesByEntity)
-        }
-      }
-    }
+  ): Future[LazyList[SubmissionValidationEntityInputs]] =
+    dataSource.inTransaction(
+      dataAccess =>
+        withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
+          // Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
+          evaluateExpressionsInternal(workspaceContext,
+                                      gatherInputsResult.processableInputs,
+                                      jobEntityRecs,
+                                      dataAccess
+          ) map { valuesByEntity =>
+            createSubmissionValidationEntityInputs(valuesByEntity)
+          }
+        },
+      TransactionIsolation.ReadCommitted
+    )
 
   override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
 
@@ -286,11 +288,12 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] =
-    dataSource.inTransaction { dataAccess =>
-      withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-        DBIO.successful(entity)
-      }
-    }
+    dataSource.inTransaction(dataAccess =>
+                               withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+                                 DBIO.successful(entity)
+                               },
+                             TransactionIsolation.ReadCommitted
+    )
 
   /**
     * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
@@ -325,9 +328,10 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     // if filtering by name, retrieve that entity directly, else do the full query:
     nameFilter match {
       case Some(entityName) =>
-        dataSource.inTransaction { dataAccess =>
-          dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query)
-        } map { case (unfilteredCount, filteredCount, entity) =>
+        dataSource.inTransaction(
+          dataAccess => dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query),
+          TransactionIsolation.ReadCommitted
+        ) map { case (unfilteredCount, filteredCount, entity) =>
           val pageCount = if (entity.nonEmpty) 1 else 0
           val entitySource = if (entity.nonEmpty) Source.single(entity.head) else Source.empty
 
@@ -367,25 +371,27 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                query: EntityQuery,
                                parentContext: RawlsRequestContext
   ): Future[EntityQueryResultMetadata] =
-    dataSource.inTransaction { dataAccess =>
-      for {
-        (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
-                                                                                        entityType,
-                                                                                        query,
-                                                                                        parentContext
-        )
-      } yield {
-        val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-        if (filteredCount > 0 && query.page > pageCount) {
-          throw new DataEntityException(
-            code = StatusCodes.BadRequest,
-            message = s"requested page ${query.page} is greater than the number of pages $pageCount"
+    dataSource.inTransaction(
+      dataAccess =>
+        for {
+          (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
+                                                                                          entityType,
+                                                                                          query,
+                                                                                          parentContext
           )
-        }
+        } yield {
+          val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+          if (filteredCount > 0 && query.page > pageCount) {
+            throw new DataEntityException(
+              code = StatusCodes.BadRequest,
+              message = s"requested page ${query.page} is greater than the number of pages $pageCount"
+            )
+          }
 
-        EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
-      }
-    }
+          EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+        },
+      TransactionIsolation.ReadCommitted
+    )
 
   /**
    * generates a Source[Entity, _] representing the individual Entity results for the incoming query.

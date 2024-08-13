@@ -9,12 +9,13 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
@@ -28,6 +29,7 @@ trait AdminApiService extends UserInfoDirectives {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService
   val userServiceConstructor: RawlsRequestContext => UserService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
 
@@ -45,30 +47,10 @@ trait AdminApiService extends UserInfoDirectives {
           }
         }
       } ~
-        path("admin" / "project" / "registration") {
-          post {
-            entity(as[RawlsBillingProjectTransfer]) { xfer =>
-              complete {
-                userServiceConstructor(ctx).adminRegisterBillingProject(xfer).map(_ => StatusCodes.Created)
-              }
-            }
-          }
-        } ~
-        path("admin" / "project" / "registration" / Segment) { projectName =>
-          delete {
-            entity(as[Map[String, String]]) { ownerInfo =>
-              complete {
-                userServiceConstructor(ctx)
-                  .adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo)
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
-        } ~
         path("admin" / "submissions") {
           get {
             complete {
-              workspaceServiceConstructor(ctx).adminListAllActiveSubmissions()
+              submissionsServiceConstructor(ctx).adminListAllActiveSubmissions()
             }
           }
         } ~
@@ -76,7 +58,7 @@ trait AdminApiService extends UserInfoDirectives {
           (workspaceNamespace, workspaceName, submissionId) =>
             delete {
               complete {
-                workspaceServiceConstructor(ctx)
+                submissionsServiceConstructor(ctx)
                   .adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
                   .map { count =>
                     if (count == 1) StatusCodes.NoContent -> None
@@ -93,7 +75,7 @@ trait AdminApiService extends UserInfoDirectives {
         path("admin" / "submissions" / "queueStatusByUser") {
           get {
             complete {
-              workspaceServiceConstructor(ctx).adminWorkflowQueueStatusByUser
+              submissionsServiceConstructor(ctx).adminWorkflowQueueStatusByUser
             }
           }
         } ~

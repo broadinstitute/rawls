@@ -7,10 +7,9 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{AzureContext, JobReport, JobResult, WorkspaceDescription, ErrorReport => _}
+import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
-import io.opencensus.trace.Span
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -33,7 +32,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
-import spray.json.{JsObject, enrichAny}
+import spray.json.{enrichAny, JsObject}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
@@ -405,10 +404,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
 
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
+    val authDomain = Some(Set(ManagedGroupRef(RawlsGroupName("Test-Realm"))))
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Map.empty
+      Map.empty,
+      authorizationDomain = authDomain
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
@@ -419,11 +420,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, authDomain)
         }
+        val details = responseAs[WorkspaceDetails]
+        details.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
         assertResult(newWorkspace) {
-          val ws = responseAs[WorkspaceDetails]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty))
+          WorkspaceRequest(details.namespace,
+                           details.name,
+                           details.attributes.getOrElse(Map()),
+                           details.authorizationDomain
+          )
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -469,6 +475,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val ws = responseAs[WorkspaceDetails]
         ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
+        ws.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
       }
   }
 
@@ -1257,6 +1264,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Set(
             WorkspaceListResponse(
               WorkspaceAccessLevels.Owner,
+              Some(true),
+              Some(true),
               WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime),
                                                        Option(Set.empty),
                                                        true,
@@ -1268,6 +1277,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             ),
             WorkspaceListResponse(
               WorkspaceAccessLevels.Owner,
+              Some(true),
+              Some(true),
               WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace2.copy(lastModified = dateTime),
                                                        Option(Set.empty),
                                                        true,
@@ -1336,6 +1347,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Set(
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(testData.workspace.copy(lastModified = dateTime),
                                                          Option(Set.empty),
                                                          true,
@@ -1347,6 +1360,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               ),
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(
                   testData.workspaceFailedSubmission.copy(lastModified = dateTime),
                   Option(Set.empty),
@@ -2649,19 +2664,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a reader-access user to request bucket usage" in withTestWorkspacesApiServicesAndUser(
-    "reader-access"
-  ) { services =>
-    Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-      sealRoute(services.workspaceRoutes()) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
-  for (access <- Seq("owner-access", "writer-access"))
+  for (access <- Seq("owner-access", "writer-access", "reader-access"))
     it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(
       access
     ) { services =>

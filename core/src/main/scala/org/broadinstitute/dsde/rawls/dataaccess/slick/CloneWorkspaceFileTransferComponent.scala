@@ -30,14 +30,10 @@ trait CloneWorkspaceFileTransferComponent {
     def finished = column[Option[Timestamp]]("FINISHED")
     def outcome = column[Option[String]]("OUTCOME")
 
-    def * = (id,
-             destWorkspaceId,
-             sourceWorkspaceId,
-             copyFilesWithPrefix,
-             created,
-             finished,
-             outcome
-    ) <> (CloneWorkspaceFileTransferRecord.tupled, CloneWorkspaceFileTransferRecord.unapply)
+    def * = (id, destWorkspaceId, sourceWorkspaceId, copyFilesWithPrefix, created, finished, outcome) <> (
+      CloneWorkspaceFileTransferRecord.tupled,
+      CloneWorkspaceFileTransferRecord.unapply
+    )
   }
 
   object cloneWorkspaceFileTransferQuery extends TableQuery(new CloneWorkspaceFileTransferTable(_)) {

@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{
   monitorRecord,
@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceCon
 }
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doAnswer, doReturn, spy, verify}
+import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -108,52 +108,6 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
   }
 
-  it should "return a completed status if no user email is set on the job" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-
-    doAnswer(answer =>
-      Future.successful(Some(workspace.copy(errorMessage = Some(answer.getArgument(1).asInstanceOf[String]))))
-    ).when(runner)
-      .cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-  }
-
-  it should "return Incomplete when the if the user context cannot be created" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-    doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
-      .when(runner)
-      .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include(workspaceId.toString)
-      errorMessage should include(userEmail)
-      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
-    }.when(runner)
-      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-  }
-
   it should "report errors from api response and complete the job for jobs failed with a 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -173,7 +127,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -205,7 +159,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -238,7 +192,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+    when(runner.samDAO.rawlsSAContext).thenReturn(ctx)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]

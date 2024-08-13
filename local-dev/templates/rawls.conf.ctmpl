@@ -14,7 +14,6 @@
 {{- $landingZonePostgres := (secret "secret/dsde/terra/azure/dev/workspacemanager/azure-postgres-credential" ).Data -}}
 
 backRawls = false
-
 gcs {
   deletedBucketCheckSeconds = "21600"
   adminRegisterBillingAccountId = "billingAccounts/{{ (secret "secret/dsde/firecloud/local/rawls/gcs/admin-billing-account-id").Data.id }}"
@@ -90,18 +89,8 @@ bond {
   baseUrl = "https://broad-bond-dev.appspot.com"
 }
 
-martha {
-  baseUrl = "https://us-central1-broad-dsde-dev.cloudfunctions.net"
-}
-
-drs {
-    martha {
-      baseUrl = "https://us-central1-broad-dsde-dev.cloudfunctions.net"
-    }
-    drshub {
-      baseUrl = "https://drshub.dsde-dev.broadinstitute.org"
-    }
-    resolver = "drshub"
+drshub {
+  baseUrl = "https://drshub.dsde-dev.broadinstitute.org"
 }
 
 billingProfileManager {
@@ -162,15 +151,13 @@ executionservice {
   cromiamUrl = "https://cromiam-priv.dsde-dev.broadinstitute.org"
 }
 avroUpsertMonitor {
-  pubSubProject = "broad-dsde-dev"
+  # read by HttpCwdsDao
+  cwds = "https://cwds.dsde-dev.broadinstitute.org"
 
-  server = "https://terra-importservice-dev.appspot.com"
-  bucketName = "import-service-batchupsert-dev"
-
+  # read by BootMonitors.scala
   importRequestPubSubTopic = "rawls-async-import-topic-local"
   importRequestPubSubSubscription = "rawls-async-import-topic-sub-local"
-  updateImportStatusPubSubProject = "terra-importservice-dev"
-  updateImportStatusPubSubTopic = "import-service-notify-local"
+  updateCwdsPubSubTopic = "cwds-notify-local"
 
   batchSize = 1000
   ackDeadlineSeconds = 600
@@ -322,7 +309,7 @@ directory {
 oidc {
   authorityEndpoint = "https://terra{{ $b2cTenant }}b2c.b2clogin.com/terra{{ $b2cTenant }}b2c.onmicrosoft.com/v2.0?p=b2c_1a_signup_signin_{{ $b2cEnv }}"
   oidcClientId = "{{ $b2cAppId }}"
-  legacyGoogleClientId = "{{ $refreshTokenCredential.web.client_id }}"
+  authorityEndpointWithGoogleBillingScope = "https://terra{{ $b2cTenant }}b2c.b2clogin.com/terra{{ $b2cTenant }}b2c.onmicrosoft.com/v2.0?p=b2c_1a_signup_signin_billing_{{ $b2cEnv }}"
 }
 
 # TODO: remove once https://github.com/broadinstitute/rawls/pull/1794 is merged
@@ -386,14 +373,17 @@ multiCloudWorkspaces {
 
     landingZoneParameters = {
       # Total Network IP Space Size - 16,384 unique ips
+      # 10.1.0.0 - 10.1.63.255
       "VNET_ADDRESS_SPACE": "10.1.0.0/18"
-      # Each subnet will have 1024 unique ips
-      # This intenionally leaves a large number of the vnet address space unallocated
-      # This is hedging against future need for additional subnets or expanding the current ones
+      # 10.1.0.0 - 10.1.3.255 -- 1024 ips
       "AKS_SUBNET": "10.1.0.0/22"
-      "BATCH_SUBNET": "10.1.4.0/22"
+      # 10.1.4.0 - 10.1.7.255 -- 1024 ips
+      "COMPUTE_SUBNET": "10.1.4.0/22"
+      # 10.1.8.0 - 10.1.11.255 -- 1024 ips
       "POSTGRESQL_SUBNET": "10.1.8.0/22"
-      "COMPUTE_SUBNET": "10.1.12.0/22"
+      # gap from 10.1.12.0 - 10.1.31.255 -- available for future use
+      # 10.1.32.0 - 10.1.63.254 -- 8192 ips
+      "BATCH_SUBNET": "10.1.32.0/19"
       "POSTGRES_DB_ADMIN": "{{ $landingZonePostgres.username }}"
       "POSTGRES_DB_PASSWORD": "{{ $landingZonePostgres.password }}"
       "AKS_AUTOSCALING_ENABLED": "true"

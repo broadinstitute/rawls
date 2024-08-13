@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
   _
 }
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
+import org.broadinstitute.dsde.rawls.workspace.{AttributeUpdateOperationException, WorkspaceRepository}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
@@ -61,6 +61,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
+
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
@@ -141,22 +144,27 @@ class EntityService(protected val ctx: RawlsRequestContext,
                      dataReference: Option[DataReferenceName],
                      billingProject: Option[GoogleProjectId]
   ): Future[Set[AttributeEntityReference]] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
+    // short-circuit: if caller requested to delete nothing, then we do nothing
+    if (entRefs.isEmpty) {
+      Future.successful(Set.empty)
+    } else {
+      getV2WorkspaceContextAndPermissions(workspaceName,
+                                          SamWorkspaceActions.write,
+                                          Some(WorkspaceAttributeSpecs(all = false))
+      ) flatMap { workspaceContext =>
+        val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
-      val deleteFuture = for {
-        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntities(entRefs)
-      } yield Set[AttributeEntityReference]()
+        val deleteFuture = for {
+          entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+          _ <- entityProvider.deleteEntities(entRefs)
+        } yield Set[AttributeEntityReference]()
 
-      deleteFuture
-        .recover { case delEx: DeleteEntitiesConflictException =>
-          delEx.referringEntities
-        }
-        .recover(bigQueryRecover)
+        deleteFuture
+          .recover { case delEx: DeleteEntitiesConflictException =>
+            delEx.referringEntities
+          }
+          .recover(bigQueryRecover)
+      }
     }
 
   def deleteEntitiesOfType(workspaceName: WorkspaceName,
@@ -287,39 +295,41 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                         SamWorkspaceActions.read,
                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity =>
-              tryValuesByEntity match {
-                // parsing failure
-                case Failure(regret) =>
-                  throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                case Success(valuesByEntity) =>
-                  if (valuesByEntity.size != 1) {
-                    // wrong number of entities?!
-                    throw new RawlsException(
-                      s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                    )
-                  } else {
-                    assert(valuesByEntity.head._1 == entityName)
-                    valuesByEntity.head match {
-                      case (_, Success(result)) => result.toSeq
-                      case (_, Failure(regret)) =>
-                        throw new RawlsExceptionWithErrorReport(
-                          errorReport = ErrorReport(
-                            StatusCodes.BadRequest,
-                            "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                            ErrorReport(regret)
+      dataSource.inTransaction(
+        dataAccess =>
+          withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
+              evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity =>
+                tryValuesByEntity match {
+                  // parsing failure
+                  case Failure(regret) =>
+                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
+                  case Success(valuesByEntity) =>
+                    if (valuesByEntity.size != 1) {
+                      // wrong number of entities?!
+                      throw new RawlsException(
+                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
+                      )
+                    } else {
+                      assert(valuesByEntity.head._1 == entityName)
+                      valuesByEntity.head match {
+                        case (_, Success(result)) => result.toSeq
+                        case (_, Failure(regret)) =>
+                          throw new RawlsExceptionWithErrorReport(
+                            errorReport = ErrorReport(
+                              StatusCodes.BadRequest,
+                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
+                              ErrorReport(regret)
+                            )
                           )
-                        )
+                      }
                     }
-                  }
+                }
               }
             }
-          }
-        }
-      }
+          },
+        TransactionIsolation.ReadCommitted
+      )
     }
 
   def entityTypeMetadata(workspaceName: WorkspaceName,

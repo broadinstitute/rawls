@@ -218,24 +218,6 @@ class HealthMonitorSpec
     )
   }
 
-  // Ignored due to PROD-791, which stubs groups status checks to always return ok
-  it should "return a non-ok for Google Groups" ignore {
-    val actor = newHealthMonitorActor(googleServicesDAO = mockGoogleServicesDAO_noGroups)
-    actor ! CheckAll
-    checkCurrentStatus(
-      actor,
-      false,
-      successes = AllSubsystems.filterNot(_ == GoogleGroups),
-      failures = Set(GoogleGroups),
-      errorMessages = { case (GoogleGroups, Some(messages)) =>
-        messages.size should be(2)
-        messages.foreach(_ should startWith("Could not find"))
-        messages(0) should endWith("group1")
-        messages(1) should endWith("group2")
-      }
-    )
-  }
-
   it should "return a non-ok for Google PubSub" in {
     val actor = newHealthMonitorActor(googlePubSubDAO = mockGooglePubSubDAO_noTopics)
     actor ! CheckAll
@@ -307,7 +289,7 @@ class HealthMonitorSpec
                               mockExecutionServiceServers
   ): ActorRef =
     system.actorOf(
-      HealthMonitor.props(
+      HealthMonitor.propsInGoogleControlPlane(
         slickDataSource,
         googleServicesDAO,
         googlePubSubDAO,
@@ -316,7 +298,6 @@ class HealthMonitorSpec
         billingProfileManagerDAO,
         workspaceManagerDAO,
         executionServiceServers,
-        Seq("group1", "group2"),
         Seq("topic1", "topic2"),
         Seq("bucket1", "bucket2"),
         futureTimeout,

@@ -220,13 +220,10 @@ trait RawlsBillingProjectComponent {
 
     def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
 
-    def * = (projectName,
-             operationName,
-             operationId,
-             done,
-             errorMessage,
-             api
-    ) <> (RawlsBillingProjectOperationRecord.tupled, RawlsBillingProjectOperationRecord.unapply)
+    def * = (projectName, operationName, operationId, done, errorMessage, api) <> (
+      RawlsBillingProjectOperationRecord.tupled,
+      RawlsBillingProjectOperationRecord.unapply
+    )
   }
 
   protected val rawlsBillingProjectOperationQuery = TableQuery[RawlsBillingProjectOperationTable]

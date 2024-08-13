@@ -8,6 +8,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -29,7 +30,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 10/27/15.
@@ -44,9 +45,7 @@ object UserService {
     samDAO: SamDAO,
     bqServiceFactory: GoogleBigQueryServiceFactory,
     bigQueryCredentialJson: String,
-    requesterPaysRole: String,
     servicePerimeterService: ServicePerimeterService,
-    adminRegisterBillingAccountId: RawlsBillingAccountName,
     billingProfileManagerDAO: BillingProfileManagerDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     notificationDAO: NotificationDAO
@@ -58,13 +57,10 @@ object UserService {
       samDAO,
       bqServiceFactory,
       bigQueryCredentialJson,
-      requesterPaysRole,
       servicePerimeterService,
-      adminRegisterBillingAccountId,
       workspaceManagerDAO,
       billingProfileManagerDAO,
       new BillingRepository(dataSource),
-      new WorkspaceManagerResourceMonitorRecordDao(dataSource),
       notificationDAO
     )
 
@@ -175,13 +171,10 @@ class UserService(
   val samDAO: SamDAO,
   bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
-  requesterPaysRole: String,
   servicePerimeterService: ServicePerimeterService,
-  adminRegisterBillingAccountId: RawlsBillingAccountName,
-  workspaceManagerDAO: WorkspaceManagerDAO,
+  val workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
   val billingRepository: BillingRepository,
-  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao,
   notificationDAO: NotificationDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
@@ -285,7 +278,7 @@ class UserService(
       _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
     }
   } yield billingProject.flatMap(p =>
-    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles)) else None
+    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDAO)) else None
   )
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
@@ -298,11 +291,12 @@ class UserService(
     resourceIds = rolesByResourceId.keySet
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
     projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
+    workspaceManagerDao = workspaceManagerDAO
   } yield projectsInDB.toList
     .map { p =>
       val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
       val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
-      mapCloudPlatformAndPolicies(p, billingProfile, roles)
+      mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDao)
     }
     .filter(p => p.roles.nonEmpty)
 
@@ -315,15 +309,30 @@ class UserService(
   def mapCloudPlatformAndPolicies(
     project: RawlsBillingProject,
     billingProfile: Option[ProfileModel],
-    roles: Set[ProjectRole]
+    roles: Set[ProjectRole],
+    workspaceManagerDao: WorkspaceManagerDAO
   ): RawlsBillingProjectResponse = (project.billingProfileId, billingProfile) match {
     case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP, protectedData = None)
     case (Some(_), Some(p)) =>
       val platform = CloudPlatform(p)
-      val responseProject = if (platform == CloudPlatform.AZURE) {
+      val (responseProject, maybeRegion) = if (platform == CloudPlatform.AZURE) {
         val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-        project.copy(azureManagedAppCoordinates = Some(c))
-      } else project
+        val projectWithCoords = project.copy(azureManagedAppCoordinates = Some(c))
+        val landingZoneRegion = project.landingZoneId match {
+          case Some(landingZoneId) =>
+            Try(workspaceManagerDao.getLandingZone(UUID.fromString(landingZoneId), ctx)) match {
+              case Success(landingZone) => Option(landingZone.getRegion)
+              case Failure(exception) =>
+                logger.debug(
+                  s"landing zone ${landingZoneId} could not be retrieved from the workspaceManagerDao",
+                  exception
+                )
+                None
+            }
+          case None => None
+        }
+        (projectWithCoords, landingZoneRegion)
+      } else (project, None)
       val protectedData = Option(p.getPolicies) match {
         case Some(policies) =>
           Option(
@@ -333,8 +342,16 @@ class UserService(
           )
         case None => Option(false)
       }
-
-      RawlsBillingProjectResponse(roles, responseProject, platform, protectedData)
+      RawlsBillingProjectResponse(
+        roles,
+        responseProject,
+        platform,
+        protectedData,
+        region = maybeRegion,
+        organization = Option(p.getOrganization).map(org =>
+          RawlsBillingProjectOrganization(org.isEnterprise, org.getLimits.asScala.toMap)
+        )
+      )
     case (Some(id), None) =>
       val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
       RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
@@ -404,37 +421,6 @@ class UserService(
           email <- policy.memberEmails
         } yield RawlsBillingProjectMember(RawlsUserEmail(email.value), role)
       }
-
-  /**
-    * Unregisters a billing project with OwnerInfo provided in the request body.
-    *
-    * The admin unregister endpoint does not delete the Google project in Google when we unregister it. Project
-    * registration allows tests to use existing Google projects (like GPAlloc) as if Rawls had created it,
-    * so we should not delete those pre-existing Google projects when we unregister them.
-    *
-    * @param projectName The project name to be unregistered.
-    * @param ownerInfo   A map parsed from request body contains the project's owner info.
-    * */
-  def adminUnregisterBillingProjectWithOwnerInfo(projectName: RawlsBillingProjectName,
-                                                 ownerInfo: Map[String, String]
-  ): Future[Unit] =
-    asFCAdmin {
-      val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")),
-                                   OAuth2BearerToken(ownerInfo("newOwnerToken")),
-                                   3600,
-                                   RawlsUserSubjectId("0")
-      )
-      for {
-        _ <- deleteGoogleProjectIfChild(projectName,
-                                        ownerUserInfo,
-                                        gcsDAO,
-                                        samDAO,
-                                        ctx,
-                                        deleteGoogleProjectWithGoogle = false
-        )
-        result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
-      } yield result
-    }
 
   /**
     * Unregisters a billing project with UserInfo provided in parameter
@@ -586,95 +572,6 @@ class UserService(
       }
     }
 
-  // very sad: have to pass the new owner's token in the POST body (oh no!)
-  // we could instead exploit the fact that Sam will let you create pets in projects you're not in (!!!),
-  // but that seems extremely shady
-  // We believe this is mostly used by gpalloc/only used by gpalloc, which is why the billing account
-  // is hard coded.
-  def adminRegisterBillingProject(xfer: RawlsBillingProjectTransfer): Future[Unit] =
-    asFCAdmin {
-      val billingProjectName = RawlsBillingProjectName(xfer.project)
-      val project =
-        RawlsBillingProject(billingProjectName, CreationStatuses.Ready, Option(adminRegisterBillingAccountId), None)
-      val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail),
-                                   OAuth2BearerToken(xfer.newOwnerToken),
-                                   3600,
-                                   RawlsUserSubjectId("0")
-      )
-
-      (for {
-        _ <- dataSource.inTransaction(dataAccess => dataAccess.rawlsBillingProjectQuery.create(project))
-
-        _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ctx)
-        _ <- samDAO.createResourceFull(
-          SamResourceTypeNames.googleProject,
-          project.projectName.value,
-          Map.empty,
-          Set.empty,
-          ctx.copy(userInfo = ownerUserInfo),
-          Option(SamFullyQualifiedResourceId(project.projectName.value, SamResourceTypeNames.billingProject.value))
-        )
-        _ <- samDAO.overwritePolicy(
-          SamResourceTypeNames.billingProject,
-          billingProjectName.value,
-          SamBillingProjectPolicyNames.workspaceCreator,
-          SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)),
-          ctx.copy(userInfo = ownerUserInfo)
-        )
-        _ <- samDAO.overwritePolicy(
-          SamResourceTypeNames.billingProject,
-          billingProjectName.value,
-          SamBillingProjectPolicyNames.canComputeUser,
-          SamPolicy(Set.empty,
-                    Set.empty,
-                    Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
-          ),
-          ctx.copy(userInfo = ownerUserInfo)
-        )
-        ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, project.projectName)
-        computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO, project.projectName)
-
-        policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
-
-        _ <- gcsDAO.addPolicyBindings(project.googleProjectId, policiesToAdd)
-        _ <- gcsDAO.grantReadAccess(xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
-      } yield {}).recoverWith { case t: Throwable =>
-        // attempt cleanup then rethrow
-        for {
-          _ <- samDAO
-            .deleteResource(SamResourceTypeNames.googleProject,
-                            project.projectName.value,
-                            ctx.copy(userInfo = ownerUserInfo)
-            )
-            .recover { case x =>
-              logger.debug(
-                s"failure deleting google project ${project.projectName.value} from sam during error recovery cleanup.",
-                x
-              )
-            }
-          _ <- samDAO
-            .deleteResource(SamResourceTypeNames.billingProject,
-                            project.projectName.value,
-                            ctx.copy(userInfo = ownerUserInfo)
-            )
-            .recover { case x =>
-              logger.debug(
-                s"failure deleting billing project ${project.projectName.value} from sam during error recovery cleanup.",
-                x
-              )
-            }
-          _ <- dataSource
-            .inTransaction(dataAccess => dataAccess.rawlsBillingProjectQuery.delete(project.projectName))
-            .recover { case x =>
-              logger.debug(
-                s"failure deleting billing project ${project.projectName.value} from rawls db during error recovery cleanup.",
-                x
-              )
-            }
-        } yield throw t
-      }
-    }
-
   private def getLegacyBillingPolicies(samRole: ProjectRole): Seq[SamResourcePolicyName] =
     samRole match {
       case ProjectRoles.Owner => Seq(SamBillingProjectPolicyNames.owner)
@@ -770,16 +667,17 @@ class UserService(
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
         billingProfileId <- billingRepository.getBillingProfileId(projectName)
-        _ <- billingProfileId match {
-          case Some(billingProfileId) =>
+        _ = (billingProfileId, projectAccessUpdate.email) match {
+          case (Some(billingProfileId), ctx.userInfo.userEmail.value) =>
+            billingProfileManagerDAO.leaveProfile(UUID.fromString(billingProfileId), ctx)
+          case (Some(billingProfileId), _) =>
             billingProfileManagerDAO.deleteProfilePolicyMember(
               UUID.fromString(billingProfileId),
               ProfilePolicy.fromProjectRole(projectAccessUpdate.role),
               projectAccessUpdate.email,
               ctx
             )
-            Future.successful()
-          case None => Future.successful()
+          case (None, _) => ()
         }
         _ <- removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
       } yield {}
@@ -851,12 +749,41 @@ class UserService(
     billingAccount: Option[RawlsBillingAccountName]
   ): Future[Option[RawlsBillingProjectResponse]] = for {
     project <- updateBillingAccountInDatabase(projectName, billingAccount)
+    _ <- project
+      .collect { p =>
+        p.billingProfileId.collect { pf =>
+          updateBillingAccountInBillingProfile(pf, billingAccount)
+        }
+      }
+      .flatten
+      .sequence
     projectRoles <- samDAO
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
   } yield project.flatMap { p =>
-    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
+    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p, platform = CloudPlatform.GCP))
+    else None
   }
+
+  private def updateBillingAccountInBillingProfile(billingProfileId: String,
+                                                   billingAccount: Option[RawlsBillingAccountName]
+  ): Future[Unit] =
+    (billingAccount match {
+      case Some(newBillingAccount) =>
+        billingProfileManagerDAO
+          .updateBillingProfile(UUID.fromString(billingProfileId), newBillingAccount, ctx)
+          .flatMap(_ => Future.unit)
+      case None =>
+        billingProfileManagerDAO.removeBillingAccountFromBillingProfile(UUID.fromString(billingProfileId), ctx)
+    }).recover {
+      // Until BPM is the system of record for Terra billing information, Rawls will not throw an exception if BPM fails to update
+      case e: Exception =>
+        val message =
+          s"Failed to update billing account in BPM [billingProfile=$billingProfileId, billingAccount=${billingAccount
+              .map(_.value)}]"
+        logger.warn(message, e)
+        Sentry.captureException(new RawlsException(message, cause = e))
+    }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]

@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   TestDriverComponent
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactory,
+  GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
   SlickDataSource
 }
@@ -128,7 +128,7 @@ class EntityServiceSpec
     def actorRefFactory = system
     val samDAO = new MockSamDAO(dataSource)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val testConf = ConfigFactory.load()
 
@@ -462,6 +462,29 @@ class EntityServiceSpec
       }
       ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
       ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+  }
+
+  it should "do nothing when asked to delete zero entities" in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    // get metadata for all entities in this workspace before calling deleteEntities()
+    val metadataBefore =
+      Await.result(services.entityService.entityTypeMetadata(testData.wsName, None, None, useCache = false),
+                   waitDuration
+      )
+
+    // call deleteEntities() with an empty input, should return zero entities deleted
+    assertResult(Set.empty) {
+      Await.result(services.entityService.deleteEntities(testData.wsName, Seq.empty, None, None), waitDuration)
+    }
+
+    // get metadata for all entities in this workspace after calling deleteEntities()
+    val metadataAfter =
+      Await.result(services.entityService.entityTypeMetadata(testData.wsName, None, None, useCache = false),
+                   waitDuration
+      )
+
+    // metadata should be the same before and after
+    metadataAfter shouldBe metadataBefore
   }
 
   // all following tests can use the same exemplar data, no need to re-create it for each unit test

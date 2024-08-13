@@ -6,7 +6,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
-import com.google.cloud.storage.{Acl, BucketInfo, Storage, StorageClass}
+import com.google.cloud.storage.{Acl, BucketInfo, Cors, Storage, StorageClass}
 import com.google.rpc.Code
 import com.google.storagetransfer.v1.proto.TransferTypes._
 import io.grpc.{Status, StatusRuntimeException}
@@ -528,31 +528,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
-  it should "fail the migration when the billing account on the billing project is invalid" in
-    runMigrationTest {
-      for {
-        _ <- inTransaction { dataAccess =>
-          import dataAccess.{executionContext => _, _}
-          for {
-            _ <- createAndScheduleWorkspace(testData.workspace)
-            _ <- writeStarted(testData.workspace.workspaceIdAsUUID)
-            _ <- rawlsBillingProjectQuery
-              .withProjectName(RawlsBillingProjectName(testData.workspace.namespace))
-              .setInvalidBillingAccount(true)
-          } yield ()
-        }
-
-        _ <- migrate
-
-        migration <- inTransactionT {
-          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
-        }
-      } yield {
-        migration.finished shouldBe defined
-        migration.outcome.value.failureMessage should include("invalid billing account on billing project")
-      }
-    }
-
   it should "fail the migration when the billing account on the workspace does not match the billing account on the billing project" in
     runMigrationTest {
       val workspace = testData.workspace.copy(
@@ -620,7 +595,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                     location: Option[String],
                                     bucketTargetOptions: List[Storage.BucketTargetOption],
                                     autoclassEnabled: Boolean,
-                                    autoclassTerminalStorageClass: Option[StorageClass]
+                                    autoclassTerminalStorageClass: Option[StorageClass],
+                                    cors: List[Cors]
           ): fs2.Stream[IO, Unit] =
             fs2.Stream.raiseError[IO](error)
         }

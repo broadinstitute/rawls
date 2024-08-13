@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.consumer
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import au.com.dius.pact.consumer.dsl.LambdaDsl.newJsonBody
 import au.com.dius.pact.consumer.dsl._
@@ -37,6 +38,9 @@ import java.util.function.Consumer
 import scala.concurrent.ExecutionContext
 
 class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactForger {
+  implicit val executionContext: ExecutionContext = ExecutionContext.global
+  implicit val actor: ActorSystem = ActorSystem("BpmClientSpec")
+
   /*
     Define the folder that the pact contracts get written to upon completion of this test suite.
    */
@@ -260,6 +264,17 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
 
   pactDslResponse = pactDslResponse
     .`given`("an Azure billing profile")
+    .`given`("a Sam service that supports leaving resources")
+    .uponReceiving("Request to leave a billing profile")
+    .method("DELETE")
+    .pathFromProviderState("/api/profiles/v1/${azureProfileId}/leave",
+                           s"/api/profiles/v1/${dummyBillingProfileId}/leave"
+    )
+    .willRespondWith()
+    .status(204)
+
+  pactDslResponse = pactDslResponse
+    .`given`("an Azure billing profile")
     .`given`("a Sam service that supports profile policy member addition")
     .uponReceiving("Request to add a profile policy member")
     .method("POST")
@@ -374,6 +389,14 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     for {
       billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(testContext)
     } yield billingProfiles.length shouldBe 2
+  }
+
+  it should "allow leaving a profile" in {
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      new HttpBillingProfileManagerClientProvider(Some(mockServer.getUrl)),
+      multiCloudWorkspaceConfig
+    )
+    billingProfileManagerDAO.leaveProfile(dummyBillingProfileId, testContext)
   }
 
   it should "allow the addition of a profile policy member" in {

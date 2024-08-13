@@ -2,9 +2,9 @@ name: Scala tests with coverage
 
 on:
   pull_request:
-    paths-ignore: ['**.md']
+    paths-ignore: [ '**.md' ]
   push:
-    paths-ignore: ['**.md']
+    paths-ignore: [ '**.md' ]
 
 jobs:
 
@@ -14,34 +14,18 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v2
-
-      # coursier cache action caches both coursier and sbt caches
-      - name: coursier-cache-action
-        uses: coursier/cache-action@v6
+      - uses: actions/checkout@v4
 
       - name: Start MySQL
         run: |
           sh docker/run-mysql.sh start
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: 17
-
-      - name: Git secrets setup
-        run: |
-          git clone https://github.com/awslabs/git-secrets.git ~/git-secrets
-          cd ~/git-secrets
-          git checkout ad82d68ee924906a0401dfd48de5057731a9bc84
-          sudo make install
-
-      - name: Secrets check
-        run: |
-          sudo ln -s "$(which echo)" /usr/local/bin/say
-          ./minnie-kenny.sh --force
-          git secrets --scan-history
+          cache: sbt
 
       - name: Run tests
         id: tests
@@ -60,7 +44,7 @@ jobs:
       # https://github.com/ScaCap/action-surefire-report/issues/39
       # https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380
       - name: Upload Test Report
-        uses: mikepenz/action-junit-report@v2.0.3
+        uses: mikepenz/action-junit-report@v4
         if: ${{ always() }}
         with:
           report_paths: '**/target/test-reports/TEST-*.xml'
@@ -68,7 +52,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Codecov upload
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         if: ${{ always() }}
 
       - name: Stop MySQL

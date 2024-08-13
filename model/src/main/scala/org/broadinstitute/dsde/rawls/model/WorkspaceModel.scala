@@ -209,6 +209,8 @@ case class Workspace(
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
+  // this field is used in metrics labels only. Currently it's either `aou` or `cwb` (community workbench).
+  def projectType: String = if (googleProjectId.value.startsWith("terra-vpc-sc-")) "aou" else "cwb"
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
@@ -277,6 +279,28 @@ object Workspace {
                        attributes: AttributeMap,
                        state: WorkspaceState
   ) =
+    buildWorkspace(namespace,
+                   name,
+                   workspaceId,
+                   createdDate,
+                   lastModified,
+                   createdBy,
+                   attributes,
+                   state,
+                   WorkspaceType.McWorkspace
+    )
+  def buildWorkspace(namespace: String,
+                     name: String,
+                     workspaceId: String,
+                     createdDate: DateTime,
+                     lastModified: DateTime,
+                     createdBy: String,
+                     attributes: AttributeMap,
+                     state: WorkspaceState,
+                     workspaceType: WorkspaceType
+  ) = {
+    val googleProjectId =
+      if (workspaceType == WorkspaceType.RawlsWorkspace) GoogleProjectId("google-id") else GoogleProjectId("")
     new Workspace(
       namespace,
       name,
@@ -289,14 +313,15 @@ object Workspace {
       attributes,
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId(""),
+      googleProjectId,
       None,
       None,
       None,
       None,
-      WorkspaceType.McWorkspace,
+      workspaceType,
       state
     )
+  }
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -427,6 +452,15 @@ object ImportStatuses {
     override def withName(name: String): ImportStatus = ImportStatuses.withName(name)
   }
 
+  // translates cWDS's status values into the values used by Import Service, for compatibility
+  // while both cWDS and Import Service are in use
+  def fromCwdsStatus(name: String): ImportStatus = name.toLowerCase match {
+    case "running"   => ReadyForUpsert
+    case "succeeded" => Done
+    case "error"     => Error
+    case _           => throw new RawlsException(s"invalid cWDS status [$name]")
+  }
+
   def withName(name: String): ImportStatus = name.toLowerCase match {
     case "readyforupsert" => ReadyForUpsert
     case "upserting"      => Upserting
@@ -490,20 +524,36 @@ object WorkspaceState {
   sealed trait WorkspaceState extends RawlsEnumeration[WorkspaceState] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceState = WorkspaceState.withName(name)
+    def isDeletable: Boolean = this match {
+      // Ensure all states are explicitly matched on to avoid accidentally adding a new state without
+      // defining if it is deletable.
+      case WorkspaceState.Ready | WorkspaceState.CreateFailed | WorkspaceState.DeleteFailed |
+          WorkspaceState.UpdateFailed | WorkspaceState.CloningFailed =>
+        true
+      case WorkspaceState.Creating | WorkspaceState.Cloning | WorkspaceState.CloningContainer |
+          WorkspaceState.Deleting | WorkspaceState.Updating =>
+        false
+    }
   }
 
   def withName(name: String): WorkspaceState = name.toLowerCase match {
-    case "creating"     => Creating
-    case "createfailed" => CreateFailed
-    case "ready"        => Ready
-    case "updating"     => Updating
-    case "updatefailed" => UpdateFailed
-    case "deleting"     => Deleting
-    case "deletefailed" => DeleteFailed
-    case _              => throw new RawlsException(s"invalid WorkspaceState [$name]")
+    case "creating"         => Creating
+    case "createfailed"     => CreateFailed
+    case "cloning"          => Cloning
+    case "cloningcontainer" => CloningContainer
+    case "cloningfailed"    => CloningFailed
+    case "ready"            => Ready
+    case "updating"         => Updating
+    case "updatefailed"     => UpdateFailed
+    case "deleting"         => Deleting
+    case "deletefailed"     => DeleteFailed
+    case _                  => throw new RawlsException(s"invalid WorkspaceState [$name]")
   }
   case object Creating extends WorkspaceState
   case object CreateFailed extends WorkspaceState
+  case object Cloning extends WorkspaceState
+  case object CloningContainer extends WorkspaceState
+  case object CloningFailed extends WorkspaceState
   case object Ready extends WorkspaceState
   case object Updating extends WorkspaceState
   case object UpdateFailed extends WorkspaceState
@@ -748,6 +798,8 @@ case class MethodRepoConfigurationExport(
 )
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+                                 canShare: Option[Boolean],
+                                 canCompute: Option[Boolean],
                                  workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                                  public: Boolean,
@@ -1262,7 +1314,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat21(WorkspaceDetails.apply)
 
-  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat5(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat7(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.datarepo.client.ApiException
 import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -12,14 +13,20 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   NamedDataRepoSnapshot,
   RawlsRequestContext,
+  SamResourceTypeNames,
   SamWorkspaceActions,
   SnapshotListResponse,
+  Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceCloudPlatform,
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  AggregateWorkspaceNotFoundException,
+  AggregatedWorkspaceService,
+  WorkspaceRepository
+}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -56,51 +63,127 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     with WorkspaceSupport
     with LazyLogging {
 
-  def createSnapshot(workspaceName: WorkspaceName,
-                     snapshotIdentifiers: NamedDataRepoSnapshot
+  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
+  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
+
+  // Finds a workspace using the workspaceId then calls the createSnapshot method
+  def createSnapshotByWorkspaceId(workspaceId: String,
+                                  snapshotIdentifiers: NamedDataRepoSnapshot
+  ): Future[DataRepoSnapshotResource] =
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.write,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).flatMap { rawlsWorkspace =>
+      createSnapshot(rawlsWorkspace, snapshotIdentifiers)
+    }
+// Find a workspace using the workspaceName then calls the createSnapshot method
+  def createSnapshotByWorkspaceName(workspaceName: WorkspaceName,
+                                    snapshotIdentifiers: NamedDataRepoSnapshot
   ): Future[DataRepoSnapshotResource] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap { rawlsWorkspace =>
-      val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
-      val snapshot =
-        new WrappedSnapshot(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken))
-      val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
+    ).flatMap(rawlsWorkspace => createSnapshot(rawlsWorkspace, snapshotIdentifiers))
+//Given a rawls workspace, creates a snapshot reference in workspace manager
+  private def createSnapshot(rawlsWorkspace: Workspace,
+                             snapshotIdentifiers: NamedDataRepoSnapshot
+  ): Future[DataRepoSnapshotResource] =
+    samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, rawlsWorkspace.workspaceId, ctx).map {
+      workspaceAuthDomain =>
+        val wsid = rawlsWorkspace.workspaceIdAsUUID // to avoid UUID parsing multiple times
 
-      // prevent snapshots from disallowed platforms
-      snapshotValidator.validateSnapshotPlatform()
+        // try to parse the cloning instructions, if provided
+        val cloningInstructions: CloningInstructionsEnum = CloningInstructionsEnum
+          .fromValue(snapshotIdentifiers.cloningInstructions.getOrElse(CloningInstructionsEnum.NOTHING.toString))
+        if (cloningInstructions == null) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid cloning instructions"))
+        }
 
-      // prevent disallowed access across workspace or dataset protection boundaries
-      snapshotValidator.validateProtectedStatus()
+        val snapshot =
+          new WrappedSnapshot(getSnapshotFromDataRepo(snapshotIdentifiers))
+        val snapshotValidator = new SnapshotReferenceCreationValidator(rawlsWorkspace, snapshot)
 
-      try {
-        // if there's an existing WSM workspace, make sure its platform is compatible
-        // with that of the snapshot's dataset.
-        val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
-        snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
-      } catch {
-        case _: AggregateWorkspaceNotFoundException =>
-          // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
-          // and then create a stub workspace
-          snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
-          workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, ctx)
-      }
+        // prevent snapshots from disallowed platforms
+        snapshotValidator.validateSnapshotPlatform()
 
-      // create the requested snapshot reference
-      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(
-        wsid,
-        snapshotIdentifiers.snapshotId,
-        snapshotIdentifiers.name,
-        snapshotIdentifiers.description,
-        terraDataRepoInstanceName,
-        CloningInstructionsEnum.NOTHING,
-        ctx
-      )
-      Future.successful(snapshotRef)
+        // prevent disallowed access across workspace or dataset protection boundaries
+        snapshotValidator.validateProtectedStatus()
+
+        val wsmPolicyInputs = workspaceAuthDomain.toList match {
+          case Nil => None
+          case authDomainGroups =>
+            Option(
+              new WsmPolicyInputs().inputs(
+                List(
+                  new WsmPolicyInput()
+                    .namespace("terra")
+                    .name("group-constraint")
+                    .additionalData(
+                      authDomainGroups.map(groupName => new WsmPolicyPair().key("group").value(groupName)).asJava
+                    )
+                ).asJava
+              )
+            )
+        }
+
+        try {
+          // if there's an existing WSM workspace, make sure its platform is compatible
+          // with that of the snapshot's dataset.
+          val wsmWorkspace = aggregatedWorkspaceService.fetchAggregatedWorkspace(rawlsWorkspace, ctx)
+          snapshotValidator.validateWorkspacePlatformCompatibility(wsmWorkspace.getCloudPlatform)
+
+          // if the existing WSM workspace doesn't have a group-constraint policy, but the Rawls workspace
+          // has an auth domain, backfill the group-constraint policy on the existing WSM workspace
+          if (
+            !wsmWorkspace.policies.exists(policy =>
+              policy.namespace.equals("terra") && policy.name.equals("group-constraint")
+            ) && wsmPolicyInputs.isDefined
+          ) {
+            workspaceManagerDAO.updateWorkspacePolicies(rawlsWorkspace.workspaceIdAsUUID, wsmPolicyInputs.get, ctx)
+          }
+        } catch {
+          case _: AggregateWorkspaceNotFoundException =>
+            // if a WSM workspace does not already exist, assume the platform is GCP, confirm platform compatibility,
+            // and then create a stub workspace
+            snapshotValidator.validateWorkspacePlatformCompatibility(Some(WorkspaceCloudPlatform.Gcp))
+            workspaceManagerDAO.createWorkspace(wsid, rawlsWorkspace.workspaceType, wsmPolicyInputs, ctx)
+        }
+
+        // create the requested snapshot reference
+        workspaceManagerDAO.createDataRepoSnapshotReference(
+          wsid,
+          snapshotIdentifiers.snapshotId,
+          snapshotIdentifiers.name,
+          snapshotIdentifiers.description,
+          terraDataRepoInstanceName,
+          cloningInstructions,
+          snapshotIdentifiers.properties,
+          ctx
+        )
     }
 
-  def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
+  private def getSnapshotFromDataRepo(snapshotIdentifiers: NamedDataRepoSnapshot) =
+    Try(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken)) match {
+      case Success(snapshot) => snapshot
+      // if snapshot not found in TDR, this is a bad request
+      case Failure(ex: ApiException) if ex.getCode == StatusCodes.NotFound.intValue =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Snapshot ${snapshotIdentifiers.snapshotId} not found.")
+        )
+      // on some other TDR API exception, strip the stack trace and propagate
+      case Failure(ex: ApiException) =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(ex.getCode, ex.getMessage)
+        )
+      // else, propagate by wrapping in an error report
+      case Failure(other) =>
+        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}", other)
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, other.getMessage))
+    }
+
+  def getSnapshotResourceFromWsm(workspaceName: WorkspaceName,
+                                 referenceId: String
+  ): Future[DataRepoSnapshotResource] = {
     val referenceUuid = validateSnapshotId(referenceId)
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.read,
@@ -152,29 +235,48 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         throw new RawlsExceptionWithErrorReport(ErrorReport(other))
     }
 
+  def enumerateSnapshotsByWorkspaceName(workspaceName: WorkspaceName,
+                                        offset: Int,
+                                        limit: Int,
+                                        referencedSnapshotId: Option[UUID] = None
+  ): Future[SnapshotListResponse] =
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
+    ).map(workspaceContext =>
+      enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
+    )
+
+  def enumerateSnapshotsById(workspaceId: String,
+                             offset: Int,
+                             limit: Int,
+                             referencedSnapshotId: Option[UUID] = None
+  ): Future[SnapshotListResponse] =
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.read,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).map(workspaceContext =>
+      enumerateSnapshots(workspaceContext.workspaceIdAsUUID, offset, limit, referencedSnapshotId)
+    )
+
   /**
     * return a given page of snapshot references from Workspace Manager, optionally returning only those
     * snapshot references that refer to a supplied TDR snapshotId.
     *
-    * @param workspaceName the workspace owning the snapshot references
+    * @param workspaceId the id of the workspace owning the snapshot references
     * @param offset pagination offset for the list
     * @param limit pagination limit for the list
     * @param referencedSnapshotId the TDR snapshotId for which to return matching references
     * @return the list of snapshot references
     */
-  def enumerateSnapshots(workspaceName: WorkspaceName,
-                         offset: Int,
-                         limit: Int,
-                         referencedSnapshotId: Option[UUID] = None
-  ): Future[SnapshotListResponse] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.read,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ).map { workspaceContext =>
-      referencedSnapshotId match {
-        case None     => retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
-        case Some(id) => findBySnapshotId(workspaceContext.workspaceIdAsUUID, id, offset, limit)
-      }
+  private def enumerateSnapshots(workspaceId: UUID,
+                                 offset: Int,
+                                 limit: Int,
+                                 referencedSnapshotId: Option[UUID] = None
+  ): SnapshotListResponse =
+    referencedSnapshotId match {
+      case None     => retrieveSnapshotReferences(workspaceId, offset, limit)
+      case Some(id) => findBySnapshotId(workspaceId, id, offset, limit)
     }
 
   /*

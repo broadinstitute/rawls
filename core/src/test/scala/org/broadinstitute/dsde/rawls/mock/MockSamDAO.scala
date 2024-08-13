@@ -13,6 +13,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] = ???
 
+  override def registerRawlsIdentity(): Future[Option[RawlsUser]] = ???
+
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     Future.successful(
       Option(SamUserStatusResponse(ctx.userInfo.userSubjectId.value, ctx.userInfo.userEmail.value, enabled = true))
@@ -165,6 +167,11 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                      resourceId: String,
                                      ctx: RawlsRequestContext
   ): Future[Seq[String]] = Future.successful(Seq.empty)
+
+  override def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
+                                                resourceId: String,
+                                                ctx: RawlsRequestContext
+  ): Future[Boolean] = Future.successful(true)
 
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId,
                                               userEmail: RawlsUserEmail
@@ -434,4 +441,5 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
         )
     }
   }
+
 }

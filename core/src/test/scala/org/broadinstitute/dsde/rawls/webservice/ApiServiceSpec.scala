@@ -8,68 +8,68 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
-import akka.testkit.TestKitBase
-import cats.effect.IO
+import akka.testkit.{TestActors, TestKitBase}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
-  BillingProjectOrchestrator,
-  BillingRepository,
-  BpmBillingProjectLifecycle,
-  GoogleBillingProjectLifecycle
-}
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
+import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
+import org.broadinstitute.dsde.rawls.billing._
+import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.{
   Agora,
   ApplicationVersion,
   Dockstore,
-  RawlsBillingAccountName,
+  GoogleProjectId,
   RawlsRequestContext,
   RawlsUser
 }
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceRepository,
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
-import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
-import java.time.temporal.ChronoUnit
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
@@ -155,11 +155,14 @@ trait ApiServiceSpec
       with SnapshotApiService
       with StatusApiService
       with UserApiService
-      with WorkspaceApiService {
+      with MethodConfigApiService
+      with WorkspaceApiService
+      with SubmissionApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
+    val submissionMonitorsEnabled: Boolean = true // should we start the Cromwell monitor actors?
     val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO =
       new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -175,9 +178,15 @@ trait ApiServiceSpec
 
     val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
 
+    val leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
+    when(
+      leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
+    )
+      .thenReturn(Future.successful())
+
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
@@ -188,7 +197,10 @@ trait ApiServiceSpec
 
     val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
     val testConf = ConfigFactory.load()
-    val submissionSupervisor = system.actorOf(
+
+    // if a test doesn't need the Cromwell monitor actors, it can override submissionMonitorsEnabled to false,
+    // and we'll spin up a simple TestKit blackhole actor instead of the heavyweight Rawls actors.
+    val submissionSupervisorProps = if (submissionMonitorsEnabled) {
       SubmissionSupervisor
         .props(
           executionServiceCluster,
@@ -196,13 +208,15 @@ trait ApiServiceSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           config,
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher")
-    )
+    } else {
+      TestActors.blackholeProps
+    }
+    val submissionSupervisor = system.actorOf(submissionSupervisorProps)
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
@@ -213,18 +227,21 @@ trait ApiServiceSpec
 
     val drsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
 
-    val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
-    val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+    val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
+    val servicePerimeterService = new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
-    val billingRepository = new BillingRepository(slickDataSource)
+    val billingRepository = spy(new BillingRepository(slickDataSource))
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
+    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
+    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      mock[BpmBillingProjectLifecycle],
+      azureBillingProjectLifecycle,
+      billingProjectDeletion,
       workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
@@ -235,9 +252,7 @@ trait ApiServiceSpec
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
-      "requesterPaysRole",
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
@@ -251,7 +266,7 @@ trait ApiServiceSpec
       dataRepoDAO
     )
 
-    override val genomicsServiceConstructor = GenomicsService.constructor(
+    override val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
       slickDataSource,
       gcsDAO
     ) _
@@ -269,7 +284,7 @@ trait ApiServiceSpec
     )
 
     override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
-      BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
+      BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
@@ -278,7 +293,7 @@ trait ApiServiceSpec
     )
 
     val healthMonitor = system.actorOf(
-      HealthMonitor.props(
+      HealthMonitor.propsInGoogleControlPlane(
         dataSource,
         gcsDAO,
         gpsDAO,
@@ -287,7 +302,6 @@ trait ApiServiceSpec
         billingProfileManagerDAO,
         workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
-        Seq("my-favorite-group"),
         Seq.empty,
         Seq("my-favorite-bucket")
       )
@@ -307,7 +321,7 @@ trait ApiServiceSpec
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
@@ -323,7 +337,7 @@ trait ApiServiceSpec
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+    val resourceBufferService = new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig)
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -331,7 +345,7 @@ trait ApiServiceSpec
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassConfig = FastPassConfig.apply(testConf)
-    val fastPassServiceConstructor = FastPassService.constructor(
+    val fastPassServiceConstructor = FastPassServiceImpl.constructor(
       fastPassConfig,
       new MockGoogleIamDAO,
       new MockGoogleStorageDAO,
@@ -346,26 +360,17 @@ trait ApiServiceSpec
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      methodRepoDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
-      methodConfigResolver,
+      leonardoService,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
@@ -388,6 +393,35 @@ trait ApiServiceSpec
       workbenchMetricBaseName
     )
 
+    override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+      MethodConfigurationService.constructor(
+        slickDataSource,
+        samDAO,
+        methodRepoDAO,
+        methodConfigResolver,
+        entityManager,
+        new WorkspaceRepository(slickDataSource),
+        workbenchMetricBaseName
+      ) _
+
+    val submissionsServiceConstructor = SubmissionsService.constructor(
+      dataSource,
+      entityManager,
+      methodRepoDAO,
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+      executionServiceCluster,
+      methodConfigResolver,
+      gcsDAO,
+      samDAO,
+      maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser,
+      workbenchMetricBaseName,
+      submissionCostService,
+      genomicsServiceConstructor,
+      workspaceServiceConfig,
+      new WorkspaceRepository(slickDataSource)
+    ) _
+
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
@@ -402,19 +436,24 @@ trait ApiServiceSpec
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
-      sealRoute(
-        adminRoutes(otelContext) ~
-          billingRoutesV2(otelContext) ~
-          billingRoutes(otelContext) ~
-          entityRoutes(otelContext) ~
-          methodConfigRoutes(otelContext) ~
-          notificationsRoutes ~
-          statusRoute ~
-          submissionRoutes(otelContext) ~
-          userRoutes(otelContext) ~
-          workspaceRoutes(otelContext)
-      )
+    val sealedInstrumentedRoutes: Route = captureRequestMetrics {
+      traceRequests { otelContext =>
+        sealRoute(
+          workspaceRoutesV2(otelContext) ~
+            workspaceRoutes(otelContext) ~
+            entityRoutes(otelContext) ~
+            methodConfigRoutes(otelContext) ~
+            submissionRoutes(otelContext) ~
+            adminRoutes(otelContext) ~
+            userRoutes(otelContext) ~
+            billingRoutesV2(otelContext) ~
+            billingRoutes(otelContext) ~
+            notificationsRoutes ~
+            servicePerimeterRoutes(otelContext) ~
+            snapshotRoutes(otelContext) ~
+            statusRoute
+        )
+      }
     }
 
     override val openIDConnectConfiguration = FakeOpenIDConnectConfiguration

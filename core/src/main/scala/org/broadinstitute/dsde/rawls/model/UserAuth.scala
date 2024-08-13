@@ -90,6 +90,8 @@ case class WorkspaceBillingAccount(
   currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
 )
 
+case class RawlsBillingProjectOrganization(enterprise: Boolean, limits: Map[String, String])
+
 case class RawlsBillingProjectResponse(
   projectName: RawlsBillingProjectName,
   billingAccount: Option[RawlsBillingAccountName],
@@ -101,7 +103,9 @@ case class RawlsBillingProjectResponse(
   managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
   cloudPlatform: String,
   landingZoneId: Option[String],
-  protectedData: Option[Boolean]
+  protectedData: Option[Boolean],
+  region: Option[String],
+  organization: Option[RawlsBillingProjectOrganization]
 )
 
 object RawlsBillingProjectResponse {
@@ -109,7 +113,9 @@ object RawlsBillingProjectResponse {
     roles: Set[ProjectRole],
     project: RawlsBillingProject,
     platform: CloudPlatform = CloudPlatform.UNKNOWN,
-    protectedData: Option[Boolean] = None
+    protectedData: Option[Boolean] = None,
+    region: Option[String] = None,
+    organization: Option[RawlsBillingProjectOrganization] = None
   ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
@@ -121,7 +127,9 @@ object RawlsBillingProjectResponse {
     project.azureManagedAppCoordinates,
     platform.toString,
     project.landingZoneId,
-    protectedData
+    protectedData,
+    region,
+    organization
   )
 }
 
@@ -319,8 +327,12 @@ class UserAuthJsonSupport extends JsonSupport {
     WorkspaceBillingAccount
   )
 
+  implicit val BillingProjectOrganizationFormat: RootJsonFormat[RawlsBillingProjectOrganization] = jsonFormat2(
+    RawlsBillingProjectOrganization.apply
+  )
+
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
-    jsonFormat11(RawlsBillingProjectResponse.apply)
+    jsonFormat13(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

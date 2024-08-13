@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
+import org.broadinstitute.dsde.rawls.mock.MockBardService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -93,7 +94,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         MockShardedExecutionServiceCluster
           .fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
         10,
-        services.gcsDAO.getPreparedMockGoogleCredential(),
         50 milliseconds,
         100 milliseconds,
         100000,
@@ -106,7 +106,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         false,
         CromwellBackend("PAPIv2"),
         CromwellBackend("PAPIv2-CloudNAT"),
-        methodConfigResolver
+        methodConfigResolver,
+        new MockBardService()
       )
     )
 
@@ -437,7 +438,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           status
         }
         responseAs[Seq[SubmissionListResponse]] should contain allOf (submissionListResponseWithFailureMode,
-        submissionListResponseWithoutFailureMode)
+                                                                      submissionListResponseWithoutFailureMode
+        )
       }
   }
 

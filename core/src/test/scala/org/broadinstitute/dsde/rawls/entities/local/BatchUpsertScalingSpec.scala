@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactory,
+  GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
   SlickDataSource
 }
@@ -57,7 +57,7 @@ import scala.io.Source
   * batchUpsert-entity and delete-entity code paths. Furthermore, the test always passes unless something throws an
   * exception; it is up to you to look at the console/log output and find the performance timings it outputs.
   *
-  * Because this test runs on your laptop, or potentially in Jenkins or GHA, the numbers it produces should not be
+  * Because this test runs on your laptop, or potentially in GHA, the numbers it produces should not be
   * considered to be objective results, and they do not translate to performance on production. They should only be used
   * to compare before/after your code changes.
   */
@@ -98,7 +98,7 @@ class BatchUpsertScalingSpec
     def actorRefFactory = system
     val samDAO = new MockSamDAO(dataSource)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val testConf = ConfigFactory.load()
 

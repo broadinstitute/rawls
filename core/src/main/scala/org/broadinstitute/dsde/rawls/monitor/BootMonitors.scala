@@ -6,8 +6,8 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
-import org.broadinstitute.dsde.rawls.config.FastPassConfig
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectDeletion, BillingRepository}
+import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -27,15 +28,19 @@ import org.broadinstitute.dsde.rawls.jobexec.{
   SubmissionSupervisor,
   WorkflowSubmissionActor
 }
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.metrics.BardService
+import org.broadinstitute.dsde.rawls.model.{
+  CromwellBackend,
+  RawlsRequestContext,
+  WorkflowStatuses,
+  WorkspaceCloudPlatform
+}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.{
-  LeonardoResourceDeletionAction,
-  WsmDeletionAction
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
@@ -48,7 +53,6 @@ import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import spray.json._
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -61,16 +65,15 @@ import scala.util.Try
 object BootMonitors extends LazyLogging {
 
   def bootMonitors(system: ActorSystem,
-                   conf: Config,
+                   appConfigManager: RawlsConfigManager,
                    slickDataSource: SlickDataSource,
-                   gcsDAO: HttpGoogleServicesDAO,
+                   gcsDAO: GoogleServicesDAO,
                    googleIamDAO: GoogleIamDAO,
                    googleStorageDAO: GoogleStorageDAO,
                    samDAO: SamDAO,
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
-                   importServicePubSubDAO: GooglePubSubDAO,
-                   importServiceDAO: HttpImportServiceDAO,
+                   cwdsDAO: CwdsDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
                    billingProfileManagerDAO: BillingProfileManagerDAO,
                    leonardoDAO: LeonardoDAO,
@@ -91,124 +94,139 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
-                   methodConfigResolver: MethodConfigResolver
+                   methodConfigResolver: MethodConfigResolver,
+                   bardService: BardService
   ): Unit = {
-    // Reset "Launching" workflows to "Queued"
-    resetLaunchingWorkflows(slickDataSource)
 
-    // Boot data source access
-    val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
+    if (appConfigManager.cloudProvider == WorkspaceCloudPlatform.Gcp) {
+      // these monitors are only appropriate for GCP control plane
 
-    // Boot submission monitor supervisor
-    val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
-    val submissionMonitorConfig = SubmissionMonitorConfig(
-      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
-      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollExpiration")),
-      submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
-      submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
-      submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
-    )
-    startSubmissionMonitorSupervisor(
-      system,
-      submissionMonitorConfig,
-      dataSourceAccess,
-      samDAO,
-      gcsDAO,
-      notificationDAO,
-      shardedExecutionServiceCluster,
-      entityQueryTimeout,
-      metricsPrefix
-    )
+      // Reset "Launching" workflows to "Queued"
+      resetLaunchingWorkflows(slickDataSource)
 
-    // Boot workflow submission actors
-    startWorkflowSubmissionActors(
-      system,
-      conf,
-      slickDataSource,
-      gcsDAO,
-      samDAO,
-      methodRepoDAO,
-      drsResolver,
-      shardedExecutionServiceCluster,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
-      metricsPrefix,
-      requesterPaysRole,
-      useWorkflowCollectionField,
-      useWorkflowCollectionLabel,
-      defaultNetworkCromwellBackend,
-      highSecurityNetworkCromwellBackend,
-      methodConfigResolver
-    )
+      // Boot data source access
+      val dataSourceAccess = startDataSourceAccess(system, appConfigManager.conf, slickDataSource)
 
-    // Boot bucket deletion monitor
-    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+      // Boot submission monitor supervisor
+      val submissionmonitorConfigRoot = appConfigManager.conf.getConfig("submissionmonitor")
+      val submissionMonitorConfig = SubmissionMonitorConfig(
+        util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
+        util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollExpiration")),
+        submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
+        submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
+        submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
+      )
+      startSubmissionMonitorSupervisor(
+        system,
+        submissionMonitorConfig,
+        dataSourceAccess,
+        samDAO,
+        gcsDAO,
+        notificationDAO,
+        shardedExecutionServiceCluster,
+        entityQueryTimeout,
+        metricsPrefix
+      )
 
-    val workspaceBillingAccountMonitorConfigRoot = conf.getConfig("workspace-billing-account-monitor")
-    val workspaceBillingAccountMonitorConfig = BillingAccountSynchronizerConfig(
-      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("pollInterval")),
-      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("initialDelay"))
-    )
-    // Boot workspace billing account monitor
-    startBillingAccountChangeSynchronizer(system, workspaceBillingAccountMonitorConfig, slickDataSource, gcsDAO, samDAO)
+      // Boot workflow submission actors
+      startWorkflowSubmissionActors(
+        system,
+        appConfigManager.conf,
+        slickDataSource,
+        gcsDAO,
+        samDAO,
+        methodRepoDAO,
+        drsResolver,
+        shardedExecutionServiceCluster,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        metricsPrefix,
+        requesterPaysRole,
+        useWorkflowCollectionField,
+        useWorkflowCollectionLabel,
+        defaultNetworkCromwellBackend,
+        highSecurityNetworkCromwellBackend,
+        methodConfigResolver,
+        bardService
+      )
 
-    val cloneWorkspaceFileTransferMonitorConfigRoot = conf.getConfig("clone-workspace-file-transfer-monitor")
+      // Boot bucket deletion monitor
+      startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+
+      val workspaceBillingAccountMonitorConfigRoot =
+        appConfigManager.conf.getConfig("workspace-billing-account-monitor")
+      val workspaceBillingAccountMonitorConfig = BillingAccountSynchronizerConfig(
+        util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("pollInterval")),
+        util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("initialDelay"))
+      )
+      // Boot workspace billing account monitor
+      startBillingAccountChangeSynchronizer(system,
+                                            workspaceBillingAccountMonitorConfig,
+                                            slickDataSource,
+                                            gcsDAO,
+                                            samDAO
+      )
+
+      // Boot entity statistics cache monitor
+      if (appConfigManager.conf.getBoolean("entityStatisticsCache.enabled")) {
+        startEntityStatisticsCacheMonitor(
+          system,
+          slickDataSource,
+          util.toScalaDuration(appConfigManager.conf.getDuration("entityStatisticsCache.timeoutPerWorkspace")),
+          util.toScalaDuration(appConfigManager.conf.getDuration("entityStatisticsCache.standardPollInterval")),
+          util.toScalaDuration(appConfigManager.conf.getDuration("entityStatisticsCache.workspaceCooldown")),
+          metricsPrefix
+        )
+      }
+
+      val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
+        util.toScalaDuration(appConfigManager.conf.getDuration("avroUpsertMonitor.pollInterval")),
+        util.toScalaDuration(appConfigManager.conf.getDuration("avroUpsertMonitor.pollJitter")),
+        appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
+        appConfigManager.conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
+        appConfigManager.conf.getString("avroUpsertMonitor.updateCwdsPubSubTopic"),
+        appConfigManager.conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
+        appConfigManager.conf.getInt("avroUpsertMonitor.batchSize"),
+        appConfigManager.conf.getInt("avroUpsertMonitor.workerCount")
+      )
+
+      // Boot the avro upsert monitor to read and process messages in the specified PubSub topic
+      startAvroUpsertMonitor(system,
+                             entityService,
+                             gcsDAO,
+                             samDAO,
+                             googleStorage,
+                             pubSubDAO,
+                             cwdsDAO,
+                             avroUpsertMonitorConfig,
+                             slickDataSource
+      )
+
+      startMultiregonalBucketMigrationActor(system,
+                                            appConfigManager.conf,
+                                            gcsDAO,
+                                            googleIamDAO,
+                                            slickDataSource,
+                                            workspaceService,
+                                            googleStorage,
+                                            googleStorageTransferService,
+                                            samDAO
+      )
+
+      startFastPassMonitor(system, appConfigManager.conf, slickDataSource, googleIamDAO, googleStorageDAO)
+    }
+
+    val cloneWorkspaceFileTransferMonitorConfigRoot =
+      appConfigManager.conf.getConfig("clone-workspace-file-transfer-monitor")
     val cloneWorkspaceFileTransferMonitorConfig = CloneWorkspaceFileTransferMonitorConfig(
       util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("pollInterval")),
       util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("initialDelay"))
     )
     startCloneWorkspaceFileTransferMonitor(system, cloneWorkspaceFileTransferMonitorConfig, slickDataSource, gcsDAO)
 
-    // Boot entity statistics cache monitor
-    if (conf.getBoolean("entityStatisticsCache.enabled")) {
-      startEntityStatisticsCacheMonitor(
-        system,
-        slickDataSource,
-        util.toScalaDuration(conf.getDuration("entityStatisticsCache.timeoutPerWorkspace")),
-        util.toScalaDuration(conf.getDuration("entityStatisticsCache.standardPollInterval")),
-        util.toScalaDuration(conf.getDuration("entityStatisticsCache.workspaceCooldown")),
-        metricsPrefix
-      )
-    }
-
-    val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
-      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
-      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
-      conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
-      conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
-      conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
-      conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
-      conf.getInt("avroUpsertMonitor.batchSize"),
-      conf.getInt("avroUpsertMonitor.workerCount")
-    )
-
-    // Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-    startAvroUpsertMonitor(system,
-                           entityService,
-                           gcsDAO,
-                           samDAO,
-                           googleStorage,
-                           pubSubDAO,
-                           importServicePubSubDAO,
-                           importServiceDAO,
-                           avroUpsertMonitorConfig,
-                           slickDataSource
-    )
-
-    startMultiregonalBucketMigrationActor(system,
-                                          conf,
-                                          gcsDAO,
-                                          googleIamDAO,
-                                          slickDataSource,
-                                          workspaceService,
-                                          googleStorage,
-                                          googleStorageTransferService,
-                                          samDAO
-    )
-
     startWorkspaceResourceMonitor(
       system,
-      conf,
+      appConfigManager.conf,
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
@@ -217,8 +235,6 @@ object BootMonitors extends LazyLogging {
       leonardoDAO,
       workspaceRepository
     )
-
-    startFastPassMonitor(system, conf, slickDataSource, googleIamDAO, googleStorageDAO)
 
   }
 
@@ -297,7 +313,6 @@ object BootMonitors extends LazyLogging {
         samDAO,
         gcsDAO,
         notificationDAO,
-        gcsDAO.getBucketServiceAccountCredential,
         submissionMonitorConfig,
         entityQueryTimeout,
         workbenchMetricBaseName = metricsPrefix
@@ -321,7 +336,8 @@ object BootMonitors extends LazyLogging {
                                             useWorkflowCollectionLabel: Boolean,
                                             defaultNetworkCromwellBackend: CromwellBackend,
                                             highSecurityNetworkCromwellBackend: CromwellBackend,
-                                            methodConfigResolver: MethodConfigResolver
+                                            methodConfigResolver: MethodConfigResolver,
+                                            bardService: BardService
   ) =
     for (i <- 0 until conf.getInt("executionservice.parallelSubmitters"))
       system.actorOf(
@@ -333,7 +349,6 @@ object BootMonitors extends LazyLogging {
           drsResolver,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
-          gcsDAO.getBucketServiceAccountCredential,
           util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
           util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
           maxActiveWorkflowsTotal,
@@ -348,7 +363,8 @@ object BootMonitors extends LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
-          methodConfigResolver
+          methodConfigResolver,
+          bardService
         )
       )
 
@@ -413,8 +429,7 @@ object BootMonitors extends LazyLogging {
                                      samDAO: SamDAO,
                                      googleStorage: GoogleStorageService[IO],
                                      googlePubSubDAO: GooglePubSubDAO,
-                                     importServicePubSubDAO: GooglePubSubDAO,
-                                     importServiceDAO: HttpImportServiceDAO,
+                                     cwdsDAO: CwdsDAO,
                                      avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
                                      dataSource: SlickDataSource
   ) =
@@ -425,8 +440,7 @@ object BootMonitors extends LazyLogging {
         samDAO,
         googleStorage,
         googlePubSubDAO,
-        importServicePubSubDAO,
-        importServiceDAO,
+        cwdsDAO,
         avroUpsertMonitorConfig,
         dataSource
       )
@@ -445,18 +459,25 @@ object BootMonitors extends LazyLogging {
   ) = {
     val billingRepo = new BillingRepository(dataSource)
 
-    val leoDeletionAction = new LeonardoResourceDeletionAction(leonardoDAO)(system)
+    val leoService = new LeonardoService(leonardoDAO)(system)
     val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
     val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
     val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
                                                               workspaceManagerDAO,
                                                               workspaceRepository,
-                                                              leoDeletionAction,
+                                                              leoService,
                                                               wsmDeletionAction,
                                                               gcsDAO,
                                                               monitorRecordDao
     )
-
+    val workspaceCloneRunner = new WorkspaceCloningRunner(
+      samDAO,
+      gcsDAO,
+      leonardoDAO,
+      workspaceManagerDAO,
+      monitorRecordDao,
+      workspaceRepository
+    )
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
@@ -475,21 +496,16 @@ object BootMonitors extends LazyLogging {
             gcsDAO,
             workspaceManagerDAO,
             billingRepo,
-            new BpmBillingProjectLifecycle(samDAO,
-                                           billingRepo,
-                                           billingProfileManagerDAO,
-                                           workspaceManagerDAO,
-                                           monitorRecordDao
-            )
+            new BillingProjectDeletion(samDAO, billingRepo, billingProfileManagerDAO)
           )
-        )
+        ) ++ JobType.cloneJobTypes.map(jobType => jobType -> workspaceCloneRunner).toMap
       )
     )
   }
 
   private def startMultiregonalBucketMigrationActor(system: ActorSystem,
                                                     config: Config,
-                                                    gcsDAO: HttpGoogleServicesDAO,
+                                                    gcsDAO: GoogleServicesDAO,
                                                     googleIamDAO: GoogleIamDAO,
                                                     dataSource: SlickDataSource,
                                                     workspaceService: RawlsRequestContext => WorkspaceService,

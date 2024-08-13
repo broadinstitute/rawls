@@ -11,7 +11,7 @@ import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, Quer
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, GoogleBigQueryServiceFactoryImpl, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
   EntityName,
@@ -281,7 +281,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[Stream[SubmissionValidationEntityInputs]] =
+  ): Future[LazyList[SubmissionValidationEntityInputs]] =
     expressionEvaluationContext match {
       case ExpressionEvaluationContext(None, None, None, Some(rootEntityType)) =>
         /*

@@ -65,24 +65,21 @@ object SubmissionMonitorActor {
             googleServicesDAO: GoogleServicesDAO,
             notificationDAO: NotificationDAO,
             executionServiceCluster: ExecutionServiceCluster,
-            credential: Credential,
             config: SubmissionMonitorConfig,
             queryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionMonitorActor(
-        workspaceName,
-        submissionId,
-        datasource,
-        samDAO,
-        googleServicesDAO,
-        notificationDAO,
-        executionServiceCluster,
-        credential,
-        config,
-        queryTimeout,
-        workbenchMetricBaseName
+      new SubmissionMonitorActor(workspaceName,
+                                 submissionId,
+                                 datasource,
+                                 samDAO,
+                                 googleServicesDAO,
+                                 notificationDAO,
+                                 executionServiceCluster,
+                                 config,
+                                 queryTimeout,
+                                 workbenchMetricBaseName
       )
     )
 
@@ -123,7 +120,6 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val googleServicesDAO: GoogleServicesDAO,
                              val notificationDAO: NotificationDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
-                             val credential: Credential,
                              val config: SubmissionMonitorConfig,
                              val queryTimeout: Duration,
                              override val workbenchMetricBaseName: String
@@ -174,8 +170,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 
 }
 
-//A map of writebacks to apply to the given entity reference
-case class WorkflowEntityUpdate(entityRef: AttributeEntityReference, upserts: AttributeMap)
+//A map of writebacks to apply to the given entity
+case class WorkflowEntityUpdate(entity: Entity, upserts: AttributeMap)
 
 //noinspection ScalaDocMissingParameterDescription,RedundantBlock,TypeAnnotation,ReplaceWithFlatten,ScalaUnnecessaryParentheses,ScalaUnusedSymbol,DuplicatedCode
 trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented with AuthUtil {
@@ -186,7 +182,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val googleServicesDAO: GoogleServicesDAO
   val notificationDAO: NotificationDAO
   val executionServiceCluster: ExecutionServiceCluster
-  val credential: Credential
   val config: SubmissionMonitorConfig
   val queryTimeout: Duration
 
@@ -711,11 +706,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         DBIO.successful(())
       } else {
         traceDBIOWithParent("saveEntityPatchSequence", span) { innerSpan =>
-          DBIO.sequence(entityUpdates map { entityUpd =>
-            dataAccess.entityQuery
-              .saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq(), innerSpan)
-              .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
-          })
+          // apply the workflow outputs to the original entities
+          val updatedEntities = entityUpdates map { entityUpd =>
+            val updatedAttrs = entityUpd.entity.attributes ++ entityUpd.upserts
+            entityUpd.entity.copy(attributes = updatedAttrs)
+          }
+
+          // save
+          dataAccess.entityQuery
+            .save(workspace, updatedEntities)
+            .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
         }
       }
     }
@@ -772,7 +772,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         val entityAttributeCount = optEntityUpdates map { update: WorkflowEntityUpdate =>
           val cnt = attributeCount(update.upserts.values)
           logger.trace(
-            s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId
+            s"Updating $cnt attribute values for entity ${update.entity.name} of type ${update.entity.entityType} in ${submissionId.toString}/${workflowRecord.externalId
                 .getOrElse("MISSING_WORKFLOW")}. ${safePrint(update.upserts)}"
           )
           cnt
@@ -838,7 +838,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       throw new RawlsException("how am I supposed to bind expressions to a nonexistent entity??!!")
     }
 
-    val entityAndUpsert = entity.map(e => WorkflowEntityUpdate(e.toReference, entityUpsert.toMap))
+    val entityAndUpsert = entity.map(e => WorkflowEntityUpdate(e, entityUpsert.toMap))
     val updatedWorkspace =
       if (workspaceAttributes.isEmpty) None
       else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))

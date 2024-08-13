@@ -4,7 +4,14 @@ object Merging {
   def customMergeStrategy(oldStrategy: (String) => MergeStrategy): (String => MergeStrategy) = {
     case x if x.endsWith("Resource$AuthenticationType.class") => MergeStrategy.first
     case x if x.endsWith("module-info.class")                 => MergeStrategy.discard
-    case x if x.contains("bouncycastle")                      => MergeStrategy.first
+    // For bouncycastle merge error:
+    // [error] Deduplicate found different file contents in the following:
+    // [error]   Jar name = bcpkix-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    // [error]   Jar name = bcprov-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    // [error]   Jar name = bcutil-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
+    case "META-INF/versions/9/OSGI-INF/MANIFEST.MF" => MergeStrategy.first
+    // For source bouncycastle files
+    case x if x.contains("bouncycastle") => MergeStrategy.first
     // For the following error:
     // [error] java.lang.RuntimeException: deduplicate: different file contents found in the following:
     // [error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
@@ -18,8 +25,8 @@ object Merging {
     case x if x.endsWith("kotlin_module")                => MergeStrategy.first
     case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.concat
     case x if x.endsWith("arrow-git.properties")         => MergeStrategy.concat
-    case PathList("javax", "servlet", _ @_*)             => MergeStrategy.first // This should be resolved in dependencies
-    case PathList("mozilla", _ @_*)                      => MergeStrategy.first // This should be resolved in dependencies
+    case x if x.endsWith("aot.factories")                => MergeStrategy.first
+    case x if x.endsWith("public-suffix-list.txt")       => MergeStrategy.first
     case x                                               => oldStrategy(x)
   }
 }

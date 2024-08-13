@@ -37,7 +37,6 @@ class HttpGooglePubSubDAO(clientEmail: String,
 
   private val characterEncoding = "UTF-8"
   implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.PubSub
-
   override def createTopic(topicName: String) =
     retryWithRecoverWhen500orGoogleError { () =>
       executeGoogleRequest(getPubSubDirectory.projects().topics().create(topicToFullPath(topicName), new Topic()))

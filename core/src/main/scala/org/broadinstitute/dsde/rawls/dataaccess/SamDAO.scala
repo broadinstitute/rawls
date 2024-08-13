@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.Async
 import cats.effect.kernel.Resource
 import org.broadinstitute.dsde.rawls.model.{
@@ -7,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RawlsUser,
   RawlsUserEmail,
+  RawlsUserSubjectId,
   SamCreateResourceResponse,
   SamFullyQualifiedResourceId,
   SamPolicy,
@@ -35,6 +37,8 @@ trait SamDAO {
   val errorReportSource = ErrorReportSource("sam")
 
   def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]]
+
+  def registerRawlsIdentity(): Future[Option[RawlsUser]]
 
   def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]]
 
@@ -129,6 +133,11 @@ trait SamDAO {
                             ctx: RawlsRequestContext
   ): Future[Seq[String]]
 
+  def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
+                                       resourceId: String,
+                                       ctx: RawlsRequestContext
+  ): Future[Boolean]
+
   def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]]
 
   def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
@@ -157,6 +166,10 @@ trait SamDAO {
   ): Future[Seq[SamFullyQualifiedResourceId]]
 
   def admin: SamAdminDAO
+
+  def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""), None)
+  )
 }
 
 trait SamAdminDAO {

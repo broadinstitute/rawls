@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.datarepo.client
 import bio.terra.datarepo.model.{
   CloudPlatform => SnapshotCloudPlatform,
   DatasetSummaryModel,
@@ -9,7 +11,7 @@ import bio.terra.datarepo.model.{
 }
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -21,6 +23,7 @@ import org.broadinstitute.dsde.rawls.model.{
   NamedDataRepoSnapshot,
   RawlsRequestContext,
   SamResourceAction,
+  SamResourceTypeName,
   SamResourceTypeNames,
   SamUserStatusResponse,
   WorkspaceType
@@ -43,7 +46,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
   // a test-fixture user info object
   private def defaultMockSamDao() = {
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-
+    when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+      .thenReturn(Future.successful(Seq.empty))
     when(
       mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                any[String],
@@ -76,6 +80,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     )
@@ -134,11 +139,18 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val snapshotUuid = UUID.randomUUID()
       val snapRefName = DataReferenceName("refname")
       val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+      val properties = Map("foo" -> "bar", "baz" -> "baaz")
 
       // call createSnapshot on the service
       Await.result(
-        snapshotService.createSnapshot(workspace.toWorkspaceName,
-                                       NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
+        snapshotService.createSnapshotByWorkspaceName(
+          workspace.toWorkspaceName,
+          NamedDataRepoSnapshot(snapRefName,
+                                snapRefDescription,
+                                snapshotUuid,
+                                Some(CloningInstructionsEnum.REFERENCE.toString),
+                                Some(properties)
+          )
         ),
         Duration.Inf
       )
@@ -150,9 +162,82 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         ArgumentMatchers.eq(snapRefName),
         ArgumentMatchers.eq(snapRefDescription),
         any[String],
-        any[CloningInstructionsEnum],
+        ArgumentMatchers.eq(CloningInstructionsEnum.REFERENCE),
+        ArgumentMatchers.eq(Some(properties)),
         any[RawlsRequestContext]
       )
+    }
+
+    "fail with a badrequest if the cloning instructions are invalid" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = defaultMockSamDao()
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      val mockDataRepoDAO = defaultDataRepoDao()
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      // call createSnapshot on the service
+      val ex = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(workspace.toWorkspaceName,
+                                                        NamedDataRepoSnapshot(snapRefName,
+                                                                              snapRefDescription,
+                                                                              snapshotUuid,
+                                                                              Some("COPY_INVALID_STRING")
+                                                        )
+          ),
+          Duration.Inf
+        )
+      }
+
+      assert(ex.errorReport.statusCode.get.intValue() == StatusCodes.BadRequest.intValue)
+    }
+
+    "fail with a badrequest if the snapshot does not exist in TDR" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = defaultMockSamDao()
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      val mockDataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
+      when(mockDataRepoDAO.getSnapshot(any[UUID], any())).thenAnswer(_ =>
+        throw new client.ApiException(StatusCodes.NotFound.intValue, "not found")
+      )
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      // call createSnapshot on the service
+      val ex = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(workspace.toWorkspaceName,
+                                                        NamedDataRepoSnapshot(snapRefName,
+                                                                              snapRefDescription,
+                                                                              snapshotUuid
+                                                        )
+          ),
+          Duration.Inf
+        )
+      }
+
+      assert(ex.errorReport.statusCode.get.intValue() == StatusCodes.BadRequest.intValue)
     }
 
     "create a WSM workspace if one doesn't exist when creating a snapshot reference" in withMinimalTestDatabase { _ =>
@@ -177,11 +262,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // call createSnapshot on the service
       Await.result(
-        snapshotService.createSnapshot(workspace.toWorkspaceName,
-                                       NamedDataRepoSnapshot(DataReferenceName("foo"),
-                                                             Option(DataReferenceDescriptionField("foo")),
-                                                             UUID.randomUUID()
-                                       )
+        snapshotService.createSnapshotByWorkspaceName(
+          workspace.toWorkspaceName,
+          NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                Option(DataReferenceDescriptionField("foo")),
+                                UUID.randomUUID()
+          )
         ),
         Duration.Inf
       )
@@ -196,6 +282,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO).createWorkspace(
         ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
         ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+        ArgumentMatchers.eq(None),
         any[RawlsRequestContext]
       )
     }
@@ -220,11 +307,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
         // call createSnapshot on the service
         Await.result(
-          snapshotService.createSnapshot(workspace.toWorkspaceName,
-                                         NamedDataRepoSnapshot(DataReferenceName("foo"),
-                                                               Option(DataReferenceDescriptionField("foo")),
-                                                               UUID.randomUUID()
-                                         )
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
           ),
           Duration.Inf
         )
@@ -239,7 +327,198 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
           any[UUID],
           ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          any[Option[WsmPolicyInputs]],
           any[RawlsRequestContext]
+        )
+    }
+
+    "set a group-constraint policy on a new WSM workspace if workspace has an auth domain" in withMinimalTestDatabase {
+      _ =>
+        val authDomainGroup = "authDomainGroup"
+        val mockSamDAO = defaultMockSamDao()
+        when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+          .thenReturn(Future.successful(Seq(authDomainGroup)))
+
+        val expectedPolicyInputs = new WsmPolicyInputs().inputs(
+          List(
+            new WsmPolicyInput()
+              .namespace("terra")
+              .name("group-constraint")
+              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+          ).asJava
+        )
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+        when(
+          mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])
+        ).thenAnswer(_ => throw new ApiException(404, "Workspace does not exist"))
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service called WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO).createWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          ArgumentMatchers.eq(Some(expectedPolicyInputs)),
+          any[RawlsRequestContext]
+        )
+    }
+
+    "set a group-constraint policy on an existing WSM workspace if no such policy exists and the workspace has an auth domain" in withMinimalTestDatabase {
+      _ =>
+        val authDomainGroup = "authDomainGroup"
+        val mockSamDAO = defaultMockSamDao()
+        when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+          .thenReturn(Future.successful(Seq(authDomainGroup)))
+
+        val expectedPolicyInputs = new WsmPolicyInputs().inputs(
+          List(
+            new WsmPolicyInput()
+              .namespace("terra")
+              .name("group-constraint")
+              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+          ).asJava
+        )
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service DID NOT call WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
+          any[UUID],
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          any[Option[WsmPolicyInputs]],
+          any[RawlsRequestContext]
+        )
+
+        // assert that the group-constraint policy was backfilled on the existing WSM workspace
+        verify(mockWorkspaceManagerDAO).updateWorkspacePolicies(any[UUID],
+                                                                ArgumentMatchers.eq(expectedPolicyInputs),
+                                                                any[RawlsRequestContext]
+        )
+    }
+
+    "not set a group-constraint policy on an existing WSM workspace if there is already a group-constraint policy even if the workspace has an auth domain" in withMinimalTestDatabase {
+      _ =>
+        val authDomainGroup = "authDomainGroup"
+        val mockSamDAO = defaultMockSamDao()
+        when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+          .thenReturn(Future.successful(Seq(authDomainGroup)))
+
+        val existingPolicyInputs = new WsmPolicyInputs().inputs(
+          List(
+            new WsmPolicyInput()
+              .namespace("terra")
+              .name("group-constraint")
+              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+              .additionalData(List(new WsmPolicyPair().key("group").value("additionalPolicyGroup")).asJava)
+          ).asJava
+        )
+
+        val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+        when(mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+          new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE).policies(existingPolicyInputs.getInputs)
+        )
+
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+
+        val workspace = minimalTestData.workspace
+
+        val snapshotService = SnapshotService.constructor(
+          slickDataSource,
+          mockSamDAO,
+          mockWorkspaceManagerDAO,
+          "fake-terra-data-repo-dev",
+          mockDataRepoDAO
+        )(testContext)
+
+        // call createSnapshot on the service
+        Await.result(
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
+          ),
+          Duration.Inf
+        )
+
+        // assert that the service checked to see if the workspace exists
+        verify(mockWorkspaceManagerDAO).getWorkspace(
+          ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+          any[RawlsRequestContext]
+        )
+
+        // assert that the service DID NOT call WSM's createWorkspace
+        verify(mockWorkspaceManagerDAO, times(0)).createWorkspace(
+          any[UUID],
+          ArgumentMatchers.eq(WorkspaceType.RawlsWorkspace),
+          any[Option[WsmPolicyInputs]],
+          any[RawlsRequestContext]
+        )
+
+        // assert that the workspace's existing policies were not updated
+        verify(mockWorkspaceManagerDAO, times(0)).updateWorkspacePolicies(any[UUID],
+                                                                          any[WsmPolicyInputs],
+                                                                          any[RawlsRequestContext]
         )
     }
 
@@ -259,6 +538,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
+      when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+        .thenReturn(Future.successful(Seq.empty))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
       when(
@@ -269,6 +550,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           any[Option[DataReferenceDescriptionField]],
           any[String],
           any[CloningInstructionsEnum],
+          any[Option[Map[String, String]]],
           any[RawlsRequestContext]
         )
       )
@@ -315,11 +597,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       intercept[RawlsException] {
         Await.result(
-          snapshotService.createSnapshot(workspace.toWorkspaceName,
-                                         NamedDataRepoSnapshot(DataReferenceName("foo"),
-                                                               Option(DataReferenceDescriptionField("foo")),
-                                                               UUID.randomUUID()
-                                         )
+          snapshotService.createSnapshotByWorkspaceName(
+            workspace.toWorkspaceName,
+            NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                  Option(DataReferenceDescriptionField("foo")),
+                                  UUID.randomUUID()
+            )
           ),
           Duration.Inf
         )
@@ -332,6 +615,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -352,6 +636,8 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
+      when(mockSamDAO.getResourceAuthDomain(any[SamResourceTypeName], any[String], any[RawlsRequestContext]))
+        .thenReturn(Future.successful(Seq.empty))
 
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       when(
@@ -362,6 +648,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           any[Option[DataReferenceDescriptionField]],
           any[String],
           any[CloningInstructionsEnum],
+          any[Option[Map[String, String]]],
           any[RawlsRequestContext]
         )
       )
@@ -411,11 +698,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       )(testContext)
 
       Await.result(
-        snapshotService.createSnapshot(workspace.toWorkspaceName,
-                                       NamedDataRepoSnapshot(DataReferenceName("foo"),
-                                                             Option(DataReferenceDescriptionField("foo")),
-                                                             UUID.randomUUID()
-                                       )
+        snapshotService.createSnapshotByWorkspaceName(
+          workspace.toWorkspaceName,
+          NamedDataRepoSnapshot(DataReferenceName("foo"),
+                                Option(DataReferenceDescriptionField("foo")),
+                                UUID.randomUUID()
+          )
         ),
         Duration.Inf
       )
@@ -427,11 +715,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
 
     "not create a snapshot reference of an Azure snapshot in a GCP workspace" in withDefaultTestDatabase {
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       // stub an Azure snapshot
       val mockDataRepoDAO = defaultDataRepoDao()
       val azureSnapshot = new SnapshotModel()
@@ -451,14 +741,14 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         defaultMockSamDao(),
-        defaultMockWorkspaceManagerDao(),
+        mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev",
         mockDataRepoDAO
       )(testContext)
 
       val thrown = intercept[RawlsException] {
         Await.result(
-          snapshotService.createSnapshot(
+          snapshotService.createSnapshotByWorkspaceName(
             testData.workspace.toWorkspaceName, // unless otherwise specified testData workspaces are GCP
             NamedDataRepoSnapshot(DataReferenceName("refname"),
                                   Option(DataReferenceDescriptionField("my reference description")),
@@ -472,13 +762,14 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         thrown.getMessage === "Snapshots by reference are not supported for Azure datasets."
       )
 
-      verify(defaultMockWorkspaceManagerDao(), never()).createDataRepoSnapshotReference(
+      verify(mockWorkspaceManagerDAO, never()).createDataRepoSnapshotReference(
         any[UUID],
         any[UUID],
         any[DataReferenceName],
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -521,8 +812,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val thrown = intercept[RawlsException] {
         Await.result(
-          snapshotService.createSnapshot(testData.azureWorkspace.toWorkspaceName,
-                                         NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
+          snapshotService.createSnapshotByWorkspaceName(testData.azureWorkspace.toWorkspaceName,
+                                                        NamedDataRepoSnapshot(snapRefName,
+                                                                              snapRefDescription,
+                                                                              snapshotUuid
+                                                        )
           ),
           Duration.Inf
         )
@@ -538,6 +832,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -574,8 +869,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val thrown = intercept[RawlsException] {
         Await.result(
-          snapshotService.createSnapshot(testData.deletingAzureWorkspace.toWorkspaceName,
-                                         NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
+          snapshotService.createSnapshotByWorkspaceName(testData.deletingAzureWorkspace.toWorkspaceName,
+                                                        NamedDataRepoSnapshot(snapRefName,
+                                                                              snapRefDescription,
+                                                                              snapshotUuid
+                                                        )
           ),
           Duration.Inf
         )
@@ -591,6 +889,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -599,6 +898,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // stub an Azure workspace
       val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
       val azureWorkspaceDescription = new WorkspaceDescription()
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
         .azureContext(
           new AzureContext()
             .tenantId(UUID.randomUUID().toString)
@@ -638,9 +938,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         "fake-terra-data-repo-dev",
         mockDataRepoDAO
       )(testContext)
-      val thrown = intercept[RawlsException] {
+      val thrown = intercept[UnsupportedPlatformException] {
         Await.result(
-          snapshotService.createSnapshot(
+          snapshotService.createSnapshotByWorkspaceName(
             testData.azureWorkspace.toWorkspaceName,
             NamedDataRepoSnapshot(DataReferenceName("refname"),
                                   Option(DataReferenceDescriptionField("my reference description")),
@@ -661,6 +961,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         any[Option[DataReferenceDescriptionField]],
         any[String],
         any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
         any[RawlsRequestContext]
       )
     }
@@ -736,10 +1037,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         // search for one of the snapshotIds that should be in the list
         val criteria = "00000000-0000-0000-0000-000000000012"
         val found = Await
-          .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                     0,
-                                                     10,
-                                                     Option(UUID.fromString(criteria))
+          .result(snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                                    0,
+                                                                    10,
+                                                                    Option(UUID.fromString(criteria))
                   ),
                   Duration.Inf
           )
@@ -759,10 +1060,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         // search for one of the snapshotIds that should be duplicated
         val criteria1 = "00000000-0000-0000-0000-000000000005"
         val found1 = Await
-          .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                     0,
-                                                     10,
-                                                     Option(UUID.fromString(criteria1))
+          .result(snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                                    0,
+                                                                    10,
+                                                                    Option(UUID.fromString(criteria1))
                   ),
                   Duration.Inf
           )
@@ -776,10 +1077,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         // now search for one of the snapshotIds that should NOT be duplicated, to be sure
         val criteria2 = "00000000-0000-0000-0000-000000000015"
         val found2 = Await
-          .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                     0,
-                                                     10,
-                                                     Option(UUID.fromString(criteria2))
+          .result(snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                                    0,
+                                                                    10,
+                                                                    Option(UUID.fromString(criteria2))
                   ),
                   Duration.Inf
           )
@@ -802,10 +1103,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         // search for one of the snapshotIds that should NOT be in the list
         val criteria = "00000000-0000-0000-0000-000000000099"
         val found = Await
-          .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                     0,
-                                                     10,
-                                                     Option(UUID.fromString(criteria))
+          .result(snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                                    0,
+                                                                    10,
+                                                                    Option(UUID.fromString(criteria))
                   ),
                   Duration.Inf
           )
@@ -907,12 +1208,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be duplicated
       val criteria1 = "00000000-0000-0000-0000-000000000002"
       val found1 = Await
-        .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                   pageOffset,
-                                                   pageLimit,
-                                                   Option(UUID.fromString(criteria1))
-                ),
-                Duration.Inf
+        .result(
+          snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                            pageOffset,
+                                                            pageLimit,
+                                                            Option(UUID.fromString(criteria1))
+          ),
+          Duration.Inf
         )
         .gcpDataRepoSnapshots
 
@@ -931,10 +1233,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // return the first 8 results for one of the snapshotIds that should be duplicated
       val criteria1 = "00000000-0000-0000-0000-000000000003"
       val found1 = Await
-        .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                   0,
-                                                   8,
-                                                   Option(UUID.fromString(criteria1))
+        .result(snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                                  0,
+                                                                  8,
+                                                                  Option(UUID.fromString(criteria1))
                 ),
                 Duration.Inf
         )
@@ -947,10 +1249,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // now, perform the same search but with an offset of 4 and limit of 3
       val found2 = Await
-        .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                   4,
-                                                   3,
-                                                   Option(UUID.fromString(criteria1))
+        .result(snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                                  4,
+                                                                  3,
+                                                                  Option(UUID.fromString(criteria1))
                 ),
                 Duration.Inf
         )
@@ -978,12 +1280,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be duplicated
       val criteria1 = "00000000-0000-0000-0000-000000000002"
       val found1 = Await
-        .result(snapshotService.enumerateSnapshots(minimalTestData.workspace.toWorkspaceName,
-                                                   pageOffset,
-                                                   pageLimit,
-                                                   Option(UUID.fromString(criteria1))
-                ),
-                Duration.Inf
+        .result(
+          snapshotService.enumerateSnapshotsByWorkspaceName(minimalTestData.workspace.toWorkspaceName,
+                                                            pageOffset,
+                                                            pageLimit,
+                                                            Option(UUID.fromString(criteria1))
+          ),
+          Duration.Inf
         )
         .gcpDataRepoSnapshots
 
@@ -991,6 +1294,45 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       found1.foreach { x =>
         x.getAttributes.getSnapshot shouldBe criteria1
       }
+    }
+
+    "create a new snapshot reference when called with workspaceId" in withMinimalTestDatabase { _ =>
+      val mockSamDAO = defaultMockSamDao()
+      val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
+      val mockDataRepoDAO = defaultDataRepoDao()
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        "fake-terra-data-repo-dev",
+        mockDataRepoDAO
+      )(testContext)
+
+      val snapshotUuid = UUID.randomUUID()
+      val snapRefName = DataReferenceName("refname")
+      val snapRefDescription = Option(DataReferenceDescriptionField("my reference description"))
+
+      // call createSnapshot on the service
+      Await.result(
+        snapshotService.createSnapshotByWorkspaceId(workspace.workspaceIdAsUUID.toString,
+                                                    NamedDataRepoSnapshot(snapRefName, snapRefDescription, snapshotUuid)
+        ),
+        Duration.Inf
+      )
+
+      // assert that the service called WSM's createDataRepoSnapshotReference
+      verify(mockWorkspaceManagerDAO).createDataRepoSnapshotReference(
+        ArgumentMatchers.eq(workspace.workspaceIdAsUUID),
+        ArgumentMatchers.eq(snapshotUuid),
+        ArgumentMatchers.eq(snapRefName),
+        ArgumentMatchers.eq(snapRefDescription),
+        any[String],
+        any[CloningInstructionsEnum],
+        any[Option[Map[String, String]]],
+        any[RawlsRequestContext]
+      )
     }
 
   }

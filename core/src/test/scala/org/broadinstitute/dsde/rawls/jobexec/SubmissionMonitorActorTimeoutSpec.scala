@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType.Workspace
 import org.broadinstitute.dsde.rawls.dataaccess.{
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster,
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeName,
   AttributeString,
+  Entity,
   RawlsTracingContext,
   WorkflowStatuses
 }
@@ -79,15 +81,14 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
           mockNotificationDAO,
           MockShardedExecutionServiceCluster
             .fromDAO(new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString), dataSource),
-          new Builder().build(),
           config,
-          Duration.create(1, SECONDS), // <-- 1 second timeout for entity queries
+          Duration.create(1, SECONDS),
           "test"
         )
       )
 
       // generate a workflow entity update
-      val entityRef = AttributeEntityReference(testData.sample1.entityType, testData.sample1.name)
+      val entityRef = Entity(testData.sample1.entityType, testData.sample1.name, Map())
       val entityUpdate =
         WorkflowEntityUpdate(
           entityRef,

@@ -223,11 +223,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - googleoauth:
-            - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
+        - oidc_google_billing_scope: []
       x-codegen-request-body-name: createProjectRequest
   /api/billing/v2/{projectId}:
     get:
@@ -714,76 +710,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/project/registration:
-    post:
-      tags:
-        - admin
-      summary: create a record of project ownership
-      operationId: recordProjectOwnership
-      requestBody:
-        description: create project request
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/RawlsBillingProjectTransfer'
-        required: true
-      responses:
-        201:
-          description: Successful project record creation
-          content: {}
-        403:
-          description: You must be an admin to call this endpoint.
-          content: {}
-        404:
-          description: Missing required parameter
-          content: {}
-        500:
-          description: Internal Server Error
-          content: {}
-      x-codegen-request-body-name: createProjectRequest
-  /api/admin/project/registration/{projectName}:
-    delete:
-      tags:
-        - admin
-      summary: remove the record for a billing project
-      operationId: unregisterBillingProject
-      parameters:
-        - name: projectName
-          in: path
-          description: name of the project
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          'application/json':
-            schema:
-              required:
-                - newOwnerEmail
-                - newOwnerToken
-              type: object
-              properties:
-                newOwnerEmail:
-                  type: string
-                  description: Email of the current owner
-                newOwnerToken:
-                  type: string
-                  description: OAuth2Token of the current owner
-        required: true
-      responses:
-        204:
-          description: Successful project record removal
-          content: {}
-        403:
-          description: You must be an admin to call this endpoint.
-          content: {}
-        404:
-          description: Missing required parameter
-          content: {}
-        500:
-          description: Internal Server Error
-          content: {}
-      x-codegen-request-body-name: ownerInfo
   /api/admin/submissions:
     get:
       tags:
@@ -3893,11 +3819,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - googleoauth:
-            - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
+        - oidc_google_billing_scope: []
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -4065,6 +3987,80 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceId}/snapshots/v2:
+    parameters:
+      - $ref: '#/components/parameters/workspaceIdPathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
+      operationId: enumerateDataRepoSnapshotByWorkspaceId
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+        - name: referencedSnapshotId
+          in: query
+          description: Optional; UUID of the Data Repo snapshot being referenced
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SnapshotListResponse'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - snapshots_v2
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshotByWorkspaceId
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -4173,6 +4169,71 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/clone:
+    post:
+      tags:
+        - workspaces_v2
+      summary: Clone workspace
+      description: Clone a workspace, asynchronously if possible
+      operationId: cloneWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: Request for new workspace
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/WorkspaceRequestClone'
+        required: true
+      responses:
+        201:
+          description: Successful Request
+          headers:
+            Location:
+              description: The path to the newly cloned workspace
+              schema:
+                type: string
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDetails'
+        400:
+          description: Workspace namespace is not ready
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to create workspace in namespace
+            or user does not have permission to set attributes in the namespace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Source workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: Destination workspace already exists
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        422:
+          description: Destination workspace must match source's authorization domain,
+            if the dest has one
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: workspaceRequest
+
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketMigration:
     get:
       tags:
@@ -4407,6 +4468,22 @@ components:
           type: string
           description: A description for the snapshot
           default: ""
+        properties:
+          type: object
+          description: A map of key-value pairs to associate with the snapshot. Optional, defaults to an empty map if not specified.
+          default: {}
+        cloningInstructions:
+          type: string
+          default: COPY_NOTHING
+          description: |
+            Cloning semantics for this snapshot. Optional, defaults to COPY_NOTHING if not specified.
+            COPY_NOTHING: Don't clone the snapshot.
+            COPY_REFERENCE: Create a new referenced snapshot that points to same cloud resource as the source snapshot.
+            COPY_LINK_REFERENCE: Create a new referenced snapshot that points to the same cloud resource as the source resource, AND link the source workspace policy to the destination workspace policy; changes in the source will propagate to the destination.
+          enum:
+            - COPY_NOTHING
+            - COPY_REFERENCE
+            - COPY_LINK_REFERENCE
       description: A Data Repo snapshot
     UpdateDataReferenceRequestBody:
       type: object
@@ -4435,6 +4512,10 @@ components:
           type: string
         cloningInstructions:
           type: string
+        properties:
+          type: array
+          items:
+            type: object
     DataRepoSnapshotAttributes:
       type: object
       required: [ instanceName, snapshot ]
@@ -5753,7 +5834,7 @@ components:
         runningSubmissionsCount:
           type: integer
           description: Count of all the running submissions
-      description: Statistics about submissions in a workspace
+      description: Statistics about submissions in a workspace (only supported for GCP workspaces)
     WorkspaceRequest:
       required:
         - attributes
@@ -5770,7 +5851,8 @@ components:
         authorizationDomain:
           type: array
           description: The list of groups in the Authorization Domain (empty if no
-            AD is set)
+            AD is set). Not supported for Azure workspaces. To limit Azure workspace 
+            access to members of a set of Terra groups, use a group-constraint policy instead.
           items:
             $ref: '#/components/schemas/ManagedGroupRef'
         attributes:
@@ -5944,10 +6026,12 @@ components:
             The AzureManagedAppCoordinates of the billing project, if this is an Azure workspace.
         bucketOptions:
           $ref: '#/components/schemas/WorkspaceBucketOptions'
-        canCompute:
-          type: boolean
         canShare:
           type: boolean
+          description: True if the user can share the workspace with others, false otherwise
+        canCompute:
+          type: boolean
+          description: True if the user can launch compute in this workspace, false otherwise
         catalog:
           type: boolean
         owners:
@@ -5981,10 +6065,17 @@ components:
           $ref: '#/components/schemas/WorkspaceAccessLevel'
         public:
           type: boolean
+        canShare:
+          type: boolean
+          description: True if the user can share the workspace with others, false otherwise
+        canCompute:
+          type: boolean
+          description: True if the user can launch compute in this workspace, false otherwise
         workspace:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
-          $ref: '#/components/schemas/WorkspaceSubmissionStats'
+          description: GCP workspace submission statistics, deprecated as part of the list response due to slow performance. This field will continue to be supported on individual workspace details.
+          deprecated: true
         policies:
           type: array
           items:
@@ -6484,9 +6575,14 @@ components:
           type: string
           format: uuid
           description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        region:
+          type: string
+          description: the region that the landing zone is in (cloudPlatform AZURE only)
         protectedData:
           type: boolean
           description: whether this billing project supports protected data (cloudPlatform AZURE only)
+        organization:
+          $ref: '#/components/schemas/RawlsBillingProjectOrganization'
     AzureManagedAppCoordinates:
       required:
         - tenantId
@@ -6505,6 +6601,15 @@ components:
         managedResourceGroupId:
           type: string
           description: ID of the Azure managed resource group for this managed application deployment.
+    RawlsBillingProjectOrganization:
+      required:
+        - enterprise
+      type: object
+      description: Details about billing project's organization. Only present if billing project is backed by a billing profile.
+      properties:
+        enterprise:
+          type: boolean
+          description: whether this billing project is part of an enterprise organization i.e. they have a signed business associate agreement (BAA)
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
@@ -6825,6 +6930,13 @@ components:
       required: true
       schema:
         type: string
+    workspaceIdPathParam:
+      name: workspaceId
+      in: path
+      description: The workspace id
+      required: true
+      schema:
+        type: string
   responses:
     RawlsInternalError:
       description: Rawls Internal Error
@@ -6833,26 +6945,22 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
-    googleoauth:
-      type: oauth2
-      flows:
-        implicit:
-          authorizationUrl: https://accounts.google.com/o/oauth2/auth
-          scopes:
-            openid: open id authorization
-            email: email authorization
-            profile: profile authorization
-            https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
     oidc:
       type: oauth2
+      x-tokenName: id_token
       flows:
         authorizationCode:
-          authorizationUrl: /oauth2/authorize
-          tokenUrl: /oauth2/token
-          scopes:
-            openid: open id authorization
-            email: email authorization
-            profile: profile authorization
+          authorizationUrl: OAUTH_AUTHORIZATION_URL
+          scopes: {}
+          tokenUrl: OAUTH_TOKEN_URL
+    oidc_google_billing_scope:
+      type: oauth2
+      x-tokenName: id_token
+      flows:
+        authorizationCode:
+          authorizationUrl: OAUTH_AUTHORIZATION_URL_WITH_GOOGLE_BILLING_SCOPE
+          scopes: {}
+          tokenUrl: OAUTH_TOKEN_URL_WITH_GOOGLE_BILLING_SCOPE
+
 security:
-  - googleoauth: [openid, email, profile]
-  - oidc: [openid, email, profile]
+  - oidc: []

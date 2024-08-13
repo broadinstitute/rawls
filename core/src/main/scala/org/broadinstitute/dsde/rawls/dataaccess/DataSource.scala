@@ -75,8 +75,10 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     }
 
     database.run(callerActionWithTempTables.withPinnedSession).recover { case t: Throwable =>
-      logger.error(
-        s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). Message: ${t.getMessage}"
+      // log the transaction error at DEBUG level. Since we rethrow the error, calling code is responsible for handling
+      // it and, if appropriate, logging at ERROR level. Only ERROR-level logs are picked up as Sentry alerts.
+      logger.debug(
+        s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). ${t.getClass.getName}: ${t.getMessage}"
       )
       throw t
     }

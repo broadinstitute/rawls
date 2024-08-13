@@ -16,25 +16,31 @@ env:
   BEE_DESTROY_RUN_NAME: 'bee-destroy-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'
 
 jobs:
-  rawls-build-tag-publish-job:
+  # Attempt to bump the app version.
+
+  tag-job:
+    uses: ./.github/workflows/tag.yml
+    with:
+      release-branches: develop
+    secrets: inherit
+
+  # Set the test-context: is this a merge to `develop` or is this a PR? Extract branch accordingly
+  init-github-context:
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     outputs:
-      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+      log-results: ${{ steps.set-test-context.outputs.log-results }}
+      test-context: ${{ steps.set-test-context.outputs.test-context }}
+      ref: ${{ steps.extract-branch.outputs.ref }}
     steps:
-      - uses: 'actions/checkout@v3'
-
-      - name: Bump the tag to a new version
-        uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
-        id: tag
-        env:
-          DEFAULT_BUMP: patch
-          GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
-          RELEASE_BRANCHES: main
-          WITH_V: true
-
+      - name: Get test context
+        id: set-test-context
+        run: |-
+          echo 'log-results=true' >> $GITHUB_OUTPUT
+          if ${{ github.ref_name == 'develop' }}; then
+            echo 'test-context=dev-merge' >> $GITHUB_OUTPUT
+          else
+            echo 'test-context=pr-test' >> $GITHUB_OUTPUT
+          fi
       - name: Extract branch
         id: extract-branch
         run: |
@@ -53,6 +59,21 @@ jobs:
           echo "ref=$GITHUB_REF" >> $GITHUB_OUTPUT
           echo "name=$GITHUB_SHA" >> $GITHUB_OUTPUT
 
+  # Compile the Scala code to a jar.
+  # Build the docker image and push that image to GCR.
+  rawls-build-publish-job:
+    runs-on: ubuntu-latest
+    needs:
+      - tag-job
+      - init-github-context
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    outputs:
+      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+    steps:
+      - uses: 'actions/checkout@v4'
+
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
@@ -64,8 +85,8 @@ jobs:
           inputs: '{
             "run-name": "${{ env.RAWLS_BUILD_RUN_NAME }}",
             "repository": "${{ github.event.repository.full_name }}",
-            "ref": "${{ steps.extract-branch.outputs.ref }}",
-            "rawls-release-tag": "${{ steps.tag.outputs.tag }}"
+            "ref": "${{ needs.init-github-context.outputs.ref }}",
+            "rawls-release-tag": "${{ needs.tag-job.outputs.tag }}"
           }'
 
       - name: Render Rawls version
@@ -74,38 +95,50 @@ jobs:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: |
           echo "$GITHUB_CONTEXT"
-          echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
+          echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ needs.tag-job.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
-  init-github-context:
-    runs-on: ubuntu-latest
-    outputs:
-      log-results: ${{ steps.set-test-context.outputs.log-results }}
-      test-context: ${{ steps.set-test-context.outputs.test-context }}
-    steps:
-      - name: Get test context
-        id: set-test-context
-        run: |-
-          echo 'log-results=true' >> $GITHUB_OUTPUT
-          if ${{ github.ref_name == 'develop' }}; then
-            echo 'test-context=dev-merge' >> $GITHUB_OUTPUT
-          else
-            echo 'test-context=pr-test' >> $GITHUB_OUTPUT
-          fi
-          
+
+
+  # Tell Broad DevOps Sherlock about the build version we just created.
+  report-to-sherlock:
+    uses: broadinstitute/sherlock/.github/workflows/client-report-app-version.yaml@main
+    needs: [tag-job, rawls-build-publish-job]
+    with:
+      new-version: ${{ needs.tag-job.outputs.tag }}
+      chart-name: 'rawls'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+  # Put new Rawls version in Broad dev environment
+  set-version-in-dev:
+    uses: broadinstitute/sherlock/.github/workflows/client-set-environment-app-version.yaml@main
+    needs: [tag-job, rawls-build-publish-job, report-to-sherlock]
+    if: ${{ github.ref_name == 'develop' }}
+    with:
+      new-version: ${{ needs.tag-job.outputs.tag }}
+      chart-name: 'rawls'
+      environment-name: 'dev'
+    secrets:
+      sync-git-token: ${{ secrets.BROADBOT_TOKEN }}
+    permissions:
+      id-token: 'write'
+
+  # Create a BEE to be used by swat tests.
   create-bee-workflow:
     strategy:
       matrix:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
     runs-on: ubuntu-latest
     needs:
-      - rawls-build-tag-publish-job
+      - rawls-build-publish-job
     permissions:
       contents: 'read'
       id-token: 'write'
     steps:
       - name: Echo Rawls version
         run: |
-          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+          echo '${{ needs.rawls-build-publish-job.outputs.custom-version-json }}'
 
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v4.0.0
@@ -120,19 +153,29 @@ jobs:
             "run-name": "${{ env.BEE_CREATE_RUN_NAME }}-${{ matrix.terra-env }}",
             "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
             "version-template": "${{ matrix.terra-env }}",
-            "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
+            "custom-version-json": "${{ needs.rawls-build-publish-job.outputs.custom-version-json }}"
           }'
 
+  # Run swat tests. This kicks off multiple parallel jobs for Workflows and Workspaces tests, which run against the BEE
+  # we just created.
   rawls-swat-test-job:
     strategy:
+      # set fail-fast: false. We want all test jobs to complete, so we can see their results. If fail-fast were true,
+      # the first test jobs failure would cancel the other test jobs.
+      fail-fast: false
       matrix:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
         testing-env: [ qa ] # what env resources to use, e.g. SA keys
         test-group: [
-          { group_name: workspaces, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest -n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesTest" },
-          { group_name: analysis_journeys, tag: "-n org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest" },
+          { group_name: workspaces, tag: "-n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesTest" },
+          { group_name: workspacesAuthDomains, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest" },
           { group_name: workflows, tag: "-n org.broadinstitute.dsde.test.api.MethodsTest" }
+          # The Analysis Journeys swat tests (DataRepoSnapshotsTest) are all disabled, so the following matrix value
+          # will run zero tests. Instead of running a noop test job, skip it altogether. We are leaving this value
+          # here, commented out, to make it easy to re-instate if/when Analysis Journeys does have some tests to run.
+          # { group_name: analysis_journeys, tag: "-n org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest" }
         ] # Rawls test groups
+    name: ${{ matrix.test-group.group_name }}-owned tests
     runs-on: ubuntu-latest
     needs:
       - create-bee-workflow
@@ -160,9 +203,11 @@ jobs:
             "ENV": "${{ matrix.testing-env }}",
             "test-group-name": "${{ matrix.test-group.group_name }}",
             "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
-            "test-context": "${{ env.test-context }}"
+            "test-context": "${{ env.test-context }}",
+            "ref": "${{ needs.init-github-context.outputs.ref }}"
           }'
 
+  # Delete the BEE, now that swat tests are done.
   destroy-bee-workflow:
     strategy:
       matrix:

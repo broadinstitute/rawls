@@ -12,9 +12,9 @@ import bio.terra.workspace.model.{
   WorkspaceDescription,
   WorkspaceStageModel,
   WsmPolicyInput,
+  WsmPolicyInputs,
   WsmPolicyPair
 }
-import cats.effect.IO
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -22,43 +22,38 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
-import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
-import org.broadinstitute.dsde.rawls.model.Workspace.buildMcWorkspace
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.google.{
-  BigQueryDatasetName,
-  BigQueryTableName,
-  GcsBucketName,
-  GoogleProject,
-  IamPermission
-}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -77,7 +72,7 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
@@ -127,7 +122,7 @@ class WorkspaceServiceSpec
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
-    val executionContext: ExecutionContext
+    override val executionContext: ExecutionContext
   ) extends WorkspaceApiService
       with MethodConfigApiService
       with SubmissionApiService
@@ -135,6 +130,8 @@ class WorkspaceServiceSpec
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
+    lazy val methodConfigurationService: MethodConfigurationService = methodConfigurationServiceConstructor(ctx1)
+    lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
 
@@ -149,6 +146,11 @@ class WorkspaceServiceSpec
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
+    when(
+      leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
+    )
+      .thenReturn(Future.successful())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
@@ -168,7 +170,6 @@ class WorkspaceServiceSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
@@ -184,7 +185,7 @@ class WorkspaceServiceSpec
       1 second,
       5 seconds
     )
-    val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+    val servicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
@@ -196,15 +197,13 @@ class WorkspaceServiceSpec
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
-      "requesterPaysRole",
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
-    val genomicsServiceConstructor = GenomicsService.constructor(
+    val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
       slickDataSource,
       gcsDAO
     ) _
@@ -240,9 +239,9 @@ class WorkspaceServiceSpec
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       workspaceManagerDAO,
@@ -257,7 +256,7 @@ class WorkspaceServiceSpec
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
+    val resourceBufferService = Mockito.spy(new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig))
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -271,7 +270,7 @@ class WorkspaceServiceSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassConfig = FastPassConfig.apply(testConf)
-    val fastPassServiceConstructor = FastPassService.constructor(
+    val fastPassServiceConstructor = FastPassServiceImpl.constructor(
       fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
@@ -284,32 +283,21 @@ class WorkspaceServiceSpec
       terraBucketWriterRole
     ) _
 
+    val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(
-        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-        workbenchMetricBaseName = workbenchMetricBaseName
-      ),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
-      methodConfigResolver,
+      leonardoService,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
       terraBillingProjectOwnerRole,
@@ -321,6 +309,42 @@ class WorkspaceServiceSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor
     ) _
+
+    val methodRepoDAO = new HttpMethodRepoDAO(
+      MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+      workbenchMetricBaseName = workbenchMetricBaseName
+    )
+
+    override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+      MethodConfigurationService.constructor(
+        slickDataSource,
+        samDAO,
+        methodRepoDAO,
+        methodConfigResolver,
+        entityManager,
+        workspaceRepository,
+        workbenchMetricBaseName
+      ) _
+
+    override val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService =
+      SubmissionsService.constructor(
+        slickDataSource,
+        entityManager,
+        methodRepoDAO,
+        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        executionServiceCluster,
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName,
+        submissionCostService,
+        genomicsServiceConstructor,
+        workspaceServiceConfig,
+        workspaceRepository
+      ) _
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
@@ -1308,7 +1332,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "delete an Azure workspace" in withTestDataServices { services =>
+  it should "fail if called with an MC workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
@@ -1334,99 +1358,16 @@ class WorkspaceServiceSpec
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    val deletionResult = Await.result(services.workspaceService.deleteWorkspace(
-                                        WorkspaceName(workspace.namespace, workspace.name)
-                                      ),
-                                      Duration.Inf
-    )
-
-    deletionResult.gcpContext shouldBe None
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(
+                     WorkspaceName(workspace.namespace, workspace.name)
+                   ),
+                   Duration.Inf
+      )
     }
-  }
-
-  it should "not delete the rawls Azure workspace when WSM errors out for an azure workspace" in withTestDataServices {
-    services =>
-      val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val workspaceRequest = WorkspaceRequest(
-        testData.testProject1Name.value,
-        workspaceName,
-        Map.empty
-      )
-      when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-        new WorkspaceDescription()
-          .stage(WorkspaceStageModel.MC_WORKSPACE)
-          .azureContext(
-            new AzureContext()
-              .tenantId("fake_tenant_id")
-              .subscriptionId("fake_sub_id")
-              .resourceGroupId("fake_mrg_id")
-          )
-      )
-      when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
-        throw new ApiException("error")
-      )
-
-      val workspace =
-        Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
-                                                                           new ProfileModel().id(UUID.randomUUID())
-                     ),
-                     Duration.Inf
-        )
-      assertResult(Option(workspace.toWorkspaceName)) {
-        runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
-      }
-
-      val ex = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.deleteWorkspace(
-                       WorkspaceName(workspace.namespace, workspace.name)
-                     ),
-                     Duration.Inf
-        )
-      }
-
-      val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-      assert(maybeWorkspace.isDefined)
-  }
-
-  it should "delete the rawls workspace when WSM returns 404" in withTestDataServices { services =>
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = WorkspaceRequest(
-      testData.testProject1Name.value,
-      workspaceName,
-      Map.empty
-    )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
-    )
-    when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
-      throw new ApiException(404, "not found")
-    )
-
-    val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
-      Duration.Inf
-    )
-    assertResult(Option(workspace.toWorkspaceName)) {
-      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    assertResult(Some(StatusCodes.InternalServerError)) {
+      error.errorReport.statusCode
     }
-
-    Await.result(services.workspaceService.deleteWorkspace(
-                   WorkspaceName(workspace.namespace, workspace.name)
-                 ),
-                 Duration.Inf
-    )
-
-    val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-    assert(maybeWorkspace.isEmpty)
   }
 
   behavior of "getTags"
@@ -1802,123 +1743,6 @@ class WorkspaceServiceSpec
       }
     }
 
-  "extractOperationIdsFromCromwellMetadata" should "parse workflow metadata" in {
-    val jsonString =
-      """{
-        |  "calls": {
-        |    "hello_and_goodbye.goodbye": [
-        |      {
-        |        "attempt": 1,
-        |        "backendLogs": {
-        |          "log": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye.log"
-        |        },
-        |        "backendStatus": "Success",
-        |        "end": "2019-04-24T13:57:48.998Z",
-        |        "executionStatus": "Done",
-        |        "jobId": "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
-        |        "shardIndex": -1,
-        |        "start": "2019-04-24T13:56:22.387Z",
-        |        "stderr": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye-stderr.log",
-        |        "stdout": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye-stdout.log"
-        |      }
-        |    ],
-        |    "hello_and_goodbye.hello": [
-        |      {
-        |        "attempt": 1,
-        |        "backendLogs": {
-        |          "log": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello.log"
-        |        },
-        |        "backendStatus": "Success",
-        |        "end": "2019-04-24T13:58:21.978Z",
-        |        "executionStatus": "Done",
-        |        "jobId": "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl",
-        |        "shardIndex": -1,
-        |        "start": "2019-04-24T13:56:22.387Z",
-        |        "stderr": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello-stderr.log",
-        |        "stdout": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello-stdout.log"
-        |      }
-        |    ]
-        |  },
-        |  "end": "2019-04-24T13:58:23.868Z",
-        |  "id": "0d6768b7-73b3-41c4-b292-de743657c5db",
-        |  "start": "2019-04-24T13:56:20.348Z",
-        |  "status": "Succeeded",
-        |  "workflowName": "sub.hello_and_goodbye",
-        |  "workflowRoot": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/"
-        |}""".stripMargin
-
-    import spray.json._
-    val metadataJson = jsonString.parseJson.asJsObject
-    WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson) should contain theSameElementsAs Seq(
-      "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
-      "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
-    )
-  }
-
-  behavior of "getTerminalStatusDate"
-
-  // test getTerminalStatusDate
-  private val workflowFinishingTomorrow =
-    testData.submissionMixed.workflows.head.copy(statusLastChangedDate = testDate.plusDays(1))
-  private val submissionMixedDates = testData.submissionMixed.copy(
-    workflows = workflowFinishingTomorrow +: testData.submissionMixed.workflows.tail
-  )
-  private val getTerminalStatusDateTests = Table(
-    ("description", "submission", "workflowId", "expectedOutput"),
-    ("submission containing one completed workflow, no workflowId input",
-     testData.submissionSuccessful1,
-     None,
-     Option(testDate)
-    ),
-    ("submission containing one completed workflow, with workflowId input",
-     testData.submissionSuccessful1,
-     testData.submissionSuccessful1.workflows.head.workflowId,
-     Option(testDate)
-    ),
-    ("submission containing one completed workflow, with nonexistent workflowId input",
-     testData.submissionSuccessful1,
-     Option("thisWorkflowIdDoesNotExist"),
-     None
-    ),
-    ("submission containing several workflows with one finishing tomorrow, no workflowId input",
-     submissionMixedDates,
-     None,
-     Option(testDate.plusDays(1))
-    ),
-    ("submission containing several workflows, with workflowId input for workflow finishing tomorrow",
-     submissionMixedDates,
-     submissionMixedDates.workflows.head.workflowId,
-     Option(testDate.plusDays(1))
-    ),
-    ("submission containing several workflows, with workflowId input for workflow finishing today",
-     submissionMixedDates,
-     submissionMixedDates.workflows(2).workflowId,
-     Option(testDate)
-    ),
-    ("submission containing several workflows, with workflowId input for workflow not finished",
-     submissionMixedDates,
-     submissionMixedDates.workflows.last.workflowId,
-     None
-    ),
-    ("aborted submission, no workflowId input", testData.submissionAborted1, None, Option(testDate)),
-    ("aborted submission, with workflowId input",
-     testData.submissionAborted1,
-     testData.submissionAborted1.workflows.head.workflowId,
-     Option(testDate)
-    ),
-    ("in progress submission, no workflowId input", testData.submissionSubmitted, None, None),
-    ("in progress submission, with workflowId input",
-     testData.submissionSubmitted,
-     testData.submissionSubmitted.workflows.head.workflowId,
-     None
-    )
-  )
-  forAll(getTerminalStatusDateTests) { (description, submission, workflowId, expectedOutput) =>
-    it should s"run getTerminalStatusDate test for $description" in {
-      assertResult(WorkspaceService.getTerminalStatusDate(submission, workflowId))(expectedOutput)
-    }
-  }
-
   behavior of "RequesterPays"
 
   it should "return Unit when adding linked service accounts to workspace" in withTestDataServices { services =>
@@ -2049,6 +1873,48 @@ class WorkspaceServiceSpec
     workspace.googleProjectNumber should not be empty
   }
 
+  it should "create desired policies on the Sam workspace resource" in withTestDataServices { services =>
+    val newWorkspaceName = "workspaceResourcePoliciesTest"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val requestedPoliciesCaptor = captor[Map[SamResourcePolicyName, SamPolicy]]
+    verify(services.samDAO).createResourceFull(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspace.workspaceId),
+      requestedPoliciesCaptor.capture,
+      any[Set[String]],
+      any[RawlsRequestContext],
+      ArgumentMatchers.eq(None)
+    )
+
+    val requestedPolicies = requestedPoliciesCaptor.getValue
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.projectOwner, fail("Missing project-owner policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.projectOwner, SamWorkspaceRoles.owner)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.owner, fail("Missing owner policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.owner)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.writer, fail("Missing writer policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.writer)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.reader, fail("Missing reader policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.reader)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.shareWriter, fail("Missing share-writer policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.shareWriter)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.shareReader, fail("Missing share-reader policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.shareReader)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.canCompute, fail("Missing can-compute policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCompute)
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.canCatalog, fail("Missing can-catalog policy"))
+      .roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCatalog)
+  }
+
   it should "create Sam resource for google project" in withTestDataServices { services =>
     val newWorkspaceName = "new-workspace"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
@@ -2059,10 +1925,12 @@ class WorkspaceServiceSpec
     verify(services.samDAO).createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
       ArgumentMatchers.eq(workspace.googleProjectId.value),
-      any[Map[SamResourcePolicyName, SamPolicy]],
-      any[Set[String]],
+      ArgumentMatchers.eq(Map.empty),
+      ArgumentMatchers.eq(Set.empty),
       any[RawlsRequestContext],
-      any[Option[SamFullyQualifiedResourceId]]
+      ArgumentMatchers.eq(
+        Option(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
+      )
     )
   }
 
@@ -2415,8 +2283,11 @@ class WorkspaceServiceSpec
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectId.value should not be empty
+    workspace.googleProject.value should not be empty
     workspace.googleProjectNumber should not be empty
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    workspace.attributes shouldBe Some(baseWorkspace.attributes)
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
@@ -2440,12 +2311,46 @@ class WorkspaceServiceSpec
     eventually(timeout = timeout(Span(10, Seconds))) {
       runAndWait(slickDataSource.dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers())
         .map(_.destWorkspaceId)
-        .contains(workspace.workspaceIdAsUUID) shouldBe true
+        .contains(workspace.toWorkspace.workspaceIdAsUUID) shouldBe true
     }
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectId.value should not be empty
+    workspace.googleProject.value should not be empty
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     workspace.googleProjectNumber should not be empty
+  }
+
+  it should "merge destination attributes with source attributes" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    testData.workspace.attributes.get(AttributeName.withDefaultNS("string")).value should be(
+      AttributeString("yep, it's a string")
+    )
+    val newAttributes = Map(
+      AttributeName.withDefaultNS("string") -> AttributeString("destination string")
+    )
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, newAttributes)
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProject.value should not be empty
+    workspace.googleProjectNumber should not be empty
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    val mergedAttributes = workspace.attributes.get
+    // overrides value in source attributes
+    mergedAttributes.get(AttributeName.withDefaultNS("string")).value should be(AttributeString("destination string"))
+    // from source attributes
+    mergedAttributes.get(AttributeName.withDefaultNS("number")).value should be(AttributeNumber(10))
   }
 
   it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
@@ -2776,6 +2681,102 @@ class WorkspaceServiceSpec
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
+  it should "clone the WSM stub workspace if it exists" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      any[UUID],
+      any[String],
+      ArgumentMatchers.eq(None),
+      any[String],
+      any[RawlsRequestContext],
+      any[Option[WsmPolicyInputs]]
+    )
+  }
+
+  it should "not fail if the source workspace doesn't have a WSM stub workspace" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    when(
+      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
+        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+        any[UUID],
+        any[String],
+        ArgumentMatchers.eq(None),
+        any[String],
+        any[RawlsRequestContext],
+        any[Option[WsmPolicyInputs]]
+      )
+    ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      any[UUID],
+      any[String],
+      ArgumentMatchers.eq(None),
+      any[String],
+      any[RawlsRequestContext],
+      any[Option[WsmPolicyInputs]]
+    )
+  }
+
+  it should "fail if cloning the WSM stub workspace fails" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    when(
+      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
+        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+        any[UUID],
+        any[String],
+        ArgumentMatchers.eq(None),
+        any[String],
+        any[RawlsRequestContext],
+        any[Option[WsmPolicyInputs]]
+      )
+    ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
+
+    val thrown = intercept[ApiException] {
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      any[UUID],
+      any[String],
+      ArgumentMatchers.eq(None),
+      any[String],
+      any[RawlsRequestContext],
+      any[Option[WsmPolicyInputs]]
+    )
+    thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "cloning a Workspace into a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {
@@ -2836,62 +2837,7 @@ class WorkspaceServiceSpec
       servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
       // verify that we set the folder for the perimeter
-      verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
-  }
-
-  "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices {
-    services =>
-      val billingProjectName = RawlsBillingProjectName("test-project")
-      val billingProject = RawlsBillingProject(
-        billingProjectName,
-        CreationStatuses.Ready,
-        None,
-        None,
-        None,
-        None,
-        None,
-        false,
-        Some(BigQueryDatasetName("bar")),
-        Some(BigQueryTableName("baz")),
-        Some(GoogleProject("foo"))
-      )
-      runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
-
-      val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
-
-      result shouldBe Some("foo.bar.baz")
-  }
-
-  it should "return None if the spend report config is not set" in withTestDataServices { services =>
-    val billingProjectName = RawlsBillingProjectName("test-project")
-    val billingProject = RawlsBillingProject(billingProjectName,
-                                             CreationStatuses.Ready,
-                                             None,
-                                             None,
-                                             None,
-                                             None,
-                                             None,
-                                             false,
-                                             None,
-                                             None,
-                                             None
-    )
-    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
-
-    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
-
-    result shouldBe None
-  }
-
-  it should "throw a RawlsExceptionWithErrorReport if the billing project does not exist" in withTestDataServices {
-    services =>
-      val billingProjectName = RawlsBillingProjectName("test-project")
-
-      val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
-      }
-
-      actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
+      verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProject), any[String])
   }
 
   behavior of "sendChangeNotifications"
@@ -3000,29 +2946,79 @@ class WorkspaceServiceSpec
                                    managedAppCoordinates: AzureManagedAppCoordinates,
                                    policies: List[WsmPolicyInput] = List()
   ): Workspace = {
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceName = s"rawls-azure-test-ws-${UUID.randomUUID().toString}"
 
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
       Map.empty
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .azureContext(
-          new AzureContext()
-            .tenantId(managedAppCoordinates.tenantId.toString)
-            .subscriptionId(managedAppCoordinates.subscriptionId.toString)
-            .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
-        )
-        .policies(policies.asJava)
-    )
 
-    Await.result(
+    val createdWorkspace = Await.result(
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
     )
+
+    val workspaceDescription = new WorkspaceDescription()
+      .id(createdWorkspace.workspaceIdAsUUID)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .azureContext(
+        new AzureContext()
+          .tenantId(managedAppCoordinates.tenantId.toString)
+          .subscriptionId(managedAppCoordinates.subscriptionId.toString)
+          .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
+      )
+      .policies(policies.asJava)
+
+    when(
+      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
+                                                any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      workspaceDescription
+    )
+
+    when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        workspaceDescription
+      )
+    )
+    createdWorkspace
+  }
+
+  private def createGcpWorkspaceStub(services: TestApiService,
+                                     workspaceName: String,
+                                     policies: List[WsmPolicyInput] = List(),
+                                     workspaceService: WorkspaceService
+  ): Workspace = {
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      workspaceName,
+      Map.empty
+    )
+    val createdWorkspace = Await
+      .result(
+        services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
+        Duration.Inf
+      )
+      .toWorkspace
+    val workspaceDescription = new WorkspaceDescription()
+      .id(createdWorkspace.workspaceIdAsUUID)
+      .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+      .policies(policies.asJava)
+    when(
+      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
+                                                any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      workspaceDescription
+    )
+    when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        workspaceDescription
+      )
+    )
+    createdWorkspace
   }
 
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
@@ -3119,6 +3115,47 @@ class WorkspaceServiceSpec
     )
 
     val response = readWorkspace.convertTo[WorkspaceResponse]
+    response.policies should not be empty
+    val policies: List[WorkspacePolicy] = response.policies.get
+    policies should not be empty
+    val policy: WorkspacePolicy = policies.head
+    policy.name shouldBe wsmPolicyInput.getName
+    policy.namespace shouldBe wsmPolicyInput.getNamespace
+    val additionalData = policy.additionalData
+    additionalData.length shouldEqual 2
+    additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
+    additionalData.tail.head.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
+  }
+
+  it should "return the policies of a GCP workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      workspaceName,
+      Map.empty
+    )
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("test_name")
+      .namespace("test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key"),
+          new WsmPolicyPair().value("pair2Val").key("pair2Key")
+        ).asJava
+      )
+    val workspace = createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
+    val readWorkspace = Await.result(services.workspaceService.getWorkspace(
+                                       WorkspaceName(workspace.namespace, workspace.name),
+                                       WorkspaceFieldSpecs()
+                                     ),
+                                     Duration.Inf
+    )
+
+    val response = readWorkspace.convertTo[WorkspaceResponse]
+
+    response.workspace.name shouldBe workspaceName
+    response.azureContext shouldEqual None
+    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     response.policies should not be empty
     val policies: List[WorkspacePolicy] = response.policies.get
     policies should not be empty
@@ -3404,7 +3441,10 @@ class WorkspaceServiceSpec
         new WorkspaceDescription().id(deletingAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
         // no azureContext, should not be returned
         new WorkspaceDescription().id(readyAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
-        new WorkspaceDescription().id(googleWorkspace.workspaceIdAsUUID).gcpContext(new GcpContext())
+        new WorkspaceDescription()
+          .id(googleWorkspace.workspaceIdAsUUID)
+          .gcpContext(new GcpContext())
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
       )
     )
 
@@ -3456,7 +3496,7 @@ class WorkspaceServiceSpec
       // set up test data
       val azureWorkspace =
         Workspace.buildReadyMcWorkspace("test_namespace1",
-                                        "name",
+                                        "azureWorkspaceWithNoWsmRecord",
                                         workspaceId1,
                                         new DateTime(),
                                         new DateTime(),
@@ -3464,7 +3504,7 @@ class WorkspaceServiceSpec
                                         Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
-                                      workspaceId2,
+                                      "googleWorkspaceWithWsmRecord",
                                       workspaceId2,
                                       "aBucket",
                                       Some("workflow-collection"),
@@ -3486,7 +3526,10 @@ class WorkspaceServiceSpec
 
       when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
         List(
-          new WorkspaceDescription().id(googleWorkspace.workspaceIdAsUUID).gcpContext(new GcpContext())
+          new WorkspaceDescription()
+            .id(googleWorkspace.workspaceIdAsUUID)
+            .gcpContext(new GcpContext())
+            .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
         )
       )
 
@@ -3754,45 +3797,258 @@ class WorkspaceServiceSpec
     }
   }
 
-  "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {
+  it should "return policy information for GCP workspaces with a stub workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("gcp_test_name")
+      .namespace("gcp_test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key")
+        ).asJava
+      )
+    createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
+
+    val result = Await
+      .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+      .convertTo[Seq[WorkspaceListResponse]]
+
+    val matchingWorkspaces = result.filter { ws =>
+      if (ws.workspace.name == workspaceName) {
+        val policies: List[WorkspacePolicy] = ws.policies.get
+        policies should not be empty
+        val policy: WorkspacePolicy = policies.head
+        policy.name shouldBe wsmPolicyInput.getName
+        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        true
+      } else {
+        false
+      }
+    }
+    matchingWorkspaces.size should be(1)
+  }
+
+  it should "return no policy information for GCP workspaces without a stub workspace" in withTestDataServices {
     services =>
-      val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
-      val originalMethodConfig = testData.agoraMethodConfig
-
-      // Overwrite the method configuration that was used for the submission. This forces it to generate a new version and soft-delete the old one
-      Await.result(
-        services.workspaceService.overwriteMethodConfiguration(
-          workspaceName,
-          originalMethodConfig.namespace,
-          originalMethodConfig.name,
-          originalMethodConfig.copy(inputs = Map("i1" -> AttributeString("input_updated")))
-        ),
-        Duration.Inf
+      val noPoliciesWorkspaceName = s"rawls-no-policies-test-ws-${UUID.randomUUID().toString}"
+      val workspaceNoPoliciesRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        noPoliciesWorkspaceName,
+        Map.empty
       )
+      Await.result(services.workspaceService.createWorkspace(workspaceNoPoliciesRequest), Duration.Inf)
 
-      val firstSubmission =
-        Await.result(services.workspaceService.listSubmissions(workspaceName, testContext), Duration.Inf).head
+      val result = Await
+        .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
 
-      val result = Await.result(
-        services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
-        Duration.Inf
+      val matchingWorkspaces = result.filter { ws =>
+        if (ws.workspace.name == noPoliciesWorkspaceName) {
+          ws.policies.get should be(empty)
+          // We shouldn't report an error about the workspace not existing in workspace manager.
+          ws.workspace.errorMessage should be(empty)
+          true
+        } else {
+          false
+        }
+      }
+      matchingWorkspaces.size should be(1)
+  }
+
+  it should "return policy information for Azure workspaces" in withTestDataServices { services =>
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("azure_test_name")
+      .namespace("azure_test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key")
+        ).asJava
       )
+    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
+    val workspace = createAzureWorkspace(services, managedAppCoordinates, List(wsmPolicyInput))
 
-      // None of the following attributes of a method config change when it is soft-deleted
-      assertResult(originalMethodConfig.namespace)(result.namespace)
-      assertResult(originalMethodConfig.inputs)(result.inputs)
-      assertResult(originalMethodConfig.outputs)(result.outputs)
-      assertResult(originalMethodConfig.prerequisites)(result.prerequisites)
-      assertResult(originalMethodConfig.methodConfigVersion)(result.methodConfigVersion)
-      assertResult(originalMethodConfig.methodRepoMethod)(result.methodRepoMethod)
-      assertResult(originalMethodConfig.rootEntityType)(result.rootEntityType)
+    val result = Await
+      .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+      .convertTo[Seq[WorkspaceListResponse]]
 
-      // The following attributes are modified when it is soft-deleted
-      assert(
-        result.name.startsWith(originalMethodConfig.name)
-      ) // a random suffix is added in this case, should be something like "testConfig1_HoQyHjLZ"
-      assert(result.deleted)
-      assert(result.deletedDate.isDefined)
+    val matchingWorkspaces = result.filter { ws =>
+      if (ws.workspace.name == workspace.name) {
+        val policies: List[WorkspacePolicy] = ws.policies.get
+        policies should not be empty
+        val policy: WorkspacePolicy = policies.head
+        policy.name shouldBe wsmPolicyInput.getName
+        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        true
+      } else {
+        false
+      }
+    }
+    matchingWorkspaces.size should be(1)
+  }
+
+  it should "return canCompute and canShare for Azure and Google workspaces" in withTestDataServices { services =>
+    val service = services.workspaceService
+
+    // set up test data
+    val azureWriterWorkspace =
+      Workspace.buildReadyMcWorkspace("azureWriterNamespace",
+                                      "azureWriterWorkspace",
+                                      UUID.randomUUID().toString,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser1",
+                                      Map.empty
+      )
+    val azureShareReaderWorkspace =
+      Workspace.buildReadyMcWorkspace("azureReaderNamespace",
+                                      "azureReaderWorkspace",
+                                      UUID.randomUUID().toString,
+                                      new DateTime(),
+                                      new DateTime(),
+                                      "testUser1",
+                                      Map.empty
+      )
+    val googleShareWriterNoComputeWorkspace = Workspace(
+      "googleWriterNoComputeNamespace",
+      "googleWriterNoComputeWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val googleWriterCanComputeWorkspace = Workspace(
+      "googleWriterCanComputeNamespace",
+      "googleWriterCanComputeWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val googleReaderWorkspace = Workspace(
+      "googleReaderNamespace",
+      "googleReaderWorkspace",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "testUser2",
+      Map.empty
+    )
+    val expected = List(
+      (azureShareReaderWorkspace.name, Some(false), Some(true)), // share-reader added
+      (azureWriterWorkspace.name, Some(true), Some(false)), // does not have share-writer
+      (googleReaderWorkspace.name, Some(false), Some(false)), // does not have share-reader
+      (googleShareWriterNoComputeWorkspace.name, Some(false), Some(true)), // share-writer added
+      (googleWriterCanComputeWorkspace.name, Some(true), Some(false)) // does not have share-writer
+    )
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureShareReaderWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWriterWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleReaderWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleShareWriterNoComputeWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWriterCanComputeWorkspace)
+      } yield ()
+    }
+
+    // mock external calls
+    when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
+      List(
+        new WorkspaceDescription()
+          .id(googleReaderWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(googleShareWriterNoComputeWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(googleWriterCanComputeWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
+          .gcpContext(new GcpContext()),
+        new WorkspaceDescription()
+          .id(azureShareReaderWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          ),
+        new WorkspaceDescription()
+          .id(azureWriterWorkspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          )
+      )
+    )
+    when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
+      Future(
+        Seq(
+          SamUserResource(
+            azureShareReaderWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.reader, SamWorkspaceRoles.shareReader), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            azureWriterWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleReaderWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.reader), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleShareWriterNoComputeWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.shareWriter), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            googleWriterCanComputeWorkspace.workspaceId,
+            SamRolesAndActions(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.canCompute), Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+
+    // actually call listWorkspaces to get result it returns given the mocked calls you set up
+    val result =
+      Await
+        .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+        .convertTo[Seq[WorkspaceListResponse]]
+
+    // verify that the result is what you expect it to be
+    result.map(ws => (ws.workspace.name, ws.canCompute, ws.canShare)) should contain theSameElementsAs expected
   }
 
   "checkWorkspaceCloudPermissions" should "use workspace pet for > reader" in withTestDataServices { services =>

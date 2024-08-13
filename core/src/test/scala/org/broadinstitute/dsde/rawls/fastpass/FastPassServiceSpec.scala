@@ -11,19 +11,20 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
@@ -134,8 +135,6 @@ class FastPassServiceSpec
   )(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
-      with MethodConfigApiService
-      with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
@@ -152,8 +151,10 @@ class FastPassServiceSpec
     val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new SlowGoogleStorageDAO(slowIam))
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
-    val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
+    val mockNotificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS)
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
+    val leonardoDAO = Mockito.spy(new MockLeonardoDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
@@ -173,7 +174,6 @@ class FastPassServiceSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          gcsDAO.getBucketServiceAccountCredential,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
@@ -189,7 +189,7 @@ class FastPassServiceSpec
       1 second,
       5 seconds
     )
-    val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+    val servicePerimeterService = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
@@ -201,15 +201,13 @@ class FastPassServiceSpec
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
-      "requesterPaysRole",
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
-    val genomicsServiceConstructor = GenomicsService.constructor(
+    val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
       slickDataSource,
       gcsDAO
     ) _
@@ -245,9 +243,9 @@ class FastPassServiceSpec
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       workspaceManagerDAO,
@@ -262,7 +260,7 @@ class FastPassServiceSpec
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
+    val resourceBufferService = Mockito.spy(new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig))
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -295,30 +293,17 @@ class FastPassServiceSpec
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(
-        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-        workbenchMetricBaseName = workbenchMetricBaseName
-      ),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
-      methodConfigResolver,
+      leonardoService,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager,
       resourceBufferService,
-      resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
       terraBillingProjectOwnerRole,
@@ -419,12 +404,14 @@ class FastPassServiceSpec
     parentWorkspaceFastPassGrantsBefore should be(empty)
 
     val childWorkspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        parentWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+      Await
+        .result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                     parentWorkspace.toWorkspaceName,
+                                                                     workspaceRequest
+                ),
+                Duration.Inf
+        )
+        .toWorkspace
 
     verify(services.mockFastPassService)
       .setupFastPassForUserInClonedWorkspace(
@@ -449,6 +436,36 @@ class FastPassServiceSpec
     verify(services.mockFastPassService)
       .removeFastPassGrantsForWorkspace(
         ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(workspace.workspaceId))
+      )
+  }
+
+  it should "not sync FastPass grants for a workspace if auth domain constraints are not satisfied" in withTestDataServices {
+    services =>
+      when(
+        services.fastPassMockSamDAO.getAuthDomainConstraintSatisfied(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.any[String],
+          ArgumentMatchers.any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(Future(false))
+      Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+      verify(services.googleIamDAO, never()).addRoles(
+        ArgumentMatchers.any[GoogleProject],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]]
+      )
+      verify(services.googleStorageDAO, never()).addIamRoles(
+        ArgumentMatchers.any[GcsBucketName],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]],
+        ArgumentMatchers.any[Option[GoogleProject]]
       )
   }
 
@@ -504,7 +521,7 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
-    val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
+    val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
@@ -576,7 +593,7 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
-    val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
+    val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
 
     // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
@@ -648,7 +665,7 @@ class FastPassServiceSpec
           ),
           Duration.Inf
         )
-      val parentWorkspacePetEmail = FastPassService.getEmailFromPetSaKey(parentWorkspacePetKey)
+      val parentWorkspacePetEmail = FastPassServiceImpl.getEmailFromPetSaKey(parentWorkspacePetKey)
 
       val childWorkspacePetKey =
         Await.result(
@@ -657,7 +674,7 @@ class FastPassServiceSpec
           ),
           Duration.Inf
         )
-      val childWorkspacePetEmail = FastPassService.getEmailFromPetSaKey(childWorkspacePetKey)
+      val childWorkspacePetEmail = FastPassServiceImpl.getEmailFromPetSaKey(childWorkspacePetKey)
 
       parentWorkspacePetEmail should not be childWorkspacePetEmail
 
@@ -865,7 +882,7 @@ class FastPassServiceSpec
   it should "not do anything if there's no project IAM Policy binding quota available" in withTestDataServices {
     services =>
       val projectPolicy = toProjectPolicy(
-        Policy(Range(0, FastPassService.policyBindingsQuotaLimit - 1)
+        Policy(Range(0, FastPassServiceImpl.policyBindingsQuotaLimit - 1)
                  .map(i => Binding(s"role$i", Set("foo@bar.com"), null))
                  .toSet,
                "abcd"
@@ -889,7 +906,7 @@ class FastPassServiceSpec
   it should "not do anything if there's no bucket IAM Policy binding quota available" in withTestDataServices {
     services =>
       val bucketPolicy = toBucketPolicy(
-        Policy(Range(0, FastPassService.policyBindingsQuotaLimit - 1)
+        Policy(Range(0, FastPassServiceImpl.policyBindingsQuotaLimit - 1)
                  .map(i => Binding(s"role$i", Set("foo@bar.com"), null))
                  .toSet,
                "abcd"
@@ -923,7 +940,7 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
-    val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
+    val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
 
     workspaceFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.accountType) should contain only (IamMemberTypes.ServiceAccount)
@@ -990,14 +1007,12 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    val childWorkspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        parentWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+    Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                      parentWorkspace.toWorkspaceName,
+                                                                      workspaceRequest
+                 ),
+                 Duration.Inf
+    )
   }
 
   it should "not block workspace delete if FastPass fails" in withTestDataServices { services =>
@@ -1063,12 +1078,12 @@ class FastPassServiceSpec
 
     val failedRemovals = Await.result(
       slickDataSource.inTransaction { dataAccess =>
-        FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
-                                                               testData.workspace.googleProjectId,
-                                                               dataAccess,
-                                                               services.googleIamDAO,
-                                                               services.googleStorageDAO,
-                                                               None
+        FastPassServiceImpl.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
+                                                                   testData.workspace.googleProjectId,
+                                                                   dataAccess,
+                                                                   services.googleIamDAO,
+                                                                   services.googleStorageDAO,
+                                                                   None
         )(executionContext)
       },
       Duration.Inf
@@ -1205,20 +1220,20 @@ class FastPassServiceSpec
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspaceNoAttrs.workspaceIdAsUUID))
 
     val project1Removal =
-      FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants1,
-                                                             testData.workspace.googleProjectId,
-                                                             slickDataSource.dataAccess,
-                                                             services.googleIamDAO,
-                                                             services.googleStorageDAO,
-                                                             None
+      FastPassServiceImpl.removeFastPassGrantsInWorkspaceProject(fastPassGrants1,
+                                                                 testData.workspace.googleProjectId,
+                                                                 slickDataSource.dataAccess,
+                                                                 services.googleIamDAO,
+                                                                 services.googleStorageDAO,
+                                                                 None
       )(executionContext)
     val project2Removal =
-      FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants2,
-                                                             testData.workspaceNoAttrs.googleProjectId,
-                                                             slickDataSource.dataAccess,
-                                                             services.googleIamDAO,
-                                                             services.googleStorageDAO,
-                                                             None
+      FastPassServiceImpl.removeFastPassGrantsInWorkspaceProject(fastPassGrants2,
+                                                                 testData.workspaceNoAttrs.googleProjectId,
+                                                                 slickDataSource.dataAccess,
+                                                                 services.googleIamDAO,
+                                                                 services.googleStorageDAO,
+                                                                 None
       )(executionContext)
 
     runAndWait(DBIO.seq(project1Removal, project2Removal))
@@ -1414,7 +1429,7 @@ class FastPassServiceSpec
     val storageDAO = spy(new MockGoogleStorageDAO)
     val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))
     val fastPassService =
-      new FastPassService(ctx, slickDataSource, config, iamDAO, storageDAO, gcsDAO, null, "", "", "", "", "")
+      new FastPassServiceImpl(ctx, slickDataSource, config, iamDAO, storageDAO, gcsDAO, null, "", "", "", "", "")
 
     Await.result(
       for {
@@ -1451,7 +1466,7 @@ class FastPassServiceSpec
     val storageDAO = spy(new MockGoogleStorageDAO)
     val gcsDAO = spy(new MockGoogleServicesDAO("groupsPrefix"))
     val fastPassService =
-      new FastPassService(ctx, slickDataSource, config, iamDAO, storageDAO, gcsDAO, null, "", "", "", "", "")
+      new FastPassServiceImpl(ctx, slickDataSource, config, iamDAO, storageDAO, gcsDAO, null, "", "", "", "", "")
 
     Await.result(
       for {

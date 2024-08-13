@@ -321,7 +321,10 @@ class BillingAccountChangeSynchronizerSpec
         .getOrElse(fail("workspace not found"))
         .currentBillingAccountOnGoogleProject shouldBe originalBillingAccount
 
-      verify(mockGcsDAO, times(0)).setBillingAccountName(ArgumentMatchers.eq(workspace.googleProjectId), ArgumentMatchers.eq(originalBillingAccount.value), any())
+      verify(mockGcsDAO, times(0)).setBillingAccountName(ArgumentMatchers.eq(workspace.googleProjectId),
+                                                         ArgumentMatchers.eq(originalBillingAccount.value),
+                                                         any()
+      )
     }
 
   it should "continue to update other workspace google projects even if one fails to update" in

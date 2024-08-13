@@ -22,8 +22,8 @@ import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 
 class MockWorkspaceManagerDAO(
-  val createCloudContextResult: CreateCloudContextResult =
-    MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED)
+  val createWorkspaceResult: CreateWorkspaceV2Result =
+    MockWorkspaceManagerDAO.getCreateWorkspaceResult(StatusEnum.SUCCEEDED)
 ) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
@@ -31,6 +31,11 @@ class MockWorkspaceManagerDAO(
   def mockGetWorkspaceResponse(workspaceId: UUID) =
     new WorkspaceDescription().id(workspaceId).stage(WorkspaceStageModel.RAWLS_WORKSPACE)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId)
+
+  def mockInitialCreateWorkspaceV2Result() =
+    MockWorkspaceManagerDAO.getCreateWorkspaceResult(StatusEnum.RUNNING)
+  def mockCreateWorkspaceV2Result() = createWorkspaceResult
+
   def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.getOrElse(
     (workspaceId, referenceId),
     throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))
@@ -38,9 +43,6 @@ class MockWorkspaceManagerDAO(
   def mockEnumerateReferenceResponse(workspaceId: UUID) = references.collect {
     case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
   }
-  def mockInitialCreateAzureCloudContextResult() =
-    MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
-  def mockCreateAzureCloudContextResult() = createCloudContextResult
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
 
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
@@ -50,17 +52,19 @@ class MockWorkspaceManagerDAO(
 
   override def createWorkspace(workspaceId: UUID,
                                workspaceType: WorkspaceType, // currently ignored by the mock
+                               policyInputs: Option[WsmPolicyInputs], // currently ignored by the mock
                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
+  @throws[ApiException]
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
-                              spendProfile: ProfileModel,
+                              spendProfile: Option[ProfileModel],
                               billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
-                              location: Option[String]
+                              additionalPolicyInputs: Option[WsmPolicyInputs]
   ): CloneWorkspaceResult = {
     val clonedWorkspace = new ClonedWorkspace()
       .sourceWorkspaceId(sourceWorkspaceId)
@@ -124,12 +128,18 @@ class MockWorkspaceManagerDAO(
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
 
+  override def updateWorkspacePolicies(workspaceId: UUID,
+                                       policyInputs: WsmPolicyInputs,
+                                       ctx: RawlsRequestContext
+  ): WsmPolicyUpdateResult = ???
+
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,
                                                name: DataReferenceName,
                                                description: Option[DataReferenceDescriptionField],
                                                instanceName: String,
                                                cloningInstructions: CloningInstructionsEnum,
+                                               properties: Option[Map[String, String]],
                                                ctx: RawlsRequestContext
   ): DataRepoSnapshotResource =
     if (name.value.contains("fakesnapshot"))
@@ -210,18 +220,14 @@ class MockWorkspaceManagerDAO(
                                                spendProfileId: String,
                                                billingProjectNamespace: String,
                                                applicationIds: Seq[String],
+                                               cloudPlatform: CloudPlatform,
                                                policyInputs: Option[WsmPolicyInputs],
                                                ctx: RawlsRequestContext
-  ): CreatedWorkspace =
-    mockCreateWorkspaceResponse(workspaceId)
+  ): CreateWorkspaceV2Result =
+    mockInitialCreateWorkspaceV2Result()
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
-    mockInitialCreateAzureCloudContextResult()
-
-  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
-                                                    jobControlId: String,
-                                                    ctx: RawlsRequestContext
-  ): CreateCloudContextResult = mockCreateAzureCloudContextResult()
+  override def getCreateWorkspaceResult(workspaceId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result =
+    mockCreateWorkspaceV2Result()
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
@@ -240,6 +246,8 @@ class MockWorkspaceManagerDAO(
   override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport = ???
 
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult = ???
+
+  override def getLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): AzureLandingZone = ???
 
   override def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): Some[DeleteAzureLandingZoneResult] =
     ???
@@ -268,14 +276,14 @@ class MockWorkspaceManagerDAO(
 }
 
 object MockWorkspaceManagerDAO {
-  def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult =
-    new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
+  def getCreateWorkspaceResult(status: StatusEnum): CreateWorkspaceV2Result =
+    new CreateWorkspaceV2Result().jobReport(new JobReport().id("fake_id").status(status))
 
   def getCloneWorkspaceResult(status: StatusEnum): CloneWorkspaceResult =
     new CloneWorkspaceResult().jobReport(new JobReport().id("fake_id").status(status))
 
-  def buildWithAsyncCloudContextResult(createCloudContextStatus: StatusEnum) =
+  def buildWithAsyncCreateWorkspaceResult(createWorkspaceStatus: StatusEnum) =
     new MockWorkspaceManagerDAO(
-      getCreateCloudContextResult(createCloudContextStatus)
+      getCreateWorkspaceResult(createWorkspaceStatus)
     )
 }

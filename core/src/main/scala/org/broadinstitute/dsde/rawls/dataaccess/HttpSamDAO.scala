@@ -4,11 +4,11 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.common.tracing.OkHttpClientTracingInterceptor
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
 import okhttp3.{Interceptor, Protocol, Response}
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
@@ -17,6 +17,8 @@ import org.broadinstitute.dsde.workbench.client.sam.api._
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -27,7 +29,7 @@ import scala.util.{Try, Using}
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, timeout: FiniteDuration)(implicit
+class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, timeout: FiniteDuration)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -66,8 +68,8 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
 
   protected def adminApi(ctx: RawlsRequestContext) = new AdminApi(getApiClient(ctx))
 
-  private def rawlsSAContext = RawlsRequestContext(
-    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getServiceAccountAccessToken), 0, RawlsUserSubjectId(""))
+  override def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getRawlsIdentityAccessToken), 0, RawlsUserSubjectId(""))
   )
 
   protected def when401or5xx: Predicate[Throwable] = anyOf(DsdeHttpDAO.when5xx, DsdeHttpDAO.whenUnauthorized)
@@ -261,6 +263,8 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
             None
         }
     }
+
+  override def registerRawlsIdentity(): Future[Option[RawlsUser]] = registerUser(rawlsSAContext)
 
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     retry(when401or5xx) { () =>
@@ -582,12 +586,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
       callback.future.map(WorkbenchEmail)
     }
 
-  private def getServiceAccountAccessToken = {
-    val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
-    if (expiresInSeconds < 60 * 5) {
-      serviceAccountCreds.refreshToken()
+  private def getRawlsIdentityAccessToken = {
+    if (rawlsCredential.getExpiresAt.isBefore(Instant.now.plus(5, ChronoUnit.MINUTES))) {
+      rawlsCredential.refreshToken()
     }
-    serviceAccountCreds.getAccessToken
+    rawlsCredential.getAccessToken
   }
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
@@ -600,6 +603,22 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
       resourcesApi(ctx).getAuthDomainV2Async(resourceTypeName.value, resourceId, callback)
 
       callback.future.map(_.asScala.toSeq)
+    }
+
+  override def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
+                                                resourceId: String,
+                                                ctx: RawlsRequestContext
+  ): Future[Boolean] =
+    retry(when401or5xx) { () =>
+      Future {
+        val response = resourcesApi(ctx).isAuthDomainV2SatisfiedWithHttpInfo(resourceTypeName.value, resourceId)
+        response.getStatusCode match {
+          case StatusCodes.OK.intValue        => true
+          case StatusCodes.Forbidden.intValue => false
+          case _ =>
+            throw new RawlsExceptionWithErrorReport(ErrorReport(response.getStatusCode, "Response not 200 or 403"))
+        }
+      }
     }
 
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
@@ -707,9 +726,8 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
 }
 
 class OtelContextSettingInterceptor(otelContext: Context) extends Interceptor {
-  override def intercept(chain: Interceptor.Chain): Response = {
+  override def intercept(chain: Interceptor.Chain): Response =
     Using(otelContext.makeCurrent()) { _ =>
       chain.proceed(chain.request())
     }.get
-  }
 }
