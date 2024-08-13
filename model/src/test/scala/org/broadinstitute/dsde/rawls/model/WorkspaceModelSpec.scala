@@ -699,7 +699,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |      "rules": [
             |        {
             |          "action": {
-            |            "type": "Delete"
+            |            "actionType": "Delete"
             |          },
             |          "conditions": {
             |            "age": 30,
@@ -736,7 +736,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |      "rules": [
             |        {
             |          "action": {
-            |            "type": "Delete"
+            |            "actionType": "Delete"
             |          },
             |          "conditions": {
             |            "age": 30,
@@ -770,7 +770,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |      "rules": [
             |        {
             |          "action": {
-            |            "type": "Delete"
+            |            "actionType": "Delete"
             |          },
             |          "conditions": {
             |            "matchesPrefix": [
@@ -878,7 +878,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |      "rules": [
             |        {
             |          "action": {
-            |            "type": "Delete"
+            |            "actionType": "Delete"
             |          }
             |        }
             |      ]
