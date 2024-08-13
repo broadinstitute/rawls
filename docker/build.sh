@@ -95,7 +95,12 @@ function make_jar()
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
     DOCKER_RUN="docker run --rm"
-    DOCKER_RUN="$DOCKER_RUN -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/clean_install.sh /working"
+
+    # TODO: DOCKER_TAG hack until JAR build migrates to Dockerfile. Tell SBT to name the JAR
+    # `rawls-assembly-local-SNAP.jar` instead of including the commit hash. Otherwise we get
+    # an explosion of JARs that all get copied to the image; and which one runs is undefined.
+    DOCKER_RUN="$DOCKER_RUN -e DOCKER_TAG=local -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/clean_install.sh /working"
+
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
