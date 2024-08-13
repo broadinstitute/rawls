@@ -4441,7 +4441,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceSettings'
+                  $ref: '#/components/schemas/WorkspaceSetting'
         403:
           description: User does not have access to requested workspace
           content:
@@ -4459,9 +4459,9 @@ paths:
     put:
       tags:
         - workspaces_v2
-      summary: Overwrite workspace settings
-      description: Overwrite the settings for a workspace
-      operationId: overwriteWorkspaceSettings
+      summary: Update workspace settings
+      description: Update the settings for a workspace. Unspecified setting types will be left unchanged.
+      operationId: updateWorkspaceSettings
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
@@ -4472,7 +4472,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceSettings'
+                  $ref: '#/components/schemas/WorkspaceSetting'
           required: true
       responses:
         200:
@@ -4480,7 +4480,7 @@ paths:
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/WorkspaceSettings'
+                $ref: '#/components/schemas/WorkspaceSettingsResponse'
         400:
           description: Invalid settings
           content:
@@ -5896,7 +5896,25 @@ components:
             - Deleting
             - DeleteFailed
       description: ""
-    WorkspaceSettings:
+    WorkspaceSettingsResponse:
+      required:
+        - successes
+        - failures
+      type: object
+      properties:
+        successes:
+          type: array
+          description: The settings that were successfully applied
+          items:
+            $ref: '#/components/schemas/WorkspaceSetting'
+        failures:
+          $ref: '#/components/schemas/FailedWorkspaceSettingsResponse'
+    FailedWorkspaceSettingsResponse:
+      type: object
+      description: The settings that failed to apply. The key is the setting type that failed.
+      additionalProperties:
+        $ref: '#/components/schemas/ErrorReport'
+    WorkspaceSetting:
       required:
         - settingType
         - config
@@ -5943,6 +5961,7 @@ components:
             - Delete
     GcpBucketLifecycleCondition:
       type: object
+      minProperties: 1
       properties:
         age:
           type: integer
