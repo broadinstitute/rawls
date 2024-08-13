@@ -136,7 +136,7 @@ function artifactory_push()
 function docker_cmd()
 {
     if [ $DOCKER_CMD = "build" ] || [ $DOCKER_CMD = "push" ]; then
-        GIT_SHA=$(git rev-parse origin/${BRANCH})
+        GIT_SHA=$(git rev-parse ${BRANCH})
         echo GIT_SHA=$GIT_SHA > env.properties
         HASH_TAG=${GIT_SHA:0:12}
 
