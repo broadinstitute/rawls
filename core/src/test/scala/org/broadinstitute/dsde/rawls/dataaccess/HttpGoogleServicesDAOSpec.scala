@@ -210,21 +210,20 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
                                      None
     )
 
-    verify(
-      googleStorageService, times(1)).insertBucket(
-        ArgumentMatchers.eq(GoogleProject(googleProjectId)),
-        ArgumentMatchers.eq(bucketName),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        autoclassEnabled = ArgumentMatchers.eq(true),
-        autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
-        cors = ArgumentMatchers.eq(expectedCorsPolicy)
+    verify(googleStorageService, times(1)).insertBucket(
+      ArgumentMatchers.eq(GoogleProject(googleProjectId)),
+      ArgumentMatchers.eq(bucketName),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      autoclassEnabled = ArgumentMatchers.eq(true),
+      autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
+      cors = ArgumentMatchers.eq(expectedCorsPolicy)
     )
   }
 }
