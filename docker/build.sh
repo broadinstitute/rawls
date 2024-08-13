@@ -28,7 +28,6 @@ DOCKER_CMD=
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
 GCR_REGISTRY=${GCR_REGISTRY:-gcr.io/broad-dsp-gcr-public/rawls}
 ENV=${ENV:-""}
-SKIP_TESTS=${SKIP_TESTS:-""}
 SERVICE_ACCT_KEY_FILE=""
 
 MAKE_JAR=false
@@ -93,27 +92,14 @@ fi
 function make_jar()
 {
     echo "building jar..."
-    if [ "$SKIP_TESTS" != "skip-tests" ]; then
-        echo "starting mysql..."
-        bash ./docker/run-mysql.sh start
-    fi
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
     DOCKER_RUN="docker run --rm"
-    if [ "$SKIP_TESTS" != "skip-tests" ]; then
-        DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
-    fi
-    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/install.sh /working"
+    DOCKER_RUN="$DOCKER_RUN -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/clean_install.sh /working"
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
-    if [ "$SKIP_TESTS" != "skip-tests" ]; then
-        # stop mysql
-        echo "stopping mysql..."
-        bash ./docker/run-mysql.sh stop
-    fi
-
-    # if tests were a fail, fail script
+    # if jar is a fail, fail script
     if [ $EXIT_CODE != 0 ]; then
         exit $EXIT_CODE
     fi
