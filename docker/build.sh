@@ -138,7 +138,7 @@ function docker_cmd()
         echo "building ${GCR_REGISTRY}:${HASH_TAG}..."
         docker build --pull -t ${GCR_REGISTRY}:${HASH_TAG} .
 
-        if [ $DOCKER_CMD="push" ]; then
+        if [ $DOCKER_CMD = "push" ]; then
             echo "pushing ${GCR_REGISTRY}:${HASH_TAG}..."
             docker push ${GCR_REGISTRY}:${HASH_TAG}
         fi
