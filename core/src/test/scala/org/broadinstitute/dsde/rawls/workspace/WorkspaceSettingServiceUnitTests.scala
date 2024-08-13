@@ -282,6 +282,13 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
     when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+    when(
+      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                         List.empty,
+                                                         defaultRequestContext.userInfo.userSubjectId
+      )
+    )
+      .thenReturn(Future.successful(List.empty))
 
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(any()))
@@ -406,13 +413,12 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
   }
 
-  it should "validate requested settings" in {
-    val workspaceName = workspace.toWorkspaceName
-    val newSetting = WorkspaceSetting(
+  "validateSettings" should "require a non-negative age for GcpBucketLifecycle settings" in {
+    val negativeAgeSetting = WorkspaceSetting(
       WorkspaceSettingTypes.GcpBucketLifecycle,
       GcpBucketLifecycleConfig(
         List(
-          GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"),
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
                                  GcpBucketLifecycleCondition(Some(Set("prefixToMatch")), Some(-1))
           )
         )
@@ -422,13 +428,84 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     val service = workspaceSettingServiceConstructor()
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(negativeAgeSetting)), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
     exception.errorReport.causes should contain theSameElementsAs List(
-      ErrorReport("Invalid GcpBucketLifecycle configuration: age must be a non-negative integer."),
+      ErrorReport("Invalid GcpBucketLifecycle configuration: age must be a non-negative integer.")
+    )
+  }
+
+  it should "not allow unsupported lifecycle actions for GcpBucketLifecycle settings" in {
+    val unsupportedActionSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"),
+                                 GcpBucketLifecycleCondition(Some(Set("prefixToMatch")), Some(10))
+          )
+        )
+      )
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(unsupportedActionSetting)),
+                   Duration.Inf
+      )
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes should contain theSameElementsAs List(
       ErrorReport("Invalid GcpBucketLifecycle configuration: unsupported lifecycle action SetStorageClass.")
+    )
+  }
+
+  it should "require at least one condition for GcpBucketLifecycle settings" in {
+    val noConditionsSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(None, None))
+        )
+      )
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(noConditionsSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes should contain theSameElementsAs List(
+      ErrorReport("Invalid GcpBucketLifecycle configuration: at least one condition must be specified.")
+    )
+  }
+
+  it should "require at least one prefix if matchesPrefix is the only condition for GcpBucketLifecycle settings" in {
+    val noPrefixSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle,
+      GcpBucketLifecycleConfig(
+        List(
+          GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Some(Set.empty), None))
+        )
+      )
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(noPrefixSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes should contain theSameElementsAs List(
+      ErrorReport(
+        "Invalid GcpBucketLifecycle configuration: at least one prefix must be specified if matchesPrefix is the only condition."
+      )
     )
   }
 }

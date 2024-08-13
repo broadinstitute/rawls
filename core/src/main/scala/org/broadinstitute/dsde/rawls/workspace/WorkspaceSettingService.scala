@@ -7,7 +7,10 @@ import com.typesafe.scalalogging.LazyLogging
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketLifecycleConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleCondition,
+  GcpBucketLifecycleConfig
+}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsRequestContext,
@@ -60,10 +63,10 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
               case age if age < 0 =>
                 validationErrorReport(settingType, "age must be a non-negative integer")
             }
-            val atLeastOneConditionValidation = (rule.conditions.age, rule.conditions.matchesPrefix) match {
-              case (None, None) =>
+            val atLeastOneConditionValidation = rule.conditions match {
+              case GcpBucketLifecycleCondition(None, None) =>
                 Some(validationErrorReport(settingType, "at least one condition must be specified"))
-              case (None, Some(prefixes)) if prefixes.isEmpty =>
+              case GcpBucketLifecycleCondition(Some(prefixes), None) if prefixes.isEmpty =>
                 Some(
                   validationErrorReport(settingType,
                                         "at least one prefix must be specified if matchesPrefix is the only condition"
