@@ -55,6 +55,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   RawlsWorkspaceAclManager,
   WorkspaceRepository,
   WorkspaceService,
+  WorkspaceSettingRepository,
   WorkspaceSettingService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
@@ -395,7 +396,12 @@ trait ApiServiceSpec
     )
 
     override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-      new WorkspaceSettingService(_, new WorkspaceRepository(slickDataSource), gcsDAO, samDAO)
+      new WorkspaceSettingService(_,
+                                  new WorkspaceSettingRepository(slickDataSource),
+                                  new WorkspaceRepository(slickDataSource),
+                                  gcsDAO,
+                                  samDAO
+      )
 
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
       MethodConfigurationService.constructor(

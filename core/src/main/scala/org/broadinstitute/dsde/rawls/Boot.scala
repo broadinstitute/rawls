@@ -62,6 +62,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   RawlsWorkspaceAclManager,
   WorkspaceRepository,
   WorkspaceService,
+  WorkspaceSettingRepository,
   WorkspaceSettingService
 }
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
@@ -511,8 +512,9 @@ object Boot extends IOApp with LazyLogging {
       val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
         BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
 
+      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
       val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-        new WorkspaceSettingService(_, workspaceRepository, gcsDAO, samDAO)
+        new WorkspaceSettingService(_, workspaceSettingRepository, workspaceRepository, gcsDAO, samDAO)
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,

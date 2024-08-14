@@ -28,15 +28,18 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
+                              workspaceSettingRepository: WorkspaceSettingRepository,
                               val workspaceRepository: WorkspaceRepository,
                               gcsDAO: GoogleServicesDAO,
                               val samDAO: SamDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends WorkspaceSupport
     with LazyLogging {
+
+  // Returns applied settings on a workspace.
   def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read).flatMap { workspace =>
-      workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+      workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
     }
 
   def setWorkspaceSettings(workspaceName: WorkspaceName,
@@ -117,7 +120,9 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
 
           for {
             _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
-            _ <- workspaceRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting.settingType)
+            _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
+                                                                        setting.settingType
+            )
           } yield None
         case _ => throw new RawlsException("unsupported workspace setting")
       }).recoverWith { case e =>
@@ -125,7 +130,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.settingType}]",
           e
         )
-        workspaceRepository
+        workspaceSettingRepository
           .removePendingSetting(workspace.workspaceIdAsUUID, setting.settingType)
           .map(_ => Some((setting.settingType, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
       }
@@ -133,11 +138,11 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
     validateSettings(workspaceSettings)
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
-      currentSettings <- workspaceRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+      currentSettings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
       newSettings = workspaceSettings.filterNot(currentSettings.contains(_))
-      _ <- workspaceRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID,
-                                                              newSettings,
-                                                              ctx.userInfo.userSubjectId
+      _ <- workspaceSettingRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID,
+                                                                     newSettings,
+                                                                     ctx.userInfo.userSubjectId
       )
       applyFailures <- newSettings.traverse(s => applySetting(workspace, s))
     } yield {

@@ -48,13 +48,16 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     )
 
-  def workspaceSettingServiceConstructor(ctx: RawlsRequestContext = defaultRequestContext,
-                                         workspaceRepository: WorkspaceRepository =
-                                           mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-                                         gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
-                                         samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+  def workspaceSettingServiceConstructor(
+    ctx: RawlsRequestContext = defaultRequestContext,
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](
+      RETURNS_SMART_NULLS
+    ),
+    workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+    gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
+    samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   ): WorkspaceSettingService =
-    new WorkspaceSettingService(ctx, workspaceRepository, gcsDAO, samDAO)
+    new WorkspaceSettingService(ctx, workspaceSettingRepository, workspaceRepository, gcsDAO, samDAO)
 
   val workspace: Workspace = Workspace(
     "settingsTestWorkspace",
@@ -79,7 +82,9 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
-    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(workspaceSettings))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(workspaceSettings))
 
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(any()))
@@ -93,7 +98,10 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     ).thenReturn(Future.successful(true))
 
     val service =
-      workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
 
     val returnedSettings = Await.result(service.getWorkspaceSettings(workspaceName), Duration.Inf)
     returnedSettings shouldEqual workspaceSettings
@@ -110,7 +118,9 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
-    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
 
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(any()))
@@ -124,7 +134,10 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     ).thenReturn(Future.successful(true))
 
     val service =
-      workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
 
     val returnedSettings = Await.result(service.getWorkspaceSettings(workspaceName), Duration.Inf)
     returnedSettings shouldEqual List.empty
@@ -169,15 +182,17 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
-    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
     when(
-      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
-                                                         List(workspaceSetting),
-                                                         defaultRequestContext.userInfo.userSubjectId
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List(workspaceSetting),
+                                                                defaultRequestContext.userInfo.userSubjectId
       )
     )
       .thenReturn(Future.successful(List(workspaceSetting)))
-    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.settingType))
+    when(workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.settingType))
       .thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
@@ -195,7 +210,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(gcsDAO.setBucketLifecycle(workspace.bucketName, List())).thenReturn(Future.successful())
 
     val service =
-      workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository, gcsDAO = gcsDAO)
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         gcsDAO = gcsDAO,
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
 
     val res = Await.result(service.setWorkspaceSettings(workspaceName, List(workspaceSetting)), Duration.Inf)
     res.successes should contain theSameElementsAs List(workspaceSetting)
@@ -228,15 +247,18 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
-    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
+      .thenReturn(Future.successful(List(existingSetting)))
     when(
-      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
-                                                         List(newSetting),
-                                                         defaultRequestContext.userInfo.userSubjectId
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List(newSetting),
+                                                                defaultRequestContext.userInfo.userSubjectId
       )
     )
       .thenReturn(Future.successful(List(newSetting)))
-    when(workspaceRepository.markWorkspaceSettingApplied(workspaceId, newSetting.settingType))
+    when(workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, newSetting.settingType))
       .thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
@@ -258,7 +280,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule))).thenReturn(Future.successful())
 
     val service =
-      workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository, gcsDAO = gcsDAO)
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         gcsDAO = gcsDAO,
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
 
     val res = Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
     res.successes should contain theSameElementsAs List(newSetting)
@@ -281,11 +307,14 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
-    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
+      .thenReturn(Future.successful(List(existingSetting)))
     when(
-      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
-                                                         List.empty,
-                                                         defaultRequestContext.userInfo.userSubjectId
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List.empty,
+                                                                defaultRequestContext.userInfo.userSubjectId
       )
     )
       .thenReturn(Future.successful(List.empty))
@@ -301,7 +330,10 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       )
     ).thenReturn(Future.successful(true))
 
-    val service = workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)
+    val service = workspaceSettingServiceConstructor(samDAO = samDAO,
+                                                     workspaceRepository = workspaceRepository,
+                                                     workspaceSettingRepository = workspaceSettingRepository
+    )
 
     val res = Await.result(service.setWorkspaceSettings(workspaceName, List.empty), Duration.Inf)
     res.successes shouldEqual List.empty
@@ -334,15 +366,19 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
-    when(workspaceRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List(existingSetting)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
+      .thenReturn(Future.successful(List(existingSetting)))
     when(
-      workspaceRepository.createWorkspaceSettingsRecords(workspaceId,
-                                                         List(newSetting),
-                                                         defaultRequestContext.userInfo.userSubjectId
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List(newSetting),
+                                                                defaultRequestContext.userInfo.userSubjectId
       )
     )
       .thenReturn(Future.successful(List(newSetting)))
-    when(workspaceRepository.removePendingSetting(workspaceId, newSetting.settingType)).thenReturn(Future.successful(1))
+    when(workspaceSettingRepository.removePendingSetting(workspaceId, newSetting.settingType))
+      .thenReturn(Future.successful(1))
 
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(any()))
@@ -364,14 +400,18 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       .thenReturn(Future.failed(new Exception("failed to apply settings")))
 
     val service =
-      workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository, gcsDAO = gcsDAO)
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         gcsDAO = gcsDAO,
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
 
     val res = Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
     res.successes shouldEqual List.empty
     res.failures(WorkspaceSettingTypes.GcpBucketLifecycle) shouldEqual ErrorReport(StatusCodes.InternalServerError,
                                                                                    "failed to apply settings"
     )
-    verify(workspaceRepository).removePendingSetting(workspaceId, newSetting.settingType)
+    verify(workspaceSettingRepository).removePendingSetting(workspaceId, newSetting.settingType)
   }
 
   it should "be limited to owners" in {
