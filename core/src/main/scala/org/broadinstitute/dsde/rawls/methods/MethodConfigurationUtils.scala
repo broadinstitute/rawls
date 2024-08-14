@@ -21,7 +21,7 @@ object MethodConfigurationUtils {
       case Success(None) =>
         throw new RawlsExceptionWithErrorReport(
           errorReport = ErrorReport(StatusCodes.NotFound,
-            s"Cannot get ${methodConfig.methodRepoMethod.methodUri} from method repo."
+                                    s"Cannot get ${methodConfig.methodRepoMethod.methodUri} from method repo."
           )
         )
       case Success(Some(wdl)) =>
@@ -34,8 +34,8 @@ object MethodConfigurationUtils {
       case Failure(throwable) =>
         throw new RawlsExceptionWithErrorReport(
           errorReport = ErrorReport(StatusCodes.BadGateway,
-            s"Unable to query the method repo.",
-            methodRepoDAO.toErrorReport(throwable)
+                                    s"Unable to query the method repo.",
+                                    methodRepoDAO.toErrorReport(throwable)
           )
         )
     }
