@@ -26,14 +26,8 @@ echo "rawls docker/build.sh starting ..."
 # Set default variables
 DOCKER_CMD=
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
-REGEX_TO_REPLACE_ILLEGAL_CHARACTERS_WITH_DASHES="s/[^a-zA-Z0-9_.\-]/-/g"
-REGEX_TO_REMOVE_DASHES_AND_PERIODS_FROM_BEGINNING="s/^[.\-]*//g"
-DOCKERTAG_SAFE_NAME=$(echo $BRANCH | sed -e $REGEX_TO_REPLACE_ILLEGAL_CHARACTERS_WITH_DASHES -e $REGEX_TO_REMOVE_DASHES_AND_PERIODS_FROM_BEGINNING | cut -c 1-127)  # https://docs.docker.com/engine/reference/commandline/tag/#:~:text=A%20tag%20name%20must%20be,a%20maximum%20of%20128%20characters.
-DOCKERHUB_REGISTRY=${DOCKERHUB_REGISTRY:-broadinstitute/$PROJECT}
-DOCKERHUB_TESTS_REGISTRY=${DOCKERHUB_REGISTRY}-tests
-GCR_REGISTRY=""
+GCR_REGISTRY=${GCR_REGISTRY:-gcr.io/broad-dsp-gcr-public/rawls}
 ENV=${ENV:-""}
-SKIP_TESTS=${SKIP_TESTS:-""}
 SERVICE_ACCT_KEY_FILE=""
 
 MAKE_JAR=false
@@ -98,27 +92,19 @@ fi
 function make_jar()
 {
     echo "building jar..."
-    if [ "$SKIP_TESTS" != "skip-tests" ]; then
-        echo "starting mysql..."
-        bash ./docker/run-mysql.sh start
-    fi
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
     DOCKER_RUN="docker run --rm"
-    if [ "$SKIP_TESTS" != "skip-tests" ]; then
-        DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
-    fi
-    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/install.sh /working"
+
+    # TODO: DOCKER_TAG hack until JAR build migrates to Dockerfile. Tell SBT to name the JAR
+    # `rawls-assembly-local-SNAP.jar` instead of including the commit hash. Otherwise we get
+    # an explosion of JARs that all get copied to the image; and which one runs is undefined.
+    DOCKER_RUN="$DOCKER_RUN -e DOCKER_TAG=local -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/clean_install.sh /working"
+
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
-    if [ "$SKIP_TESTS" != "skip-tests" ]; then
-        # stop mysql
-        echo "stopping mysql..."
-        bash ./docker/run-mysql.sh stop
-    fi
-
-    # if tests were a fail, fail script
+    # if jar is a fail, fail script
     if [ $EXIT_CODE != 0 ]; then
         exit $EXIT_CODE
     fi
@@ -136,35 +122,16 @@ function artifactory_push()
 function docker_cmd()
 {
     if [ $DOCKER_CMD = "build" ] || [ $DOCKER_CMD = "push" ]; then
-        GIT_SHA=$(git rev-parse origin/${BRANCH})
+        GIT_SHA=$(git rev-parse ${BRANCH})
         echo GIT_SHA=$GIT_SHA > env.properties
         HASH_TAG=${GIT_SHA:0:12}
 
-        echo "building ${DOCKERHUB_REGISTRY}:${HASH_TAG}..."
-        docker build --pull -t $DOCKERHUB_REGISTRY:${HASH_TAG} .
+        echo "building ${GCR_REGISTRY}:${HASH_TAG}..."
+        docker build --pull -t ${GCR_REGISTRY}:${HASH_TAG} .
 
-        echo "building ${DOCKERHUB_TESTS_REGISTRY}:${HASH_TAG}..."
-        cd automation
-        docker build -f Dockerfile-tests -t $DOCKERHUB_TESTS_REGISTRY:${HASH_TAG} .
-        cd ..
-
-        if [ $DOCKER_CMD="push" ]; then
-            echo "pushing ${DOCKERHUB_REGISTRY}:${HASH_TAG}..."
-            docker push $DOCKERHUB_REGISTRY:${HASH_TAG}
-            docker tag $DOCKERHUB_REGISTRY:${HASH_TAG} $DOCKERHUB_REGISTRY:${DOCKERTAG_SAFE_NAME}
-            docker push $DOCKERHUB_REGISTRY:${DOCKERTAG_SAFE_NAME}
-
-            echo "pushing ${DOCKERHUB_TESTS_REGISTRY}:${HASH_TAG}..."
-            docker push $DOCKERHUB_TESTS_REGISTRY:${HASH_TAG}
-            docker tag $DOCKERHUB_TESTS_REGISTRY:${HASH_TAG} $DOCKERHUB_TESTS_REGISTRY:${DOCKERTAG_SAFE_NAME}
-            docker push $DOCKERHUB_TESTS_REGISTRY:${DOCKERTAG_SAFE_NAME}
-
-            if [[ -n $GCR_REGISTRY ]]; then
-                echo "pushing $GCR_REGISTRY:${HASH_TAG}..."
-                docker tag $DOCKERHUB_REGISTRY:${HASH_TAG} $GCR_REGISTRY:${HASH_TAG}
-                gcloud docker -- push $GCR_REGISTRY:${HASH_TAG}
-                gcloud container images add-tag $GCR_REGISTRY:${HASH_TAG} $GCR_REGISTRY:${DOCKERTAG_SAFE_NAME}
-            fi
+        if [ $DOCKER_CMD = "push" ]; then
+            echo "pushing ${GCR_REGISTRY}:${HASH_TAG}..."
+            docker push ${GCR_REGISTRY}:${HASH_TAG}
         fi
     else
         echo "Not a valid docker option!  Choose either build or push (which includes build)"
