@@ -133,7 +133,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   // This is a temporary flag to indicate that a GCP workspace request should be carried out via the
   // MC infrastructure instead of the legacy WorkspaceService codepaths.
-  val GCP_MC_FLAG = "mc_gcp"
+  private val GCP_MC_FLAG = "mc_gcp"
 
   /**
     * Deletes a workspace. For legacy "rawls" workspaces,
@@ -921,7 +921,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         maybeWorkspace.getOrElse(throw new RuntimeException("Workspace not found"))
       }
       wsmWorkspace <- Future {
-        // TODO error handling
         workspaceManagerDAO.getWorkspace(workspaceId, ctx)
       }
       _ <- Future {
