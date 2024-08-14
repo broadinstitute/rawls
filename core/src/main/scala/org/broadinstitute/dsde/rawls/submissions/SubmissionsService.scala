@@ -161,7 +161,7 @@ object SubmissionsService {
 
   def submissionRootPath(workspace: Workspace, id: UUID) = {
     // Check workspace settings here (1/2)
-    if (true)
+    if (false)
       s"gs://${workspace.bucketName}/submissions/$id"
     else
       s"gs://${workspace.bucketName}/submissions/intermediates/$id"
