@@ -35,6 +35,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MethodWiths, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.workbench.util.FutureSupport.toFutureTry
 import slick.dbio.DBIO
 import spray.json.JsonParser
 
@@ -469,39 +470,13 @@ class MethodConfigurationService(
   ): Future[ValidatedMethodConfiguration] =
     for {
       entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
-      gatherInputsResult <- gatherMethodConfigInputs(methodConfiguration)
+      gatherInputsResult <- MethodConfigurationUtils.gatherMethodConfigInputs(ctx,
+                                                                              methodRepoDAO,
+                                                                              methodConfiguration,
+                                                                              methodConfigResolver
+      )
       vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
     } yield vmc
-
-  private def gatherMethodConfigInputs(
-    methodConfig: MethodConfiguration
-  ): Future[MethodConfigResolver.GatherInputsResult] =
-    methodRepoDAO
-      .getMethod(methodConfig.methodRepoMethod, ctx.userInfo)
-      .map {
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound,
-                                      s"Cannot get ${methodConfig.methodRepoMethod.methodUri} from method repo."
-            )
-          )
-        case Some(wdl) =>
-          methodConfigResolver
-            .gatherInputs(ctx.userInfo, methodConfig, wdl)
-            .recoverWith { case regrets =>
-              Failure(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets)))
-            }
-            .get
-      }
-      .recover { case t: Throwable =>
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.BadGateway,
-            s"Unable to query the method repo.",
-            methodRepoDAO.toErrorReport(t)
-          )
-        )
-      }
 
   private def getEntityProviderForMethodConfig(workspaceContext: Workspace,
                                                methodConfiguration: MethodConfiguration

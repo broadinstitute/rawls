@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationUtils
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -75,6 +76,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, Workspace
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.util.FutureSupport.toFutureTry
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
 import spray.json.DefaultJsonProtocol._
@@ -570,7 +572,11 @@ class SubmissionsService(
 
       _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", UserCommentMaxLength))
 
-      gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
+      gatherInputsResult <- MethodConfigurationUtils.gatherMethodConfigInputs(ctx,
+                                                                              methodRepoDAO,
+                                                                              methodConfig,
+                                                                              methodConfigResolver
+      )
 
       validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig,
                                                                                               gatherInputsResult
@@ -802,35 +808,6 @@ class SubmissionsService(
     entityManager.resolveProviderFuture(
       EntityRequestArguments(workspaceContext, ctx, methodConfiguration.dataReferenceName, None)
     )
-
-  private def gatherMethodConfigInputs(
-    methodConfig: MethodConfiguration
-  ): Future[MethodConfigResolver.GatherInputsResult] =
-    methodRepoDAO
-      .getMethod(methodConfig.methodRepoMethod, ctx.userInfo)
-      .map {
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound,
-                                      s"Cannot get ${methodConfig.methodRepoMethod.methodUri} from method repo."
-            )
-          )
-        case Some(wdl) =>
-          methodConfigResolver
-            .gatherInputs(ctx.userInfo, methodConfig, wdl)
-            .recoverWith { case regrets =>
-              Failure(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets)))
-            }
-            .get
-      }
-      .recover { throwable: Throwable =>
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(StatusCodes.BadGateway,
-                                    s"Unable to query the method repo.",
-                                    methodRepoDAO.toErrorReport(throwable)
-          )
-        )
-      }
 
   private def saveSubmission(workspaceContext: Workspace,
                              submissionId: UUID,
