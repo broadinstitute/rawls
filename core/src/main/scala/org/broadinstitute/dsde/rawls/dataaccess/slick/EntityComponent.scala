@@ -699,12 +699,12 @@ trait EntityComponent {
 
         val countQuery =
           sql"""select count(ea.id) from ENTITY doing_reference, ENTITY being_referenced, ENTITY_ATTRIBUTE_#$shardId ea where ea.value_entity_ref = being_referenced.id
-               |and ea.owner_id = doing_reference.id
-               |and being_referenced.entity_type=$entityType
-               |and doing_reference.entity_type!=$entityType
-               |and ea.deleted = 0
-               |and doing_reference.deleted = 0
-               |and being_referenced.workspace_id=${workspaceContext.workspaceIdAsUUID}""".stripMargin
+               and ea.owner_id = doing_reference.id
+               and being_referenced.entity_type=$entityType
+               and doing_reference.entity_type!=$entityType
+               and ea.deleted = 0
+               and doing_reference.deleted = 0
+               and being_referenced.workspace_id=${workspaceContext.workspaceIdAsUUID}"""
 
         countQuery.as[Int]
       }
