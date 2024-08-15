@@ -124,10 +124,10 @@ trait RawSqlQuery {
   }
 
   def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder =
-    SQLActionBuilder(builders.flatMap(_.queryParts),
+    SQLActionBuilder(builders.flatMap(_.sql).mkString,
                      new SetParameter[Unit] {
                        def apply(p: Unit, pp: PositionedParameters): Unit =
-                         builders.foreach(_.unitPConv.apply(p, pp))
+                         builders.foreach(_.setParameter.apply(p, pp))
                      }
     )
 
