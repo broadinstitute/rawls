@@ -923,16 +923,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       wsmWorkspace <- Future {
         workspaceManagerDAO.getWorkspace(workspaceId, ctx)
       }
-      _ <- Future {
+      _ <-
         workspaceRepository.updateBucketName(workspace.workspaceIdAsUUID,
                                              MultiCloudWorkspaceService.getStorageContainerName(workspaceId)
         )
-      }
-      _ <- Future {
+
+      _ <-
         workspaceRepository.updateGoogleProjectId(workspace.workspaceIdAsUUID,
                                                   GoogleProjectId(wsmWorkspace.getGcpContext.getProjectId)
         )
-      }
+
     } yield {}
   }
 
@@ -952,7 +952,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             .getResourceId
         )
       case CloudPlatform.GCP =>
-        Future.successful(
+        Future(
           workspaceManagerDAO
             .createGcpStorageBucket(
               workspaceId,
