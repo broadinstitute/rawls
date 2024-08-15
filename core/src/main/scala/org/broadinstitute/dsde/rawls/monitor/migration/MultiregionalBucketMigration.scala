@@ -332,7 +332,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
           )
         }
 
-        _ <- sqlu"insert into #$tableName (#${workspaceIdCol.value}{}.value}) values (${workspace.workspaceIdAsUUID})"
+        _ <- sqlu"insert into #$tableName (#${workspaceIdCol.value}) values (${workspace.workspaceIdAsUUID})"
         id <- sql"select LAST_INSERT_ID()".as[Long].head
       } yield id
 
