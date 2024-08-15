@@ -38,6 +38,18 @@ case class SubmissionRequest(
   monitoringImageScript: Option[String] = None
 )
 
+// This class contains values from the submission REST request
+// merged with values derived from Rawls settings
+// We never send it over the wire, so no serializer
+case class PreparedSubmission(
+  workspace: Workspace,
+  id: UUID,
+  inputs: LazyList[SubmissionValidationEntityInputs],
+  failureMode: Option[WorkflowFailureMode],
+  header: SubmissionValidationHeader,
+  submissionRoot: String
+)
+
 // Cromwell's response to workflow submission
 case class ExecutionServiceStatus(
   id: String,

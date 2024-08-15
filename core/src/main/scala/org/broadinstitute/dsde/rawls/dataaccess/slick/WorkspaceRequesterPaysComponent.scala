@@ -21,11 +21,9 @@ trait WorkspaceRequesterPaysComponent {
     def userEmail = column[String]("USER_EMAIL", O.Length(254))
     def serviceAccountEmail = column[String]("SERVICE_ACCOUNT_EMAIL", O.Length(254))
 
-    def * = (id,
-             workspaceId,
-             userEmail,
-             serviceAccountEmail
-    ) <> (WorkspaceRequesterPaysRecord.tupled, WorkspaceRequesterPaysRecord.unapply)
+    def * = (id, workspaceId, userEmail, serviceAccountEmail) <> (WorkspaceRequesterPaysRecord.tupled,
+                                                                  WorkspaceRequesterPaysRecord.unapply
+    )
   }
 
   object workspaceRequesterPaysQuery extends TableQuery(new WorkspaceRequesterPaysTable(_)) {

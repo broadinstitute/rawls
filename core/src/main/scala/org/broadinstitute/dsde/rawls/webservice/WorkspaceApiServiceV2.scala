@@ -42,10 +42,7 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                         workspaceName,
                         destWorkspace
                       )
-                      .map(w =>
-                        StatusCodes.Created ->
-                          WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty))
-                      )
+                      .map(w => StatusCodes.Created -> w)
                   }
                 }
               }

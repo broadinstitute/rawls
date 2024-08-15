@@ -135,8 +135,6 @@ class FastPassServiceSpec
   )(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
-      with MethodConfigApiService
-      with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
@@ -295,29 +293,16 @@ class FastPassServiceSpec
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(
-        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
-        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-        workbenchMetricBaseName = workbenchMetricBaseName
-      ),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
       leonardoService,
-      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager,
       resourceBufferService,
       servicePerimeterService,
       googleIamDAO,
@@ -419,12 +404,14 @@ class FastPassServiceSpec
     parentWorkspaceFastPassGrantsBefore should be(empty)
 
     val childWorkspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        parentWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+      Await
+        .result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                     parentWorkspace.toWorkspaceName,
+                                                                     workspaceRequest
+                ),
+                Duration.Inf
+        )
+        .toWorkspace
 
     verify(services.mockFastPassService)
       .setupFastPassForUserInClonedWorkspace(
@@ -449,6 +436,36 @@ class FastPassServiceSpec
     verify(services.mockFastPassService)
       .removeFastPassGrantsForWorkspace(
         ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(workspace.workspaceId))
+      )
+  }
+
+  it should "not sync FastPass grants for a workspace if auth domain constraints are not satisfied" in withTestDataServices {
+    services =>
+      when(
+        services.fastPassMockSamDAO.getAuthDomainConstraintSatisfied(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.any[String],
+          ArgumentMatchers.any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(Future(false))
+      Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+      verify(services.googleIamDAO, never()).addRoles(
+        ArgumentMatchers.any[GoogleProject],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]]
+      )
+      verify(services.googleStorageDAO, never()).addIamRoles(
+        ArgumentMatchers.any[GcsBucketName],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]],
+        ArgumentMatchers.any[Option[GoogleProject]]
       )
   }
 
@@ -990,14 +1007,12 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    val childWorkspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        parentWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+    Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                      parentWorkspace.toWorkspaceName,
+                                                                      workspaceRequest
+                 ),
+                 Duration.Inf
+    )
   }
 
   it should "not block workspace delete if FastPass fails" in withTestDataServices { services =>

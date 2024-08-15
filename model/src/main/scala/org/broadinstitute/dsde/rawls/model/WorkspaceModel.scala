@@ -279,6 +279,28 @@ object Workspace {
                        attributes: AttributeMap,
                        state: WorkspaceState
   ) =
+    buildWorkspace(namespace,
+                   name,
+                   workspaceId,
+                   createdDate,
+                   lastModified,
+                   createdBy,
+                   attributes,
+                   state,
+                   WorkspaceType.McWorkspace
+    )
+  def buildWorkspace(namespace: String,
+                     name: String,
+                     workspaceId: String,
+                     createdDate: DateTime,
+                     lastModified: DateTime,
+                     createdBy: String,
+                     attributes: AttributeMap,
+                     state: WorkspaceState,
+                     workspaceType: WorkspaceType
+  ) = {
+    val googleProjectId =
+      if (workspaceType == WorkspaceType.RawlsWorkspace) GoogleProjectId("google-id") else GoogleProjectId("")
     new Workspace(
       namespace,
       name,
@@ -291,14 +313,15 @@ object Workspace {
       attributes,
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId(""),
+      googleProjectId,
       None,
       None,
       None,
       None,
-      WorkspaceType.McWorkspace,
+      workspaceType,
       state
     )
+  }
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -775,6 +798,8 @@ case class MethodRepoConfigurationExport(
 )
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+                                 canShare: Option[Boolean],
+                                 canCompute: Option[Boolean],
                                  workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                                  public: Boolean,
@@ -1289,7 +1314,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat21(WorkspaceDetails.apply)
 
-  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat5(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat7(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 

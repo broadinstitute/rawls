@@ -43,12 +43,15 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
+import org.broadinstitute.dsde.rawls.metrics.BardService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.serviceFactory._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
@@ -328,7 +331,7 @@ object Boot extends IOApp with LazyLogging {
         HealthMonitor.CheckAll
       )
 
-      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
+      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)()
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager)
 
@@ -388,25 +391,16 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
-        methodRepoDAO,
-        cromiamDAO,
         shardedExecutionServiceCluster,
-        appConfigManager.conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
         new LeonardoService(leonardoDAO),
-        methodConfigResolver,
         gcsDAO,
         samDAO,
         notificationDAO,
         userServiceConstructor,
-        genomicsServiceConstructor,
-        maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
-        submissionCostService,
         workspaceServiceConfig,
         requesterPaysSetupService,
-        entityManager,
         resourceBufferService,
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
@@ -423,6 +417,35 @@ object Boot extends IOApp with LazyLogging {
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor
+      )
+
+      val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+        MethodConfigurationService.constructor(
+          slickDataSource,
+          samDAO,
+          methodRepoDAO,
+          methodConfigResolver,
+          entityManager,
+          new WorkspaceRepository(slickDataSource),
+          workbenchMetricBaseName = metricsPrefix
+        )
+
+      val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
+        slickDataSource,
+        entityManager,
+        methodRepoDAO,
+        cromiamDAO,
+        shardedExecutionServiceCluster,
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName = metricsPrefix,
+        submissionCostService,
+        genomicsServiceConstructor,
+        workspaceServiceConfig,
+        new WorkspaceRepository(slickDataSource)
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -497,6 +520,8 @@ object Boot extends IOApp with LazyLogging {
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,
         bucketMigrationServiceConstructor,
+        methodConfigurationServiceConstructor,
+        submissionsServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
@@ -513,6 +538,12 @@ object Boot extends IOApp with LazyLogging {
 
       if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
+
+        val bardService = new BardService(
+          appConfigManager.conf.getBoolean("bard.enabled"),
+          appConfigManager.conf.getString("bard.bardUrl"),
+          appConfigManager.conf.getInt("bard.connectionPoolSize")
+        )
 
         BootMonitors.bootMonitors(
           system,
@@ -545,7 +576,8 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
-          methodConfigResolver
+          methodConfigResolver,
+          bardService
         )
       } else
         logger.info(

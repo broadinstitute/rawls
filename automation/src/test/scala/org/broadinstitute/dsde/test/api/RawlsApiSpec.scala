@@ -14,7 +14,13 @@ import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBi
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
-import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
+import org.broadinstitute.dsde.workbench.service.SamModel.{
+  AccessPolicyMembership,
+  AccessPolicyResponseEntry,
+  ResourceActionPattern,
+  ResourceRole,
+  ResourceType
+}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
@@ -149,6 +155,81 @@ class RawlsApiSpec
     Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/submissions/queueStatus"))
 
   "Rawls" - {
+    "should agree with Sam on the permissions it sets on its resources" in {
+      implicit val token: AuthToken = owner.makeAuthToken()
+      val resourceTypes = Sam.config.listResourceTypes()
+
+      resourceTypes.collect {
+        case ResourceType(typeName, roles, actionPatterns, _, _, allowLeaving) if typeName.equals("workspace") =>
+          roles.collect {
+            case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("owner") =>
+              actions should contain allElementsOf (List(
+                "share_policy::reader",
+                "share_policy::share-reader",
+                "share_policy::writer",
+                "share_policy::share-writer",
+                "share_policy::can-compute",
+                "share_policy::owner",
+                "write",
+                "own",
+                "compute",
+                "delete",
+                "read_auth_domain",
+                "update_auth_domain"
+              ))
+              descendantRoles.get("google-project") shouldBe Option(Set("owner"))
+            case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("reader") =>
+              actions should contain allElementsOf (List("read", "read_policy::owner", "read_auth_domain"))
+              actions should contain noElementsOf (List("write", "compute"))
+              descendantRoles.get("google-project") shouldBe Option(Set("pet-creator"))
+            case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("writer") =>
+              actions should contain allElementsOf (List("write", "read", "read_policy::owner", "read_auth_domain"))
+              actions should contain noElementsOf (List("compute"))
+              descendantRoles.get("google-project") shouldBe Option(Set("pet-creator"))
+            case ResourceRole(roleName, actions, descendantRoles, _) if roleName.equals("can-compute") =>
+              actions should contain allElementsOf (List("compute"))
+              descendantRoles.get("google-project") shouldBe Option(Set("notebook-user"))
+          }
+          actionPatterns.collect {
+            case ResourceActionPattern(authDomainConstrainable, _, value) if value.equals("read") =>
+              authDomainConstrainable shouldBe true
+          }
+          allowLeaving shouldBe true
+        case ResourceType(typeName, roles, _, _, _, allowLeaving) if typeName.equals("billing-project") =>
+          roles.collect {
+            case ResourceRole(roleName, actions, _, _) if roleName.equals("owner") =>
+              actions should contain allElementsOf (List(
+                "view_status",
+                "create_workspace",
+                "alter_policies",
+                "add_to_service_perimeter",
+                "delete",
+                "update_billing_account",
+                "alter_spend_report_configuration",
+                "read_spend_report_configuration",
+                "read_spend_report"
+              ))
+            case ResourceRole(roleName, actions, _, _) if roleName.equals("workspace-creator") =>
+              actions should contain allElementsOf (List("view_status", "create_workspace"))
+            case ResourceRole(roleName, actions, _, _) if roleName.equals("batch-compute-user") =>
+              actions should contain allElementsOf (List("launch_batch_compute"))
+          }
+          allowLeaving shouldBe true
+        case ResourceType(typeName, roles, _, _, _, allowLeaving) if typeName.equals("google-project") =>
+          roles.collect {
+            case ResourceRole(roleName, actions, _, includedRoles) if roleName.equals("owner") =>
+              actions should contain allElementsOf (List("delete", "set_parent", "read_policies"))
+              includedRoles should contain allElementsOf (List("notebook-user", "pet-creator"))
+            case ResourceRole(roleName, actions, _, includedRoles) if roleName.equals("notebook-user") =>
+              actions should contain allElementsOf (List("add_child"))
+              includedRoles should contain allElementsOf (List("pet-creator"))
+            case ResourceRole(roleName, actions, _, _) if roleName.equals("pet-creator") =>
+              actions should contain allElementsOf (List("create-pet"))
+          }
+          allowLeaving shouldBe true
+      }
+    }
+
     "should retrieve sub-workflow metadata and outputs from Cromwell" taggedAs MethodsTest in {
       implicit val token: AuthToken = studentB.makeAuthToken()
 

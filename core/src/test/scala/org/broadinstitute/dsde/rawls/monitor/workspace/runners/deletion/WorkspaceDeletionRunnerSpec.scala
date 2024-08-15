@@ -76,31 +76,6 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     )
   }
 
-  it should "return a completed status if the user email is None" in {
-    val wsRepo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(wsRepo.getWorkspace(any[UUID])).thenAnswer(_ => Future(Some(azureWorkspace)))
-    when(wsRepo.setFailedState(any[UUID], any[WorkspaceState], any[String])).thenAnswer(_ => Future.successful(1))
-
-    val runner = new WorkspaceDeletionRunner(
-      mock[SamDAO](RETURNS_SMART_NULLS),
-      mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
-      wsRepo,
-      mock[LeonardoService](RETURNS_SMART_NULLS),
-      mock[WsmDeletionAction](RETURNS_SMART_NULLS),
-      mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
-      mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
-    )
-
-    whenReady(runner(monitorRecord.copy(userEmail = None)))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(wsRepo).setFailedState(
-      monitorRecord.workspaceId.get,
-      WorkspaceState.DeleteFailed,
-      s"Job to monitor workspace deletion for workspace id = ${monitorRecord.workspaceId.get} created with id ${monitorRecord.jobControlId} but no user email set"
-    )
-  }
-
   it should "throw an exception if called with a job type that is not WorkspaceDelete" in {
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
@@ -184,6 +159,32 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     }
   }
 
+  it should "continue on when leo returns a 404 for the workspace when deleting apps" in {
+    val leoDeletion = mock[LeonardoService]
+    when(leoDeletion.deleteApps(any, any)(any))
+      .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
+    val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    when(recordDao.update(any)).thenReturn(Future.successful(1))
+
+    val runner = new WorkspaceDeletionRunner(
+      mock[SamDAO],
+      mock[WorkspaceManagerDAO],
+      mock[WorkspaceRepository],
+      leoDeletion,
+      mock[WsmDeletionAction],
+      mock[GoogleServicesDAO],
+      recordDao
+    )
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.WorkspaceDeleteInit),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
+    verify(leoDeletion).deleteApps(any, any)(any)
+    verify(recordDao).update(any)
+  }
+
   behavior of "leo runtime deletion orchestration"
 
   it should "delete leo runtimes and update the job after leo apps are deleted" in {
@@ -211,6 +212,35 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     verify(leoDeletion).pollAppDeletion(any(), any())(any[ExecutionContext]())
     verify(recordDao).update(jobUpdate)
     verify(leoDeletion).deleteRuntimes(any(), any())(any[ExecutionContext]())
+  }
+
+  it should "continue on when leo returns a 404 for the workspace when deleting runtimes or polling for app deletion" in {
+    val leoDeletion = mock[LeonardoService]
+    when(leoDeletion.pollAppDeletion(any, any)(any))
+      .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
+    when(leoDeletion.deleteRuntimes(any, any)(any))
+      .thenReturn(Future.failed(new ApiException(404, "Workspace Not Found")))
+    val recordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    when(recordDao.update(any)).thenReturn(Future.successful(1))
+
+    val runner = new WorkspaceDeletionRunner(
+      mock[SamDAO],
+      mock[WorkspaceManagerDAO],
+      mock[WorkspaceRepository],
+      leoDeletion,
+      mock[WsmDeletionAction],
+      mock[GoogleServicesDAO],
+      recordDao
+    )
+    whenReady(
+      runner.runStep(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll),
+                     azureWorkspace,
+                     RawlsRequestContext(null, null)
+      )
+    )(_ shouldBe Incomplete)
+    verify(leoDeletion).pollAppDeletion(any, any)(any)
+    verify(leoDeletion).deleteRuntimes(any, any)(any)
+    verify(recordDao).update(any)
   }
 
   it should "return incomplete when leo runtimes are not deleted" in {
@@ -339,7 +369,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
     val wsmAction = mock[WsmDeletionAction](RETURNS_SMART_NULLS)
     when(wsmAction.pollForCompletion(any(), any(), any())(any[ExecutionContext]())).thenReturn(Future.successful(true))
     val repo = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(repo.deleteWorkspaceRecord(azureWorkspace)).thenReturn(Future.successful(true))
+    when(repo.deleteWorkspace(azureWorkspace)).thenReturn(Future.successful(true))
     val runner = new WorkspaceDeletionRunner(
       mock[SamDAO](RETURNS_SMART_NULLS),
       mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
@@ -356,7 +386,7 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
       )
     )(_ shouldBe Complete)
     verify(wsmAction).pollForCompletion(any(), any(), any())(any[ExecutionContext]())
-    verify(repo).deleteWorkspaceRecord(azureWorkspace)
+    verify(repo).deleteWorkspace(azureWorkspace)
 
   }
 
@@ -432,9 +462,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(RawlsRequestContext(null, null)))
-      .when(runner)
-      .getUserCtx(anyString())(ArgumentMatchers.any())
+
+    when(runner.samDAO.rawlsSAContext).thenReturn(RawlsRequestContext(null, null))
 
     whenReady(runner(monitorRecord.copy(jobType = JobType.LeoAppDeletionPoll)))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(
@@ -475,9 +504,8 @@ class WorkspaceDeletionRunnerSpec extends AnyFlatSpec with MockitoSugar with Mat
         mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
       )
     )
-    doReturn(Future.successful(RawlsRequestContext(null, null)))
-      .when(runner)
-      .getUserCtx(anyString())(ArgumentMatchers.any())
+
+    when(runner.samDAO.rawlsSAContext).thenReturn(RawlsRequestContext(null, null))
 
     whenReady(runner(job))(_ shouldBe Complete)
     verify(workspaceRepo).setFailedState(

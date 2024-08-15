@@ -5,13 +5,13 @@ object Dependencies {
 
   val akkaV         = "2.6.8"
   val akkaHttpV     = "10.2.0"
-  val jacksonV      = "2.17.1"
+  val jacksonV      = "2.17.2"
 
-  val workbenchLibsHash = "3a8f98c"
-  val serviceTestV = s"4.4-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.30-${workbenchLibsHash}"
+  val workbenchLibsHash = "d47b6d4"
+  val serviceTestV = s"5.0-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.32-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
-  val workbenchModelV  = s"0.19-${workbenchLibsHash}"
+  val workbenchModelV  = s"0.20-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.8-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
@@ -28,7 +28,7 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.1116-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.1142-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 
@@ -57,7 +57,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "1824ef0eb"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "339209ac"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),

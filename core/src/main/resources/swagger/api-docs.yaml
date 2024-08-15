@@ -223,8 +223,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - oidc_google_billing_scope:
-            - openid
+        - oidc_google_billing_scope: []
       x-codegen-request-body-name: createProjectRequest
   /api/billing/v2/{projectId}:
     get:
@@ -3820,8 +3819,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - oidc_google_billing_scope:
-            - openid
+        - oidc_google_billing_scope: []
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -5853,7 +5851,8 @@ components:
         authorizationDomain:
           type: array
           description: The list of groups in the Authorization Domain (empty if no
-            AD is set)
+            AD is set). Not supported for Azure workspaces. To limit Azure workspace 
+            access to members of a set of Terra groups, use a group-constraint policy instead.
           items:
             $ref: '#/components/schemas/ManagedGroupRef'
         attributes:
@@ -6027,10 +6026,12 @@ components:
             The AzureManagedAppCoordinates of the billing project, if this is an Azure workspace.
         bucketOptions:
           $ref: '#/components/schemas/WorkspaceBucketOptions'
-        canCompute:
-          type: boolean
         canShare:
           type: boolean
+          description: True if the user can share the workspace with others, false otherwise
+        canCompute:
+          type: boolean
+          description: True if the user can launch compute in this workspace, false otherwise
         catalog:
           type: boolean
         owners:
@@ -6064,6 +6065,12 @@ components:
           $ref: '#/components/schemas/WorkspaceAccessLevel'
         public:
           type: boolean
+        canShare:
+          type: boolean
+          description: True if the user can share the workspace with others, false otherwise
+        canCompute:
+          type: boolean
+          description: True if the user can launch compute in this workspace, false otherwise
         workspace:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
@@ -6939,13 +6946,21 @@ components:
             $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
     oidc:
-      type: openIdConnect
-      openIdConnectUrl: OPEN_ID_CONNECT_URL
+      type: oauth2
       x-tokenName: id_token
+      flows:
+        authorizationCode:
+          authorizationUrl: OAUTH_AUTHORIZATION_URL
+          scopes: {}
+          tokenUrl: OAUTH_TOKEN_URL
     oidc_google_billing_scope:
-      type: openIdConnect
-      openIdConnectUrl: OPEN_ID_CONNECT_URL_WITH_GOOGLE_BILLING_SCOPE
+      type: oauth2
       x-tokenName: id_token
+      flows:
+        authorizationCode:
+          authorizationUrl: OAUTH_AUTHORIZATION_URL_WITH_GOOGLE_BILLING_SCOPE
+          scopes: {}
+          tokenUrl: OAUTH_TOKEN_URL_WITH_GOOGLE_BILLING_SCOPE
 
 security:
-  - oidc: [openid]
+  - oidc: []

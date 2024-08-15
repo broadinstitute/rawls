@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.{
@@ -45,12 +46,14 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceRepository,
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
@@ -152,7 +155,9 @@ trait ApiServiceSpec
       with SnapshotApiService
       with StatusApiService
       with UserApiService
-      with WorkspaceApiService {
+      with MethodConfigApiService
+      with WorkspaceApiService
+      with SubmissionApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
@@ -355,25 +360,16 @@ trait ApiServiceSpec
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      methodRepoDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
-      execServiceBatchSize,
       workspaceManagerDAO,
       leonardoService,
-      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,
       userServiceConstructor,
-      genomicsServiceConstructor,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager,
       resourceBufferService,
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
@@ -397,6 +393,35 @@ trait ApiServiceSpec
       workbenchMetricBaseName
     )
 
+    override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
+      MethodConfigurationService.constructor(
+        slickDataSource,
+        samDAO,
+        methodRepoDAO,
+        methodConfigResolver,
+        entityManager,
+        new WorkspaceRepository(slickDataSource),
+        workbenchMetricBaseName
+      ) _
+
+    val submissionsServiceConstructor = SubmissionsService.constructor(
+      dataSource,
+      entityManager,
+      methodRepoDAO,
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+      executionServiceCluster,
+      methodConfigResolver,
+      gcsDAO,
+      samDAO,
+      maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser,
+      workbenchMetricBaseName,
+      submissionCostService,
+      genomicsServiceConstructor,
+      workspaceServiceConfig,
+      new WorkspaceRepository(slickDataSource)
+    ) _
+
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
@@ -411,19 +436,24 @@ trait ApiServiceSpec
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = instrumentRequest { otelContext =>
-      sealRoute(
-        adminRoutes(otelContext) ~
-          billingRoutesV2(otelContext) ~
-          billingRoutes(otelContext) ~
-          entityRoutes(otelContext) ~
-          methodConfigRoutes(otelContext) ~
-          notificationsRoutes ~
-          statusRoute ~
-          submissionRoutes(otelContext) ~
-          userRoutes(otelContext) ~
-          workspaceRoutes(otelContext)
-      )
+    val sealedInstrumentedRoutes: Route = captureRequestMetrics {
+      traceRequests { otelContext =>
+        sealRoute(
+          workspaceRoutesV2(otelContext) ~
+            workspaceRoutes(otelContext) ~
+            entityRoutes(otelContext) ~
+            methodConfigRoutes(otelContext) ~
+            submissionRoutes(otelContext) ~
+            adminRoutes(otelContext) ~
+            userRoutes(otelContext) ~
+            billingRoutesV2(otelContext) ~
+            billingRoutes(otelContext) ~
+            notificationsRoutes ~
+            servicePerimeterRoutes(otelContext) ~
+            snapshotRoutes(otelContext) ~
+            statusRoute
+        )
+      }
     }
 
     override val openIDConnectConfiguration = FakeOpenIDConnectConfiguration
