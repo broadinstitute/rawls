@@ -443,7 +443,9 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     }
 
     final def getAttempt(migrationId: Long) = OptionT[ReadWriteAction, MultiregionalBucketMigration] {
-      sql"select #$allColumns from #$tableName where #${idCol.value} = $migrationId".as[MultiregionalBucketMigration].headOption
+      sql"select #$allColumns from #$tableName where #${idCol.value} = $migrationId"
+        .as[MultiregionalBucketMigration]
+        .headOption
     }
 
 // Resource-limited migrations are those requiring new google projects and storage transfer jobs
