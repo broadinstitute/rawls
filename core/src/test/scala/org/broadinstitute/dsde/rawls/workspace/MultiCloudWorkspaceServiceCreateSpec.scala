@@ -30,6 +30,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   CreationStatuses,
   ErrorReport,
+  GoogleProjectId,
   ManagedGroupRef,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -323,6 +324,8 @@ class MultiCloudWorkspaceServiceCreateSpec
     when(workspaceRepository.createMCWorkspace(any, ArgumentMatchers.eq(workspaceName), any, any, any)(any))
       .thenReturn(Future(defaultWorkspace))
     when(workspaceRepository.getWorkspace(any[UUID])).thenReturn(Future.successful(Some(defaultWorkspace)))
+    when(workspaceRepository.updateBucketName(any[UUID], any[String])).thenReturn(Future.successful(1))
+    when(workspaceRepository.updateGoogleProjectId(any[UUID], any[GoogleProjectId])).thenReturn(Future.successful(1))
     val bpmDAO = mock[BillingProfileManagerDAO]
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(model.CloudPlatform.GCP)
     when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Some(billingProfile))
