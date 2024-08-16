@@ -264,20 +264,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         getBillingProfile(billingProject, s)
       }
 
-      workspaceOpt <-
+      workspaceOpt: Option[(Workspace, WorkspaceCloudPlatform)] <-
         if (isMcRequest(workspaceRequest, billingProfileOpt)) {
           billingProfileOpt
             .traverse { profileModel =>
-              Option(profileModel.getCloudPlatform)
-                .traverse { _ =>
-                  traceFutureWithParent("createMultiCloudWorkspace", parentContext) { s =>
-                    createMultiCloudWorkspace(
-                      workspaceRequest,
-                      profileModel,
-                      s
-                    ).map(workspace => (workspace, rawlsCloudPlatformFromBpm(profileModel)))
-                  }
-                }
+              createMultiCloudWorkspace(
+                workspaceRequest,
+                profileModel,
+                ctx
+              ).map(workspace => (workspace, rawlsCloudPlatformFromBpm(profileModel)))
             }
         } else {
           Future.successful(None)
@@ -286,7 +281,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // Default to the legacy implementation if no workspace was been created
       // This can happen if there's
       // - no billing profile or the request is not for a multi-cloud workspace
-      (workspace, cloudPlatform) <- workspaceOpt.flatten
+      (workspace, cloudPlatform) <- workspaceOpt
         .map(Future.successful)
         .getOrElse(
           traceFutureWithParent("createWorkspace", parentContext) { s =>
