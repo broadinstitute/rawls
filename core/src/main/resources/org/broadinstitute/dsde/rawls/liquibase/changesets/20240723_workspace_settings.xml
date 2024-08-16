@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_WORKSPACE_SETTINGS">
+        <createTable tableName="WORKSPACE_SETTINGS">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="WORKSPACE_ID" type="BINARY(16)">
+                <constraints nullable="false" referencedTableName="WORKSPACE" referencedColumnNames="id" foreignKeyName="FK_WSETTINGS_WORKSPACE_ID" deleteCascade="true"/>
+            </column>
+            <column name="SETTING_TYPE" type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="CONFIG" type="JSON">
+                <constraints nullable="false"/>
+            </column>
+            <column name="CREATED_TIME" type="DATETIME(6)" defaultValueComputed="NOW(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="LAST_UPDATED" type="DATETIME(6)" defaultValueComputed="NOW(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="STATUS" type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="USER_ID" type="varchar(254)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

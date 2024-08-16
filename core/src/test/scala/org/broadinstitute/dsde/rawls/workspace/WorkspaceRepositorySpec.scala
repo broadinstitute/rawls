@@ -2,8 +2,20 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceName, WorkspaceState}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceSettingRecord}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleAction,
+  GcpBucketLifecycleCondition,
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule
+}
+import org.broadinstitute.dsde.rawls.model.{
+  Workspace,
+  WorkspaceName,
+  WorkspaceSetting,
+  WorkspaceSettingTypes,
+  WorkspaceState
+}
 import org.joda.time.DateTime
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
