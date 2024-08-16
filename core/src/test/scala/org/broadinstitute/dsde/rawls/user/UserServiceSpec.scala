@@ -1867,6 +1867,54 @@ class UserServiceSpec
     }
   }
 
+  it should "update billing profile record when an owner removes themself from a project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = testContext.userInfo.userEmail.value
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                    ownerProject.projectName.value,
+                                    SamBillingProjectPolicyNames.owner,
+                                    ownerEmail,
+                                    testContext
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      Await.result(userService.removeUserFromBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).leaveProfile(
+        billingProfileId,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                          ownerProject.projectName.value,
+                                          SamBillingProjectPolicyNames.owner,
+                                          ownerEmail,
+                                          testContext
+      )
+    }
+  }
+
   it should "not update Sam permissions if billing profile member deletion fails" in {
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()

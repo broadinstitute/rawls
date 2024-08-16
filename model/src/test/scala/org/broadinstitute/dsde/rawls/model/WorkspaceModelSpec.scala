@@ -1,8 +1,15 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import akka.http.scaladsl.model.StatusCodes.BadRequest
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{MethodRepoMethodFormat, WorkspaceSettingFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleAction,
+  GcpBucketLifecycleCondition,
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule
+}
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -658,4 +665,229 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
   }
 
+  "toWSMPolicyInput" - {
+    "throws an exception for malformed additional fields" in {
+      val e = intercept[RawlsExceptionWithErrorReport] {
+        WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup", "otherInvalid" -> "other")))
+          .toWsmPolicyInput()
+      }
+      e.errorReport.statusCode shouldBe Some(BadRequest)
+    }
+  }
+
+  "WorkspaceSetting" - {
+    "throws an exception for invalid workspace setting type" in {
+      val fakeSetting =
+        """{
+          |    "settingType": "FakeWorkspaceSetting",
+          |    "config": {
+          |      "rules": []
+          |    }
+          |  }""".stripMargin.parseJson
+
+      intercept[RawlsException] {
+        WorkspaceSettingFormat.read(fakeSetting)
+      }
+    }
+
+    "GoogleBucketLifecycleSettings" - {
+      "parses lifecycle settings with matchesPrefix and age" in {
+        val lifecycleSetting =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": [
+            |        {
+            |          "action": {
+            |            "actionType": "Delete"
+            |          },
+            |          "conditions": {
+            |            "age": 30,
+            |            "matchesPrefix": [
+            |              "prefix1",
+            |              "prefix2"
+            |            ]
+            |          }
+            |        }
+            |      ]
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          WorkspaceSetting(
+            WorkspaceSettingTypes.GcpBucketLifecycle,
+            GcpBucketLifecycleConfig(
+              List(
+                GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                       GcpBucketLifecycleCondition(Some(Set("prefix1", "prefix2")), Some(30))
+                )
+              )
+            )
+          )
+        } {
+          WorkspaceSettingFormat.read(lifecycleSetting)
+        }
+      }
+
+      "parses lifecycle settings with no prefixes" in {
+        val lifecycleSettingNoPrefixes =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": [
+            |        {
+            |          "action": {
+            |            "actionType": "Delete"
+            |          },
+            |          "conditions": {
+            |            "age": 30,
+            |            "matchesPrefix": []
+            |          }
+            |        }
+            |      ]
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          WorkspaceSetting(
+            WorkspaceSettingTypes.GcpBucketLifecycle,
+            GcpBucketLifecycleConfig(
+              List(
+                GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                       GcpBucketLifecycleCondition(Some(Set.empty), Some(30))
+                )
+              )
+            )
+          )
+        } {
+          WorkspaceSettingFormat.read(lifecycleSettingNoPrefixes)
+        }
+      }
+
+      "parses lifecycle settings with no age" in {
+        val lifecycleSettingNoAge =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": [
+            |        {
+            |          "action": {
+            |            "actionType": "Delete"
+            |          },
+            |          "conditions": {
+            |            "matchesPrefix": [
+            |              "prefix1",
+            |              "prefix2"
+            |            ]
+            |          }
+            |        }
+            |      ]
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          WorkspaceSetting(
+            WorkspaceSettingTypes.GcpBucketLifecycle,
+            GcpBucketLifecycleConfig(
+              List(
+                GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                       GcpBucketLifecycleCondition(Some(Set("prefix1", "prefix2")), None)
+                )
+              )
+            )
+          )
+        } {
+          WorkspaceSettingFormat.read(lifecycleSettingNoAge)
+        }
+      }
+
+      "parses lifecycle settings with no rules" in {
+        val lifecycleSettingNoRules =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": []
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(List.empty))
+        } {
+          WorkspaceSettingFormat.read(lifecycleSettingNoRules)
+        }
+      }
+
+      "throws an exception for missing config" in {
+        val lifecycleSettingNoConfig =
+          """{
+            |    "settingType": "GcpBucketLifecycle"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(lifecycleSettingNoConfig)
+        }
+      }
+
+      "throws an exception for incorrect format" in {
+        val lifecycleSettingBadConfig =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": "not a list"
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(lifecycleSettingBadConfig)
+        }
+      }
+
+      "throws an exception for missing rules" in {
+        val lifecycleSettingNoRules =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(lifecycleSettingNoRules)
+        }
+      }
+
+      "throws an exception for missing rule action" in {
+        val lifecycleSettingNoAction =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": [
+            |        {
+            |          "conditions": {
+            |            "age": 30,
+            |            "matchesPrefix": [
+            |              "prefix1",
+            |              "prefix2"
+            |            ]
+            |          }
+            |        }
+            |      ]
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(lifecycleSettingNoAction)
+        }
+      }
+
+      "throws an exception for missing rule conditions" in {
+        val lifecycleSettingNoConditions =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": [
+            |        {
+            |          "action": {
+            |            "actionType": "Delete"
+            |          }
+            |        }
+            |      ]
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(lifecycleSettingNoConditions)
+        }
+      }
+    }
+  }
 }

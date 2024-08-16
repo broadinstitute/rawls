@@ -18,22 +18,24 @@ import io.opentelemetry.context.Context
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 
-import java.sql.SQLTransactionRollbackException
+import java.sql.{SQLException, SQLTransactionRollbackException}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -59,6 +61,14 @@ object RawlsApiService extends LazyLogging {
         )
         Sentry.captureException(rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
+      case sql: SQLException =>
+        val sentryId = Sentry.captureException(sql)
+        logger.error(
+          s"Unhandled SQL exception with sentry id [$sentryId]: ${sql.getMessage} [${sql.getErrorCode} ${sql.getSQLState}] ${sql.getNextException}",
+          sql
+        )
+        val message = s"Internal server exception [sentryId=${sentryId.toString}]"
+        complete(StatusCodes.InternalServerError -> ErrorReport(message))
       case wsmApiException: ApiException =>
         if (wsmApiException.getCode >= 500) {
           Sentry.captureException(wsmApiException)
@@ -107,17 +117,7 @@ trait RawlsApiService
     with VersionApiService
     with ServicePerimeterApiService {
 
-  val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService
-  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
-  val entityServiceConstructor: RawlsRequestContext => EntityService
-  val userServiceConstructor: RawlsRequestContext => UserService
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService
-  val snapshotServiceConstructor: RawlsRequestContext => SnapshotService
-  val spendReportingConstructor: RawlsRequestContext => SpendReportingService
-  val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator
-  val statusServiceConstructor: () => StatusService
-  val executionServiceCluster: ExecutionServiceCluster
-  val appVersion: ApplicationVersion
   val submissionTimeout: FiniteDuration
   val workbenchMetricBaseName: String
   val samDAO: SamDAO
@@ -140,23 +140,22 @@ trait RawlsApiService
       servicePerimeterRoutes(otelContext) ~
       snapshotRoutes(otelContext)
 
-  val instrumentedRoutes = instrumentRequest(baseApiRoutes)
-
   def apiRoutes =
     options(complete(OK)) ~
       withExecutionContext(ExecutionContext.global) { // Serve real work off the global EC to free up the dispatcher to run more routes, including status
-        instrumentedRoutes
+        traceRequests(baseApiRoutes)
       }
 
-  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(
-    RawlsApiService.rejectionHandler
-  )) {
-    openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
-      openIDConnectConfiguration.oauth2Routes(materializer.system) ~
-      versionRoutes ~
-      statusRoute ~
-      pathPrefix("api")(apiRoutes)
-  }
+  def route: server.Route =
+    (logRequestResult & captureRequestMetrics & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(
+      RawlsApiService.rejectionHandler
+    )) {
+      openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
+        openIDConnectConfiguration.oauth2Routes(materializer.system) ~
+        versionRoutes ~
+        statusRoute ~
+        pathPrefix("api")(apiRoutes)
+    }
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests
   private def logRequestResult: Directive0 = {
@@ -213,6 +212,7 @@ trait VersionApiService {
 
 class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
                           val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+                          val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
                           val entityServiceConstructor: RawlsRequestContext => EntityService,
                           val userServiceConstructor: RawlsRequestContext => UserService,
                           val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
@@ -220,6 +220,8 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
                           val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
                           val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
+                          val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
+                          val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,

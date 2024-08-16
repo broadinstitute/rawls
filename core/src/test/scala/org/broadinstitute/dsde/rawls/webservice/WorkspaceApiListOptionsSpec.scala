@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import io.opencensus.trace.Span
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
@@ -230,6 +229,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
             Set(
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime),
                                                          Option(Set.empty),
                                                          true,
@@ -241,6 +242,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
               ),
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace2.copy(lastModified = dateTime),
                                                          Option(Set.empty),
                                                          true,
@@ -273,6 +276,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
             Set(
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime),
                                                          Option(Set.empty),
                                                          true,
@@ -284,6 +289,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
               ),
               WorkspaceListResponse(
                 WorkspaceAccessLevels.Owner,
+                Some(true),
+                Some(true),
                 WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace2.copy(lastModified = dateTime),
                                                          Option(Set.empty),
                                                          true,
@@ -427,15 +434,15 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   }
 
   it should "throw error with unrecognized field value" in withTestWorkspacesApiServices { services =>
-    // NB: "canShare" is valid for get-workspace but not list-workspaces.
-    Get("/workspaces?fields=accessLevel,somethingNotRecognized,canShare") ~>
+    // NB: "workspaceType" is valid for get-workspace but not list-workspaces.
+    Get("/workspaces?fields=accessLevel,workspaceType,somethingNotRecognized") ~>
       sealRoute(services.workspaceRoutes()) ~>
       check {
         assertResult(StatusCodes.BadRequest)(status)
         val actual = responseAs[ErrorReport]
 
         // NB: field names in error response are alphabetized for deterministic behavior
-        assertResult("Unrecognized field names: canShare, somethingNotRecognized")(actual.message)
+        assertResult("Unrecognized field names: somethingNotRecognized, workspaceType")(actual.message)
       }
   }
 

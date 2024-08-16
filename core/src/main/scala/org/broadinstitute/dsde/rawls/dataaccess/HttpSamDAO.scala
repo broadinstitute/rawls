@@ -68,7 +68,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
   protected def adminApi(ctx: RawlsRequestContext) = new AdminApi(getApiClient(ctx))
 
-  private def rawlsSAContext = RawlsRequestContext(
+  override def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getRawlsIdentityAccessToken), 0, RawlsUserSubjectId(""))
   )
 
@@ -585,6 +585,22 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       resourcesApi(ctx).getAuthDomainV2Async(resourceTypeName.value, resourceId, callback)
 
       callback.future.map(_.asScala.toSeq)
+    }
+
+  override def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
+                                                resourceId: String,
+                                                ctx: RawlsRequestContext
+  ): Future[Boolean] =
+    retry(when401or5xx) { () =>
+      Future {
+        val response = resourcesApi(ctx).isAuthDomainV2SatisfiedWithHttpInfo(resourceTypeName.value, resourceId)
+        response.getStatusCode match {
+          case StatusCodes.OK.intValue        => true
+          case StatusCodes.Forbidden.intValue => false
+          case _ =>
+            throw new RawlsExceptionWithErrorReport(ErrorReport(response.getStatusCode, "Response not 200 or 403"))
+        }
+      }
     }
 
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,

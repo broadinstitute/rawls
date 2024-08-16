@@ -1860,55 +1860,11 @@ class AttributeComponentSpec
       }
     }
 
-  private def runEntityPatchNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit =
-    withDefaultTestDatabase {
-      withWorkspaceContext(testData.workspace) { context =>
-        // insert new attribute
-        val inserts = Map(AttributeName.withDefaultNS("newEntityAttribute") -> insertAttribute)
-
-        val expectedAfterInsertion = testData.sample1.attributes ++ inserts
-
-        runAndWait(
-          entityQuery.saveEntityPatch(
-            context,
-            testData.sample1.toReference,
-            inserts,
-            Seq.empty[AttributeName],
-            RawlsTracingContext(None)
-          )
-        )
-
-        val resultAfterInsert = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-
-        assertSameElements(expectedAfterInsertion, resultAfterInsert)
-
-        // update the new attribute
-        val updates: AttributeMap = Map(AttributeName.withDefaultNS("newEntityAttribute") -> updateAttribute)
-
-        val expectedAfterUpdate = testData.sample1.attributes ++ updates
-
-        runAndWait(
-          entityQuery.saveEntityPatch(context,
-                                      testData.sample1.toReference,
-                                      updates,
-                                      Seq.empty[AttributeName],
-                                      RawlsTracingContext(None)
-          )
-        )
-
-        val resultAfterUpdate = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-
-        // check that the new attribute has been updated
-        assertSameElements(expectedAfterUpdate, resultAfterUpdate)
-      }
-    }
-
   private case class AttributeTestFunction(description: String, run: (Attribute, Attribute) => Unit)
 
   private val attributeTestFunctions = List(
     AttributeTestFunction("workspaceQuery.createOrUpdate()", runWorkspaceSaveNewTest),
-    AttributeTestFunction("entityQuery.save()", runEntitySaveNewTest),
-    AttributeTestFunction("entityQuery.saveEntityPatch()", runEntityPatchNewTest)
+    AttributeTestFunction("entityQuery.save()", runEntitySaveNewTest)
   )
 
   private case class AttributeTestData(description: String, attribute: Attribute)
