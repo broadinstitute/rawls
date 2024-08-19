@@ -27,7 +27,8 @@ trait DataAccess
     with WorkspaceFeatureFlagComponent
     with WorkspaceManagerResourceMonitorRecordComponent
     with FastPassGrantComponent
-    with MultiregionalBucketMigrationHistory {
+    with MultiregionalBucketMigrationHistory
+    with WorkspaceSettingComponent {
 
   this: DriverComponent =>
 

@@ -288,7 +288,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     }
 
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
-      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null"
+      sql"select count(*) from #$tableName where #${workspaceIdCol.value} = ${workspace.workspaceIdAsUUID} and #${startedCol.value} is not null and #${finishedCol.value} is null"
         .as[Int]
         .map(_.head > 0)
 
@@ -332,7 +332,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
           )
         }
 
-        _ <- sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})"
+        _ <- sqlu"insert into #$tableName (#${workspaceIdCol.value}) values (${workspace.workspaceIdAsUUID})"
         id <- sql"select LAST_INSERT_ID()".as[Long].head
       } yield id
 
@@ -411,11 +411,11 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
     final def getMetadata(migrationId: Long): ReadAction[MultiregionalBucketMigrationMetadata] =
       sql"""
-        select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
+        select b.normalized_id, a.#${createdCol.value}, a.#${startedCol.value}, a.#${updatedCol.value}, a.#${finishedCol.value}, a.#${outcomeCol.value}, a.#${messageCol.value}
         from #$tableName a
-        join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
-        on a.#$idCol = b.last_id
-        where a.#$idCol = $migrationId
+        join (select count(*) - 1 as normalized_id, max(#${idCol.value}) as last_id from #$tableName group by #${workspaceIdCol.value}) b
+        on a.#${idCol.value} = b.last_id
+        where a.#${idCol.value} = $migrationId
         """
         .as[MultiregionalBucketMigrationMetadata]
         .headOption
@@ -426,32 +426,34 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         )
 
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[MultiregionalBucketMigration]] =
-      sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol"
+      sql"select #$allColumns from #$tableName where #${workspaceIdCol.value} = ${workspace.workspaceIdAsUUID} order by #${idCol.value}"
         .as[MultiregionalBucketMigration]
         .map(_.toList)
 
     final def selectMigrationsWhere(conditions: SQLActionBuilder): ReadAction[Vector[MultiregionalBucketMigration]] = {
-      val startingSql = sql"select #$allColumns from #$tableName where #$finishedCol is null and "
-      concatSqlActions(startingSql, conditions, sql" order by #$updatedCol asc limit 1")
+      val startingSql = sql"select #$allColumns from #$tableName where #${finishedCol.value} is null and "
+      concatSqlActions(startingSql, conditions, sql" order by #${updatedCol.value} asc limit 1")
         .as[MultiregionalBucketMigration]
     }
 
     final def getAttempt(workspaceUuid: UUID) = OptionT[ReadWriteAction, MultiregionalBucketMigration] {
-      sql"select #$allColumns from #$tableName where #$workspaceIdCol = $workspaceUuid order by #$idCol desc limit 1"
+      sql"select #$allColumns from #$tableName where #${workspaceIdCol.value} = $workspaceUuid order by #${idCol.value} desc limit 1"
         .as[MultiregionalBucketMigration]
         .headOption
     }
 
     final def getAttempt(migrationId: Long) = OptionT[ReadWriteAction, MultiregionalBucketMigration] {
-      sql"select #$allColumns from #$tableName where #$idCol = $migrationId".as[MultiregionalBucketMigration].headOption
+      sql"select #$allColumns from #$tableName where #${idCol.value} = $migrationId"
+        .as[MultiregionalBucketMigration]
+        .headOption
     }
 
 // Resource-limited migrations are those requiring new google projects and storage transfer jobs
     final def getNumActiveResourceLimitedMigrations: ReadWriteAction[Int] =
       sql"""
         select count(*) from #$tableName m
-        join (select id, namespace from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
-        where m.#$startedCol is not null and m.#$finishedCol is null
+        join (select id, namespace from WORKSPACE) as w on (w.id = m.#${workspaceIdCol.value})
+        where m.#${startedCol.value} is not null and m.#${finishedCol.value} is null
         """.as[Int].head
 
 // The following query uses raw parameters. In this particular case it's safe to do as the
@@ -460,9 +462,9 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     final def nextMigration() = OptionT[ReadWriteAction, (Long, UUID, String)] {
       concatSqlActions(
         sql"""
-            select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
-            join (select id, namespace, name, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
-            where m.#$startedCol is null
+            select m.#${idCol.value}, m.#${workspaceIdCol.value}, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
+            join (select id, namespace, name, is_locked from WORKSPACE) as w on (w.id = m.#${workspaceIdCol.value})
+            where m.#${startedCol.value} is null
             /* exclude workspaces with active submissions */
             and not exists (
                 select workspace_id, status from SUBMISSION
@@ -470,49 +472,49 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
                 and workspace_id = m.workspace_id
             )
             """,
-        sql"order by m.#$idCol limit 1"
+        sql"order by m.#${idCol.value} limit 1"
       ).as[(Long, UUID, String)].headOption
     }
 
     def getWorkspaceName(migrationId: Long) = OptionT[ReadWriteAction, WorkspaceName] {
       sql"""
           select w.namespace, w.name from WORKSPACE w
-          where w.id in (select #$workspaceIdCol from #$tableName m where m.id = $migrationId)
+          where w.id in (select #${workspaceIdCol.value} from #$tableName m where m.id = $migrationId)
           """.as[(String, String)].headOption.map(_.map(WorkspaceName.tupled))
     }
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
-      sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
+      sql"#${startedCol.value} is not null and #${workspaceBucketIamRemovedCol.value} is null"
     )
     val createTempBucketConditionCondition = selectMigrationsWhere(
-      sql"#$workspaceBucketIamRemovedCol is not null and #$tmpBucketCreatedCol is null"
+      sql"#${workspaceBucketIamRemovedCol.value} is not null and #${tmpBucketCreatedCol.value} is null"
     )
     val configureWorkspaceBucketTransferIam = selectMigrationsWhere(
-      sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferIamConfiguredCol is null"
+      sql"#${tmpBucketCreatedCol.value} is not null and #${workspaceBucketTransferIamConfiguredCol.value} is null"
     )
     val issueTransferJobToTmpBucketCondition = selectMigrationsWhere(
-      sql"#$workspaceBucketTransferIamConfiguredCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
+      sql"#${workspaceBucketTransferIamConfiguredCol.value} is not null and #${workspaceBucketTransferJobIssuedCol.value} is null"
     )
     val deleteWorkspaceBucketCondition = selectMigrationsWhere(
-      sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"
+      sql"#${workspaceBucketTransferredCol.value} is not null and #${workspaceBucketDeletedCol.value} is null"
     )
     val createFinalWorkspaceBucketCondition = selectMigrationsWhere(
-      sql"#$workspaceBucketDeletedCol is not null and #$finalBucketCreatedCol is null"
+      sql"#${workspaceBucketDeletedCol.value} is not null and #${finalBucketCreatedCol.value} is null"
     )
     val configureTmpBucketTransferIam = selectMigrationsWhere(
-      sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferIamConfiguredCol is null"
+      sql"#${finalBucketCreatedCol.value} is not null and #${tmpBucketTransferIamConfiguredCol.value} is null"
     )
     val issueTransferJobToFinalWorkspaceBucketCondition = selectMigrationsWhere(
-      sql"#$tmpBucketTransferIamConfiguredCol is not null and #$tmpBucketTransferJobIssuedCol is null"
+      sql"#${tmpBucketTransferIamConfiguredCol.value} is not null and #${tmpBucketTransferJobIssuedCol.value} is null"
     )
     val deleteTemporaryBucketCondition = selectMigrationsWhere(
-      sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
+      sql"#${tmpBucketTransferredCol.value} is not null and #${tmpBucketDeletedCol.value} is null"
     )
     val restoreIamPoliciesCondition = selectMigrationsWhere(
-      sql"#$tmpBucketDeletedCol is not null"
+      sql"#${tmpBucketDeletedCol.value} is not null"
     )
 
-    def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
+    def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#${idCol.value} = $migrationId")
   }
 
   object multiregionalBucketMigrationRetryQuery
@@ -552,7 +554,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
         def notExceededMaxRetries = (migration: String) => sql"""not exists (
           select null from #$tableName
-          where #$migrationIdCol = #$migration.id and #$retriesCol >= $maxRetries
+          where #${migrationIdCol.value} = #$migration.id and #${retriesCol.value} >= $maxRetries
         )"""
 
         reduceSqlActionsWithDelim(
@@ -576,8 +578,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       }
 
     final def getOrCreate(migrationId: Long): ReadWriteAction[MultiregionalBucketMigrationRetry] =
-      sqlu"insert ignore into #$tableName (#$migrationIdCol) values ($migrationId)" >>
-        sql"select #$allColumns from #$tableName where #$migrationIdCol = $migrationId"
+      sqlu"insert ignore into #$tableName (#${migrationIdCol.value}) values ($migrationId)" >>
+        sql"select #$allColumns from #$tableName where #${migrationIdCol.value} = $migrationId"
           .as[MultiregionalBucketMigrationRetry]
           .head
   }
@@ -589,7 +591,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     def update[A](key: PrimaryKey, columnName: ColumnName[A], value: A)(implicit
       setA: SetParameter[A]
     ): ReadWriteAction[Int] =
-      sqlu"update #$tableName set #$columnName = $value where #$primaryKey = $key"
+      sqlu"update #$tableName set #${columnName.value} = $value where #${primaryKey.value} = $key"
 
     def update2[A, B](key: PrimaryKey, columnName1: ColumnName[A], value1: A, columnName2: ColumnName[B], value2: B)(
       implicit
@@ -598,8 +600,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
-        set #$columnName1 = $value1, #$columnName2 = $value2
-        where #$primaryKey = $key
+        set #${columnName1.value} = $value1, #${columnName2.value} = $value2
+        where #${primaryKey.value} = $key
       """
 
     def update3[A, B, C](key: PrimaryKey,
@@ -616,8 +618,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
-        set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3
-        where #$primaryKey = $key
+        set #${columnName1.value} = $value1, #${columnName2.value} = $value2, #${columnName3.value} = $value3
+        where #${primaryKey.value} = $key
       """
 
     def update5[A, B, C, D, E](key: PrimaryKey,
@@ -640,12 +642,12 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
-        set #$columnName1 = $value1,
-            #$columnName2 = $value2,
-            #$columnName3 = $value3,
-            #$columnName4 = $value4,
-            #$columnName5 = $value5
-        where #$primaryKey = $key
+        set #${columnName1.value} = $value1,
+            #${columnName2.value} = $value2,
+            #${columnName3.value} = $value3,
+            #${columnName4.value} = $value4,
+            #${columnName5.value} = $value5
+        where #${primaryKey.value} = $key
       """
 
     def update10[A, B, C, D, E, F, G, H, I, J](key: PrimaryKey,
@@ -683,17 +685,17 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
-        set #$columnName1 = $value1,
-            #$columnName2 = $value2,
-            #$columnName3 = $value3,
-            #$columnName4 = $value4,
-            #$columnName5 = $value5,
-            #$columnName6 = $value6,
-            #$columnName7 = $value7,
-            #$columnName8 = $value8,
-            #$columnName9 = $value9,
-            #$columnName10 = $value10
-        where #$primaryKey = $key
+        set #${columnName1.value} = $value1,
+            #${columnName2.value} = $value2,
+            #${columnName3.value} = $value3,
+            #${columnName4.value} = $value4,
+            #${columnName5.value} = $value5,
+            #${columnName6.value} = $value6,
+            #${columnName7.value} = $value7,
+            #${columnName8.value} = $value8,
+            #${columnName9.value} = $value9,
+            #${columnName10.value} = $value10
+        where #${primaryKey.value} = $key
       """
 
     def delete: WriteAction[Int] =
