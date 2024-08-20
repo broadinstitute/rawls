@@ -4549,7 +4549,6 @@ components:
         properties:
           type: object
           description: A map of key-value pairs to associate with the snapshot. Optional, defaults to an empty map if not specified.
-          default: {}
         cloningInstructions:
           type: string
           default: COPY_NOTHING
@@ -5035,7 +5034,7 @@ components:
       type: object
       properties:
         value:
-          type: string
+          type: object
           description: the value of the input expression for the specified entity
         error:
           type: string
