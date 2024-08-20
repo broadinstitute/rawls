@@ -27,6 +27,9 @@
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-4">
+        <!-- Setting validCheckSum to 1:any to avoid checksum validation errors during liquibase upgrades due to string
+             interpolation in this changeset (i.e., ${gcs:appsDomain}) -->
+        <validCheckSum>1:any</validCheckSum>
         <sql stripComments="true">
             insert into `GROUP` select concat("PROJECT_",b.NAME,"-",r.role), concat("GROUP_PROJECT_",b.NAME,"-",r.role,"@","${gcs:appsDomain}") from BILLING_PROJECT b join temp_roles r
         </sql>

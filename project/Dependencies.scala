@@ -80,8 +80,7 @@ object Dependencies {
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.0.0" exclude("com.google.protobuf", "protobuf-java")
-  // Update warning for liquibase-core: Here be dragons! See https://broadworkbench.atlassian.net/browse/WOR-1197
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2" // scala-steward:off
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.29.1"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.7"
 
