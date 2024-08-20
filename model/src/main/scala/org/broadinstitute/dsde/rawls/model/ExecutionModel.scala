@@ -35,7 +35,8 @@ case class SubmissionRequest(
   ignoreEmptyOutputs: Boolean = false,
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
-  monitoringImageScript: Option[String] = None
+  monitoringImageScript: Option[String] = None,
+  costCapThreshold: Option[BigDecimal]  = None
 )
 
 // This class contains values from the submission REST request
@@ -167,7 +168,8 @@ case class Submission(
   ignoreEmptyOutputs: Boolean = false,
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
-  monitoringImageScript: Option[String] = None
+  monitoringImageScript: Option[String] = None,
+  costCapThreshold: Option[BigDecimal]  = None
 )
 
 case class SubmissionListResponse(
@@ -187,7 +189,8 @@ case class SubmissionListResponse(
   workflowIds: Option[Seq[String]],
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
-  userComment: Option[String] = None
+  userComment: Option[String] = None,
+  costCapThreshold: Option[BigDecimal]  = None
 )
 
 object SubmissionListResponse {
@@ -401,7 +404,8 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson),
           Option("monitoringScript" -> obj.monitoringScript.toJson),
           Option("monitoringImage" -> obj.monitoringImage.toJson),
-          Option("monitoringImageScript" -> obj.monitoringImageScript.toJson)
+          Option("monitoringImageScript" -> obj.monitoringImageScript.toJson),
+          obj.costCapThreshold.map("costCapThreshold" -> _.toJson)
         ).flatten: _*
       )
 
@@ -428,7 +432,8 @@ trait ExecutionJsonSupport extends JsonSupport {
         ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean]),
         monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
         monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
-        monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]])
+        monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]]),
+        costCapThreshold = fields.get("costCapThreshold").map(_.convertTo[BigDecimal])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
@@ -500,7 +505,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat: RootJsonFormat[ExternalEntityInfo] = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat: RootJsonFormat[Submission] = jsonFormat21(Submission)
+  implicit val SubmissionFormat: RootJsonFormat[Submission] = jsonFormat22(Submission)
 
   implicit val SubmissionRetryFormat: RootJsonFormat[SubmissionRetry] = jsonFormat1(SubmissionRetry)
 
@@ -510,7 +515,7 @@ trait ExecutionJsonSupport extends JsonSupport {
     RetriedSubmissionReport
   )
 
-  implicit val SubmissionListResponseFormat: RootJsonFormat[SubmissionListResponse] = jsonFormat17(
+  implicit val SubmissionListResponseFormat: RootJsonFormat[SubmissionListResponse] = jsonFormat18(
     SubmissionListResponse.apply
   )
 

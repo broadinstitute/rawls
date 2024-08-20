@@ -880,7 +880,8 @@ class SubmissionsService(
         ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs,
         monitoringScript = submissionRequest.monitoringScript,
         monitoringImage = submissionRequest.monitoringImage,
-        monitoringImageScript = submissionRequest.monitoringImageScript
+        monitoringImageScript = submissionRequest.monitoringImageScript,
+        costCapThreshold = submissionRequest.costCapThreshold
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)

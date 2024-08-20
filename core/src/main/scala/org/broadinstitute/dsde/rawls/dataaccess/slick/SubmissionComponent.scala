@@ -40,7 +40,8 @@ case class SubmissionRecord(id: UUID,
                             ignoreEmptyOutputs: Boolean,
                             monitoringScript: Option[String],
                             monitoringImage: Option[String],
-                            monitoringImageScript: Option[String]
+                            monitoringImageScript: Option[String],
+                            costCapThreshold: Option[BigDecimal]
 )
 
 case class SubmissionValidationRecord(id: Long, workflowId: Long, errorText: Option[String], inputName: String)
@@ -79,6 +80,7 @@ trait SubmissionComponent {
     def monitoringScript = column[Option[String]]("MONITORING_SCRIPT")
     def monitoringImage = column[Option[String]]("MONITORING_IMAGE")
     def monitoringImageScript = column[Option[String]]("MONITORING_IMAGE_SCRIPT")
+    def costCapThreshold = column[Option[BigDecimal]]("COST_CAP_THRESHOLD")
 
     def * = (
       id,
@@ -100,7 +102,8 @@ trait SubmissionComponent {
       ignoreEmptyOutputs,
       monitoringScript,
       monitoringImage,
-      monitoringImageScript
+      monitoringImageScript,
+      costCapThreshold
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -503,7 +506,8 @@ trait SubmissionComponent {
         submission.ignoreEmptyOutputs,
         submission.monitoringScript,
         submission.monitoringImage,
-        submission.monitoringImageScript
+        submission.monitoringImageScript,
+        submission.costCapThreshold
       )
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord,
