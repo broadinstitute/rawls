@@ -1413,7 +1413,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 status
               }
               val response = responseAs[Submission]
-              response.submissionRoot shouldBe s"gs://${testData.workspace.bucketName}/submissions/${submission.submissionId}"
+              response.submissionRoot shouldBe s"gs://${testData.workspace.bucketName}/submissions/intermediates/${submission.submissionId}"
             }
         }
     }
