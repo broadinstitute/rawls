@@ -279,16 +279,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case None    => throw new RawlsException(s"client_email missing for service account key json")
     }
 
-    // Save `gs://${workspace.bucketName}/submissions/intermediates/$id` to DB as submission root
-    // Calculate `gs://${workspace.bucketName}/submissions/final-outputs/$id` from scratch here?
-    // Check workspace settings here (2/2)
-    val (finalOutputsDir, finalOutputsMode) =
-      (Option(s"gs://${workspace.bucketName}/submissions/final-outputs/${submission.id}"), Option("move"))
-
     ExecutionServiceWorkflowOptions(
       submission.submissionRoot,
-      finalOutputsDir,
-      finalOutputsMode,
+      // Intermediate/final output separation: location 2/2
+      // Final outputs are moved to the directory specified
+      // Cromwell `/outputs` endpoint and Terra data table use this location
+      Option(s"gs://${workspace.bucketName}/submissions/final-outputs/${submission.id}"),
+      Option("move"),
       workspace.googleProjectId,
       userEmail.value,
       petSAEmail,
