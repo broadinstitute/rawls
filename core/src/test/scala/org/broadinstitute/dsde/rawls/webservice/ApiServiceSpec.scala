@@ -54,7 +54,9 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceRepository,
-  WorkspaceService
+  WorkspaceService,
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -392,6 +394,14 @@ trait ApiServiceSpec
       leonardoDAO,
       workbenchMetricBaseName
     )
+
+    override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
+      new WorkspaceSettingService(_,
+                                  new WorkspaceSettingRepository(slickDataSource),
+                                  new WorkspaceRepository(slickDataSource),
+                                  gcsDAO,
+                                  samDAO
+      )
 
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
       MethodConfigurationService.constructor(

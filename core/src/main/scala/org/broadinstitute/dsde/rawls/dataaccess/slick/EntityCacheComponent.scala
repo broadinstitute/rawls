@@ -39,12 +39,12 @@ trait EntityCacheComponent {
       // C. lastModified is before @param maxModifiedTime, meaning the workspace isn't likely actively being updated
       // D. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
       sql"""SELECT w.id, w.last_modified, c.entity_cache_last_updated
-           |FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
-           |    on w.id = c.workspace_id
-           |where (c.entity_cache_last_updated > $minCacheTime or c.entity_cache_last_updated is null)
-           |  and w.last_modified < $maxModifiedTime
-           |  and (c.entity_cache_last_updated < w.last_modified or c.entity_cache_last_updated is null)
-           |order by w.last_modified asc limit $numResults""".stripMargin.as[(UUID, Timestamp, Option[Timestamp])]
+           FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
+               on w.id = c.workspace_id
+           where (c.entity_cache_last_updated > $minCacheTime or c.entity_cache_last_updated is null)
+             and w.last_modified < $maxModifiedTime
+             and (c.entity_cache_last_updated < w.last_modified or c.entity_cache_last_updated is null)
+           order by w.last_modified asc limit $numResults""".as[(UUID, Timestamp, Option[Timestamp])]
 
     // insert if not exist
     def updateCacheLastUpdated(workspaceId: UUID,

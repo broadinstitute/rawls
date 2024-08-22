@@ -41,7 +41,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.{Cors, HttpMethod, StorageClass, StorageException}
+import com.google.cloud.storage.{BucketInfo, Cors, HttpMethod, StorageClass, StorageException}
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -330,6 +330,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         true
     }
   }
+
+  override def setBucketLifecycle(bucketName: String, lifecycle: List[BucketInfo.LifecycleRule]): Future[Unit] =
+    googleStorageService
+      .setBucketLifecycle(GcsBucketName(bucketName), lifecycle)
+      .compile
+      .drain
+      .unsafeToFuture()
 
   override def isAdmin(userEmail: String): Future[Boolean] =
     hasGoogleRole(adminGroupName, userEmail)

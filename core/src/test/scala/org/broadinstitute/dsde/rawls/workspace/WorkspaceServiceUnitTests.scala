@@ -2,9 +2,8 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.Materializer
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
@@ -55,7 +54,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   val workspace: Workspace = Workspace(
     "test-namespace",
     "test-name",
-    "aWorkspaceId",
+    UUID.randomUUID().toString,
     "aBucket",
     Some("workflow-collection"),
     new DateTime(),
@@ -87,9 +86,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
     fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassServiceImpl = (_, _) =>
-      mock[FastPassServiceImpl](RETURNS_SMART_NULLS)
+      mock[FastPassServiceImpl](RETURNS_SMART_NULLS),
+    workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+    billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
-    WorkspaceService.constructor(
+    new WorkspaceService(
+      info,
       datasource,
       executionServiceCluster,
       workspaceManagerDAO,
@@ -111,8 +113,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       terraBucketWriterRole,
       new RawlsWorkspaceAclManager(samDAO),
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource),
-      fastPassServiceConstructor
-    )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
+      fastPassServiceConstructor,
+      workspaceRepository,
+      billingRepository
+    )(scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
     val datasource = mock[SlickDataSource]
@@ -393,16 +397,16 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     samDAO
   }
 
-  def mockDatasourceForAclTests(workspaceType: WorkspaceType,
-                                workspaceId: UUID = UUID.randomUUID()
-  ): SlickDataSource = {
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+  def mockWorkspaceRepositoryForAclTests(workspaceType: WorkspaceType,
+                                         workspaceId: UUID = UUID.randomUUID()
+  ): WorkspaceRepository = {
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     val googleProjectId = workspaceType match {
       case WorkspaceType.McWorkspace    => GoogleProjectId("")
       case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
     }
 
-    when(datasource.inTransaction[Option[Workspace]](any(), any())).thenReturn(
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(
       Future.successful(
         Option(
           Workspace("fake_namespace",
@@ -418,7 +422,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
         )
       )
     )
-    datasource
+    workspaceRepository
   }
 
   def samWorkspacePoliciesForAclTests(projectOwnerEmail: String,
@@ -467,9 +471,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       Future.successful(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
     )
 
-    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
 
-    val service = workspaceServiceConstructor(datasource, samDAO = samDAO)(defaultRequestContext)
+    val service =
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository, samDAO = samDAO)(defaultRequestContext)
     val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
 
     val expected = WorkspaceACL(
@@ -490,11 +495,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val readerEmail = "reader@example.com"
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
 
-    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace)
 
     val samDAO = mockSamForAclTests()
     val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
 
     val expected = WorkspaceACL(
       Map(
@@ -525,7 +533,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(samDAO.removeUserFromPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
 
     val workspaceId = UUID.randomUUID()
-    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
 
     val requesterPaysSetupService = mock[RequesterPaysSetupServiceImpl](RETURNS_SMART_NULLS)
     when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
@@ -535,10 +543,11 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       .thenReturn(Future.successful())
 
     val service =
-      workspaceServiceConstructor(datasource,
-                                  samDAO = samDAO,
-                                  requesterPaysSetupService = requesterPaysSetupService,
-                                  fastPassServiceConstructor = (_, _) => mockFastPassService
+      workspaceServiceConstructor(
+        workspaceRepository = workspaceRepository,
+        samDAO = samDAO,
+        requesterPaysSetupService = requesterPaysSetupService,
+        fastPassServiceConstructor = (_, _) => mockFastPassService
       )(
         defaultRequestContext
       )
@@ -577,7 +586,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceId = UUID.randomUUID()
 
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
-    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace, workspaceId)
     val samDAO = mockSamForAclTests()
 
     val aclManagerDatasource = mock[SlickDataSource]
@@ -602,11 +611,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
         )
       )
     val service =
-      workspaceServiceConstructor(datasource,
-                                  samDAO = samDAO,
-                                  workspaceManagerDAO = wsmDAO,
-                                  aclManagerDatasource = aclManagerDatasource,
-                                  fastPassServiceConstructor = (_, _) => mockFastPassService
+      workspaceServiceConstructor(
+        workspaceRepository = workspaceRepository,
+        samDAO = samDAO,
+        workspaceManagerDAO = wsmDAO,
+        aclManagerDatasource = aclManagerDatasource,
+        fastPassServiceConstructor = (_, _) => mockFastPassService
       )(defaultRequestContext)
 
     val aclUpdates = Set(
@@ -642,7 +652,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceId = UUID.randomUUID()
 
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
-    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace, workspaceId)
     val samDAO = mockSamForAclTests()
 
     val aclUpdates = Set(
@@ -650,7 +660,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
@@ -665,7 +678,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceId = UUID.randomUUID()
 
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
-    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace, workspaceId)
     val samDAO = mockSamForAclTests()
 
     val aclUpdates = Set(
@@ -673,7 +686,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
@@ -688,7 +704,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceId = UUID.randomUUID()
 
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
-    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace, workspaceId)
     val samDAO = mockSamForAclTests()
 
     val aclUpdates = Set(
@@ -696,7 +712,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO
+      )(defaultRequestContext)
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
@@ -717,12 +736,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
 
     val workspaceId = UUID.randomUUID()
-    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
     val mockFastPassService = mock[FastPassServiceImpl]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
       .thenReturn(Future.successful())
 
-    val service = workspaceServiceConstructor(datasource,
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
                                               samDAO = samDAO,
                                               fastPassServiceConstructor = (_, _) => mockFastPassService
     )(defaultRequestContext)
@@ -755,12 +774,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
 
     val workspaceId = UUID.randomUUID()
-    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
     val mockFastPassService = mock[FastPassServiceImpl]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
       .thenReturn(Future.successful())
 
-    val service = workspaceServiceConstructor(datasource,
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
                                               samDAO = samDAO,
                                               fastPassServiceConstructor = (_, _) => mockFastPassService
     )(defaultRequestContext)
