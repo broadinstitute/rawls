@@ -281,7 +281,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     ExecutionServiceWorkflowOptions(
       submission.submissionRoot,
-      // Intermediate/final output separation: location 2/2
+      // Intermediate/final output separation: location 2/2 (SU-166, WX-1702)
       // Final outputs are moved to the directory specified
       // Cromwell `/outputs` endpoint and Terra data table use this location
       Option(s"gs://${workspace.bucketName}/submissions/final-outputs/${submission.id}"),
