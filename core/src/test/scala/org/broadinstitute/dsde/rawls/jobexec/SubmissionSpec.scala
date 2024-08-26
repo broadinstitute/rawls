@@ -1488,7 +1488,8 @@ class SubmissionSpec(_system: ActorSystem)
         Await.result(submissionsService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
       }
       ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-      ex.errorReport.message shouldBe "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
+      ex.errorReport.causes should have length 1
+      ex.errorReport.causes.head.message shouldBe "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
     }
   }
 
