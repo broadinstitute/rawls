@@ -541,14 +541,7 @@ class SubmissionsService(
 
     for {
       _ <- requireComputePermission(workspaceName)
-
-      // getWorkflowFailureMode early because it does validation and better to error early
-      workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
-
       workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
-
-      submissionRoot = submissionRootPath(workspaceContext, submissionId)
-
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext,
                                                 submissionRequest.methodConfigurationNamespace,
@@ -563,12 +556,9 @@ class SubmissionsService(
           )
         )
       )
+      _ = SubmissionValidation.staticValidation(submissionRequest, methodConfig)
 
       entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfig)
-
-      _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
-
-      _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", UserCommentMaxLength))
 
       gatherInputsResult <- MethodConfigurationUtils.gatherMethodConfigInputs(ctx,
                                                                               methodRepoDAO,
@@ -602,9 +592,9 @@ class SubmissionsService(
       workspaceContext,
       submissionId,
       submissionParameters,
-      workflowFailureMode,
+      submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName),
       header,
-      submissionRoot
+      submissionRootPath(workspaceContext, submissionId)
     )
   }
 
@@ -710,64 +700,6 @@ class SubmissionsService(
         case _        => op(None)
       }
     }
-
-  /** Validates the workflow failure mode in the submission request. */
-  private def getWorkflowFailureMode(submissionRequest: SubmissionRequest): Future[Option[WorkflowFailureMode]] =
-    Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
-      case Success(failureMode) => Future.successful(failureMode)
-      case Failure(NonFatal(e)) =>
-        Future.failed(
-          new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e.getMessage))
-        )
-      case Failure(e) =>
-        Future.failed(
-          new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e.getMessage))
-        )
-    }
-
-  private def validateSubmissionRootEntity(submissionRequest: SubmissionRequest,
-                                           methodConfig: MethodConfiguration
-  ): Unit = {
-    if (submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
-      throw new RawlsExceptionWithErrorReport(
-        errorReport = ErrorReport(
-          StatusCodes.BadRequest,
-          s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."
-        )
-      )
-    }
-    if (
-      methodConfig.dataReferenceName.isEmpty && methodConfig.rootEntityType.isDefined != submissionRequest.entityName.isDefined
-    ) {
-      if (methodConfig.rootEntityType.isDefined) {
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.BadRequest,
-            s"Your method config defines a root entity but you haven't passed one to the submission."
-          )
-        )
-      } else {
-        // This isn't _strictly_ necessary, since a single submission entity will create one workflow.
-        // However, passing in a submission entity + an expression doesn't make sense for two reasons:
-        // 1. you'd have to write an expression from your submission entity to an entity of "no entity necessary" type
-        // 2. even if you _could_ do this, you'd kick off a bunch of identical workflows.
-        // More likely than not, an MC with no root entity + a submission entity = you're doing something wrong. So we'll just say no here.
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(StatusCodes.BadRequest,
-                                    s"Your method config uses no root entity, but you passed one to the submission."
-          )
-        )
-      }
-    }
-    if (methodConfig.dataReferenceName.isDefined && submissionRequest.entityName.isDefined) {
-      throw new RawlsExceptionWithErrorReport(
-        errorReport = ErrorReport(
-          StatusCodes.BadRequest,
-          "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
-        )
-      )
-    }
-  }
 
   def getSpendReportTableName(billingProjectName: RawlsBillingProjectName): Future[Option[String]] =
     dataSource.inTransaction { dataAccess =>

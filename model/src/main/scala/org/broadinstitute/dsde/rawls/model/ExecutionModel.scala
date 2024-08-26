@@ -36,7 +36,7 @@ case class SubmissionRequest(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  costCapThreshold: Option[BigDecimal]  = None
+  costCapThreshold: Option[BigDecimal] = None
 )
 
 // This class contains values from the submission REST request
@@ -169,7 +169,7 @@ case class Submission(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  costCapThreshold: Option[BigDecimal]  = None
+  costCapThreshold: Option[BigDecimal] = None
 )
 
 case class SubmissionListResponse(
@@ -190,7 +190,7 @@ case class SubmissionListResponse(
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
   userComment: Option[String] = None,
-  costCapThreshold: Option[BigDecimal]  = None
+  costCapThreshold: Option[BigDecimal] = None
 )
 
 object SubmissionListResponse {

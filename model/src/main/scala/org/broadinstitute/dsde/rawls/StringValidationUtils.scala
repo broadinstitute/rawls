@@ -98,6 +98,13 @@ trait StringValidationUtils {
         )
       )
 
+  def validateMaxStringLengthWithReport(str: String, inputName: String, maxLength: Int): Option[ErrorReport] =
+    if (str.length > maxLength) {
+      Some(ErrorReport(message = s"Invalid input $inputName. Input may be a max of $maxLength characters."))
+    } else {
+      None
+    }
+
   def validateAttributeName(an: AttributeName, entityType: String): Unit =
     if (
       Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an)) ||
