@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ValueType}
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.DataRepoExpressionFixture
@@ -105,7 +105,7 @@ class DataRepoEntityExpressionValidatorSpec
 
   "validateMCExpressions" should "validate expressions in a MethodConfiguration with a root entity" in {
     val validationResults =
-      expressionValidator.validateMCExpressions(allValid, toGatherInputs(allValid.inputs)).futureValue
+      expressionValidator.validateMCExpressions(allValid, toGatherInputs(allValid.inputs))
     assertSameElements(validInputExpressions, validationResults.validInputs)
     assertSameElements(validOutputExpressions, validationResults.validOutputs)
     validationResults.invalidInputs shouldBe 'empty
@@ -114,7 +114,7 @@ class DataRepoEntityExpressionValidatorSpec
 
   it should "validate expressions in a MethodConfiguration without a root entity" in {
     val validationResultsNoRoot =
-      expressionValidator.validateMCExpressions(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs)).futureValue
+      expressionValidator.validateMCExpressions(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs))
     assertSameElements(validInputExpressionsWithNoRoot, validationResultsNoRoot.validInputs)
     assertSameElements(validWorkspaceOutputExpressions, validationResultsNoRoot.validOutputs)
     validationResultsNoRoot.invalidInputs shouldBe 'empty
@@ -123,7 +123,7 @@ class DataRepoEntityExpressionValidatorSpec
 
   it should "detect invalid expressions in a MethodConfiguration with a root entity" in {
     val validationResults =
-      expressionValidator.validateMCExpressions(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
+      expressionValidator.validateMCExpressions(allInvalid, toGatherInputs(allInvalid.inputs))
     validationResults.validInputs shouldBe 'empty
     validationResults.validOutputs shouldBe 'empty
     validationResults.invalidInputs should have size badInputExpressionsWithRoot.size
@@ -133,7 +133,6 @@ class DataRepoEntityExpressionValidatorSpec
   it should "detect invalid expressions in a MethodConfiguration without a root entity" in {
     val validationResultsNoRoot = expressionValidator
       .validateMCExpressions(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs))
-      .futureValue
     validationResultsNoRoot.validInputs shouldBe 'empty
     validationResultsNoRoot.validOutputs shouldBe 'empty
     validationResultsNoRoot.invalidInputs should have size badInputExpressionsWithNoRoot.size
@@ -143,7 +142,7 @@ class DataRepoEntityExpressionValidatorSpec
   it should "handle optional inputs" in {
     // fail if empty input is required
     val validationResultsOneEmpty =
-      expressionValidator.validateMCExpressions(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
+      expressionValidator.validateMCExpressions(oneEmpty, toGatherInputs(oneEmpty.inputs))
     assertSameElements(validInputExpressions, validationResultsOneEmpty.validInputs)
     assertSameElements(validOutputExpressions, validationResultsOneEmpty.validOutputs)
     assertSameElements(Seq("this.empty"), validationResultsOneEmpty.invalidInputs.keys)
@@ -156,7 +155,7 @@ class DataRepoEntityExpressionValidatorSpec
     val optionalGatherInputs =
       GatherInputsResult(methodInputs.toSet diff emptyOptionalInput, emptyOptionalInput, Set(), Set())
 
-    val validationResultsEmpty = expressionValidator.validateMCExpressions(oneEmpty, optionalGatherInputs).futureValue
+    val validationResultsEmpty = expressionValidator.validateMCExpressions(oneEmpty, optionalGatherInputs)
     assertSameElements(oneEmpty.inputs.keys, validationResultsEmpty.validInputs)
     assertSameElements(oneEmpty.outputs.keys, validationResultsEmpty.validOutputs)
     validationResultsEmpty.invalidInputs shouldBe 'empty
@@ -166,7 +165,6 @@ class DataRepoEntityExpressionValidatorSpec
   it should "validate the happy path for relationship traversals" in {
     val validationResults = expressionValidatorWithMultipleTables
       .validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
-      .futureValue
     assertSameElements(validInputExpressionsWithRelationships, validationResults.validInputs)
     assertSameElements(validOutputExpressions, validationResults.validOutputs)
     validationResults.invalidInputs shouldBe 'empty
@@ -181,7 +179,6 @@ class DataRepoEntityExpressionValidatorSpec
 
     val validationResults = expressionValidatorWithMultipleTables
       .validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
-      .futureValue
     validationResults.invalidInputs.size shouldBe validEntityInputExpressionsWithRelationships.length
     validationResults.invalidOutputs shouldBe 'empty
   }
@@ -193,14 +190,13 @@ class DataRepoEntityExpressionValidatorSpec
 
     val validationResults = expressionValidatorWithMultipleTables
       .validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
-      .futureValue
     validationResults.invalidInputs.size shouldBe validEntityInputExpressionsWithRelationships.length
     validationResults.invalidOutputs shouldBe 'empty
   }
 
   "validateExpressionsForSubmission" should "succeed for valid expressions in a MethodConfiguration with a root entity" in {
     val validationResults =
-      expressionValidator.validateExpressionsForSubmission(allValid, toGatherInputs(allValid.inputs)).futureValue.get
+      expressionValidator.validateExpressionsForSubmission(allValid, toGatherInputs(allValid.inputs))
     assertSameElements(validInputExpressions, validationResults.validInputs)
     assertSameElements(validOutputExpressions, validationResults.validOutputs)
     validationResults.invalidInputs shouldBe 'empty
@@ -210,8 +206,6 @@ class DataRepoEntityExpressionValidatorSpec
   it should "succeed for valid expressions in a MethodConfiguration without a root entity" in {
     val validationResultsNoRoot = expressionValidator
       .validateExpressionsForSubmission(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs))
-      .futureValue
-      .get
     assertSameElements(validInputExpressionsWithNoRoot, validationResultsNoRoot.validInputs)
     assertSameElements(validWorkspaceOutputExpressions, validationResultsNoRoot.validOutputs)
     validationResultsNoRoot.invalidInputs shouldBe 'empty
@@ -225,7 +219,7 @@ class DataRepoEntityExpressionValidatorSpec
       GatherInputsResult(methodInputs.toSet diff emptyOptionalInput, emptyOptionalInput, Set(), Set())
 
     val validationResultsEmpty =
-      expressionValidator.validateExpressionsForSubmission(oneEmpty, optionalGatherInputs).futureValue.get
+      expressionValidator.validateExpressionsForSubmission(oneEmpty, optionalGatherInputs)
     assertSameElements(oneEmpty.inputs.keys, validationResultsEmpty.validInputs)
     assertSameElements(oneEmpty.outputs.keys, validationResultsEmpty.validOutputs)
     validationResultsEmpty.invalidInputs shouldBe 'empty
@@ -235,8 +229,6 @@ class DataRepoEntityExpressionValidatorSpec
   it should "succeed for relationship traversals" in {
     val validationResults = expressionValidatorWithMultipleTables
       .validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
-      .futureValue
-      .get
     assertSameElements(validInputExpressionsWithRelationships, validationResults.validInputs)
     assertSameElements(validOutputExpressions, validationResults.validOutputs)
     validationResults.invalidInputs shouldBe 'empty
@@ -244,22 +236,22 @@ class DataRepoEntityExpressionValidatorSpec
   }
 
   it should "fail for invalid expressions in a MethodConfiguration with a root entity" in {
-    val validationResults =
-      expressionValidator.validateExpressionsForSubmission(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
-    validationResults shouldBe a[scala.util.Failure[_]]
+    val validationResults = intercept[RawlsExceptionWithErrorReport] {
+      expressionValidator.validateExpressionsForSubmission(allInvalid, toGatherInputs(allInvalid.inputs))
+    }
   }
 
   it should "fail for invalid expressions in a MethodConfiguration without a root entity" in {
-    val validationResultsNoRoot = expressionValidator
-      .validateExpressionsForSubmission(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs))
-      .futureValue
-    validationResultsNoRoot shouldBe a[scala.util.Failure[_]]
+    val validationResultsNoRoot = intercept[RawlsExceptionWithErrorReport] {
+      expressionValidator
+        .validateExpressionsForSubmission(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs))
+    }
   }
 
   it should "fail for empty required input expressions in a MethodConfiguration" in {
-    val validationResultsOneEmpty =
-      expressionValidator.validateExpressionsForSubmission(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
-    validationResultsOneEmpty shouldBe a[scala.util.Failure[_]]
+    val validationResultsOneEmpty = intercept[RawlsExceptionWithErrorReport] {
+      expressionValidator.validateExpressionsForSubmission(oneEmpty, toGatherInputs(oneEmpty.inputs))
+    }
   }
 
   // should never get here if TDR is not buggy
@@ -268,10 +260,10 @@ class DataRepoEntityExpressionValidatorSpec
       createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables, relationships))
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
-    val validationResults = expressionValidatorWithMultipleTables
-      .validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
-      .futureValue
-    validationResults shouldBe a[scala.util.Failure[_]]
+    val validationResults = intercept[RawlsExceptionWithErrorReport] {
+      expressionValidatorWithMultipleTables
+        .validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
+    }
   }
 
   it should "fail if the relationship does not exist for relationship traversals" in {
@@ -279,10 +271,11 @@ class DataRepoEntityExpressionValidatorSpec
       createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, List.empty))
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
-    val validationResults = expressionValidatorWithMultipleTables
-      .validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
-      .futureValue
-    validationResults shouldBe a[scala.util.Failure[_]]
+    val validationResults = intercept[RawlsExceptionWithErrorReport] {
+      expressionValidatorWithMultipleTables
+        .validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs))
+    }
+
   }
 
   private val defaultRootEntity: Option[String] = Option("Sample")

@@ -556,7 +556,7 @@ class SubmissionsService(
           )
         )
       )
-      _ = SubmissionValidation.staticValidation(submissionRequest, methodConfig)
+      _ = SubmissionRequestValidation.staticValidation(submissionRequest, methodConfig)
 
       entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfig)
 
@@ -566,12 +566,7 @@ class SubmissionsService(
                                                                               methodConfigResolver
       )
 
-      validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig,
-                                                                                              gatherInputsResult
-      )
-
-      // calling .get on the Try will throw the validation error
-      _ = validationResult.get
+      _ = entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig, gatherInputsResult)
 
       methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput =>
         SubmissionValidationInput(methodInput.workflowInput.getName, methodInput.expression)

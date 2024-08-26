@@ -475,7 +475,7 @@ class MethodConfigurationService(
                                                                               methodConfiguration,
                                                                               methodConfigResolver
       )
-      vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
+      vmc = entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
     } yield vmc
 
   private def getEntityProviderForMethodConfig(workspaceContext: Workspace,
