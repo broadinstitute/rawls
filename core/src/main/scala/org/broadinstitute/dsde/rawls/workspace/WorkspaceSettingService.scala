@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import com.typesafe.scalalogging.LazyLogging
 import cats.implicits._
@@ -9,7 +9,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleCondition,
-  GcpBucketLifecycleConfig
+  GcpBucketLifecycleConfig,
+  GcpBucketSoftDeleteConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -24,6 +25,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 
+import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
@@ -79,6 +81,16 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             }
             actionValidation ++ ageValidation ++ atLeastOneConditionValidation
           }
+        case WorkspaceSetting(settingType @ WorkspaceSettingTypes.GcpBucketSoftDelete,
+                              GcpBucketSoftDeleteConfig(retentionDuration)
+            ) =>
+          val retentionDurationValidation = retentionDuration match {
+            case retentionDuration if retentionDuration < 0 || retentionDuration > 7776000 =>
+              Some(validationErrorReport(settingType, "retention duration must be between 0 and 90 days"))
+            case _ => None
+          }
+          retentionDurationValidation
+        case WorkspaceSetting(settingType, _) => Some(validationErrorReport(settingType, "shouldn't've gotten here..."))
       }
 
       if (validationErrors.nonEmpty) {
@@ -124,6 +136,20 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                                                                         setting.settingType
             )
           } yield None
+        case WorkspaceSetting(WorkspaceSettingTypes.GcpBucketSoftDelete,
+                              GcpBucketSoftDeleteConfig(retentionDuration)
+            ) =>
+          val policyBuilder = SoftDeletePolicy.newBuilder()
+          policyBuilder.setRetentionDuration(Duration.ofSeconds(retentionDuration))
+          val softDeletePolicy = policyBuilder.build()
+
+          for {
+            _ <- gcsDAO.setSoftDeletePolicy(workspace.bucketName, softDeletePolicy)
+            _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
+                                                                        setting.settingType
+            )
+          } yield None
+
         case _ => throw new RawlsException("unsupported workspace setting")
       }).recoverWith { case e =>
         logger.error(

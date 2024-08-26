@@ -7,6 +7,7 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.SoftDeletePolicy
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -65,6 +66,8 @@ trait GoogleServicesDAO extends ErrorReportable {
   def deleteBucket(bucketName: String): Future[Boolean]
 
   def setBucketLifecycle(bucketName: String, lifecycle: List[LifecycleRule]): Future[Unit]
+
+  def setSoftDeletePolicy(bucketName: String, softDeletePolicy: SoftDeletePolicy): Future[Unit]
 
   def isAdmin(userEmail: String): Future[Boolean]
 

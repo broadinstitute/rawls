@@ -338,6 +338,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .drain
       .unsafeToFuture()
 
+  override def setSoftDeletePolicy(bucketName: String, softDeletePolicy: BucketInfo.SoftDeletePolicy): Future[Unit] =
+    googleStorageService
+      .setSoftDeletePolicy(GcsBucketName(bucketName), softDeletePolicy)
+      .compile
+      .drain
+      .unsafeToFuture()
+
   override def isAdmin(userEmail: String): Future[Boolean] =
     hasGoogleRole(adminGroupName, userEmail)
 

@@ -5924,10 +5924,12 @@ components:
           description: The type of the workspace setting
           enum:
             - GcpBucketLifecycle
+            - GcpBucketSoftDelete
         config:
           description: The configuration of the workspace setting
           oneOf:
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketLifecycleConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingGcpBucketSoftDeleteConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
       required:
         - rules
@@ -5970,6 +5972,14 @@ components:
           description: Object name prefixes that this rule applies to
           items:
             type: string
+    WorkspaceSettingGcpBucketSoftDeleteConfig:
+      required:
+        - retentionDuration
+      type: object
+      properties:
+        retentionDuration:
+          type: integer
+          description: The length of time to retain soft-deleted objects for, in seconds
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount

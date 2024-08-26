@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.GcpBucketLifecycleConfigFormat
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketLifecycleConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
+  GcpBucketLifecycleConfigFormat,
+  GcpBucketSoftDeleteConfigFormat
+}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleConfig, GcpBucketSoftDeleteConfig}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 
@@ -53,6 +56,8 @@ object WorkspaceSettingRecord {
     val settingConfig = settingType match {
       case WorkspaceSettingTypes.GcpBucketLifecycle =>
         workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig]
+      case WorkspaceSettingTypes.GcpBucketSoftDelete =>
+        workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig]
     }
 
     WorkspaceSetting(settingType, settingConfig)

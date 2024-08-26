@@ -10,7 +10,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleAction,
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule
+  GcpBucketLifecycleRule,
+  GcpBucketSoftDeleteConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -546,6 +547,42 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       ErrorReport(
         "Invalid GcpBucketLifecycle configuration: at least one prefix must be specified if matchesPrefix is the only condition."
       )
+    )
+  }
+
+  it should "require a non-negative retention duration for GcpBucketSoftDelete settings" in {
+    val negativeDurationSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketSoftDelete,
+      GcpBucketSoftDeleteConfig(-1)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(negativeDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes should contain theSameElementsAs List(
+      ErrorReport("Invalid GcpBucketSoftDelete configuration: retention duration must be between 0 and 90 days.")
+    )
+  }
+
+  it should "require a retention duration no more than 90 days for GcpBucketSoftDelete settings" in {
+    val longDurationSetting = WorkspaceSetting(
+      WorkspaceSettingTypes.GcpBucketSoftDelete,
+      GcpBucketSoftDeleteConfig(999111999)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(longDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes should contain theSameElementsAs List(
+      ErrorReport("Invalid GcpBucketSoftDelete configuration: retention duration must be between 0 and 90 days.")
     )
   }
 }
