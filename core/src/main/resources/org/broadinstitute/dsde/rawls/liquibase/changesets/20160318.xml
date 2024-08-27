@@ -10,7 +10,10 @@
             <column name="is_realm_acl" type="BIT"/>
         </addColumn>
     </changeSet>
-    <changeSet logicalFilePath="dummy" id="dvoet" author="fix_workspace_access_pk">
+    <changeSet logicalFilePath="dummy" id="dvoet" author="fix_workspace_access_pk" >
+        <!-- The id of this changeset is transposed with the author and thus collides with other similarly id'ed
+             changesets. Setting validCheckSum to 1:any to avoid checksum computation issues on liquibase upgrades -->
+        <validCheckSum>1:any</validCheckSum>
         <dropAllForeignKeyConstraints baseTableName="WORKSPACE_ACCESS"/>
         <dropPrimaryKey tableName="WORKSPACE_ACCESS" constraintName="PRIMARY"/>
         <addPrimaryKey columnNames="workspace_id, access_level, is_realm_acl" constraintName="PRIMARY" tableName="WORKSPACE_ACCESS"/>
