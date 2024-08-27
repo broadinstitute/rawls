@@ -573,7 +573,13 @@ object WorkspaceState {
   case object DeleteFailed extends WorkspaceState
 }
 
-case class WorkspaceSetting(settingType: WorkspaceSettingType, config: WorkspaceSettingConfig)
+sealed abstract class WorkspaceSetting(val settingType: WorkspaceSettingType, val config: WorkspaceSettingConfig)
+
+case class GcpBucketLifecycleSetting(override val config: GcpBucketLifecycleConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketLifecycle, config)
+
+case class GcpBucketSoftDeleteSetting(override val config: GcpBucketSoftDeleteConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketSoftDelete, config)
 
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
@@ -589,11 +595,11 @@ object WorkspaceSettingTypes {
   }
 
   case object GcpBucketLifecycle extends WorkspaceSettingType {
-    override def defaultConfig(): WorkspaceSettingConfig = GcpBucketLifecycleConfig(List.empty)
+    override def defaultConfig(): GcpBucketLifecycleConfig = GcpBucketLifecycleConfig(List.empty)
   }
 
   case object GcpBucketSoftDelete extends WorkspaceSettingType {
-    override def defaultConfig(): WorkspaceSettingConfig = GcpBucketSoftDeleteConfig(0)
+    override def defaultConfig(): GcpBucketSoftDeleteConfig = GcpBucketSoftDeleteConfig(0)
   }
 }
 
@@ -1254,20 +1260,20 @@ class WorkspaceJsonSupport extends JsonSupport {
   }
 
   implicit object WorkspaceSettingFormat extends RootJsonFormat[WorkspaceSetting] {
-    def write(ws: WorkspaceSetting): JsValue = JsObject(
-      "settingType" -> ws.settingType.toJson,
-      "config" -> ws.config.toJson
-    )
+    def write(ws: WorkspaceSetting): JsValue =
+      JsObject(
+        "settingType" -> ws.settingType.toJson,
+        "config" -> ws.config.toJson
+      )
 
     def read(json: JsValue): WorkspaceSetting = {
       val fields = json.asJsObject.fields
       val settingType = fields("settingType").convertTo[WorkspaceSettingType]
-      val configuration = settingType match {
-        case GcpBucketLifecycle  => fields("config").convertTo[GcpBucketLifecycleConfig]
-        case GcpBucketSoftDelete => fields("config").convertTo[GcpBucketSoftDeleteConfig]
+      settingType match {
+        case GcpBucketLifecycle  => GcpBucketLifecycleSetting(fields("config").convertTo[GcpBucketLifecycleConfig])
+        case GcpBucketSoftDelete => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
         case _                   => throw DeserializationException(s"unexpected setting type $settingType")
       }
-      WorkspaceSetting(settingType, configuration)
     }
   }
 

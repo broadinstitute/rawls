@@ -15,6 +15,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  GcpBucketLifecycleSetting,
+  GcpBucketSoftDeleteSetting,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -76,8 +78,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
     val workspaceSettings = List(
-      WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
-                       WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+      GcpBucketLifecycleSetting(
+        WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
       )
     )
 
@@ -177,8 +179,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   "setWorkspaceSettings" should "set the workspace settings if there aren't any set" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val workspaceSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
-                                            WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+    val workspaceSetting = GcpBucketLifecycleSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
     )
 
     val workspaceRepository = mock[WorkspaceRepository]
@@ -225,8 +227,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "overwrite existing settings" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -235,8 +236,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         )
       )
     )
-    val newSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val newSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -295,8 +295,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "not remove existing settings if no settings are specified" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -344,8 +343,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "report errors while applying settings and remove pending settings" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -354,8 +352,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         )
       )
     )
-    val newSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val newSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -418,8 +415,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "be limited to owners" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val newSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
-                                      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
+    val newSetting = GcpBucketLifecycleSetting(
+      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
     )
 
     val workspaceRepository = mock[WorkspaceRepository]
@@ -455,8 +452,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   "validateSettings" should "require a non-negative age for GcpBucketLifecycle settings" in {
-    val negativeAgeSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val negativeAgeSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -479,8 +475,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "not allow unsupported lifecycle actions for GcpBucketLifecycle settings" in {
-    val unsupportedActionSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val unsupportedActionSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"),
@@ -505,8 +500,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "require at least one condition for GcpBucketLifecycle settings" in {
-    val noConditionsSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val noConditionsSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(None, None))
@@ -527,8 +521,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "require at least one prefix if matchesPrefix is the only condition for GcpBucketLifecycle settings" in {
-    val noPrefixSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val noPrefixSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Some(Set.empty), None))
@@ -551,8 +544,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "require a non-negative retention duration for GcpBucketSoftDelete settings" in {
-    val negativeDurationSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketSoftDelete,
+    val negativeDurationSetting = GcpBucketSoftDeleteSetting(
       GcpBucketSoftDeleteConfig(-1)
     )
 
@@ -569,8 +561,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "require a retention duration no more than 90 days for GcpBucketSoftDelete settings" in {
-    val longDurationSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketSoftDelete,
+    val longDurationSetting = GcpBucketSoftDeleteSetting(
       GcpBucketSoftDeleteConfig(999111999)
     )
 

@@ -53,14 +53,12 @@ object WorkspaceSettingRecord {
     import spray.json._
 
     val settingType = WorkspaceSettingTypes.withName(workspaceSettingRecord.settingType)
-    val settingConfig = settingType match {
+    settingType match {
       case WorkspaceSettingTypes.GcpBucketLifecycle =>
-        workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig]
+        GcpBucketLifecycleSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig])
       case WorkspaceSettingTypes.GcpBucketSoftDelete =>
-        workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig]
+        GcpBucketSoftDeleteSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig])
     }
-
-    WorkspaceSetting(settingType, settingConfig)
   }
 }
 

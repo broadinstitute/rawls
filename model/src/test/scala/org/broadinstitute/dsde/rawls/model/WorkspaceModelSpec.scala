@@ -714,8 +714,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketLifecycle,
+          GcpBucketLifecycleSetting(
             GcpBucketLifecycleConfig(
               List(
                 GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -748,8 +747,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketLifecycle,
+          GcpBucketLifecycleSetting(
             GcpBucketLifecycleConfig(
               List(
                 GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -784,8 +782,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketLifecycle,
+          GcpBucketLifecycleSetting(
             GcpBucketLifecycleConfig(
               List(
                 GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -808,7 +805,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(List.empty))
+          GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
         } {
           WorkspaceSettingFormat.read(lifecycleSettingNoRules)
         }
@@ -901,8 +898,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketSoftDelete,
+          GcpBucketSoftDeleteSetting(
             GcpBucketSoftDeleteConfig(500)
           )
         } {

@@ -9,7 +9,12 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule
 }
-import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceSetting, WorkspaceSettingTypes}
+import org.broadinstitute.dsde.rawls.model.{
+  GcpBucketLifecycleSetting,
+  Workspace,
+  WorkspaceSetting,
+  WorkspaceSettingTypes
+}
 import org.joda.time.DateTime
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -43,8 +48,7 @@ class WorkspaceSettingRepositorySpec
     val workspaceRepo = new WorkspaceRepository(slickDataSource)
     val ws: Workspace = makeWorkspace()
     Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
-    val appliedSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val appliedSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -53,8 +57,7 @@ class WorkspaceSettingRepositorySpec
         )
       )
     )
-    val pendingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val pendingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -98,8 +101,7 @@ class WorkspaceSettingRepositorySpec
     val workspaceRepo = new WorkspaceRepository(slickDataSource)
     val ws: Workspace = makeWorkspace()
     Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
-    val setting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val setting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -129,8 +131,7 @@ class WorkspaceSettingRepositorySpec
     val workspaceRepo = new WorkspaceRepository(slickDataSource)
     val ws: Workspace = makeWorkspace()
     Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
-    val setting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val setting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -161,8 +162,7 @@ class WorkspaceSettingRepositorySpec
     val workspaceRepo = new WorkspaceRepository(slickDataSource)
     val ws: Workspace = makeWorkspace()
     Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -171,8 +171,7 @@ class WorkspaceSettingRepositorySpec
         )
       )
     )
-    val newSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val newSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -235,8 +234,7 @@ class WorkspaceSettingRepositorySpec
     val workspaceRepo = new WorkspaceRepository(slickDataSource)
     val ws: Workspace = makeWorkspace()
     Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
-    val setting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val setting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
