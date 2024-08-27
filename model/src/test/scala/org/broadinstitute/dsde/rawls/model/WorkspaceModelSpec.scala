@@ -889,12 +889,12 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
 
     "GoogleBucketSoftDeleteSettings" - {
-      "parses soft delete setting with retentionDuration" in {
+      "parses soft delete setting with retentionDurationInSeconds" in {
         val softDeleteSetting =
           """{
             |    "settingType": "GcpBucketSoftDelete",
             |    "config": {
-            |      "retentionDuration": 500
+            |      "retentionDurationInSeconds": 500
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
@@ -906,7 +906,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         }
       }
 
-      "throws an exception for missing retentionDuration" in {
+      "throws an exception for missing retentionDurationInSeconds" in {
         val softDeleteSettingNoDuration =
           """{
             |    "settingType": "GcpBucketSoftDelete",
@@ -932,7 +932,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           """{
             |    "settingType": "GcpBucketSoftDelete",
             |    "config": {
-            |      "retentionDuration": "not a number"
+            |      "retentionDurationInSeconds": "not a number"
             |    }
             |  }""".stripMargin.parseJson
         intercept[DeserializationException] {
@@ -945,7 +945,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           """{
             |    "settingType": "GcpBucketLifecycle",
             |    "config": {
-            |      "retentionDuration": 5
+            |      "retentionDurationInSeconds": 5
             |    }
             |  }""".stripMargin.parseJson
         intercept[DeserializationException] {

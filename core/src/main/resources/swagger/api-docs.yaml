@@ -5974,10 +5974,10 @@ components:
             type: string
     WorkspaceSettingGcpBucketSoftDeleteConfig:
       required:
-        - retentionDuration
+        - retentionDurationInSeconds
       type: object
       properties:
-        retentionDuration:
+        retentionDurationInSeconds:
           type: integer
           description: The length of time to retain soft-deleted objects for, in seconds
     WorkspaceSubmissionStats:

@@ -85,8 +85,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             }
           case GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(retentionDuration)) =>
             val retentionDurationValidation = retentionDuration match {
-              case retentionDuration if retentionDuration < 0 || retentionDuration > 7776000 =>
-                Some(validationErrorReport(setting.settingType, "retention duration must be between 0 and 90 days"))
+              case retentionDuration if retentionDuration < 0 || retentionDuration > 7_776_000 =>
+                Some(validationErrorReport(setting.settingType, "retention duration must be from 0 to 90 days"))
               case _ => None
             }
             retentionDurationValidation

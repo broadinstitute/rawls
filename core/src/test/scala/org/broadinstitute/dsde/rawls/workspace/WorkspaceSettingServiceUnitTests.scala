@@ -224,10 +224,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     res.failures shouldEqual Map.empty
   }
 
-  it should "overwrite existing settings" in {
+  it should "overwrite existing settings of the same type" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = GcpBucketLifecycleSetting(
+    val existingSoftDeleteSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(500))
+    val existingLifecycleSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -251,7 +252,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
     when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
-      .thenReturn(Future.successful(List(existingSetting)))
+      .thenReturn(Future.successful(List(existingSoftDeleteSetting, existingLifecycleSetting)))
     when(
       workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
                                                                 List(newSetting),
@@ -556,13 +557,13 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
     exception.errorReport.causes should contain theSameElementsAs List(
-      ErrorReport("Invalid GcpBucketSoftDelete configuration: retention duration must be between 0 and 90 days.")
+      ErrorReport("Invalid GcpBucketSoftDelete configuration: retention duration must be from 0 to 90 days.")
     )
   }
 
   it should "require a retention duration no more than 90 days for GcpBucketSoftDelete settings" in {
     val longDurationSetting = GcpBucketSoftDeleteSetting(
-      GcpBucketSoftDeleteConfig(999111999)
+      GcpBucketSoftDeleteConfig(999_999_999)
     )
 
     val service = workspaceSettingServiceConstructor()
@@ -573,7 +574,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
     exception.errorReport.causes should contain theSameElementsAs List(
-      ErrorReport("Invalid GcpBucketSoftDelete configuration: retention duration must be between 0 and 90 days.")
+      ErrorReport("Invalid GcpBucketSoftDelete configuration: retention duration must be from 0 to 90 days.")
     )
   }
 }

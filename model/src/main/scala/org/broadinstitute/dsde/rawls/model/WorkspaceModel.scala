@@ -613,7 +613,7 @@ object WorkspaceSettingConfig {
   case class GcpBucketLifecycleCondition(matchesPrefix: Option[Set[String]], age: Option[Days])
 
   type Seconds = Long
-  case class GcpBucketSoftDeleteConfig(retentionDuration: Seconds) extends WorkspaceSettingConfig
+  case class GcpBucketSoftDeleteConfig(retentionDurationInSeconds: Seconds) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
