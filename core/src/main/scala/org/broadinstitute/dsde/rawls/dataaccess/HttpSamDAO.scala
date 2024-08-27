@@ -340,6 +340,24 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       callback.future.map(_.booleanValue())
     }
 
+  override def getActionServiceAccount(googleProject: GoogleProjectId,
+                                       resourceTypeName: SamResourceTypeName,
+                                       resourceId: String,
+                                       action: SamResourceAction,
+                                       ctx: RawlsRequestContext
+  ): Future[WorkbenchEmail] = retry(when401or5xx) { () =>
+    val callback = new SamApiCallback[java.lang.String]("getActionServiceAccount")
+
+    googleApi(ctx).getActionServiceAccount(googleProject.value,
+                                           resourceTypeName.value,
+                                           resourceId,
+                                           action.value,
+                                           callback
+    )
+
+    callback.future.map(WorkbenchEmail)
+  }
+
   override def getPolicy(resourceTypeName: SamResourceTypeName,
                          resourceId: String,
                          policyName: SamResourcePolicyName,

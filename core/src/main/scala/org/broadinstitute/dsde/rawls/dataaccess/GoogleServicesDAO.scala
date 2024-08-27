@@ -35,7 +35,8 @@ trait GoogleServicesDAO extends ErrorReportable {
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                       userProject: Option[GoogleProjectId] = None,
-                      iamPolicyVersion: Int = 1
+                      iamPolicyVersion: Int = 1,
+                      actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[Unit]
 
   // returns bucket and group information
@@ -45,7 +46,8 @@ trait GoogleServicesDAO extends ErrorReportable {
                      bucketName: GcsBucketName,
                      labels: Map[String, String],
                      requestContext: RawlsRequestContext,
-                     bucketLocation: Option[String]
+                     bucketLocation: Option[String],
+                     actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(googleProject: GoogleProjectId): Future[Project]

@@ -67,6 +67,13 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                              cts: RawlsRequestContext
   ): Future[Boolean] = Future.successful(true)
 
+  override def getActionServiceAccount(googleProject: GoogleProjectId,
+                                       resourceTypeName: SamResourceTypeName,
+                                       resourceId: String,
+                                       action: SamResourceAction,
+                                       ctx: RawlsRequestContext
+  ): Future[WorkbenchEmail] = Future.successful(WorkbenchEmail("foo-action@neighborhood.horse"))
+
   override def getPolicy(resourceTypeName: SamResourceTypeName,
                          resourceId: String,
                          policyName: SamResourcePolicyName,

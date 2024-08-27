@@ -92,7 +92,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
-                               iamPolicyVersion: Int = 1
+                               iamPolicyVersion: Int = 1,
+                               actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[Unit] =
     Future.unit
 
@@ -102,7 +103,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                               bucketName: GcsBucketName,
                               labels: Map[String, String],
                               requestContext: RawlsRequestContext,
-                              bucketLocation: Option[String]
+                              bucketLocation: Option[String],
+                              actionServiceAccountsByAction: Map[SamResourceAction, WorkbenchEmail] = Map.empty
   ): Future[GoogleWorkspaceInfo] = {
 
     val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName.value, policyGroupsByAccessLevel)
