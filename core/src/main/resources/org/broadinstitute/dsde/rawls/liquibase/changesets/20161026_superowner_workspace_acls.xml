@@ -8,6 +8,9 @@
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-2">
+        <!-- Setting validCheckSum to 1:any to avoid checksum validation errors during liquibase upgrades due to string
+             interpolation in this changeset (i.e., ${gcs:appsDomain}) -->
+        <validCheckSum>1:any</validCheckSum>
         <sql stripComments="true">
             insert into super_owners_temp_no_realm select ws.id, ws.namespace,
                 concat("GROUP_", LOWER(CONCAT(
@@ -66,6 +69,9 @@
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-9">
+        <!-- Setting validCheckSum to 1:any to avoid checksum validation errors during liquibase upgrades due to string
+             interpolation in this changeset (i.e., ${gcs:appsDomain}) -->
+        <validCheckSum>1:any</validCheckSum>
         <sql stripComments="true">
             insert into super_owners_temp_realm_intersection select ws.id, ws.namespace,
                 concat("GROUP_I_", LOWER(CONCAT(
@@ -87,6 +93,9 @@
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-10">
+        <!-- Setting validCheckSum to 1:any to avoid checksum validation errors during liquibase upgrades due to string
+             interpolation in this changeset (i.e., ${gcs:appsDomain}) -->
+        <validCheckSum>1:any</validCheckSum>
         <sql stripComments="true">
             insert into super_owners_temp_realm select ws.id, ws.namespace,
                 concat("GROUP_", LOWER(CONCAT(

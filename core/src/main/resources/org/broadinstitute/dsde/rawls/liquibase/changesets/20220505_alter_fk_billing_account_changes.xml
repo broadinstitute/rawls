@@ -3,6 +3,9 @@
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
     <changeSet logicalFilePath="dummy" author="ehigham" id="ALTER_BILLING_ACCOUNT_CHANGE_FK">
+        <!-- This file collides with 20220513_alter_entity_type_collation.xml, setting validCheckSum to 1:any here
+             as liquibase balks when it recomputes checksums in the event of an upgrade -->
+        <validCheckSum>1:any</validCheckSum>
         <comment>
             [CA-1875] The `FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME` foreign key constraint prevents
             users from deleting their billing projects if they changed the billing account.

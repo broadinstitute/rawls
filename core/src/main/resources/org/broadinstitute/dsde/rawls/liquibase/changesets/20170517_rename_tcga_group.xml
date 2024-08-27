@@ -2,6 +2,9 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="rename-tcga-group-1">
+        <!-- Setting validCheckSum to 1:any to avoid checksum validation errors during liquibase upgrades due to string
+             interpolation in this changeset (i.e., ${gcs:appsDomain}) -->
+        <validCheckSum>1:any</validCheckSum>
         <sql stripComments="true">
             insert into `GROUP`(NAME, EMAIL) values ("TCGA-dbGaP-Authorized", concat("GROUP_TCGA-dbGaP-Authorized@", "${gcs:appsDomain}")), ("TCGA-dbGaP-Authorized-owners", concat("GROUP_TCGA-dbGaP-Authorized-owners@", "${gcs:appsDomain}"));
 

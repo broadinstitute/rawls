@@ -27,6 +27,9 @@
     </changeSet>
 
     <changeSet id="insert-owner-groups" author="dvoet" logicalFilePath="dummy">
+        <!-- Setting validCheckSum to 1:any to avoid checksum validation errors during liquibase upgrades due to string
+             interpolation in this changeset (i.e., ${gcs:appsDomain}) -->
+        <validCheckSum>1:any</validCheckSum>
         <sql>
             insert into `GROUP` select concat(mg.USERS_GROUP_NAME,"-owners"), concat("GROUP_",mg.USERS_GROUP_NAME,"-owners","@","${gcs:appsDomain}"), now(), null from MANAGED_GROUP mg
         </sql>
