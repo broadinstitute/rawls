@@ -289,6 +289,49 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     res.failures shouldEqual Map.empty
   }
 
+  it should "not apply a setting that is identical to an existing setting" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val existingSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(500))
+    val newSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(500))
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
+      .thenReturn(Future.successful(List(existingSetting)))
+    when(
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List.empty,
+                                                                defaultRequestContext.userInfo.userSubjectId
+      )
+    )
+      .thenReturn(Future.successful(List.empty))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val service =
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         gcsDAO = mock[GoogleServicesDAO],
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
+
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+    res.successes shouldEqual List.empty
+    res.failures shouldEqual Map.empty
+  }
+
   it should "not remove existing settings if no settings are specified" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
