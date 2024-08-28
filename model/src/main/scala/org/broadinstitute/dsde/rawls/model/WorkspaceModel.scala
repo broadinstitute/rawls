@@ -585,7 +585,6 @@ object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceSettingType = WorkspaceSettingTypes.withName(name)
-    def defaultConfig(): WorkspaceSettingConfig
   }
 
   def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
@@ -594,13 +593,9 @@ object WorkspaceSettingTypes {
     case _                     => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
-  case object GcpBucketLifecycle extends WorkspaceSettingType {
-    override def defaultConfig(): GcpBucketLifecycleConfig = GcpBucketLifecycleConfig(List.empty)
-  }
+  case object GcpBucketLifecycle extends WorkspaceSettingType
 
-  case object GcpBucketSoftDelete extends WorkspaceSettingType {
-    override def defaultConfig(): GcpBucketSoftDeleteConfig = GcpBucketSoftDeleteConfig(0)
-  }
+  case object GcpBucketSoftDelete extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig

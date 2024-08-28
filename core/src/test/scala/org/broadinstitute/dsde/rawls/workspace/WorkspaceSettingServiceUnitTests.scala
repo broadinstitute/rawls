@@ -78,9 +78,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
     val workspaceSettings = List(
-      GcpBucketLifecycleSetting(
-        WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
-      )
+      GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
     )
 
     val workspaceRepository = mock[WorkspaceRepository]
@@ -179,9 +177,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   "setWorkspaceSettings" should "set the workspace settings if there aren't any set" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val workspaceSetting = GcpBucketLifecycleSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
-    )
+    val workspaceSetting = GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
@@ -416,9 +412,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "be limited to owners" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val newSetting = GcpBucketLifecycleSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
-    )
+    val newSetting = GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
