@@ -84,10 +84,10 @@ object Dependencies {
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.7"
 
-  val workbenchLibsHash = "097d95f5-SNAP"
+  val workbenchLibsHash = "157f079"
 
   val workbenchModelV  = s"0.20-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.32-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.33-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.7-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.7-${workbenchLibsHash}"
