@@ -21,13 +21,13 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
-  WorkspaceSettingResponse,
-  WorkspaceSettingTypes
+  WorkspaceSettingResponse
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 
 import java.time.Duration
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
@@ -84,12 +84,16 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
               actionValidation ++ ageValidation ++ atLeastOneConditionValidation
             }
           case GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(retentionDuration)) =>
-            val retentionDurationValidation = retentionDuration match {
-              case retentionDuration if retentionDuration < 0 || retentionDuration > 7_776_000 =>
-                Some(validationErrorReport(setting.settingType, "retention duration must be from 0 to 90 days"))
+            retentionDuration match {
+              case duration if (duration < 7.days.toSeconds || duration > 90.days.toSeconds) && duration != 0 =>
+                Some(
+                  validationErrorReport(
+                    setting.settingType,
+                    "retention duration must be from 7 to 90 days, or 0 to disable soft delete retention"
+                  )
+                )
               case _ => None
             }
-            retentionDurationValidation
         }
       }
 
