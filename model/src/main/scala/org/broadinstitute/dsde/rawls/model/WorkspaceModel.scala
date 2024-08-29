@@ -15,9 +15,14 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleAction,
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule
+  GcpBucketLifecycleRule,
+  GcpBucketSoftDeleteConfig
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{GcpBucketLifecycle, WorkspaceSettingType}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
+  GcpBucketLifecycle,
+  GcpBucketSoftDelete,
+  WorkspaceSettingType
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -568,23 +573,29 @@ object WorkspaceState {
   case object DeleteFailed extends WorkspaceState
 }
 
-case class WorkspaceSetting(settingType: WorkspaceSettingType, config: WorkspaceSettingConfig)
+sealed abstract class WorkspaceSetting(val settingType: WorkspaceSettingType, val config: WorkspaceSettingConfig)
+
+case class GcpBucketLifecycleSetting(override val config: GcpBucketLifecycleConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketLifecycle, config)
+
+case class GcpBucketSoftDeleteSetting(override val config: GcpBucketSoftDeleteConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketSoftDelete, config)
 
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceSettingType = WorkspaceSettingTypes.withName(name)
-    def defaultConfig(): WorkspaceSettingConfig
   }
 
   def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
-    case "gcpbucketlifecycle" => GcpBucketLifecycle
-    case _                    => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
+    case "gcpbucketlifecycle"  => GcpBucketLifecycle
+    case "gcpbucketsoftdelete" => GcpBucketSoftDelete
+    case _                     => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
-  case object GcpBucketLifecycle extends WorkspaceSettingType {
-    override def defaultConfig(): WorkspaceSettingConfig = GcpBucketLifecycleConfig(List.empty)
-  }
+  case object GcpBucketLifecycle extends WorkspaceSettingType
+
+  case object GcpBucketSoftDelete extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig
@@ -595,6 +606,9 @@ object WorkspaceSettingConfig {
   case class GcpBucketLifecycleRule(action: GcpBucketLifecycleAction, conditions: GcpBucketLifecycleCondition)
   case class GcpBucketLifecycleAction(actionType: String)
   case class GcpBucketLifecycleCondition(matchesPrefix: Option[Set[String]], age: Option[Days])
+
+  type Seconds = Long
+  case class GcpBucketSoftDeleteConfig(retentionDurationInSeconds: Seconds) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1215,6 +1229,9 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val GcpBucketLifecycleConfigFormat: RootJsonFormat[GcpBucketLifecycleConfig] = jsonFormat1(
     GcpBucketLifecycleConfig.apply
   )
+  implicit val GcpBucketSoftDeleteConfigFormat: RootJsonFormat[GcpBucketSoftDeleteConfig] = jsonFormat1(
+    GcpBucketSoftDeleteConfig.apply
+  )
 
   implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
     override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
@@ -1227,7 +1244,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit object WorkspaceSettingConfigFormat extends RootJsonFormat[WorkspaceSettingConfig] {
     def write(obj: WorkspaceSettingConfig): JsValue = obj match {
-      case config: GcpBucketLifecycleConfig => config.toJson
+      case config: GcpBucketLifecycleConfig  => config.toJson
+      case config: GcpBucketSoftDeleteConfig => config.toJson
     }
 
     // We prevent reading WorkspaceSettingConfig directly because we need
@@ -1237,19 +1255,20 @@ class WorkspaceJsonSupport extends JsonSupport {
   }
 
   implicit object WorkspaceSettingFormat extends RootJsonFormat[WorkspaceSetting] {
-    def write(ws: WorkspaceSetting): JsValue = JsObject(
-      "settingType" -> ws.settingType.toJson,
-      "config" -> ws.config.toJson
-    )
+    def write(ws: WorkspaceSetting): JsValue =
+      JsObject(
+        "settingType" -> ws.settingType.toJson,
+        "config" -> ws.config.toJson
+      )
 
     def read(json: JsValue): WorkspaceSetting = {
       val fields = json.asJsObject.fields
       val settingType = fields("settingType").convertTo[WorkspaceSettingType]
-      val configuration = settingType match {
-        case GcpBucketLifecycle => fields("config").convertTo[GcpBucketLifecycleConfig]
-        case _                  => throw DeserializationException(s"unexpected setting type $settingType")
+      settingType match {
+        case GcpBucketLifecycle  => GcpBucketLifecycleSetting(fields("config").convertTo[GcpBucketLifecycleConfig])
+        case GcpBucketSoftDelete => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
+        case _                   => throw DeserializationException(s"unexpected setting type $settingType")
       }
-      WorkspaceSetting(settingType, configuration)
     }
   }
 

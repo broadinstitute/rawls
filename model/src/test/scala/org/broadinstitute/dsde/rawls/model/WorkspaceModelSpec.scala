@@ -8,7 +8,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleAction,
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule
+  GcpBucketLifecycleRule,
+  GcpBucketSoftDeleteConfig
 }
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
@@ -713,8 +714,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketLifecycle,
+          GcpBucketLifecycleSetting(
             GcpBucketLifecycleConfig(
               List(
                 GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -747,8 +747,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketLifecycle,
+          GcpBucketLifecycleSetting(
             GcpBucketLifecycleConfig(
               List(
                 GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -783,8 +782,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(
-            WorkspaceSettingTypes.GcpBucketLifecycle,
+          GcpBucketLifecycleSetting(
             GcpBucketLifecycleConfig(
               List(
                 GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -807,7 +805,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |    }
             |  }""".stripMargin.parseJson
         assertResult {
-          WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle, GcpBucketLifecycleConfig(List.empty))
+          GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
         } {
           WorkspaceSettingFormat.read(lifecycleSettingNoRules)
         }
@@ -886,6 +884,72 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |  }""".stripMargin.parseJson
         intercept[DeserializationException] {
           WorkspaceSettingFormat.read(lifecycleSettingNoConditions)
+        }
+      }
+    }
+
+    "GoogleBucketSoftDeleteSettings" - {
+      "parses soft delete setting with retentionDurationInSeconds" in {
+        val softDeleteSetting =
+          """{
+            |    "settingType": "GcpBucketSoftDelete",
+            |    "config": {
+            |      "retentionDurationInSeconds": 500
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          GcpBucketSoftDeleteSetting(
+            GcpBucketSoftDeleteConfig(500)
+          )
+        } {
+          WorkspaceSettingFormat.read(softDeleteSetting)
+        }
+      }
+
+      "throws an exception for missing retentionDurationInSeconds" in {
+        val softDeleteSettingNoDuration =
+          """{
+            |    "settingType": "GcpBucketSoftDelete",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(softDeleteSettingNoDuration)
+        }
+      }
+
+      "throws an exception for missing config" in {
+        val softDeleteSettingNoConfig =
+          """{
+            |    "settingType": "GcpBucketSoftDelete"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(softDeleteSettingNoConfig)
+        }
+      }
+
+      "throws an exception for incorrect format" in {
+        val softDeleteSettingBadConfig =
+          """{
+            |    "settingType": "GcpBucketSoftDelete",
+            |    "config": {
+            |      "retentionDurationInSeconds": "not a number"
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(softDeleteSettingBadConfig)
+        }
+      }
+
+      "throws an exception for lifecycle setting with soft delete config" in {
+        val lifecycleSettingSoftDeleteConfig =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "retentionDurationInSeconds": 5
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(lifecycleSettingSoftDeleteConfig)
         }
       }
     }

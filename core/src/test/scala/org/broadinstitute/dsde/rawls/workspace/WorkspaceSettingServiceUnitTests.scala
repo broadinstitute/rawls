@@ -10,10 +10,13 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleAction,
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule
+  GcpBucketLifecycleRule,
+  GcpBucketSoftDeleteConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  GcpBucketLifecycleSetting,
+  GcpBucketSoftDeleteSetting,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -75,9 +78,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
     val workspaceSettings = List(
-      WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
-                       WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
-      )
+      GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
     )
 
     val workspaceRepository = mock[WorkspaceRepository]
@@ -176,9 +177,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   "setWorkspaceSettings" should "set the workspace settings if there aren't any set" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val workspaceSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
-                                            WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
-    )
+    val workspaceSetting = GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
@@ -221,11 +220,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     res.failures shouldEqual Map.empty
   }
 
-  it should "overwrite existing settings" in {
+  it should "overwrite existing settings of the same type" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSoftDeleteSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(1_000_000))
+    val existingLifecycleSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -234,8 +233,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         )
       )
     )
-    val newSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val newSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -250,7 +248,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
     when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
-      .thenReturn(Future.successful(List(existingSetting)))
+      .thenReturn(Future.successful(List(existingSoftDeleteSetting, existingLifecycleSetting)))
     when(
       workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
                                                                 List(newSetting),
@@ -291,11 +289,53 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     res.failures shouldEqual Map.empty
   }
 
+  it should "not apply a setting that is identical to an existing setting" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val existingSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0))
+    val newSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0))
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
+      .thenReturn(Future.successful(List(existingSetting)))
+    when(
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List.empty,
+                                                                defaultRequestContext.userInfo.userSubjectId
+      )
+    )
+      .thenReturn(Future.successful(List.empty))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val service =
+      workspaceSettingServiceConstructor(samDAO = samDAO,
+                                         workspaceRepository = workspaceRepository,
+                                         gcsDAO = mock[GoogleServicesDAO],
+                                         workspaceSettingRepository = workspaceSettingRepository
+      )
+
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, List(newSetting)), Duration.Inf)
+    res.successes shouldEqual List.empty
+    res.failures shouldEqual Map.empty
+  }
+
   it should "not remove existing settings if no settings are specified" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -343,8 +383,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "report errors while applying settings and remove pending settings" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val existingSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val existingSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -353,8 +392,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         )
       )
     )
-    val newSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val newSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -417,9 +455,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   it should "be limited to owners" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val newSetting = WorkspaceSetting(WorkspaceSettingTypes.GcpBucketLifecycle,
-                                      WorkspaceSettingTypes.GcpBucketLifecycle.defaultConfig()
-    )
+    val newSetting = GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
@@ -454,8 +490,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   "validateSettings" should "require a non-negative age for GcpBucketLifecycle settings" in {
-    val negativeAgeSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val negativeAgeSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
@@ -478,8 +513,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "not allow unsupported lifecycle actions for GcpBucketLifecycle settings" in {
-    val unsupportedActionSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val unsupportedActionSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("SetStorageClass"),
@@ -504,8 +538,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "require at least one condition for GcpBucketLifecycle settings" in {
-    val noConditionsSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val noConditionsSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(None, None))
@@ -526,8 +559,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   }
 
   it should "require at least one prefix if matchesPrefix is the only condition for GcpBucketLifecycle settings" in {
-    val noPrefixSetting = WorkspaceSetting(
-      WorkspaceSettingTypes.GcpBucketLifecycle,
+    val noPrefixSetting = GcpBucketLifecycleSetting(
       GcpBucketLifecycleConfig(
         List(
           GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"), GcpBucketLifecycleCondition(Some(Set.empty), None))
@@ -547,5 +579,50 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         "Invalid GcpBucketLifecycle configuration: at least one prefix must be specified if matchesPrefix is the only condition."
       )
     )
+  }
+
+  it should "require a non-negative retention duration for GcpBucketSoftDelete settings" in {
+    val negativeDurationSetting = GcpBucketSoftDeleteSetting(
+      GcpBucketSoftDeleteConfig(-1)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(negativeDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    assert(exception.errorReport.causes.exists(_.message.matches("Invalid GcpBucketSoftDelete.*retention duration.*")))
+  }
+
+  it should "require a retention duration no shorter than 7 days (if non-zero) for GcpBucketSoftDelete settings" in {
+    val shortDurationSetting = GcpBucketSoftDeleteSetting(
+      GcpBucketSoftDeleteConfig(1000)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(shortDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    assert(exception.errorReport.causes.exists(_.message.matches("Invalid GcpBucketSoftDelete.*retention duration.*")))
+  }
+
+  it should "require a retention duration no more than 90 days for GcpBucketSoftDelete settings" in {
+    val longDurationSetting = GcpBucketSoftDeleteSetting(
+      GcpBucketSoftDeleteConfig(999_999_999)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(longDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    assert(exception.errorReport.causes.exists(_.message.matches("Invalid GcpBucketSoftDelete.*retention duration.*")))
   }
 }
