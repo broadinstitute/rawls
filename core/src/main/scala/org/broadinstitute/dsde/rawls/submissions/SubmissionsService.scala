@@ -159,8 +159,11 @@ object SubmissionsService {
     }
   }
 
-  def submissionRootPath(workspace: Workspace, id: UUID) =
-    s"gs://${workspace.bucketName}/submissions/$id"
+  def submissionRootPath(workspace: Workspace, id: UUID): String =
+    // Intermediate/final output separation: location 1/2 (SU-166, WX-1702)
+    // All intermediate files including logs live here.
+    // UI links to execution directory point here.
+    s"gs://${workspace.bucketName}/submissions/intermediates/$id"
 }
 
 class SubmissionsService(

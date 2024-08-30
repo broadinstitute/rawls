@@ -126,6 +126,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
   "ExecutionServiceWorkflowOptions" should "serialize/deserialize to/from JSON" in {
     val test = ExecutionServiceWorkflowOptions(
       jes_gcs_root = "jes_gcs_root",
+      final_workflow_outputs_dir = Option("example_final_workflow_outputs_dir"),
+      final_workflow_outputs_mode = Option("example_final_workflow_outputs_mode"),
       google_project = "google_project",
       account_name = "account_name",
       google_compute_service_account = "account@foo.com",
@@ -160,6 +162,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       """
         |{
         |  "jes_gcs_root": "jes_gcs_root",
+        |  "final_workflow_outputs_dir": "example_final_workflow_outputs_dir",
+        |  "final_workflow_outputs_mode": "example_final_workflow_outputs_mode",
         |  "google_project": "google_project",
         |  "account_name": "account_name",
         |  "google_compute_service_account": "account@foo.com",
@@ -190,6 +194,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       """
         |{
         |  "jes_gcs_root": "jes_gcs_root",
+        |  "final_workflow_outputs_dir": "example_final_workflow_outputs_dir",
+        |  "final_workflow_outputs_mode": "example_final_workflow_outputs_mode",
         |  "google_project": "google_project",
         |  "account_name": "account_name",
         |  "google_compute_service_account": "account@foo.com",

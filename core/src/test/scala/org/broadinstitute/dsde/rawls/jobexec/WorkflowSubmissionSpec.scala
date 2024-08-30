@@ -376,6 +376,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         Some(
           ExecutionServiceWorkflowOptions(
             jes_gcs_root = s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
+            Some(s"gs://${testData.workspace.bucketName}/submissions/final-outputs/${testData.submission1.submissionId}"),
+            Some("move"),
             google_project = testData.workspace.googleProjectId.value,
             account_name = testData.userOwner.userEmail.value,
             google_compute_service_account = "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
