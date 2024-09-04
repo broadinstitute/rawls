@@ -43,6 +43,7 @@ class BardServiceSpec extends AnyFlatSpec with TestDriverComponent with Matchers
     false,
     None,
     None,
+    None,
     None
   )
   val methodRepoMethod = MethodRepoMethod("methodNamespace", "methodName", 1)
