@@ -33,6 +33,7 @@ import org.broadinstitute.dsde.rawls.workspace.{AttributeUpdateOperationExceptio
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
+import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -163,6 +164,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           .recover { case delEx: DeleteEntitiesConflictException =>
             delEx.referringEntities
           }
+          .recover(sqlLoggingRecover(s"deleteEntities: $workspaceName ${entRefs.size} entities"))
           .recover(bigQueryRecover)
       }
     }
@@ -193,6 +195,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             )
           )
         }
+        .recover(sqlLoggingRecover(s"deleteEntitiesOfType: $workspaceName $entityType"))
         .recover(bigQueryRecover)
     }
 
@@ -528,6 +531,18 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
       }
     }
+
+  private def sqlLoggingRecover[U](logHint: String): PartialFunction[Throwable, U] = {
+    case sqlException: SQLException =>
+      // don't log a stack trace, and don't log at ERROR level;
+      // these exceptions and their stack traces are already logged elsewhere. We just want to add logging
+      // so we understand which method generated the exception.
+      logger.warn(
+        s"SQLException in EntityService ($logHint): ${sqlException.getClass.getName} - ${sqlException.getMessage}"
+      )
+      // rethrow as-is; RawlsApiService.exceptionHandler has handling we don't want to break
+      throw sqlException;
+  }
 
   private def bigQueryRecover[U]: PartialFunction[Throwable, U] = {
     case dee: DataEntityException =>
