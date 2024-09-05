@@ -537,7 +537,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       // don't log a stack trace, and don't log at ERROR level;
       // these exceptions and their stack traces are already logged elsewhere. We just want to add logging
       // so we understand which method generated the exception.
-      logger.warn(s"SQLException in $logHint: ${sqlException.getClass.getName} - ${sqlException.getMessage}")
+      logger.warn(
+        s"SQLException in EntityService ($logHint): ${sqlException.getClass.getName} - ${sqlException.getMessage}"
+      )
       // rethrow as-is; RawlsApiService.exceptionHandler has handling we don't want to break
       throw sqlException;
   }
