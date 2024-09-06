@@ -29,7 +29,8 @@ case class WorkflowRecord(id: Long,
                           workflowEntityId: Option[Long],
                           recordVersion: Long,
                           executionServiceKey: Option[String],
-                          externalEntityId: Option[String]
+                          externalEntityId: Option[String],
+                          cost: Option[BigDecimal]
 )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
@@ -54,6 +55,7 @@ trait WorkflowComponent {
     def version = column[Long]("record_version")
     def executionServiceKey = column[Option[String]]("EXEC_SERVICE_KEY")
     def externalEntityId = column[Option[String]]("EXTERNAL_ENTITY_ID")
+    def cost = column[Option[BigDecimal]]("COST")
 
     def * = (id,
              externalId,
@@ -63,7 +65,8 @@ trait WorkflowComponent {
              workflowEntityId,
              version,
              executionServiceKey,
-             externalEntityId
+             externalEntityId,
+      cost
     ) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
@@ -271,6 +274,21 @@ trait WorkflowComponent {
       wfStatusCounter: WorkflowStatus => Option[Counter]
     ): ReadWriteAction[Int] =
       batchUpdateStatus(Seq(workflow), newStatus)
+
+    def updateStatusAndCost(workflow: WorkflowRecord, newStatus: WorkflowStatus, newCost: BigDecimal)(implicit
+      wfStatusCounter: WorkflowStatus => Option[Counter]
+    ): ReadWriteAction[Int] =
+      UpdateWorkflowStatusAndCostRawSql.actionForWorkflowRecs(Seq(workflow), newStatus, newCost) map { rows =>
+        if (rows.head != 1) {
+          throw new RawlsConcurrentModificationException(
+            s"could not update workflow because its record version(s) has changed"
+          )
+        }
+        rows.head
+      } map { result =>
+        wfStatusCounter(newStatus).foreach(_ += result)
+        result
+      }
 
     // input: old workflow records, and the status that we want to apply to all of them
     def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit
@@ -614,7 +632,8 @@ trait WorkflowComponent {
         entityId,
         0,
         None,
-        externalEntityId
+        externalEntityId,
+        None
       )
 
     private def unmarshalWorkflow(workflowRec: WorkflowRecord,
@@ -628,7 +647,8 @@ trait WorkflowComponent {
         new DateTime(workflowRec.statusLastChangedDate.getTime),
         entity,
         inputResolutions,
-        messages
+        messages,
+        workflowRec.cost.map(_.floatValue)
       )
 
     private def marshalInputResolution(value: SubmissionValidationValue, workflowId: Long): SubmissionValidationRecord =
@@ -719,6 +739,23 @@ trait WorkflowComponent {
       concatSqlActions(update(newStatus),
                        sql"where status = ${currentStatus.toString} and submission_id = ${submissionId}"
       ).as[Int].map(_.head)
+  }
+
+  private object UpdateWorkflowStatusAndCostRawSql extends RawSqlQuery {
+    val driver: JdbcProfile = WorkflowComponent.this.driver
+
+    private def update(newStatus: WorkflowStatus, cost: BigDecimal) =
+      sql"update WORKFLOW set status = ${newStatus.toString}, cost = ${cost}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
+
+    def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, cost: BigDecimal) = {
+      val where = sql"where ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf =>
+                                                       sql"(id = ${wf.id} AND record_version = ${wf.recordVersion})"
+                                                     },
+                                                     sql" OR "
+      )
+      concatSqlActions(update(newStatus, cost), where, workflowTuples, sql")").as[Int]
+    }
   }
 
   private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {

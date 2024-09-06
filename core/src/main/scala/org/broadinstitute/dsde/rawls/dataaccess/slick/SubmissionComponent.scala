@@ -299,12 +299,12 @@ trait SubmissionComponent {
         })
       )
 
-    def listActiveSubmissionIdsWithWorkspace(limit: FiniteDuration): ReadAction[Seq[(UUID, WorkspaceName)]] = {
+    def listActiveSubmissionIdsWithWorkspace(limit: FiniteDuration): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal])]] = {
       // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
       val cutoffTime = new Timestamp(DateTime.now().minusDays(limit.toDays.toInt).getMillis)
       val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
-      val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name) }.result
-      result.map(rows => rows.map { case (subId, wsNs, wsName) => (subId, WorkspaceName(wsNs, wsName)) })
+      val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name, sub.costCapThreshold) }.result
+      result.map(rows => rows.map { case (subId, wsNs, wsName, costCapThreshold) => (subId, WorkspaceName(wsNs, wsName), costCapThreshold) })
     }
 
     def getSubmissionMethodConfigId(workspaceContext: Workspace, submissionId: UUID): ReadAction[Option[Long]] =

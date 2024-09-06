@@ -67,19 +67,22 @@ object SubmissionMonitorActor {
             executionServiceCluster: ExecutionServiceCluster,
             config: SubmissionMonitorConfig,
             queryTimeout: Duration,
-            workbenchMetricBaseName: String
+            workbenchMetricBaseName: String,
+            costCapThreshold: Option[BigDecimal] = None
   ): Props =
     Props(
-      new SubmissionMonitorActor(workspaceName,
-                                 submissionId,
-                                 datasource,
-                                 samDAO,
-                                 googleServicesDAO,
-                                 notificationDAO,
-                                 executionServiceCluster,
-                                 config,
-                                 queryTimeout,
-                                 workbenchMetricBaseName
+      new SubmissionMonitorActor(
+        workspaceName,
+        submissionId,
+        datasource,
+        samDAO,
+        googleServicesDAO,
+        notificationDAO,
+        executionServiceCluster,
+        config,
+        queryTimeout,
+        workbenchMetricBaseName,
+        costCapThreshold
       )
     )
 
@@ -122,7 +125,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val config: SubmissionMonitorConfig,
                              val queryTimeout: Duration,
-                             override val workbenchMetricBaseName: String
+                             override val workbenchMetricBaseName: String,
+                             val costCapThreshold: Option[BigDecimal]
 ) extends Actor
     with SubmissionMonitor
     with LazyLogging {
@@ -184,6 +188,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val executionServiceCluster: ExecutionServiceCluster
   val config: SubmissionMonitorConfig
   val queryTimeout: Duration
+  val costCapThreshold: Option[BigDecimal]
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
@@ -249,12 +254,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         } yield abortResults
       }
 
-    def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord], petUser: UserInfo) =
+    // external workflow ids for running workflows
+    def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord],
+                              petUser: UserInfo
+    ): Future[Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]] =
       Future.traverse(externalWorkflowIds) { workflowRec =>
         // for each workflow query the exec service for status and if has Succeeded query again for outputs
         toFutureTry(execServiceStatus(workflowRec, petUser) flatMap {
-          case Some(updatedWorkflowRec) => execServiceOutputs(updatedWorkflowRec, petUser)
-          case None                     => Future.successful(None)
+          case Some(updatedWorkflowRec) =>
+            execServiceOutputs(updatedWorkflowRec,
+                               petUser
+            ) // execServiceOutputs only fetches outputs for terminated workflows. since only running workflows are passed in to this method, we know we aren't fetching outputs and costs for unnecessarily
+          case None => Future.successful(None)
         })
       }
 
@@ -272,6 +283,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         for {
           petUserInfo <- getPetServiceAccountUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
           workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
+          // todo: maybe here we get the costs? or elsewhere?
         } yield workflowOutputs
 
       } map ExecutionServiceStatusResponse
@@ -299,6 +311,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[Option[WorkflowRecord]] =
     workflowRec.externalId match {
+      case Some(externalId) if costCapThreshold.isDefined => // only fetch cost information if threshold is defined
+        executionServiceCluster.getCost(workflowRec, None, petUser).map { costBreakdown =>
+          Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+        }
       case Some(externalId) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
           if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
@@ -311,11 +327,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] =
     WorkflowStatuses.withName(workflowRec.status) match {
-      case status if WorkflowStatuses.terminalStatuses.contains(status) =>
-        if (status == WorkflowStatuses.Succeeded)
-          executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
-        else
-          Future.successful(Some((workflowRec, None)))
+      case status if status == WorkflowStatuses.Succeeded =>
+        executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
       case _ => Future.successful(Some((workflowRec, None)))
     }
 
@@ -329,6 +342,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     * @param executionContext
     * @return
     */
+
+  // okay so this is now going to be dealing with non-terminal workflows. but it must have before since I think this is how workflows go from submitted -> running -> aborting as well. it's not just for terminal statuses.
   def handleStatusResponses(
     response: ExecutionServiceStatusResponse
   )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] =
@@ -444,9 +459,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             numRowsUpdated <-
               if (doRecordUpdate) {
                 for {
-                  updateResult <- dataAccess.workflowQuery.updateStatus(currentRec,
-                                                                        WorkflowStatuses.withName(workflowRec.status)
-                  )
+                  updateResult <-
+                    if (costCapThreshold.isDefined) {
+                      dataAccess.workflowQuery.updateStatusAndCost(currentRec,
+                                                                   WorkflowStatuses.withName(workflowRec.status),
+                                                                   currentRec.cost.getOrElse(BigDecimal(0))
+                      )
+                    } else {
+                      dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
+                    }
                   _ = logger.info(
                     s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"
                   )
@@ -559,28 +580,50 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
    */
   def updateSubmissionStatus(
     dataAccess: DataAccess
-  )(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] =
-    dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
-      submissionId,
-      (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses): _*
-    ) flatMap { workflowRecs =>
-      if (workflowRecs.isEmpty) {
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] = {
+    val workflowRecsAction = if (costCapThreshold.isDefined) {
+      dataAccess.workflowQuery.listWorkflowRecsForSubmission(submissionId)
+    } else {
+      dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
+        submissionId,
+        (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses): _*
+      )
+    }
+
+    workflowRecsAction.flatMap { workflowRecs =>
+      if (workflowRecs.isEmpty || costCapThreshold.isDefined) {
         dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
-          val finalStatus = SubmissionStatuses.withName(status) match {
-            case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
-            case _                           => SubmissionStatuses.Done
+          val nonTerminalWorkflows =
+            if (costCapThreshold.isDefined)
+              workflowRecs
+                .filterNot(wf => WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(wf.status)))
+            else workflowRecs
+
+          if (nonTerminalWorkflows.isEmpty) {
+            dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
+              val finalStatus = SubmissionStatuses.withName(status) match {
+                case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
+                case _                           => SubmissionStatuses.Done
+              }
+              if (config.enableEmailNotifications)
+                sendTerminalSubmissionNotification(submissionId, finalStatus).map(_ => finalStatus)
+              else DBIO.successful(finalStatus)
+            } flatMap { newStatus =>
+              logger.debug(s"submission $submissionId terminating to status $newStatus")
+              dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
+            } map (_ => true)
+          } else if (costCapThreshold.isDefined && costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
+            logger.info(s"cost cap exceeded, aborting $submissionId")
+            dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
+          } else {
+            DBIO.successful(false)
           }
-          if (config.enableEmailNotifications)
-            sendTerminalSubmissionNotification(submissionId, finalStatus).map(_ => finalStatus)
-          else DBIO.successful(finalStatus)
-        } flatMap { newStatus =>
-          logger.debug(s"submission $submissionId terminating to status $newStatus")
-          dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
-        } map (_ => true)
+        }
       } else {
         DBIO.successful(false)
       }
     }
+  }
 
   def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
                     dataAccess: DataAccess,

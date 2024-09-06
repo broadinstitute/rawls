@@ -25,6 +25,10 @@ trait ExecutionServiceDAO extends ErrorReportable {
   def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]]
   def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse]
   def patchLabels(id: String, userInfo: UserInfo, labels: Map[String, String]): Future[ExecutionServiceLabelResponse]
+  def getCost(id: String,
+              workflowCostBreakdownParams: Option[WorkflowCostBreakdownParams],
+              userInfo: UserInfo
+  ): Future[WorkflowCostBreakdown]
 
   // get the version of the execution service itself
   def version(): Future[ExecutionServiceVersion]
