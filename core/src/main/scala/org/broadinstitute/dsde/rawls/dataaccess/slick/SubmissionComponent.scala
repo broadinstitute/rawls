@@ -568,7 +568,7 @@ trait SubmissionComponent {
       )
 
       implicit val getWorkflowMessagesListResult: GetResult[WorkflowMessagesListResult] = GetResult { r =>
-        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val rootEntityTypeOption: Option[String] = r.<<
 
         val messageOption: Option[String] = r.<<
@@ -607,7 +607,7 @@ trait SubmissionComponent {
       )
 
       implicit val getWorkflowInputResolutionListResult: GetResult[WorkflowInputResolutionListResult] = GetResult { r =>
-        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
             (Option(SubmissionValidationRecord(submissionValidationId, workflowRec.id, r.<<, r.<<)),

@@ -134,7 +134,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     case StartMonitorPass =>
       startMonitoringNewSubmissions pipeTo self
     case SubmissionStarted(workspaceName, submissionId, costCapThreshold) =>
-      val child = startSubmissionMonitor(workspaceName, submissionId)
+      val child = startSubmissionMonitor(workspaceName, submissionId, costCapThreshold)
       scheduleNextCheckCurrentWorkflowStatus(child)
       registerDetailedJobExecGauges(workspaceName, submissionId)
 
@@ -192,7 +192,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           executionServiceCluster,
           submissionMonitorConfig,
           entityQueryTimeout,
-          workbenchMetricBaseName
+          workbenchMetricBaseName,
+          costCapThreshold
         )
         .withDispatcher("submission-monitor-dispatcher"),
       submissionId.toString
