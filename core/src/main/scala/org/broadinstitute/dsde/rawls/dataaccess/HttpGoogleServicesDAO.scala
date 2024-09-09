@@ -549,36 +549,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
-    // we make requests to the target bucket as the default pet, if the user only has read access.
-    // the default pet is created in a project without APIs enabled. Due to Google issue #16062674, we cannot
-    // call the GCS JSON API as the default pet; we must use the XML API. In turn, this means we cannot use
-    // the GCS client library (which internally calls the JSON API); we must hand-code a call to the XML API.
-
-    // the "proper" request to make into the XML API is HEAD-bucket; see https://cloud.google.com/storage/docs/xml-api/overview.
-    // however, the akka-http client is vulnerable to connection-pool exhaustion with HEAD requests; see akka/akka-http#1495.
-    // therefore, we make a request to GET /?storageClass. Since all we care about is the 200 vs. 40x status code
-    // in the response, this is an equivalent request.
-    // we could switch back to HEAD requests by adding a call to httpResponse.discardEntityBytes().
-    val bucketUrl = s"https://$bucketName.storage.googleapis.com/?storageClass"
-    val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Get(bucketUrl), Authorization(userInfo.accessToken))
-
-    httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
-      logger.info(
-        s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue} " +
-          s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.userSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
-          s"and response entity ${Unmarshal(httpResponse.entity).to[String]}"
-      )
-      httpResponse.status match {
-        case StatusCodes.OK => None
-        case x              => Some(ErrorReport(x, x.defaultMessage()))
-      }
-    } recover { case t: Throwable =>
-      logger.warn(s"diagnosticBucketRead to $bucketName encountered unexpected error: ${t.getMessage}")
-      Some(ErrorReport(t))
-    }
-  }
-
   override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
     testBillingAccountAccess(billingAccountName, getBillingServiceAccountCredential)
 
