@@ -268,30 +268,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     } yield GoogleWorkspaceInfo(bucketName.value, policyGroupsByAccessLevel)
   }
 
-  def grantReadAccess(bucketName: String, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
-    implicit val service = GoogleInstrumentedService.Storage
-
-    def insertNewAcls() = for {
-      readerEmail <- authBucketReaders
-
-      bucketAcls = newBucketAccessControl(makeGroupEntityString(readerEmail.value), "READER")
-      defaultObjectAcls = newObjectAccessControl(makeGroupEntityString(readerEmail.value), "READER")
-
-      inserters = List(
-        getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(bucketName, bucketAcls),
-        getStorage(getBucketServiceAccountCredential).defaultObjectAccessControls.insert(bucketName, defaultObjectAcls)
-      )
-
-      _ <- inserters.map(inserter => executeGoogleRequest(inserter))
-    } yield ()
-
-    retryWithRecoverWhen500orGoogleError { () =>
-      insertNewAcls(); bucketName
-    } {
-      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
-    }
-  }
-
   private def newBucketAccessControl(entity: String, accessLevel: String) =
     new BucketAccessControl().setEntity(entity).setRole(accessLevel)
 
@@ -433,14 +409,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     recurse()
   }
 
-  override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    val aclGetter = getStorage(getBucketServiceAccountCredential).bucketAccessControls().list(bucketName)
-    retryWithRecoverWhen500orGoogleError(() => Option(executeGoogleRequest(aclGetter).getItems.asScala.toList)) {
-      case e: HttpResponseException => None
-    }
-  }
-
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
   ): Future[Either[String, Bucket]] = {
@@ -578,36 +546,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
       // when accumulated is None (bucket does not exist) or next page token is null
       case _ => Future.successful(accumulated)
-    }
-  }
-
-  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
-    // we make requests to the target bucket as the default pet, if the user only has read access.
-    // the default pet is created in a project without APIs enabled. Due to Google issue #16062674, we cannot
-    // call the GCS JSON API as the default pet; we must use the XML API. In turn, this means we cannot use
-    // the GCS client library (which internally calls the JSON API); we must hand-code a call to the XML API.
-
-    // the "proper" request to make into the XML API is HEAD-bucket; see https://cloud.google.com/storage/docs/xml-api/overview.
-    // however, the akka-http client is vulnerable to connection-pool exhaustion with HEAD requests; see akka/akka-http#1495.
-    // therefore, we make a request to GET /?storageClass. Since all we care about is the 200 vs. 40x status code
-    // in the response, this is an equivalent request.
-    // we could switch back to HEAD requests by adding a call to httpResponse.discardEntityBytes().
-    val bucketUrl = s"https://$bucketName.storage.googleapis.com/?storageClass"
-    val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Get(bucketUrl), Authorization(userInfo.accessToken))
-
-    httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
-      logger.info(
-        s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue} " +
-          s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.userSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
-          s"and response entity ${Unmarshal(httpResponse.entity).to[String]}"
-      )
-      httpResponse.status match {
-        case StatusCodes.OK => None
-        case x              => Some(ErrorReport(x, x.defaultMessage()))
-      }
-    } recover { case t: Throwable =>
-      logger.warn(s"diagnosticBucketRead to $bucketName encountered unexpected error: ${t.getMessage}")
-      Some(ErrorReport(t))
     }
   }
 
@@ -886,29 +824,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
           )
         )
     }
-  }
-
-  // Note that these APIs only allow for returning the fully qualified name i.e. billingAccounts/01010-01010-01010
-  // This will return just the ID of the billing account by stripping off the `billingAccounts/` prefix
-  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[String]] = {
-    implicit val service = GoogleInstrumentedService.Billing
-
-    val fullGoogleProjectName = s"projects/${googleProject.value}"
-
-    for {
-      // Fail if the user does not have a Google token
-      credential <- IO
-        .fromOption(getUserCredential(userInfo))(new RawlsException("Google login required to view billing accounts"))
-        .unsafeToFuture()
-      fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
-      billingInfo <- retryWhen500orGoogleError { () =>
-        blocking {
-          executeGoogleRequest(fetcher)
-        }
-      }
-    } yield Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/"))
   }
 
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
@@ -1271,15 +1186,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setJsonFactory(jsonFactory)
       .build()
       .setAccessToken(accessToken)
-
-  def getAccessTokenUsingJson(saKey: String): Future[String] = {
-    implicit val service = GoogleInstrumentedService.OAuth
-    retryWhen500orGoogleError { () =>
-      val keyStream = new ByteArrayInputStream(saKey.getBytes)
-      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes.asJava)
-      credential.refreshAccessToken.getTokenValue
-    }
-  }
 
   def getUserInfoUsingJson(saKey: String): Future[UserInfo] = {
     implicit val service = GoogleInstrumentedService.OAuth

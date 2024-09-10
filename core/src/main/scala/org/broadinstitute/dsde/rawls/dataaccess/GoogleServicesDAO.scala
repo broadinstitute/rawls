@@ -117,10 +117,6 @@ trait GoogleServicesDAO extends ErrorReportable {
     executionContext: ExecutionContext
   ): Future[Either[String, Bucket]]
 
-  def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
-
-  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
-
   def listObjectsWithPrefix(bucketName: String,
                             objectNamePrefix: String,
                             userProject: Option[GoogleProjectId]
@@ -179,10 +175,6 @@ trait GoogleServicesDAO extends ErrorReportable {
     executionContext: ExecutionContext
   ): Future[ProjectBillingInfo]
 
-  def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[String]]
-
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
   /**
@@ -196,8 +188,6 @@ trait GoogleServicesDAO extends ErrorReportable {
    * @return sequence of Google operations
    */
   def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean]
-
-  def toGoogleGroupName(groupName: RawlsGroupName): String
 
   def getResourceBufferServiceAccountCredential: Credential
 
@@ -247,14 +237,6 @@ trait GoogleServicesDAO extends ErrorReportable {
     updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]
   ): Future[Boolean]
 
-  /**
-   *
-   * @param bucketName
-   * @param readers emails of users to be granted read access
-   * @return bucket name
-   */
-  def grantReadAccess(bucketName: String, readers: Set[WorkbenchEmail]): Future[String]
-
   def pollOperation(operationId: OperationId): Future[OperationStatus]
 
   def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
@@ -262,8 +244,6 @@ trait GoogleServicesDAO extends ErrorReportable {
   def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project]
 
   def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
-
-  def getAccessTokenUsingJson(saKey: String): Future[String]
 
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 
