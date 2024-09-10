@@ -13,6 +13,7 @@ trait DataAccess
     with RawlsBillingProjectComponent
     with WorkspaceComponent
     with EntityComponent
+    with JsonEntityComponent
     with AttributeComponent
     with MethodConfigurationComponent
     with SubmissionComponent
