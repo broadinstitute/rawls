@@ -299,12 +299,18 @@ trait SubmissionComponent {
         })
       )
 
-    def listActiveSubmissionIdsWithWorkspace(limit: FiniteDuration): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal])]] = {
+    def listActiveSubmissionIdsWithWorkspace(
+      limit: FiniteDuration
+    ): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal])]] = {
       // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
       val cutoffTime = new Timestamp(DateTime.now().minusDays(limit.toDays.toInt).getMillis)
       val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
       val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name, sub.costCapThreshold) }.result
-      result.map(rows => rows.map { case (subId, wsNs, wsName, costCapThreshold) => (subId, WorkspaceName(wsNs, wsName), costCapThreshold) })
+      result.map(rows =>
+        rows.map { case (subId, wsNs, wsName, costCapThreshold) =>
+          (subId, WorkspaceName(wsNs, wsName), costCapThreshold)
+        }
+      )
     }
 
     def getSubmissionMethodConfigId(workspaceContext: Workspace, submissionId: UUID): ReadAction[Option[Long]] =
@@ -588,7 +594,7 @@ trait SubmissionComponent {
       }
 
       def action(submissionId: UUID) =
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID,
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID, w.COST,
         s.ROOT_ENTITY_TYPE,
         m.MESSAGE,
         e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date
@@ -635,7 +641,7 @@ trait SubmissionComponent {
       }
 
       def action(submissionId: UUID) =
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID,
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID, w.COST,
               sv.id, sv.ERROR_TEXT, sv.INPUT_NAME,
               sa.id, sa.namespace, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_json, sa.value_entity_ref, sa.list_index, sa.list_length, sa.deleted, sa.deleted_date
         from WORKFLOW w

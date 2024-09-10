@@ -101,7 +101,8 @@ class SubmissionSupervisorSpec
     withStatsD {
       withSupervisor() { supervisor =>
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
-                                       UUID.fromString(testData.submission1.submissionId)
+                                       UUID.fromString(testData.submission1.submissionId),
+                                       None
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspace.toWorkspaceName,
@@ -112,7 +113,8 @@ class SubmissionSupervisorSpec
         )
 
         supervisor ! SubmissionStarted(testData.workspaceSuccessfulSubmission.toWorkspaceName,
-                                       UUID.fromString(testData.submissionSuccessful1.submissionId)
+                                       UUID.fromString(testData.submissionSuccessful1.submissionId),
+                                       None
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspaceSuccessfulSubmission.toWorkspaceName,
@@ -162,10 +164,12 @@ class SubmissionSupervisorSpec
       withSupervisor() { supervisor =>
         // start the submission
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
-                                       UUID.fromString(testData.submission1.submissionId)
+                                       UUID.fromString(testData.submission1.submissionId),
+                                       None
         )
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
-                                       UUID.fromString(testData.submission2.submissionId)
+                                       UUID.fromString(testData.submission2.submissionId),
+                                       None
         )
 
         // the first submission updates once and then completes
@@ -234,10 +238,12 @@ class SubmissionSupervisorSpec
       withSupervisor() { supervisor =>
         // start the submission
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
-                                       UUID.fromString(testData.submission1.submissionId)
+                                       UUID.fromString(testData.submission1.submissionId),
+                                       None
         )
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
-                                       UUID.fromString(testData.submission2.submissionId)
+                                       UUID.fromString(testData.submission2.submissionId),
+                                       None
         )
 
         // both submissions immediately complete
@@ -303,7 +309,8 @@ class SubmissionSupervisorSpec
     withStatsD {
       withSupervisor(trackDetailedMetrics = false) { supervisor =>
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
-                                       UUID.fromString(testData.submission1.submissionId)
+                                       UUID.fromString(testData.submission1.submissionId),
+                                       None
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspace.toWorkspaceName,
@@ -314,7 +321,8 @@ class SubmissionSupervisorSpec
         )
 
         supervisor ! SubmissionStarted(testData.workspaceSuccessfulSubmission.toWorkspaceName,
-                                       UUID.fromString(testData.submissionSuccessful1.submissionId)
+                                       UUID.fromString(testData.submissionSuccessful1.submissionId),
+                                       None
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspaceSuccessfulSubmission.toWorkspaceName,

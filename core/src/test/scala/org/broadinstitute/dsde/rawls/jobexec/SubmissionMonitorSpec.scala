@@ -423,6 +423,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                       Some(entityId),
                       0,
                       None,
+                      None,
                       None
        ),
        outputs
@@ -478,6 +479,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                       Some(entityId),
                       0,
                       None,
+                      None,
                       None
        ),
        outputs
@@ -532,6 +534,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                       Some(entityId),
                       0,
                       None,
+                      None,
                       None
        ),
        outputs
@@ -580,6 +583,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                       Some(entityId),
                       0,
                       None,
+                      None,
                       None
        ),
        emptyOutputs
@@ -616,6 +620,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           null,
           Some(entityId),
           0,
+          None,
           None,
           None
         ),
@@ -661,6 +666,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                       Some(entityId),
                       0,
                       None,
+                      None,
                       None
        ),
        outputs
@@ -693,6 +699,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                       None,
                       0,
                       None,
+                      None,
                       None
        ),
        outputs
@@ -724,6 +731,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                         null,
                                         Some(entityId),
                                         0,
+                                        None,
                                         None,
                                         None
     )
@@ -1927,7 +1935,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       new Builder().build(),
       config,
       ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
-      "test"
+      "test",
+      None
     )
   }
 
@@ -1983,6 +1992,11 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
     Future.successful(ExecutionServiceLabelResponse(id, labels))
   }
 
+  override def getCost(id: String,
+                       workflowCostBreakdownParams: Option[WorkflowCostBreakdownParams],
+                       userInfo: UserInfo
+  ): Future[WorkflowCostBreakdown] = ???
+
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 
   override def getStatus() = {
@@ -2005,5 +2019,6 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,
                             val queryTimeout: Duration,
-                            override val workbenchMetricBaseName: String
+                            override val workbenchMetricBaseName: String,
+                            val costCapThreshold: Option[BigDecimal]
 ) extends SubmissionMonitor {}

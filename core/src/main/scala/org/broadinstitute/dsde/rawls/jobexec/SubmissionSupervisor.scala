@@ -179,7 +179,10 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     // we want to track them over a longer time frame.
     workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand("cause", cause).asCounter("monitorRestarted")
 
-  private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, costCapThreshold: Option[BigDecimal]) =
+  private def startSubmissionMonitor(workspaceName: WorkspaceName,
+                                     submissionId: UUID,
+                                     costCapThreshold: Option[BigDecimal]
+  ) =
     actorOf(
       SubmissionMonitorActor
         .props(

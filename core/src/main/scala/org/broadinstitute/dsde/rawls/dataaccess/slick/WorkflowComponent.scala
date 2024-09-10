@@ -66,7 +66,7 @@ trait WorkflowComponent {
              version,
              executionServiceKey,
              externalEntityId,
-      cost
+             cost
     ) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
@@ -633,7 +633,7 @@ trait WorkflowComponent {
         0,
         None,
         externalEntityId,
-        None
+        Some(BigDecimal(0)) // workflow.cost.map(BigDecimal(_))
       )
 
     private def unmarshalWorkflow(workflowRec: WorkflowRecord,
