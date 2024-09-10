@@ -313,6 +313,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     workflowRec.externalId match {
       case Some(externalId) if costCapThreshold.isDefined => // only fetch cost information if threshold is defined
         executionServiceCluster.getCost(workflowRec, None, petUser).map { costBreakdown =>
+          logger.info(s"costBreakdown = $costBreakdown")
           Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
         }
       case Some(externalId) =>
@@ -590,6 +591,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       )
     }
 
+    logger.info(s"costCapThreshold: $costCapThreshold")
+
     workflowRecsAction.flatMap { workflowRecs =>
       if (workflowRecs.isEmpty || costCapThreshold.isDefined) {
         dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
@@ -612,9 +615,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               logger.debug(s"submission $submissionId terminating to status $newStatus")
               dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
             } map (_ => true)
-          } else if (costCapThreshold.isDefined && costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
-            logger.info(s"cost cap exceeded, aborting $submissionId")
-            dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
+          } else if (costCapThreshold.isDefined) { // && costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
+            logger.info(s"costCap: ${costCapThreshold.get}")
+            logger.info(s"workflowRecs: $workflowRecs")
+            logger.info(s"workflowRecsSum: ${workflowRecs.flatMap(_.cost).sum}")
+            if (costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
+              logger.info(s"cost cap exceeded, aborting $submissionId")
+              dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
+            } else DBIO.successful(false)
           } else {
             DBIO.successful(false)
           }
