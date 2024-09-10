@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.29.xsd">
+
+    <!-- add the ENTITY.attributes JSON column -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="add_attributes_col_to_entity">
+        <addColumn tableName="ENTITY">
+            <column name="attributes" type="JSON"/>
+        </addColumn>
+    </changeSet>
+
+    <!-- create the ENTITY_KEYS table -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_table_entity_keys">
+        <createTable tableName="ENTITY_KEYS">
+            <column name="id" type="BIGINT UNSIGNED">
+                <constraints primaryKey="true"
+                             nullable="false"
+                             referencedTableName="ENTITY" referencedColumnNames="id"
+                             foreignKeyName="fk_entity_keys_entity_id" deleteCascade="true"/>
+            </column>
+            <column name="workspace_id" type="BINARY(16)">
+                <constraints nullable="false"
+                             referencedTableName="WORKSPACE" referencedColumnNames="id"
+                             foreignKeyName="fk_entity_keys_workspace_id" deleteCascade="true"/>
+            </column>
+            <column name="entity_type" type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attribute_keys" type="JSON">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_updated" type="TIMESTAMP(3)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex indexName="idx_entity_keys_workspace_and_entity_type" tableName="ENTITY_KEYS" unique="false">
+            <column name="workspace_id"/>
+            <column name="entity_type"/>
+        </createIndex>
+        <createIndex indexName="idx_entity_keys_last_updated_desc" tableName="ENTITY_KEYS" unique="false">
+            <column name="last_updated" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- create the ENTITY triggers to populate ENTITY_KEYS -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="entity_keys_triggers">
+        <sql stripComments="true" endDelimiter="~">
+            DROP TRIGGER IF EXISTS after_entity_insert ~
+            DROP TRIGGER IF EXISTS after_entity_update ~
+
+            CREATE TRIGGER after_entity_insert AFTER INSERT ON ENTITY
+                FOR EACH ROW
+                INSERT INTO ENTITY_KEYS
+                    (id, workspace_id, entity_type, attribute_keys, last_updated)
+                VALUES
+                    (new.id, new.workspace_id, new.entity_type, JSON_KEYS(new.attributes), now(3)); ~
+
+            CREATE TRIGGER after_entity_update AFTER UPDATE ON ENTITY
+                FOR EACH ROW
+                BEGIN
+                    -- is this row soft-deleted?
+                    if new.deleted = 1 then
+                        DELETE FROM ENTITY_KEYS WHERE id = new.id;
+                    else
+                        -- compare old keys to new keys; update the ENTITY_KEYS table only if they are different
+                        if JSON_KEYS(new.attributes) != JSON_KEYS(old.attributes) then
+                            UPDATE ENTITY_KEYS SET attribute_keys=JSON_KEYS(new.attributes), last_updated=now(3)
+                            WHERE id = new.id;
+                        end if;
+                    end if;
+                END ~
+        </sql>
+        <rollback>
+            DROP TRIGGER IF EXISTS after_entity_insert;
+            DROP TRIGGER IF EXISTS after_entity_update;
+        </rollback>
+    </changeSet>
+
+
+
+
+</databaseChangeLog>
