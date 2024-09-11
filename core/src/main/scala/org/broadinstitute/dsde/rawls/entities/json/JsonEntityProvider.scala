@@ -7,9 +7,10 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{entityIdAttributeSuffix, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
+  AttributeName,
   AttributeUpdateOperations,
   AttributeValue,
   Entity,
@@ -22,7 +23,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-
 import spray.json._
 import DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -56,6 +56,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   /**
     * Read a single entity from the db
     */
+  // TODO AJ-2008: mark transaction as read-only
   override def getEntity(entityType: String, entityName: String): Future[Entity] = dataSource.inTransaction {
     dataAccess =>
       dataAccess.jsonEntityQuery.getEntity(requestArguments.workspace.workspaceIdAsUUID, entityType, entityName)
@@ -65,7 +66,31 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 
-  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = ???
+  // TODO AJ-2008: mark transaction as read-only
+  // TODO AJ-2008: probably needs caching for the attribute calculations
+  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
+    dataSource.inTransaction { dataAccess =>
+      // get the types and counts
+      for {
+        typesAndCounts <- dataAccess.jsonEntityQuery.typesAndCounts(requestArguments.workspace.workspaceIdAsUUID)
+        typesAndAttributes <- dataAccess.jsonEntityQuery.typesAndAttributes(
+          requestArguments.workspace.workspaceIdAsUUID
+        )
+      } yield {
+        // group attribute names by entity type
+        val groupedAttributeNames: Map[String, Seq[String]] =
+          typesAndAttributes
+            .groupMap(_._1)(_._2)
+
+        // loop through the types and counts and build the EntityTypeMetadata
+        typesAndCounts.map { case (entityType: String, count: Int) =>
+          // grab attribute names
+          val attrNames = groupedAttributeNames.getOrElse(entityType, Seq())
+          val metadata = EntityTypeMetadata(count, s"$entityType$entityIdAttributeSuffix", attrNames)
+          (entityType, metadata)
+        }.toMap
+      }
+    }
 
   override def queryEntitiesSource(entityType: String,
                                    query: EntityQuery,

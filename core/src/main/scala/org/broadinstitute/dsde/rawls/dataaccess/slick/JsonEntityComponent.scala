@@ -101,6 +101,24 @@ trait JsonEntityComponent {
       }
     }
 
+    /**
+      * All entity types for the given workspace, with their counts of active entities
+      */
+    def typesAndCounts(workspaceId: UUID): ReadAction[Seq[(String, Int)]] =
+      sql"""select entity_type, count(1) from ENTITY where workspace_id = $workspaceId and deleted = 0 group by entity_type"""
+        .as[(String, Int)]
+
+    /**
+      * All attribute names for the given workspace, paired to their entity type
+      * The ENTITY_KEYS table is automatically populated via triggers on the ENTITY table; see the db
+      * to understand those triggers.
+      */
+    def typesAndAttributes(workspaceId: UUID): ReadAction[Seq[(String, String)]] =
+      sql"""SELECT DISTINCT entity_type, json_key FROM ENTITY_KEYS,
+              JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(json_key VARCHAR(256) PATH '$$')) t
+            where workspace_id = $workspaceId;"""
+        .as[(String, String)]
+
   }
 
 }
