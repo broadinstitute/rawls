@@ -60,12 +60,14 @@
                 FOR EACH ROW
                 BEGIN
                     -- is this row soft-deleted?
-                    if new.deleted = 1 then
+                    if old.deleted = 0 and new.deleted = 1 then
                         DELETE FROM ENTITY_KEYS WHERE id = new.id;
-                    else
+                    elseif new.attributes is not null then
                         -- compare old keys to new keys; update the ENTITY_KEYS table only if they are different
-                        if JSON_KEYS(new.attributes) != JSON_KEYS(old.attributes) then
-                            UPDATE ENTITY_KEYS SET attribute_keys=JSON_KEYS(new.attributes), last_updated=now(3)
+                        set @new_keys := JSON_KEYS(new.attributes);
+                        set @old_keys := JSON_KEYS(old.attributes);
+                        if JSON_LENGTH(@new_keys) != JSON_LENGTH(@old_keys) OR JSON_CONTAINS(@new_keys, @old_keys) = 0 then
+                            UPDATE ENTITY_KEYS SET attribute_keys=@new_keys, last_updated=now(3)
                             WHERE id = new.id;
                         end if;
                     end if;
