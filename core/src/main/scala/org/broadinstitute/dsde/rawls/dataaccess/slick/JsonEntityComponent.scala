@@ -72,37 +72,36 @@ trait JsonEntityComponent {
       * Insert a single entity to the db
       */
     // TODO AJ-2008: return Entity instead of JsonEntityRecord?
-    def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[JsonEntityRecord] = {
+    def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
       val attributesJson: JsValue = entity.attributes.toJson
 
-      // create insert statement
-      val insertStatement =
-        sqlu"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
+      sqlu"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
           values (${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
+    }
 
-      // execute insert statement
-      insertStatement flatMap { _ =>
-        // return the actually-saved entity
-        // TODO AJ-2008: move this logic up to JsonEntityProvider
-        getEntity(workspaceId, entity.entityType, entity.name)
-      }
+    /**
+      * Update a single entity in the db
+      */
+    // TODO AJ-2008: return Entity instead of JsonEntityRecord?
+    def updateEntity(workspaceId: UUID, entity: Entity, recordVersion: Long): ReadWriteAction[Int] = {
+      val attributesJson: JsValue = entity.attributes.toJson
+
+      sqlu"""update ENTITY set record_version = record_version+1, attributes = $attributesJson
+            where workspace_id = $workspaceId and entity_type = ${entity.entityType} and name = ${entity.name}
+            and record_version = $recordVersion;
+          """
     }
 
     /**
       * Read a single entity from the db
       */
     // TODO AJ-2008: return Entity instead of JsonEntityRecord?
-    def getEntity(workspaceId: UUID, entityType: String, entityName: String): ReadAction[JsonEntityRecord] = {
+    def getEntity(workspaceId: UUID, entityType: String, entityName: String): ReadAction[Option[JsonEntityRecord]] = {
       val selectStatement: SQLActionBuilder =
         sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
               from ENTITY where workspace_id = $workspaceId and entity_type = $entityType and name = $entityName"""
 
-      // execute select statement
-      selectStatement.as[JsonEntityRecord].map {
-        case Seq()    => throw new RawlsException(s"Expected at least one result")
-        case Seq(one) => one
-        case tooMany  => throw new RawlsException(s"Expected 1 result but found ${tooMany.size}")
-      }
+      uniqueResult(selectStatement.as[JsonEntityRecord])
     }
 
     /**
@@ -141,6 +140,34 @@ trait JsonEntityComponent {
     }
 
     // TODO AJ-2008: retrieve many JsonEntityRecords by type/name pairs. Use JsonEntityRecords for access to the recordVersion
+    def retrieve(workspaceId: UUID,
+                 allMentionedEntities: Seq[AttributeEntityReference]
+    ): ReadAction[Seq[JsonEntityRecord]] = {
+      // group the entity type/name pairs by type
+      val groupedReferences: Map[String, Seq[String]] = allMentionedEntities.groupMap(_.entityType)(_.entityName)
+
+      // build select statements for each type
+      val queryParts: Iterable[SQLActionBuilder] = groupedReferences.map {
+        case (entityType: String, entityNames: Seq[String]) =>
+          // build the "IN" clause values
+          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name"), sql",")
+
+          // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
+          concatSqlActions(
+            sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
+                from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
+                and name in (""",
+            entityNamesSql,
+            sql")"
+          )
+      }
+
+      // union the select statements together
+      val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
+
+      // execute
+      unionQuery.as[JsonEntityRecord]
+    }
   }
 
 }
