@@ -25,7 +25,11 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import spray.json._
 import DefaultJsonProtocol._
+import io.opentelemetry.api.common.AttributeKey
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.util.AttributeSupport
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent}
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
@@ -39,6 +43,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
                          val workbenchMetricBaseName: String
 )(implicit protected val executionContext: ExecutionContext)
     extends EntityProvider
+    with AttributeSupport
     with LazyLogging {
 
   override def entityStoreId: Option[String] = None
@@ -49,9 +54,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   override def createEntity(entity: Entity): Future[Entity] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.jsonEntityQuery.createEntity(requestArguments.workspace.workspaceIdAsUUID, entity)
-    } map { jsonEntityRecord =>
-      Entity(jsonEntityRecord.name, jsonEntityRecord.entityType, jsonEntityRecord.attributes.convertTo[AttributeMap])
-    }
+    } map (_.toEntity)
 
   /**
     * Read a single entity from the db
@@ -60,9 +63,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   override def getEntity(entityType: String, entityName: String): Future[Entity] = dataSource.inTransaction {
     dataAccess =>
       dataAccess.jsonEntityQuery.getEntity(requestArguments.workspace.workspaceIdAsUUID, entityType, entityName)
-  } map { jsonEntityRecord =>
-    Entity(jsonEntityRecord.name, jsonEntityRecord.entityType, jsonEntityRecord.attributes.convertTo[AttributeMap])
-  }
+  } map (_.toEntity)
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 
@@ -93,22 +94,73 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     }
 
   override def queryEntitiesSource(entityType: String,
-                                   query: EntityQuery,
+                                   entityQuery: EntityQuery,
                                    parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = ???
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = dataSource.inTransaction { dataAccess =>
+    dataAccess.jsonEntityQuery.queryEntities(requestArguments.workspace.workspaceIdAsUUID,
+                                             entityType,
+                                             entityQuery
+    ) map { results =>
+      // TODO AJ-2008: total/filtered counts
+      // TODO AJ-2008: actually stream!!!!
+      val metadata = EntityQueryResultMetadata(1, 2, 3)
+      val entitySource = Source.apply(results)
+      (metadata, entitySource)
+    }
+  }
 
   override def queryEntities(entityType: String,
-                             query: EntityQuery,
+                             entityQuery: EntityQuery,
                              parentContext: RawlsRequestContext
-  ): Future[EntityQueryResponse] = ???
+  ): Future[EntityQueryResponse] = dataSource.inTransaction { dataAccess =>
+    dataAccess.jsonEntityQuery.queryEntities(requestArguments.workspace.workspaceIdAsUUID,
+                                             entityType,
+                                             entityQuery
+    ) map { results =>
+      // TODO AJ-2008: total/filtered counts
+      EntityQueryResponse(entityQuery, EntityQueryResultMetadata(1, 2, 3), results)
+    }
+  }
 
   override def batchUpdateEntities(
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
-  ): Future[Traversable[Entity]] = ???
+  ): Future[Iterable[Entity]] = batchUpdateEntitiesImpl(entityUpdates, upsert = false)
 
   override def batchUpsertEntities(
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
-  ): Future[Traversable[Entity]] = ???
+  ): Future[Iterable[Entity]] = batchUpdateEntitiesImpl(entityUpdates, upsert = false)
+
+  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Iterable[Entity]] = {
+    // find all attribute names mentioned
+    val namesToCheck = for {
+      update <- entityUpdates
+      operation <- update.operations
+    } yield operation.name
+
+    // validate all attribute names
+    withAttributeNamespaceCheck(namesToCheck)(() => ())
+
+    // start tracing
+    traceFutureWithParent("JsonEntityProvider.batchUpdateEntitiesImpl", requestArguments.ctx) { localContext =>
+      setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), requestArguments.workspace.workspaceId)
+      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("upsert"), java.lang.Boolean.valueOf(upsert))
+      setTraceSpanAttribute(localContext,
+                            AttributeKey.longKey("entityUpdatesCount"),
+                            java.lang.Long.valueOf(entityUpdates.length)
+      )
+      setTraceSpanAttribute(localContext,
+                            AttributeKey.longKey("entityOperationsCount"),
+                            java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
+      )
+
+      // TODO: retrieve all entities mentioned in entityUpdates. For updates, throw error if any not found.
+      // TODO: for existing entities, apply operations to the existing value. For new entities, apply operations to an empty entity.
+      // TODO: perform the insert/update
+
+      Future.successful(Seq())
+
+    } // end trace
+  }
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,

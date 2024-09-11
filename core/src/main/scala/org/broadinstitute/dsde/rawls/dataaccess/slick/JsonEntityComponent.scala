@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc._
@@ -23,7 +24,10 @@ case class JsonEntityRecord(id: Long,
                             deleted: Boolean,
                             deletedDate: Option[Timestamp],
                             attributes: JsValue
-)
+) {
+  def toEntity: Entity =
+    Entity(name, entityType, attributes.convertTo[AttributeMap])
+}
 
 /**
   * companion object for constants, etc.
@@ -119,6 +123,24 @@ trait JsonEntityComponent {
             where workspace_id = $workspaceId;"""
         .as[(String, String)]
 
+    def queryEntities(workspaceId: UUID, entityType: String, queryParams: EntityQuery): ReadAction[Seq[Entity]] = {
+
+      val offset = queryParams.pageSize * (queryParams.page - 1)
+
+      // TODO AJ-2008: full-table text search
+      // TODO AJ-2008: filter by column
+      // TODO AJ-2008: arbitrary sorting
+      // TODO AJ-2008: result projection
+      // TODO AJ-2008: total/filtered counts
+
+      sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
+              from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
+              order by name
+              limit #${queryParams.pageSize}
+              offset #$offset""".as[JsonEntityRecord].map(results => results.map(_.toEntity))
+    }
+
+    // TODO AJ-2008: retrieve many JsonEntityRecords by type/name pairs. Use JsonEntityRecords for access to the recordVersion
   }
 
 }
