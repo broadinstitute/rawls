@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.Attributable.{entityIdAttributeSuffix, workspaceIdAttribute, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
+  AttributeEntityReferenceList,
   AttributeName,
   AttributeUpdateOperations,
   AttributeValue,
@@ -28,7 +29,7 @@ import DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{JsonEntityRecord, ReadAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{JsonEntityRecord, JsonEntityRefRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -61,8 +62,18 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     */
   override def createEntity(entity: Entity): Future[Entity] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.jsonEntityQuery.createEntity(workspaceId, entity)
-    } flatMap { _ => getEntity(entity.entityType, entity.name) }
+      for {
+        // find and validate all references in the entity-to-be-saved
+        referenceTargets <- DBIO.from(validateReferences(entity))
+        // save the entity
+        _ <- dataAccess.jsonEntityQuery.createEntity(workspaceId, entity)
+        // did it save correctly?
+        savedEntityRecordOption <- dataAccess.jsonEntityQuery.getEntity(workspaceId, entity.entityType, entity.name)
+        savedEntityRecord = savedEntityRecordOption.getOrElse(throw new RuntimeException("Could not save entity"))
+        // save all references from this entity to other entities
+        _ <- dataAccess.jsonEntityQuery.replaceReferences(savedEntityRecord.id, referenceTargets)
+      } yield savedEntityRecord.toEntity
+    }
 
   /**
     * Read a single entity from the db
@@ -175,6 +186,10 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
             // attempt to retrieve the existing entity
             // TODO AJ-2008: pull from the list we retrieved when possible. Only re-retrieve from the db
             //   if we are updating the same entity multiple times
+            //   see AJ-2009; the existing code does the wrong thing and this code should do better
+
+            // TODO AJ-2008: find all the inserts (vs updates), and batch them together first, preserving order
+            //   from the entityUpdates list
             dataAccess.jsonEntityQuery.getEntity(workspaceId, entityUpdate.entityType, entityUpdate.name) flatMap {
               foundEntityOption =>
                 if (!upsert && foundEntityOption.isEmpty) {
@@ -225,4 +240,49 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
   override def expressionValidator: ExpressionValidator = ???
 
+  private def validateReferences(entity: Entity): Future[Map[AttributeName, Seq[JsonEntityRefRecord]]] = {
+    // find all refs in the entity
+    val refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
+
+    // short-circuit
+    if (refs.isEmpty) {
+      Future.successful(Map())
+    }
+
+    // validate all refs
+    val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
+
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.jsonEntityQuery.validateRefs(workspaceId, allRefs) map { foundRefs =>
+        if (foundRefs.size != allRefs.size) {
+          throw new RuntimeException("Did not find all references")
+        }
+        // convert the foundRefs to a map for easier lookup
+        val foundMap: Map[(String, String), JsonEntityRefRecord] = foundRefs.map { foundRef =>
+          ((foundRef.entityType, foundRef.name), foundRef)
+        }.toMap
+
+        // return all the references found in this entity, mapped to the ids they are referencing
+        refs.map { case (name: AttributeName, refs: Seq[AttributeEntityReference]) =>
+          val refRecords: Seq[JsonEntityRefRecord] = refs.map(ref =>
+            foundMap.getOrElse((ref.entityType, ref.entityName),
+                               throw new RuntimeException("unexpected; couldn't find ref")
+            )
+          )
+          (name, refRecords)
+        }
+      }
+    }
+  }
+
+  // given an entity, finds all references in that entity, grouped by their attribute names
+  private def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
+    entity.attributes
+      .collect {
+        case (name: AttributeName, aer: AttributeEntityReference)      => Seq((name, aer))
+        case (name: AttributeName, aerl: AttributeEntityReferenceList) => aerl.list.map(ref => (name, ref))
+      }
+      .flatten
+      .toSeq
+      .groupMap(_._1)(_._2)
 }

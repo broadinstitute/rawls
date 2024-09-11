@@ -81,6 +81,22 @@
         </rollback>
     </changeSet>
 
+    <!-- create the ENTITY_REFS table -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_table_entity_refs">
+        <createTable tableName="ENTITY_REFS">
+            <column name="from_id" type="BIGINT UNSIGNED">
+                <constraints nullable="false"
+                             referencedTableName="ENTITY" referencedColumnNames="id"
+                             foreignKeyName="fk_entity_refs_from_entity_id" deleteCascade="true"/>
+            </column>
+            <column name="to_id" type="BIGINT UNSIGNED">
+                <constraints nullable="false"
+                             referencedTableName="ENTITY" referencedColumnNames="id"
+                             foreignKeyName="fk_entity_refs_to_entity_id" deleteCascade="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
 
 
 

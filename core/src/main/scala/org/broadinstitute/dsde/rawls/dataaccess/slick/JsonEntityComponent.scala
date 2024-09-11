@@ -30,6 +30,8 @@ case class JsonEntityRecord(id: Long,
     Entity(name, entityType, attributes.convertTo[AttributeMap])
 }
 
+case class JsonEntityRefRecord(id: Long, name: String, entityType: String)
+
 /**
   * companion object for constants, etc.
   */
@@ -68,6 +70,9 @@ trait JsonEntityComponent {
     // into a JsonEntityRecord
     implicit val getJsonEntityRecord: GetResult[JsonEntityRecord] =
       GetResult(r => JsonEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+    implicit val getJsonEntityRefRecord: GetResult[JsonEntityRefRecord] =
+      GetResult(r => JsonEntityRefRecord(r.<<, r.<<, r.<<))
 
     /**
       * Insert a single entity to the db
@@ -182,22 +187,20 @@ trait JsonEntityComponent {
     private def queryWhereClause(workspaceId: UUID, entityType: String, queryParams: EntityQuery): SQLActionBuilder =
       sql"where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
 
-    // TODO AJ-2008: retrieve many JsonEntityRecords by type/name pairs. Use JsonEntityRecords for access to the recordVersion
-    def retrieve(workspaceId: UUID,
-                 allMentionedEntities: Seq[AttributeEntityReference]
-    ): ReadAction[Seq[JsonEntityRecord]] = {
+    /** Given a set of entity references, retrieve their ids */
+    def validateRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRefRecord]] = {
       // group the entity type/name pairs by type
-      val groupedReferences: Map[String, Seq[String]] = allMentionedEntities.groupMap(_.entityType)(_.entityName)
+      val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
 
       // build select statements for each type
       val queryParts: Iterable[SQLActionBuilder] = groupedReferences.map {
-        case (entityType: String, entityNames: Seq[String]) =>
+        case (entityType: String, entityNames: Set[String]) =>
           // build the "IN" clause values
-          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name"), sql",")
+          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
 
           // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
           concatSqlActions(
-            sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
+            sql"""select id, name, entity_type
                 from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
                 and name in (""",
             entityNamesSql,
@@ -209,8 +212,26 @@ trait JsonEntityComponent {
       val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
 
       // execute
-      unionQuery.as[JsonEntityRecord]
+      unionQuery.as[JsonEntityRefRecord](getJsonEntityRefRecord)
     }
+
+    def replaceReferences(fromId: Long, refs: Map[AttributeName, Seq[JsonEntityRefRecord]]): ReadWriteAction[Int] =
+      sqlu"delete from ENTITY_REFS where from_id = $fromId" flatMap { _ =>
+        // reduce the references to a set to remove any duplicates
+        val toIds: Set[Long] = refs.values.flatten.map(_.id).toSet
+        // short-circuit
+        if (toIds.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          // generate bulk-insert SQL
+          val insertValues: Seq[SQLActionBuilder] = toIds.toSeq.map(toId => sql"($fromId, $toId)")
+
+          val allInsertValues: SQLActionBuilder = reduceSqlActionsWithDelim(insertValues, sql",")
+
+          concatSqlActions(sql"insert into ENTITY_REFS(from_id, to_id) values ", allInsertValues).asUpdate
+        }
+      }
+
   }
 
   private def singleResult[V](results: ReadAction[Seq[V]]): ReadAction[V] =
