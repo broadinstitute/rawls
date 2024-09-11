@@ -168,9 +168,13 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
       dataSource
         .inTransaction { dataAccess =>
+          // TODO AJ-2008: retrieve all of ${allMentionedEntities} in one query and validate existence if these are not upserts
+
           // iterate through the desired updates and apply them
           val queries = entityUpdates.map { entityUpdate =>
             // attempt to retrieve the existing entity
+            // TODO AJ-2008: pull from the list we retrieved when possible. Only re-retrieve from the db
+            //   if we are updating the same entity multiple times
             dataAccess.jsonEntityQuery.getEntity(workspaceId, entityUpdate.entityType, entityUpdate.name) flatMap {
               foundEntityOption =>
                 if (!upsert && foundEntityOption.isEmpty) {
