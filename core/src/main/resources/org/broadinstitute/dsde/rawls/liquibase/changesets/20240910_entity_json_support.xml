@@ -51,10 +51,12 @@
 
             CREATE TRIGGER after_entity_insert AFTER INSERT ON ENTITY
                 FOR EACH ROW
-                INSERT INTO ENTITY_KEYS
-                    (id, workspace_id, entity_type, attribute_keys, last_updated)
-                VALUES
-                    (new.id, new.workspace_id, new.entity_type, JSON_KEYS(new.attributes), now(3)); ~
+                if new.attributes is not null then
+                    INSERT INTO ENTITY_KEYS
+                        (id, workspace_id, entity_type, attribute_keys, last_updated)
+                    VALUES
+                        (new.id, new.workspace_id, new.entity_type, JSON_KEYS(new.attributes), now(3));
+                end if ~
 
             CREATE TRIGGER after_entity_update AFTER UPDATE ON ENTITY
                 FOR EACH ROW
