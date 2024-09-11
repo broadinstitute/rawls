@@ -31,6 +31,7 @@ import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
+// TODO AJ-2008: tracing
 class JsonEntityProvider(requestArguments: EntityRequestArguments,
                          implicit protected val dataSource: SlickDataSource,
                          cacheEnabled: Boolean,

@@ -67,6 +67,7 @@ trait JsonEntityComponent {
     /**
       * Insert a single entity to the db
       */
+    // TODO AJ-2008: return Entity instead of JsonEntityRecord?
     def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[JsonEntityRecord] = {
       val attributesJson: JsValue = entity.attributes.toJson
 
@@ -78,6 +79,7 @@ trait JsonEntityComponent {
       // execute insert statement
       insertStatement flatMap { _ =>
         // return the actually-saved entity
+        // TODO AJ-2008: move this logic up to JsonEntityProvider
         getEntity(workspaceId, entity.entityType, entity.name)
       }
     }
@@ -85,6 +87,7 @@ trait JsonEntityComponent {
     /**
       * Read a single entity from the db
       */
+    // TODO AJ-2008: return Entity instead of JsonEntityRecord?
     def getEntity(workspaceId: UUID, entityType: String, entityName: String): ReadAction[JsonEntityRecord] = {
       val selectStatement: SQLActionBuilder =
         sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes

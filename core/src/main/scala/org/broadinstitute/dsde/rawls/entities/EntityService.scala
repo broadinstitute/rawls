@@ -105,6 +105,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO AJ-2008: move to EntityProvider
   def updateEntity(workspaceName: WorkspaceName,
                    entityType: String,
                    entityName: String,
@@ -199,6 +200,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO AJ-2008: move to EntityProvider
   def deleteEntityAttributes(workspaceName: WorkspaceName,
                              entityType: String,
                              attributeNames: Set[AttributeName]
@@ -220,6 +222,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // TODO AJ-2008: move to EntityProvider
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
@@ -239,6 +242,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // TODO AJ-2008: move to EntityProvider
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
@@ -289,6 +293,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
   }
 
+  // TODO AJ-2008: move to EntityProvider
   def evaluateExpression(workspaceName: WorkspaceName,
                          entityType: String,
                          entityName: String,
@@ -374,6 +379,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     Source.fromPublisher(dataSource.database.stream(allAttrsStream))
   }
 
+  // TODO AJ-2008: move to EntityProvider
   def listEntities(workspaceName: WorkspaceName, entityType: String) =
     getWorkspaceContextAndPermissions(workspaceName,
                                       SamWorkspaceActions.read,
@@ -410,6 +416,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
   }
 
+  // TODO AJ-2008: move to EntityProvider
   def copyEntities(entityCopyDef: EntityCopyDefinition, linkExistingEntities: Boolean): Future[EntityCopyResponse] =
     for {
       destWsCtx <- getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
@@ -472,6 +479,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): Future[Traversable[Entity]] =
     batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject)
 
+  // TODO AJ-2008: move to EntityProvider
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       oldAttributeName: AttributeName,
