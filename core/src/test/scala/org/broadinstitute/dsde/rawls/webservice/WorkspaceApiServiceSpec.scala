@@ -2864,68 +2864,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return a 201 when a comment is updated" in {
-    val wsName = testData.wsName
-    val submissionId = UUID.randomUUID().toString
-    val submissionsService = mock[SubmissionsService]
-    val update = UserCommentUpdateOperation("user comment updated")
-    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update)).thenReturn(Future(1))
-    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
-
-    Patch(
-      s"${wsName.path}/submissions/$submissionId",
-      JsObject(
-        List("userComment" -> "user comment updated".toJson): _*
-      )
-    ) ~>
-      service.baseApiRoutes(Context.root()) ~>
-      check {
-        status should be(StatusCodes.NoContent)
-      }
-  }
-
-  it should "return a 404 when no submission was updated" in {
-    val wsName = testData.wsName
-    val submissionId = UUID.randomUUID().toString
-    val submissionsService = mock[SubmissionsService]
-    val update = UserCommentUpdateOperation("user comment updated")
-    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update)).thenReturn(Future(0))
-    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
-
-    Patch(
-      s"${wsName.path}/submissions/$submissionId",
-      JsObject(
-        List("userComment" -> "user comment updated".toJson): _*
-      )
-    ) ~>
-      service.baseApiRoutes(Context.root()) ~>
-      check {
-        status should be(StatusCodes.NotFound)
-      }
-  }
-
-  it should "return 403 when access is denied" in {
-    val wsName = testData.wsName
-    val submissionId = UUID.randomUUID().toString
-    val submissionsService = mock[SubmissionsService]
-    val update = UserCommentUpdateOperation("user comment updated")
-    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update))
-      .thenReturn(Future.failed(WorkspaceAccessDeniedException(wsName)))
-    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
-    Patch(
-      s"${wsName.path}/submissions/$submissionId",
-      JsObject(
-        List("userComment" -> "user comment updated".toJson): _*
-      )
-    ) ~>
-      service.baseApiRoutes(Context.root()) ~>
-      check { testResult: RouteTestResult =>
-        val response = responseAs[String]
-        status should be(StatusCodes.Forbidden)
-        response should include("insufficient permissions to perform operation on myNamespace/myWorkspace")
-      }
-  }
-
   it should "fail when user with only read access to workspace tries to edit comments" in {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       // mock service for user that has owner access to workspace

@@ -7,7 +7,9 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import akka.testkit.TestProbe
+import io.opentelemetry.context.Context
 import org.apache.commons.lang3.RandomStringUtils
+import org.broadinstitute.dsde.rawls.WorkspaceAccessDeniedException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -17,15 +19,17 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
+import org.mockito.Mockito.when
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -1439,4 +1443,67 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         }
     }
   }
+
+  it should "return a 201 when a comment is updated" in {
+    val wsName = testData.wsName
+    val submissionId = UUID.randomUUID().toString
+    val submissionsService = mock[SubmissionsService]
+    val update = UserCommentUpdateOperation("user comment updated")
+    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update)).thenReturn(Future(1))
+    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
+
+    Patch(
+      s"${wsName.path}/submissions/$submissionId",
+      JsObject(
+        List("userComment" -> "user comment updated".toJson): _*
+      )
+    ) ~>
+      service.baseApiRoutes(Context.root()) ~>
+      check {
+        status should be(StatusCodes.NoContent)
+      }
+  }
+
+  it should "return a 404 when no submission was updated" in {
+    val wsName = testData.wsName
+    val submissionId = UUID.randomUUID().toString
+    val submissionsService = mock[SubmissionsService]
+    val update = UserCommentUpdateOperation("user comment updated")
+    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update)).thenReturn(Future(0))
+    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
+
+    Patch(
+      s"${wsName.path}/submissions/$submissionId",
+      JsObject(
+        List("userComment" -> "user comment updated".toJson): _*
+      )
+    ) ~>
+      service.baseApiRoutes(Context.root()) ~>
+      check {
+        status should be(StatusCodes.NotFound)
+      }
+  }
+
+  it should "return 403 when access is denied" in {
+    val wsName = testData.wsName
+    val submissionId = UUID.randomUUID().toString
+    val submissionsService = mock[SubmissionsService]
+    val update = UserCommentUpdateOperation("user comment updated")
+    when(submissionsService.updateSubmissionUserComment(wsName, submissionId, update))
+      .thenReturn(Future.failed(WorkspaceAccessDeniedException(wsName)))
+    val service = new MockApiService(submissionsServiceConstructor = _ => submissionsService)
+    Patch(
+      s"${wsName.path}/submissions/$submissionId",
+      JsObject(
+        List("userComment" -> "user comment updated".toJson): _*
+      )
+    ) ~>
+      service.baseApiRoutes(Context.root()) ~>
+      check { testResult: RouteTestResult =>
+        val response = responseAs[String]
+        status should be(StatusCodes.Forbidden)
+        response should include("insufficient permissions to perform operation on myNamespace/myWorkspace")
+      }
+  }
+
 }
