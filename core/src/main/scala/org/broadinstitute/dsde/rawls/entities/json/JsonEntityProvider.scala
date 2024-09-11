@@ -25,8 +25,11 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import spray.json._
 import DefaultJsonProtocol._
+import akka.http.scaladsl.model.StatusCodes
 import io.opentelemetry.api.common.AttributeKey
-import org.broadinstitute.dsde.rawls.dataaccess.slick.JsonEntityRecord
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{JsonEntityRecord, ReadAction}
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
@@ -99,23 +102,30 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   override def queryEntitiesSource(entityType: String,
                                    entityQuery: EntityQuery,
                                    parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = dataSource.inTransaction { dataAccess =>
-    dataAccess.jsonEntityQuery.queryEntities(workspaceId, entityType, entityQuery) map { results =>
-      // TODO AJ-2008: total/filtered counts
-      // TODO AJ-2008: actually stream!!!!
-      val metadata = EntityQueryResultMetadata(1, 2, 3)
-      val entitySource = Source.apply(results)
-      (metadata, entitySource)
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    queryEntities(entityType, entityQuery, parentContext).map { queryResponse =>
+      // TODO AJ-2008: actually stream!
+      (queryResponse.resultMetadata, Source.apply(queryResponse.results))
     }
-  }
 
   override def queryEntities(entityType: String,
                              entityQuery: EntityQuery,
                              parentContext: RawlsRequestContext
   ): Future[EntityQueryResponse] = dataSource.inTransaction { dataAccess =>
-    dataAccess.jsonEntityQuery.queryEntities(workspaceId, entityType, entityQuery) map { results =>
-      // TODO AJ-2008: total/filtered counts
-      EntityQueryResponse(entityQuery, EntityQueryResultMetadata(1, 2, 3), results)
+    for {
+      results <- dataAccess.jsonEntityQuery.queryEntities(workspaceId, entityType, entityQuery)
+      unfilteredCount <- dataAccess.jsonEntityQuery.countType(workspaceId, entityType)
+      filteredCount <- dataAccess.jsonEntityQuery.countQuery(workspaceId, entityType, entityQuery)
+    } yield {
+      val pageCount: Int = Math.ceil(filteredCount.toFloat / entityQuery.pageSize).toInt
+      if (filteredCount > 0 && entityQuery.page > pageCount) {
+        throw new DataEntityException(
+          code = StatusCodes.BadRequest,
+          message = s"requested page ${entityQuery.page} is greater than the number of pages $pageCount"
+        )
+      }
+      val queryMetadata = EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+      EntityQueryResponse(entityQuery, queryMetadata, results)
     }
   }
 

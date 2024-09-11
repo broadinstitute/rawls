@@ -16,6 +16,7 @@ import scala.language.postfixOps
   * model class for rows in the ENTITY table
   */
 // TODO AJ-2008: handle the all_attribute_values column
+// TODO AJ-2008: probably don't need deletedDate here
 case class JsonEntityRecord(id: Long,
                             name: String,
                             entityType: String,
@@ -126,18 +127,45 @@ trait JsonEntityComponent {
 
       val offset = queryParams.pageSize * (queryParams.page - 1)
 
+      // get the where clause from the shared method
+      val whereClause = queryWhereClause(workspaceId, entityType, queryParams)
+
       // TODO AJ-2008: full-table text search
       // TODO AJ-2008: filter by column
       // TODO AJ-2008: arbitrary sorting
       // TODO AJ-2008: result projection
       // TODO AJ-2008: total/filtered counts
 
-      sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
-              from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
-              order by name
-              limit #${queryParams.pageSize}
-              offset #$offset""".as[JsonEntityRecord].map(results => results.map(_.toEntity))
+      val query = concatSqlActions(
+        sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes from ENTITY ",
+        whereClause,
+        sql" order by name limit #${queryParams.pageSize} offset #$offset"
+      )
+
+      query.as[JsonEntityRecord].map(results => results.map(_.toEntity))
     }
+
+    def countType(workspaceId: UUID, entityType: String): ReadAction[Int] =
+      singleResult(
+        sql"select count(1) from ENTITY where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
+          .as[Int]
+      )
+
+    def countQuery(workspaceId: UUID, entityType: String, queryParams: EntityQuery): ReadAction[Int] = {
+      // get the where clause from the shared method
+      val whereClause = queryWhereClause(workspaceId, entityType, queryParams)
+
+      val query = concatSqlActions(
+        sql"select count(1) from ENTITY ",
+        whereClause
+      )
+
+      singleResult(query.as[Int])
+
+    }
+
+    private def queryWhereClause(workspaceId: UUID, entityType: String, queryParams: EntityQuery): SQLActionBuilder =
+      sql"where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
 
     // TODO AJ-2008: retrieve many JsonEntityRecords by type/name pairs. Use JsonEntityRecords for access to the recordVersion
     def retrieve(workspaceId: UUID,
@@ -169,5 +197,12 @@ trait JsonEntityComponent {
       unionQuery.as[JsonEntityRecord]
     }
   }
+
+  private def singleResult[V](results: ReadAction[Seq[V]]): ReadAction[V] =
+    results map {
+      case Seq()    => throw new RawlsException(s"Expected 1 result but found 0")
+      case Seq(one) => one
+      case tooMany  => throw new RawlsException(s"Expected 1 result but found ${tooMany.size}")
+    }
 
 }
