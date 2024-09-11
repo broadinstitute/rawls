@@ -114,6 +114,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[EntityQueryResponse] = dataSource.inTransaction { dataAccess =>
     for {
       results <- dataAccess.jsonEntityQuery.queryEntities(workspaceId, entityType, entityQuery)
+      // TODO AJ-2008: optimize; if no filters are present, don't need separate queries for counts
       unfilteredCount <- dataAccess.jsonEntityQuery.countType(workspaceId, entityType)
       filteredCount <- dataAccess.jsonEntityQuery.countQuery(workspaceId, entityType, entityQuery)
     } yield {

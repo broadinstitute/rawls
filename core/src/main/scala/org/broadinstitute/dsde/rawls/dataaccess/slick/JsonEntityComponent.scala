@@ -128,7 +128,14 @@ trait JsonEntityComponent {
       val offset = queryParams.pageSize * (queryParams.page - 1)
 
       // get the where clause from the shared method
-      val whereClause = queryWhereClause(workspaceId, entityType, queryParams)
+      val whereClause: SQLActionBuilder = queryWhereClause(workspaceId, entityType, queryParams)
+
+      // sorting
+      val orderByClause: SQLActionBuilder = queryParams.sortField match {
+        case "name" => sql" order by name #${SortDirections.toSql(queryParams.sortDirection)} "
+        case attr =>
+          sql" order by JSON_EXTRACT(attributes, '$$.#$attr') #${SortDirections.toSql(queryParams.sortDirection)} "
+      }
 
       // TODO AJ-2008: full-table text search
       // TODO AJ-2008: filter by column
@@ -139,18 +146,25 @@ trait JsonEntityComponent {
       val query = concatSqlActions(
         sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes from ENTITY ",
         whereClause,
-        sql" order by name limit #${queryParams.pageSize} offset #$offset"
+        orderByClause,
+        sql" limit #${queryParams.pageSize} offset #$offset"
       )
 
       query.as[JsonEntityRecord].map(results => results.map(_.toEntity))
     }
 
+    /**
+      * Count the number of entities that match the query, before applying all filters
+      */
     def countType(workspaceId: UUID, entityType: String): ReadAction[Int] =
       singleResult(
         sql"select count(1) from ENTITY where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
           .as[Int]
       )
 
+    /**
+      * Count the number of entities that match the query, after applying all filters
+      */
     def countQuery(workspaceId: UUID, entityType: String, queryParams: EntityQuery): ReadAction[Int] = {
       // get the where clause from the shared method
       val whereClause = queryWhereClause(workspaceId, entityType, queryParams)
@@ -159,11 +173,12 @@ trait JsonEntityComponent {
         sql"select count(1) from ENTITY ",
         whereClause
       )
-
       singleResult(query.as[Int])
-
     }
 
+    /**
+      * Shared method to build the where-clause criteria for entityQuery. Used to generate the results and to generate the counts.
+      */
     private def queryWhereClause(workspaceId: UUID, entityType: String, queryParams: EntityQuery): SQLActionBuilder =
       sql"where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
 
