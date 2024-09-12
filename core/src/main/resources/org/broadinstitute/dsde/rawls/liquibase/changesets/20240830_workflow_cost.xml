@@ -2,9 +2,7 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
     <changeSet id="add_workflow_cost" author="mtalbott" logicalFilePath="dummy">
         <addColumn tableName="WORKFLOW">
-            <column name="cost" type="NUMBER(10,2)" defaultValue="0.00">
-                <constraints nullable="false" />
-            </column>
+            <column name="cost" type="NUMBER(10,2)" />
         </addColumn>
     </changeSet>
 </databaseChangeLog>

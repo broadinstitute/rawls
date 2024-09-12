@@ -161,6 +161,36 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     }
   }
 
+  (WorkflowStatuses.runningStatuses.toSet ++ WorkflowStatuses.terminalStatuses -- Set(WorkflowStatuses.Succeeded,
+    WorkflowStatuses.Submitted
+  )).foreach { status =>
+    it should s"queryExecutionServiceForCostAndStatus $status if costCapThreshold is defined" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+      val monitor = createSubmissionMonitor(dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        testData.submission1,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(status.toString, BigDecimal(5)),
+        costCapThreshold = Option(BigDecimal(10.00))
+      )
+
+      val workflowsRecs =
+        runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+
+      assertResult(
+        ignoreStatusLastChangedDate(
+          ExecutionServiceStatusResponse(
+            workflowsRecs.map { workflowRec =>
+              scala.util.Success(Option((workflowRec.copy(status = status.toString, cost = Some(BigDecimal(5))), None)))
+            }
+          )
+        )
+      ) {
+        ignoreStatusLastChangedDate(await(monitor.queryExecutionServiceForStatus()))
+      }
+    }
+  }
+
   val abortableStatuses = Seq(WorkflowStatuses.Queued) ++ WorkflowStatuses.runningStatuses
 
   abortableStatuses.foreach { status =>
@@ -1278,6 +1308,62 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       }
   }
 
+  it should "save updated workflow costs to the database" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val monitor = createSubmissionMonitor(dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        testData.submissionUpdateEntity,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString, BigDecimal(5)),
+        costCapThreshold = Option(BigDecimal(10))
+      )
+      val workflowsRecs = runAndWait(
+        workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+      )
+
+      assertResult(StatusCheckComplete(false)) {
+        await(
+          monitor.handleStatusResponses(
+            ExecutionServiceStatusResponse(
+              workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = WorkflowStatuses.Running.toString, cost = Option(BigDecimal(5))), None))))
+            )
+          )
+        )
+      }
+      runAndWait(
+        workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+      ).foreach(rec => rec.cost shouldEqual(Option(BigDecimal(5))))
+  }
+
+  it should "abort a submission that has exceeded its cost cap" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val monitor = createSubmissionMonitor(dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        testData.submissionUpdateEntity,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString, BigDecimal(5)),
+        costCapThreshold = Option(BigDecimal(2))
+      )
+      val workflowsRecs = runAndWait(
+        workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+      )
+
+      assertResult(StatusCheckComplete(false)) {
+        await(
+          monitor.handleStatusResponses(
+            ExecutionServiceStatusResponse(
+              workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = WorkflowStatuses.Running.toString, cost = Option(BigDecimal(5))), None))))
+            )
+          )
+        )
+      }
+      runAndWait(
+        submissionQuery.loadSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+      ).getOrElse(fail()).status shouldBe SubmissionStatuses.Aborting
+  }
+
   it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val unboundExprStr = AttributeString("")
@@ -1921,7 +2007,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               submission: Submission,
                               wsName: WorkspaceName,
                               execSvcDAO: ExecutionServiceDAO,
-                              attributesPerWorkflow: Int = 10
+                              attributesPerWorkflow: Int = 10,
+                              costCapThreshold: Option[BigDecimal] = None
   ): SubmissionMonitor = {
     val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true)
     new TestSubmissionMonitor(
@@ -1936,7 +2023,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       config,
       ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
       "test",
-      None
+      costCapThreshold
     )
   }
 
@@ -1949,7 +2036,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 }
 
 //noinspection TypeAnnotation,EmptyParenMethodOverriddenAsParameterless
-class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends ExecutionServiceDAO {
+class SubmissionTestExecutionServiceDAO(workflowStatus: => String, workflowCost: BigDecimal = BigDecimal(0)) extends ExecutionServiceDAO {
   val abortedMap: scala.collection.concurrent.TrieMap[String, String] =
     new scala.collection.concurrent.TrieMap[String, String]()
   var labels: Map[String, String] = Map.empty // could make this more sophisticated: map of workflow to map[s,s]
@@ -1995,7 +2082,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def getCost(id: String,
                        workflowCostBreakdownParams: Option[WorkflowCostBreakdownParams],
                        userInfo: UserInfo
-  ): Future[WorkflowCostBreakdown] = ???
+  ): Future[WorkflowCostBreakdown] = Future.successful(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, None, None))
 
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 

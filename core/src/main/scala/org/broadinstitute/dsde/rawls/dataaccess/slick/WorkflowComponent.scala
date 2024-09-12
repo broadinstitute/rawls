@@ -633,7 +633,7 @@ trait WorkflowComponent {
         0,
         None,
         externalEntityId,
-        Some(BigDecimal(0)) // workflow.cost.map(BigDecimal(_))
+        workflow.cost.map(BigDecimal(_))
       )
 
     private def unmarshalWorkflow(workflowRec: WorkflowRecord,
