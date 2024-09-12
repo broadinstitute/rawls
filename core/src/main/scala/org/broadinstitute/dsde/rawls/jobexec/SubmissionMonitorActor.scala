@@ -464,7 +464,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                     if (costCapThreshold.isDefined) {
                       dataAccess.workflowQuery.updateStatusAndCost(currentRec,
                                                                    WorkflowStatuses.withName(workflowRec.status),
-                                                                   currentRec.cost.getOrElse(BigDecimal(0))
+                                                                   workflowRec.cost.getOrElse(BigDecimal(0))
                       )
                     } else {
                       dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
