@@ -2,10 +2,9 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives.{provide, _}
 import akka.http.scaladsl.server.Directive1
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import akka.http.scaladsl.server._
 import akka.stream.Materializer
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.billing._
@@ -14,7 +13,13 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  ApplicationVersion,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  UserInfo
+}
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -76,5 +81,10 @@ class MockApiService(
   implicit override val materializer: Materializer = Materializer(system)
 
   override def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] = provide(userInfo)
+
+  def testRoutes: server.Route =
+    (handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
+      baseApiRoutes(Context.root())
+    }
 
 }

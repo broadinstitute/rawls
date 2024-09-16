@@ -79,13 +79,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         } ~
         path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-          /* we enforce a 6-character minimum for workspaceNamespace, as part of billing project creation.
-           the previous "mc", "tags", and "id" paths rely on this convention to avoid path-matching conflicts.
-           we might want to change the first Segment above to a regex a la """[^/.]{6,}""".r
-           but note that would be a behavior change: if a user entered fewer than 6 chars it would result in an
-           unmatched path rejection instead of the custom error handling inside WorkspaceService.
-           */
-
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
               complete {
