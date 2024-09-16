@@ -262,9 +262,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // for each workflow query the exec service for status and if has Succeeded query again for outputs
         toFutureTry(execServiceStatus(workflowRec, petUser) flatMap {
           case Some(updatedWorkflowRec) =>
-            execServiceOutputs(updatedWorkflowRec,
-                               petUser
-            ) // execServiceOutputs only fetches outputs for terminated workflows. since only running workflows are passed in to this method, we know we aren't fetching outputs and costs for unnecessarily
+            execServiceOutputs(updatedWorkflowRec, petUser)
           case None => Future.successful(None)
         })
       }
@@ -310,10 +308,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[Option[WorkflowRecord]] =
     workflowRec.externalId match {
-      case Some(externalId) if costCapThreshold.isDefined => // only fetch cost information if threshold is defined
+      // fetch cost information for the workflow if submission has a cost cap threshold defined
+      case Some(externalId) if costCapThreshold.isDefined =>
         executionServiceCluster.getCost(workflowRec, None, petUser).map { costBreakdown =>
           Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
         }
+      // fetch workflow status only if cost cap threshold is not defined
       case Some(externalId) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
           if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
@@ -572,6 +572,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   /**
    * When there are no workflows with a running or queued status, mark the submission as done or aborted as appropriate.
+    * If there are still non-terminal workflows and a cost cap threshold is defined, check the current cost of all workflows in the submission and abort the submission if threshold has been exceeded.
     *
     * @param dataAccess
    * @param executionContext
@@ -590,33 +591,28 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
 
     workflowRecsAction.flatMap { workflowRecs =>
-      if (workflowRecs.isEmpty || costCapThreshold.isDefined) {
-        dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
-          val nonTerminalWorkflows =
-            if (costCapThreshold.isDefined)
-              workflowRecs
-                .filterNot(wf => WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(wf.status)))
-            else workflowRecs
+      val nonTerminalWorkflows =
+        if (costCapThreshold.isDefined)
+          workflowRecs
+            .filterNot(wf => WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(wf.status)))
+        else workflowRecs
 
-          if (nonTerminalWorkflows.isEmpty) {
-            dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
-              val finalStatus = SubmissionStatuses.withName(status) match {
-                case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
-                case _                           => SubmissionStatuses.Done
-              }
-              if (config.enableEmailNotifications)
-                sendTerminalSubmissionNotification(submissionId, finalStatus).map(_ => finalStatus)
-              else DBIO.successful(finalStatus)
-            } flatMap { newStatus =>
-              logger.debug(s"submission $submissionId terminating to status $newStatus")
-              dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
-            } map (_ => true)
-          } else if (costCapThreshold.isDefined && costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
-            dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
-          } else {
-            DBIO.successful(false)
+      if (nonTerminalWorkflows.isEmpty) {
+        dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
+          val finalStatus = SubmissionStatuses.withName(status) match {
+            case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
+            case _                           => SubmissionStatuses.Done
           }
-        }
+          if (config.enableEmailNotifications)
+            sendTerminalSubmissionNotification(submissionId, finalStatus).map(_ => finalStatus)
+          else DBIO.successful(finalStatus)
+        } flatMap { newStatus =>
+          logger.debug(s"submission $submissionId terminating to status $newStatus")
+          dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
+        } map (_ => true)
+      } else if (costCapThreshold.isDefined && costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
+        logger.info(s"Submission $submissionId exceeded its cost cap and will be aborted.")
+        dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
       } else {
         DBIO.successful(false)
       }
