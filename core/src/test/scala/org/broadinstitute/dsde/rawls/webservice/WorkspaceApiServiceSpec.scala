@@ -1,37 +1,50 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers._
-import akka.http.scaladsl.server.Directive1
+import akka.http.scaladsl.server.{Directive1}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  RawlsExceptionWithErrorReport,
+  TestExecutionContext,
+}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{UserCommentUpdateOperation, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, RawlsWorkspaceAclManager}
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
 import spray.json.DefaultJsonProtocol._
 import spray.json.{enrichAny, JsObject}
 
@@ -39,12 +52,369 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
+class WorkspaceApiServiceSimpleSpec
+    extends AnyFlatSpec
+    with TableDrivenPropertyChecks
+    with Matchers
+    with MockitoTestUtils
+    with ScalatestRouteTest
+    with SprayJsonSupport {
+  implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
+
+  object testData {
+    val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
+                                      OAuth2BearerToken("token"),
+                                      123,
+                                      RawlsUserSubjectId("123456789876543212345")
+    )
+    val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
+
+    def makeWorkspaceWithUsers(project: RawlsBillingProject,
+                               name: String,
+                               workspaceId: String,
+                               bucketName: String,
+                               workflowCollectionName: Option[String],
+                               createdDate: DateTime,
+                               lastModified: DateTime,
+                               createdBy: String,
+                               attributes: AttributeMap,
+                               isLocked: Boolean
+    ): Workspace =
+      Workspace(
+        project.projectName.value,
+        name,
+        workspaceId,
+        bucketName,
+        workflowCollectionName,
+        createdDate,
+        createdDate,
+        createdBy,
+        attributes,
+        isLocked,
+        WorkspaceVersions.V2,
+        GoogleProjectId(UUID.randomUUID().toString),
+        Option(GoogleProjectNumber(UUID.randomUUID().toString)),
+        project.billingAccount,
+        None,
+        Option(createdDate),
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
+      )
+
+    def currentTime() = new DateTime()
+
+    val testDate: DateTime = currentTime()
+    val billingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("fakeBillingAcct")
+
+    val wsName: WorkspaceName = WorkspaceName("myNamespace", "myWorkspace")
+
+    val billingProject: RawlsBillingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace),
+                                                                  CreationStatuses.Ready,
+                                                                  Option(billingAccountName),
+                                                                  None
+    )
+    val wsAttrs: AttributeMap = Map(
+      AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
+      AttributeName.withDefaultNS("number") -> AttributeNumber(10),
+      AttributeName.withDefaultNS("empty") -> AttributeValueEmptyList,
+      AttributeName.withDefaultNS("values") -> AttributeValueList(
+        Seq(AttributeString("another string"), AttributeString("true"))
+      )
+    )
+    val workspace: Workspace = makeWorkspaceWithUsers(billingProject,
+                                                      wsName.name,
+                                                      UUID.randomUUID().toString,
+                                                      "aBucket",
+                                                      Some("workflow-collection"),
+                                                      currentTime(),
+                                                      currentTime(),
+                                                      "testUser",
+                                                      wsAttrs,
+                                                      false
+    )
+
+  }
+
+  behavior of "WorkspaceApiService"
+
+  it should "call workspaceService.listWorkspaces" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceListResponse(WorkspaceAccessLevels.Read, None, None, details, None, false, None)
+    val response = Seq(responseWorkspace).toJson
+    val workspaceService = mock[WorkspaceService]
+    when(workspaceService.listWorkspaces(any(), any())).thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get("/workspaces") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[Seq[WorkspaceListResponse]]
+        resp.head shouldBe responseWorkspace
+      }
+    verify(workspaceService).listWorkspaces(WorkspaceFieldSpecs(), -1) // empty seq and -1 are the default values
+  }
+
+  it should "call MCWorkspaceService.createMultiCloudOrRawlsWorkspace to create a workspace" in {
+    val workspaceService = mock[WorkspaceService]
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+
+    val newWorkspace = WorkspaceRequest(
+      namespace = workspace.namespace,
+      name = workspace.name,
+      Map.empty
+    )
+    val details = WorkspaceDetails(workspace, Set())
+    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(any, any, any))
+      .thenReturn(Future.successful(details))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Post("/workspaces", newWorkspace.toJson) ~>
+      service.baseApiRoutes(Context.root()) ~>
+      check {
+        status should be(StatusCodes.Created)
+        val response = responseAs[WorkspaceDetails]
+        response.name shouldBe workspace.name
+      }
+    verify(mcWorkspaceService).createMultiCloudOrRawlsWorkspace(
+      newWorkspace,
+      workspaceService,
+      null
+      // FIXME: should be: RawlsRequestContext(service.userInfo, Some(Context.root()))
+    )
+  }
+
+  private val tagsTestParameters = Table[String, Option[String], Option[Int]](
+    ("queryString", "userQuery", "limit"),
+    ("q=query&limit=5", Some("query"), Some(5)),
+    ("/workspaces/tags?limit=&q=", Some(""), None),
+    ("", None, None)
+  )
+
+  it should "call the workspace service to get tags with user query and limit" in {
+    forAll(tagsTestParameters) { (queryString: String, userQuery: Option[String], limit: Option[Int]) =>
+      val workspaceService = mock[WorkspaceService]
+      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+      val service = new MockApiService(
+        workspaceServiceConstructor = _ => workspaceService,
+        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      )
+      val tag = WorkspaceTag("test-tag", 1)
+      when(workspaceService.getTags(any, any)).thenReturn(Future.successful(Seq(tag)))
+
+      Get("/workspaces/tags?" + queryString) ~>
+        service.baseApiRoutes(Context.root()) ~>
+        check { _: RouteTestResult =>
+          status shouldBe StatusCodes.OK
+          val resp = responseAs[Seq[WorkspaceTag]]
+          resp.head shouldBe tag
+        }
+      verify(workspaceService).getTags(userQuery, limit)
+    }
+  }
+
+  it should "get a workspace by id from the workspace service" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceResponse(None, None, None,None, details, None, None, None,None, None)
+    val response:JsObject = responseWorkspace.toJson.asJsObject
+    val workspaceService = mock[WorkspaceService]
+    when(workspaceService.getWorkspaceById(any, any, any)).thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/id/${workspace.workspaceId}") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceResponse]
+        resp shouldBe responseWorkspace
+      }
+    // TODO: be more specific
+    verify(workspaceService).getWorkspaceById(any,any, any)
+  }
+
+  it should "get a workspace by name and namespace from the workspace service" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
+    val response: JsObject = responseWorkspace.toJson.asJsObject
+    val workspaceService = mock[WorkspaceService]
+    when(workspaceService.getWorkspace(any, any, any)).thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceResponse]
+        resp shouldBe responseWorkspace
+      }
+    // TODO: be more specific
+    verify(workspaceService).getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any, any)
+    // todo: also test with params (fields) - WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+  }
+
+  it should "update the workspace by name and namespace" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    //val workspace = testData.workspace
+    val workspaceName = WorkspaceName("ns", "n")
+    val update = Seq(
+      AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
+    val details = WorkspaceDetails(testData.workspace, Set())
+    val workspaceService = mock[WorkspaceService]
+    when(workspaceService.updateWorkspace(any, any)).thenReturn(Future.successful(details))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}", update.toJson) ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceDetails]
+        resp shouldBe details
+      }
+    // TODO remove comment in api service - this does not depend on the 6-character minimum,
+    //  but is instead solved by path ordering and increased specificity
+    verify(workspaceService).updateWorkspace(workspaceName, update)
+  }
+
+
+  it should "delete the workspace by name and namespace" in {
+    forAll(
+      Table(
+        ("bucketResult","message"),
+        (None, "Your workspace has been deleted."),
+          (Some("BucketName"), s"Your Google bucket BucketName will be deleted within 24h.")
+    )
+    ) { (bucketResult, message) =>
+      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+      val workspaceName = WorkspaceName("ns", "n")
+      val workspaceService = mock[WorkspaceService]
+      when(mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService))
+        .thenReturn(Future.successful(bucketResult))
+      val service = new MockApiService(
+        workspaceServiceConstructor = _ => workspaceService,
+        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      )
+      Delete(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}") ~>
+        service.workspaceRoutes(Context.root()) ~>
+        check {
+          status shouldBe StatusCodes.Accepted
+          responseAs[String] shouldBe message
+
+        }
+      verify(mcWorkspaceService).deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService)
+    }
+  }
+
+  it should "get accessInstructions by name and namespace" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspaceName = WorkspaceName("ns", "n")
+    val workspaceService = mock[WorkspaceService]
+    val serviceResponse = Seq[ManagedGroupAccessInstructions]()
+    when(workspaceService.getAccessInstructions(workspaceName)).thenReturn(Future.successful(serviceResponse))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/accessInstructions") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[Seq[ManagedGroupAccessInstructions]]
+        resp shouldBe serviceResponse
+      }
+
+    verify(workspaceService).getAccessInstructions(workspaceName)
+  }
+
+
+  it should "get bucketOptions by name and namespace" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspaceName = WorkspaceName("ns", "n")
+    val workspaceService = mock[WorkspaceService]
+    val serviceResponse = WorkspaceBucketOptions(requesterPays=true)
+    when(workspaceService.getBucketOptions(workspaceName)).thenReturn(Future.successful(serviceResponse))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/bucketOptions") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceBucketOptions]
+        resp shouldBe serviceResponse
+      }
+
+    verify(workspaceService).getBucketOptions(workspaceName)
+  }
+
+  it should "get the workspace ACL by name and namespace" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspaceName = WorkspaceName("ns", "n")
+    val workspaceService = mock[WorkspaceService]
+    val serviceResponse = WorkspaceACL(acl=Map("a" -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))
+    when(workspaceService.getACL(workspaceName)).thenReturn(Future.successful(serviceResponse))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/acl") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceACL]
+        resp shouldBe serviceResponse
+      }
+
+    verify(workspaceService).getACL(workspaceName)
+  }
+
+  it should "invite a user to the workspace by updating the workspace ACL" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspaceName = WorkspaceName("ns", "n")
+    val workspaceService = mock[WorkspaceService]
+    val serviceResponse = WorkspaceACL(acl = Map("a" -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))
+    when(workspaceService.getACL(workspaceName)).thenReturn(Future.successful(serviceResponse))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/acl") ~>
+      service.workspaceRoutes(Context.root()) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceACL]
+        resp shouldBe serviceResponse
+      }
+
+    verify(workspaceService).getACL(workspaceName)
+  }
+
+}
+
 /**
  * Created by dvoet on 4/24/15.
  */
 //noinspection TypeAnnotation,TypeAnnotation,NameBooleanParameters,RedundantNewCaseClass,NameBooleanParameters
 class WorkspaceApiServiceSpec extends ApiServiceSpec {
   import driver.api._
+
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
     def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] =
@@ -438,6 +808,30 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "call workspaceService.listWorkspaces" in {
+    val workspaceService = mock[WorkspaceService]
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceListResponse(WorkspaceAccessLevels.Read, None, None, details, None, false, None)
+    val response = Seq(responseWorkspace).toJson
+    when(workspaceService.listWorkspaces(any(), any())).thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get("workspaces") ~>
+      sealRoute(service.baseApiRoutes(Context.root())) ~>
+      // service.baseApiRoutes(Context.root()) ~>
+      check { // _: RouteTestResult =>
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[Seq[WorkspaceListResponse]]
+        resp.head shouldBe responseWorkspace
+      }
+    verify(workspaceService).listWorkspaces(WorkspaceFieldSpecs(), -1) // empty seq and -1 are the default values
+  }
+
   it should "return 201 for an MC workspace" in withTestDataApiServices { services =>
     val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"),
@@ -468,7 +862,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.baseApiRoutes(Context.root())) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
           status
@@ -1253,7 +1647,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.baseApiRoutes(Context.root())) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -2756,98 +3150,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      testCreateSubmission(dataSource, userWriterNoCompute, StatusCodes.Forbidden)
-  }
-
-  it should "allow user with explicit compute permission to create submission" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      testCreateSubmission(dataSource, testData.userWriter.userEmail, StatusCodes.Created)
-  }
-
-  it should "allow user to create submission with workspace compute permission and no billing project compute permission" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      testCreateSubmission(dataSource, userWriterNoComputeOnProject, StatusCodes.Created)
-  }
-
-  private def testCreateSubmission(dataSource: SlickDataSource, userEmail: RawlsUserEmail, exectedStatus: StatusCode) =
-    withApiServicesSecure(dataSource, userEmail.value) { services =>
-      val wsName = testData.wsName
-      val agoraMethodConf = MethodConfiguration("no_input",
-                                                "dsde",
-                                                Some("Sample"),
-                                                None,
-                                                Map.empty,
-                                                Map.empty,
-                                                AgoraMethod("dsde", "no_input", 1)
-      )
-      val dockstoreMethodConf =
-        MethodConfiguration("no_input_dockstore",
-                            "dsde",
-                            Some("Sample"),
-                            None,
-                            Map.empty,
-                            Map.empty,
-                            DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version")
-        )
-
-      List(agoraMethodConf, dockstoreMethodConf).foreach(
-        createSubmission(wsName, _, testData.sample1, None, services, exectedStatus)
-      )
-    }
-
-  private def createSubmission(wsName: WorkspaceName,
-                               methodConf: MethodConfiguration,
-                               submissionEntity: Entity,
-                               submissionExpression: Option[String],
-                               services: TestApiService,
-                               expectedStatus: StatusCode,
-                               userComment: Option[String] = None
-  ): Option[String] = {
-
-    Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
-      sealRoute(services.methodConfigRoutes()) ~>
-      check {
-        if (status == StatusCodes.NotFound) {
-          Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
-            sealRoute(services.methodConfigRoutes()) ~>
-            check {
-              assertResult(StatusCodes.Created, responseAs[String]) {
-                status
-              }
-            }
-        } else {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-      }
-
-    val submissionRq = SubmissionRequest(
-      methodConfigurationNamespace = methodConf.namespace,
-      methodConfigurationName = methodConf.name,
-      entityType = Option(submissionEntity.entityType),
-      entityName = Option(submissionEntity.name),
-      expression = submissionExpression,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false,
-      workflowFailureMode = None,
-      userComment = userComment
-    )
-    Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
-      sealRoute(services.submissionRoutes()) ~>
-      check {
-        assertResult(expectedStatus, responseAs[String]) {
-          status
-        }
-        if (expectedStatus == StatusCodes.Created) {
-          val response = responseAs[SubmissionReport]
-          Option(response.submissionId)
-        } else None
-      }
-  }
-
   it should "enable and disable RequesterPaysForLinkedServiceAccounts" in withTestDataApiServicesAndUser(
     testData.userWriter.userEmail.value
   ) { services =>
@@ -2864,59 +3166,4 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "fail when user with only read access to workspace tries to edit comments" in {
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
-      // mock service for user that has owner access to workspace
-      withApiServicesSecure(dataSource) { servicesForOwner =>
-        // mock service for user that has only read access to the same workspace
-        withApiServicesSecure(dataSource, testData.userReader.userEmail.value) { servicesForReader =>
-          val wsName = testData.wsName
-          val userComment = Option("Comment for submission by workspace owner")
-          val agoraMethodConf = MethodConfiguration("no_input",
-                                                    "dsde",
-                                                    Some("Sample"),
-                                                    None,
-                                                    Map.empty,
-                                                    Map.empty,
-                                                    AgoraMethod("dsde", "no_input", 1)
-          )
-
-          // submission created by user with owner access
-          val submissionId = createSubmission(wsName,
-                                              agoraMethodConf,
-                                              testData.sample1,
-                                              None,
-                                              servicesForOwner,
-                                              StatusCodes.Created,
-                                              userComment
-          ).get
-
-          // user with read access to workspace should be able to get submission details and read the user comment
-          Get(s"${wsName.path}/submissions/$submissionId") ~>
-            sealRoute(servicesForReader.submissionRoutes()) ~>
-            check {
-              assertResult(StatusCodes.OK) {
-                status
-              }
-              val response = responseAs[Submission]
-              response.userComment shouldBe Option("Comment for submission by workspace owner")
-            }
-
-          // user with read access should not be able to update the submission comment
-          Patch(
-            s"${wsName.path}/submissions/$submissionId",
-            JsObject(
-              List("userComment" -> "user comment updated".toJson): _*
-            )
-          ) ~>
-            sealRoute(servicesForReader.submissionRoutes()) ~>
-            check {
-              val response = responseAs[String]
-              status should be(StatusCodes.Forbidden)
-              response should include("insufficient permissions to perform operation on myNamespace/myWorkspace")
-            }
-        }
-      }
-    }
-  }
 }
