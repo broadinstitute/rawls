@@ -57,7 +57,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
       } ~
         path("workspaces" / "tags") {
-          parameters('q.?, "limit".as[Int].optional) { (queryString, limit) =>
+          parameters(Symbol("q").?, "limit".as[Int].optional) { (queryString, limit) =>
             get {
               complete {
                 workspaceServiceConstructor(ctx).getTags(queryString, limit)
@@ -152,12 +152,18 @@ trait WorkspaceApiService extends UserInfoDirectives {
             }
           } ~
             patch {
-              parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
+              parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound: Option[String] =>
                 entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
+                  val inviteUsersNotFoundValue = inviteUsersNotFound match {
+                    case Some(str) if str.isEmpty => false
+                    case Some(str)                => str.toBoolean
+                    case None                     => false
+                  }
+
                   complete {
                     workspaceServiceConstructor(ctx).updateACL(WorkspaceName(workspaceNamespace, workspaceName),
                                                                aclUpdate,
-                                                               inviteUsersNotFound.getOrElse("false").toBoolean
+                                                               inviteUsersNotFoundValue
                     )
                   }
                 }

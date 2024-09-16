@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers._
-import akka.http.scaladsl.server.{Directive1}
+import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -13,10 +13,7 @@ import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, Job
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.{
-  RawlsExceptionWithErrorReport,
-  TestExecutionContext,
-}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -224,8 +221,8 @@ class WorkspaceApiServiceSimpleSpec
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val details = WorkspaceDetails(workspace, Set())
-    val responseWorkspace = WorkspaceResponse(None, None, None,None, details, None, None, None,None, None)
-    val response:JsObject = responseWorkspace.toJson.asJsObject
+    val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
+    val response: JsObject = responseWorkspace.toJson.asJsObject
     val workspaceService = mock[WorkspaceService]
     when(workspaceService.getWorkspaceById(any, any, any)).thenReturn(Future.successful(response))
     val service = new MockApiService(
@@ -240,7 +237,7 @@ class WorkspaceApiServiceSimpleSpec
         resp shouldBe responseWorkspace
       }
     // TODO: be more specific
-    verify(workspaceService).getWorkspaceById(any,any, any)
+    verify(workspaceService).getWorkspaceById(any, any, any)
   }
 
   it should "get a workspace by name and namespace from the workspace service" in {
@@ -269,10 +266,9 @@ class WorkspaceApiServiceSimpleSpec
 
   it should "update the workspace by name and namespace" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
-    //val workspace = testData.workspace
     val workspaceName = WorkspaceName("ns", "n")
-    val update = Seq(
-      AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
+    val update =
+      Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
     val details = WorkspaceDetails(testData.workspace, Set())
     val workspaceService = mock[WorkspaceService]
     when(workspaceService.updateWorkspace(any, any)).thenReturn(Future.successful(details))
@@ -292,14 +288,13 @@ class WorkspaceApiServiceSimpleSpec
     verify(workspaceService).updateWorkspace(workspaceName, update)
   }
 
-
   it should "delete the workspace by name and namespace" in {
     forAll(
       Table(
-        ("bucketResult","message"),
+        ("bucketResult", "message"),
         (None, "Your workspace has been deleted."),
-          (Some("BucketName"), s"Your Google bucket BucketName will be deleted within 24h.")
-    )
+        (Some("BucketName"), s"Your Google bucket BucketName will be deleted within 24h.")
+      )
     ) { (bucketResult, message) =>
       val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceName = WorkspaceName("ns", "n")
@@ -342,12 +337,11 @@ class WorkspaceApiServiceSimpleSpec
     verify(workspaceService).getAccessInstructions(workspaceName)
   }
 
-
   it should "get bucketOptions by name and namespace" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val workspaceService = mock[WorkspaceService]
-    val serviceResponse = WorkspaceBucketOptions(requesterPays=true)
+    val serviceResponse = WorkspaceBucketOptions(requesterPays = true)
     when(workspaceService.getBucketOptions(workspaceName)).thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
@@ -368,7 +362,7 @@ class WorkspaceApiServiceSimpleSpec
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val workspaceService = mock[WorkspaceService]
-    val serviceResponse = WorkspaceACL(acl=Map("a" -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))
+    val serviceResponse = WorkspaceACL(acl = Map("a" -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))
     when(workspaceService.getACL(workspaceName)).thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
@@ -385,25 +379,46 @@ class WorkspaceApiServiceSimpleSpec
     verify(workspaceService).getACL(workspaceName)
   }
 
-  it should "invite a user to the workspace by updating the workspace ACL" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
-    val workspaceName = WorkspaceName("ns", "n")
-    val workspaceService = mock[WorkspaceService]
-    val serviceResponse = WorkspaceACL(acl = Map("a" -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))
-    when(workspaceService.getACL(workspaceName)).thenReturn(Future.successful(serviceResponse))
-    val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
-    )
-    Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/acl") ~>
-      service.workspaceRoutes(Context.root()) ~>
-      check {
-        status shouldBe StatusCodes.OK
-        val resp = responseAs[WorkspaceACL]
-        resp shouldBe serviceResponse
-      }
+  it should "update the workspace ACL for the patch operation" in {
+    forAll(
+      Table(
+        ("queryString", "inviteMissingUsersValue"),
+        ("?inviteUsersNotFound=true", true),
+        ("?inviteUsersNotFound=false", false),
+        ("?inviteUsersNotFound=", false),
+        ("?", false),
+        ("", false)
+      )
+    ) { (queryString, inviteMissingUsersValue) =>
+      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+      val workspaceName = WorkspaceName("ns", "n")
+      val workspaceService = mock[WorkspaceService]
+      val update: Set[WorkspaceACLUpdate] = Set(
+        WorkspaceACLUpdate("email1@test.com", WorkspaceAccessLevels.Read, None, None),
+        WorkspaceACLUpdate("email2@test.com", WorkspaceAccessLevels.NoAccess),
+        WorkspaceACLUpdate("email3@test.com", WorkspaceAccessLevels.Owner, Some(true), Some(false))
+      )
+      val serviceResponse = WorkspaceACLUpdateResponseList(
+        Set(WorkspaceACLUpdate("email1@test.com", WorkspaceAccessLevels.Read, None, None)),
+        Set(WorkspaceACLUpdate("email2@test.com", WorkspaceAccessLevels.NoAccess)),
+        Set(WorkspaceACLUpdate("email3@test.com", WorkspaceAccessLevels.Owner, Some(true), Some(false)))
+      )
+      when(workspaceService.updateACL(workspaceName, update, inviteMissingUsersValue))
+        .thenReturn(Future.successful(serviceResponse))
+      val service = new MockApiService(
+        workspaceServiceConstructor = _ => workspaceService,
+        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      )
+      Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/acl" + queryString, update.toJson) ~>
+        service.workspaceRoutes(Context.root()) ~>
+        check {
+          status shouldBe StatusCodes.OK
+          val resp = responseAs[WorkspaceACLUpdateResponseList]
+          resp shouldBe serviceResponse
+        }
 
-    verify(workspaceService).getACL(workspaceName)
+      verify(workspaceService).updateACL(workspaceName, update, inviteMissingUsersValue)
+    }
   }
 
 }
