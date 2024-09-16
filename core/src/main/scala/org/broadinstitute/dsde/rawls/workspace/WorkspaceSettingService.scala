@@ -10,11 +10,13 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
+  GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GcpBucketLifecycleSetting,
+  GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   RawlsRequestContext,
   SamWorkspaceActions,
@@ -94,6 +96,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_)) => None
         }
       }
 
@@ -135,18 +138,27 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           }
 
           for {
-            _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
+            _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules, workspace.googleProjectId)
             _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
                                                                         setting.settingType
             )
           } yield None
+
         case GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(retentionDuration)) =>
           val policyBuilder = SoftDeletePolicy.newBuilder()
           policyBuilder.setRetentionDuration(Duration.ofSeconds(retentionDuration))
           val softDeletePolicy = policyBuilder.build()
 
           for {
-            _ <- gcsDAO.setSoftDeletePolicy(workspace.bucketName, softDeletePolicy)
+            _ <- gcsDAO.setSoftDeletePolicy(workspace.bucketName, softDeletePolicy, workspace.googleProjectId)
+            _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
+                                                                        setting.settingType
+            )
+          } yield None
+
+        case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
+          for {
+            _ <- gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
             _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
                                                                         setting.settingType
             )

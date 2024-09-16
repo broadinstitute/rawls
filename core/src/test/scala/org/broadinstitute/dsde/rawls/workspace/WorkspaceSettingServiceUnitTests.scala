@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GcpBucketLifecycleSetting,
   GcpBucketSoftDeleteSetting,
+  GoogleProjectId,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -25,13 +26,12 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   UserInfo,
   Workspace,
-  WorkspaceSetting,
   WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers.{contain, include}
@@ -206,7 +206,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     ).thenReturn(Future.successful(true))
 
     val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List())).thenReturn(Future.successful())
+    when(gcsDAO.setBucketLifecycle(ArgumentMatchers.eq(workspace.bucketName), ArgumentMatchers.eq(List()), any()))
+      .thenReturn(Future.successful())
 
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO,
@@ -275,7 +276,12 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       LifecycleAction.newDeleteAction(),
       LifecycleCondition.newBuilder().setMatchesPrefix(List("muchBetterPrefix").asJava).setAge(31).build()
     )
-    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule))).thenReturn(Future.successful())
+    when(
+      gcsDAO.setBucketLifecycle(ArgumentMatchers.eq(workspace.bucketName),
+                                ArgumentMatchers.eq(List(newSettingGoogleRule)),
+                                any()
+      )
+    ).thenReturn(Future.successful())
 
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO,
@@ -434,8 +440,12 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       LifecycleAction.newDeleteAction(),
       LifecycleCondition.newBuilder().setMatchesPrefix(List("muchBetterPrefix").asJava).setAge(31).build()
     )
-    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule)))
-      .thenReturn(Future.failed(new Exception("failed to apply settings")))
+    when(
+      gcsDAO.setBucketLifecycle(ArgumentMatchers.eq(workspace.bucketName),
+                                ArgumentMatchers.eq(List(newSettingGoogleRule)),
+                                any()
+      )
+    ).thenReturn(Future.failed(new Exception("failed to apply settings")))
 
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO,
