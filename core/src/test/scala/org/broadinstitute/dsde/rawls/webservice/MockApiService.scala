@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directives.{provide, _}
 import akka.http.scaladsl.server.Directive1
@@ -13,13 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
-import org.broadinstitute.dsde.rawls.model.{
-  ApplicationVersion,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -62,7 +57,7 @@ class MockApiService(
   override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService = _ =>
     mock[BucketMigrationService],
   override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService]
-)(implicit val executionContext: ExecutionContext, override val materializer: Materializer)
+)(implicit val executionContext: ExecutionContext)
     extends RawlsApiService
     with AdminApiService
     with BillingApiService
@@ -75,6 +70,10 @@ class MockApiService(
     with MethodConfigApiService
     with WorkspaceApiService
     with SubmissionApiService {
+
+  implicit val system: ActorSystem = ActorSystem("rawls")
+
+  implicit override val materializer: Materializer = Materializer(system)
 
   override def requireUserInfo(otelContext: Option[Context]): Directive1[UserInfo] = provide(userInfo)
 
