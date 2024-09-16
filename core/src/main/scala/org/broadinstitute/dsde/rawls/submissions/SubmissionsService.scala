@@ -459,7 +459,7 @@ class SubmissionsService(
             case Success(costMap) =>
               val costedWorkflows = submission.workflows.map { workflow =>
                 workflow.workflowId match {
-                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId)) // use the workflow cost from the BigQuery cost report instead of the Cromwell estimated workflow cost where possible.
+                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
                   case None       => workflow
                 }
               }

@@ -299,7 +299,7 @@ trait SubmissionComponent {
         })
       )
 
-    def listActiveSubmissionIdsWithWorkspace(
+    def listActiveSubmissionIdsWithWorkspaceAndCostCapThreshold(
       limit: FiniteDuration
     ): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal])]] = {
       // Exclude submissions from monitoring if they are ancient/stuck [WX-820]

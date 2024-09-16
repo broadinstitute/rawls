@@ -254,10 +254,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         } yield abortResults
       }
 
-    // external workflow ids for running workflows
-    def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord],
-                              petUser: UserInfo
-    ): Future[Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]] =
+    def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord], petUser: UserInfo) =
       Future.traverse(externalWorkflowIds) { workflowRec =>
         // for each workflow query the exec service for status and if has Succeeded query again for outputs
         toFutureTry(execServiceStatus(workflowRec, petUser) flatMap {
@@ -342,7 +339,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     * @return
     */
 
-  // okay so this is now going to be dealing with non-terminal workflows. but it must have before since I think this is how workflows go from submitted -> running -> aborting as well. it's not just for terminal statuses.
   def handleStatusResponses(
     response: ExecutionServiceStatusResponse
   )(implicit executionContext: ExecutionContext): Future[StatusCheckComplete] =
