@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.{StatusCodes, _}
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.model.{ErrorReport => _}
+import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -109,14 +110,13 @@ class WorkspaceApiServiceSpec
     val workspaceService = mock[WorkspaceService]
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
-
     val newWorkspace = WorkspaceRequest(
       namespace = workspace.namespace,
       name = workspace.name,
       Map.empty
     )
     val details = WorkspaceDetails(workspace, Set())
-    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(any, any, any))
+    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(newWorkspace, workspaceService))
       .thenReturn(Future.successful(details))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
@@ -129,12 +129,7 @@ class WorkspaceApiServiceSpec
         val response = responseAs[WorkspaceDetails]
         response.name shouldBe workspace.name
       }
-    verify(mcWorkspaceService).createMultiCloudOrRawlsWorkspace(
-      newWorkspace,
-      workspaceService,
-      null
-      // FIXME: should be: RawlsRequestContext(service.userInfo, Some(Context.root()))
-    )
+    verify(mcWorkspaceService).createMultiCloudOrRawlsWorkspace(newWorkspace, workspaceService, null)
   }
 
   private val tagsTestParameters = Table[String, Option[String], Option[Int]](
@@ -173,20 +168,20 @@ class WorkspaceApiServiceSpec
     val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
     val response: JsObject = responseWorkspace.toJson.asJsObject
     val workspaceService = mock[WorkspaceService]
-    when(workspaceService.getWorkspaceById(any, any, any)).thenReturn(Future.successful(response))
+    val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
+    when(workspaceService.getWorkspaceById(workspace.workspaceId, params)).thenReturn(Future.successful(response))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
     )
-    Get(s"/workspaces/id/${workspace.workspaceId}") ~>
+    Get(s"/workspaces/id/${workspace.workspaceId}?fields=a,b,c") ~>
       service.testRoutes ~>
       check {
         status shouldBe StatusCodes.OK
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    // TODO: be more specific
-    verify(workspaceService).getWorkspaceById(any, any, any)
+    verify(workspaceService).getWorkspaceById(workspace.workspaceId, params, null)
   }
 
   it should "get a workspace by name and namespace from the workspace service" in {
@@ -196,7 +191,8 @@ class WorkspaceApiServiceSpec
     val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
     val response: JsObject = responseWorkspace.toJson.asJsObject
     val workspaceService = mock[WorkspaceService]
-    when(workspaceService.getWorkspace(any, any, any)).thenReturn(Future.successful(response))
+    when(workspaceService.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None)))
+      .thenReturn(Future.successful(response))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -208,9 +204,30 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    // TODO: be more specific
-    verify(workspaceService).getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any, any)
-    // todo: also test with params (fields) - WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), null)
+  }
+
+  it should "pass the fields parameter when getting a workspace by name and namespace" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
+    val response: JsObject = responseWorkspace.toJson.asJsObject
+    val workspaceService = mock[WorkspaceService]
+    val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
+    when(workspaceService.getWorkspace(workspace.toWorkspaceName, params)).thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}?fields=a,b,c") ~>
+      service.testRoutes ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceResponse]
+        resp shouldBe responseWorkspace
+      }
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, params, null)
   }
 
   it should "update the workspace by name and namespace" in {

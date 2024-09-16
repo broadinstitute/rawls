@@ -1,15 +1,16 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.{ActorRef, PoisonPill}
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import akka.http.scaladsl.testkit.RouteTestTimeout
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestProbe
 import io.opentelemetry.context.Context
 import org.apache.commons.lang3.RandomStringUtils
-import org.broadinstitute.dsde.rawls.WorkspaceAccessDeniedException
+import org.broadinstitute.dsde.rawls.{TestExecutionContext, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -20,9 +21,12 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import spray.json.DefaultJsonProtocol._
@@ -1458,7 +1462,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         List("userComment" -> "user comment updated".toJson): _*
       )
     ) ~>
-      service.baseApiRoutes(Context.root()) ~>
+      service.testRoutes ~>
       check {
         status should be(StatusCodes.NoContent)
       }
@@ -1478,14 +1482,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         List("userComment" -> "user comment updated".toJson): _*
       )
     ) ~>
-      service.baseApiRoutes(Context.root()) ~>
+      service.testRoutes ~>
       check {
         status should be(StatusCodes.NotFound)
       }
   }
 
   it should "return 403 when access is denied" in {
-    val wsName = testData.wsName
+    val wsName = WorkspaceName("ns", "n")
     val submissionId = UUID.randomUUID().toString
     val submissionsService = mock[SubmissionsService]
     val update = UserCommentUpdateOperation("user comment updated")
@@ -1498,12 +1502,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         List("userComment" -> "user comment updated".toJson): _*
       )
     ) ~>
-      service.baseApiRoutes(Context.root()) ~>
-      check { testResult: RouteTestResult =>
+      service.testRoutes ~>
+      check {
         val response = responseAs[String]
         status should be(StatusCodes.Forbidden)
-        response should include("insufficient permissions to perform operation on myNamespace/myWorkspace")
+        response should include("insufficient permissions to perform operation on")
       }
+    verify(submissionsService).updateSubmissionUserComment(wsName, submissionId, update)
   }
 
 }
