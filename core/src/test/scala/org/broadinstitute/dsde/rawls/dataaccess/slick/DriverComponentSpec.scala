@@ -19,7 +19,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   val selectAllFromWorkflow =
-    "SELECT ID, EXTERNAL_ID, SUBMISSION_ID, STATUS, STATUS_LAST_CHANGED, ENTITY_ID, record_version, EXEC_SERVICE_KEY, EXTERNAL_ENTITY_ID FROM WORKFLOW"
+    "SELECT ID, EXTERNAL_ID, SUBMISSION_ID, STATUS, STATUS_LAST_CHANGED, ENTITY_ID, record_version, EXEC_SERVICE_KEY, EXTERNAL_ENTITY_ID, COST FROM WORKFLOW"
 
   "DriverComponent" should "test concatSqlActions" in withDefaultTestDatabase {
 
