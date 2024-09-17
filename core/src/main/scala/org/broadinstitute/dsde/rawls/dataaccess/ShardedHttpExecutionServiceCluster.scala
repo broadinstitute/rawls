@@ -68,8 +68,8 @@ class ShardedHttpExecutionServiceCluster(readMembers: Set[ClusterMember],
     // the abort operation is special, it needs to go to a specific cromwell
     getMember(workflowRec).dao.abort(workflowRec.externalId.get, userInfo)
 
-  def getCost(workflowRec: WorkflowRecord, workflowCostBreakdownParams: Option[WorkflowCostBreakdownParams], userInfo: UserInfo): Future[WorkflowCostBreakdown] =
-    getMember(workflowRec).dao.getCost(workflowRec.externalId.get, workflowCostBreakdownParams, userInfo)
+  def getCost(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+    getMember(workflowRec).dao.getCost(workflowRec.externalId.get, userInfo)
 
   def version: Future[ExecutionServiceVersion] =
     getRandomReadMember.dao.version

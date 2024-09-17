@@ -144,14 +144,11 @@ case class WorkflowCost(
   cost: Option[Float]
 )
 
-case class WorkflowCostBreakdownParams(includeTaskBreakdown: Boolean, includeSubworkflowBreakdown: Boolean)
-
 case class WorkflowCostBreakdown(id: String,
                                  cost: BigDecimal,
                                  currency: String,
                                  status: String,
-                                 subworkflowBreakdown: Option[Map[String, BigDecimal]],
-                                 taskBreakdown: Option[Map[String, BigDecimal]]
+                                 errors: Seq[String]
 )
 
 case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
@@ -491,7 +488,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowCostFormat: RootJsonFormat[WorkflowCost] = jsonFormat2(WorkflowCost)
 
-  implicit val WorkflowCostBreakdownFormat: RootJsonFormat[WorkflowCostBreakdown] = jsonFormat6(WorkflowCostBreakdown)
+  implicit val WorkflowCostBreakdownFormat: RootJsonFormat[WorkflowCostBreakdown] = jsonFormat5(WorkflowCostBreakdown)
 
   implicit val SubmissionValidationInputFormat: RootJsonFormat[SubmissionValidationInput] = jsonFormat2(
     SubmissionValidationInput

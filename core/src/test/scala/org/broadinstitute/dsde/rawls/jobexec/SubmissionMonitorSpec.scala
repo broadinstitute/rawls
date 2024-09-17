@@ -2093,11 +2093,8 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String, workflowCost:
     Future.successful(ExecutionServiceLabelResponse(id, labels))
   }
 
-  override def getCost(id: String,
-                       workflowCostBreakdownParams: Option[WorkflowCostBreakdownParams],
-                       userInfo: UserInfo
-  ): Future[WorkflowCostBreakdown] =
-    Future.successful(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, None, None))
+  override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+    Future.successful(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, Seq.empty))
 
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 

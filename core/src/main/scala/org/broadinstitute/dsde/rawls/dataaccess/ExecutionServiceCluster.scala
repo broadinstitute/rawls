@@ -34,7 +34,7 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]]
 
-  def getCost(workflowRec: WorkflowRecord, workflowCostBreakdownParams: Option[WorkflowCostBreakdownParams], userInfo: UserInfo): Future[WorkflowCostBreakdown]
+  def getCost(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[WorkflowCostBreakdown]
 
   def version: Future[ExecutionServiceVersion]
 
