@@ -17,7 +17,6 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GcpBucketLifecycleSetting,
   GcpBucketSoftDeleteSetting,
-  GoogleProjectId,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -31,7 +30,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.{any, anyString}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers.{contain, include}
