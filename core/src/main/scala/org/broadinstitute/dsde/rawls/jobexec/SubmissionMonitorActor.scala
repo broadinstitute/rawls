@@ -607,7 +607,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
         } map (_ => true)
       } else if (costCapThreshold.isDefined && costCapThreshold.get <= workflowRecs.flatMap(_.cost).sum) {
-        logger.info(s"Submission $submissionId exceeded its cost cap and will be aborted. [costCap=${costCapThreshold.get},currentSubmissionCost=${workflowRecs.flatMap(_.cost).sum}]")
+        logger.info(
+          s"Submission $submissionId exceeded its cost cap and will be aborted. [costCap=${costCapThreshold.get},currentSubmissionCost=${workflowRecs.flatMap(_.cost).sum}]"
+        )
         dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
       } else {
         DBIO.successful(false)

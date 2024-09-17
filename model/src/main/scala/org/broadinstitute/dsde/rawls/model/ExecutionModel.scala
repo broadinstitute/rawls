@@ -144,12 +144,7 @@ case class WorkflowCost(
   cost: Option[Float]
 )
 
-case class WorkflowCostBreakdown(id: String,
-                                 cost: BigDecimal,
-                                 currency: String,
-                                 status: String,
-                                 errors: Seq[String]
-)
+case class WorkflowCostBreakdown(id: String, cost: BigDecimal, currency: String, status: String, errors: Seq[String])
 
 case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
 
