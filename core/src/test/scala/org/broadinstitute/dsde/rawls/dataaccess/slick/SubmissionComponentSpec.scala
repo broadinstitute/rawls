@@ -353,6 +353,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
                        None,
                        1,
                        Option("unittestdefault"),
+                       None,
                        None
         ),
         WorkflowRecord(22222,
@@ -363,6 +364,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
                        None,
                        1,
                        Option("unittestdefault"),
+                       None,
                        None
         )
       )

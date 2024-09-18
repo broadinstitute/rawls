@@ -131,6 +131,11 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     retry(when5xx)(() => pipeline[ExecutionServiceLabelResponse](userInfo) apply Patch(url, labels))
   }
 
+  override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] = {
+    val url = executionServiceURL + s"/api/workflows/v1/$id/cost"
+    retry(when5xx)(() => pipeline[WorkflowCostBreakdown](userInfo) apply Get(url))
+  }
+
   override def version(): Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
     retry(when5xx)(() => httpClientUtils.executeRequestUnmarshalResponse[ExecutionServiceVersion](http, Get(url)))
