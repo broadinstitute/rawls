@@ -5,12 +5,26 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc._
+import slick.lifted.ProvenShape
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.sql.Timestamp
 import java.util.UUID
 import scala.language.postfixOps
+
+case class JsonEntitySlickRecord(id: Long,
+                                 name: String,
+                                 entityType: String,
+                                 workspaceId: UUID,
+                                 recordVersion: Long,
+                                 deleted: Boolean,
+                                 deletedDate: Option[Timestamp],
+                                 attributes: Option[String]
+) {
+  def toEntity: Entity =
+    Entity(name, entityType, attributes.getOrElse("{}").parseJson.convertTo[AttributeMap])
+}
 
 /**
   * model class for rows in the ENTITY table
@@ -28,6 +42,16 @@ case class JsonEntityRecord(id: Long,
 ) {
   def toEntity: Entity =
     Entity(name, entityType, attributes.convertTo[AttributeMap])
+  def toSlick: JsonEntitySlickRecord =
+    JsonEntitySlickRecord(id,
+                          name,
+                          entityType,
+                          workspaceId,
+                          recordVersion,
+                          deleted,
+                          deletedDate,
+                          Some(attributes.compactPrint)
+    )
 }
 
 case class JsonEntityRefRecord(id: Long, name: String, entityType: String)
@@ -50,6 +74,27 @@ trait JsonEntityComponent {
 
   // json codec for entity attributes
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
+
+  class JsonEntityTable(tag: Tag) extends Table[JsonEntitySlickRecord](tag, "ENTITY") {
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+    def name = column[String]("name", O.Length(254))
+    def entityType = column[String]("entity_type", O.Length(254))
+    def workspaceId = column[UUID]("workspace_id")
+    def version = column[Long]("record_version")
+    def deleted = column[Boolean]("deleted")
+    def deletedDate = column[Option[Timestamp]]("deleted_date")
+    def attributes = column[Option[String]]("attributes")
+
+    // def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
+    // def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
+
+    def * =
+      (id, name, entityType, workspaceId, version, deleted, deletedDate, attributes) <> (JsonEntitySlickRecord.tupled,
+                                                                                         JsonEntitySlickRecord.unapply
+      )
+  }
+
+  object jsonEntitySlickQuery extends TableQuery(new JsonEntityTable(_)) {}
 
   /**
     * SQL queries for working with the ENTITY table
@@ -187,8 +232,8 @@ trait JsonEntityComponent {
     private def queryWhereClause(workspaceId: UUID, entityType: String, queryParams: EntityQuery): SQLActionBuilder =
       sql"where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
 
-    /** Given a set of entity references, retrieve their ids */
-    def validateRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRefRecord]] = {
+    /** Given a set of entity references, retrieve those entities */
+    def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRecord]] = {
       // group the entity type/name pairs by type
       val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
 
@@ -199,8 +244,9 @@ trait JsonEntityComponent {
           val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
 
           // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
+          // TODO AJ-2008: include `where deleted=0`? Make that an argument?
           concatSqlActions(
-            sql"""select id, name, entity_type
+            sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
                 from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
                 and name in (""",
             entityNamesSql,
@@ -212,10 +258,12 @@ trait JsonEntityComponent {
       val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
 
       // execute
-      unionQuery.as[JsonEntityRefRecord](getJsonEntityRefRecord)
+      unionQuery.as[JsonEntityRecord](getJsonEntityRecord)
     }
 
     def replaceReferences(fromId: Long, refs: Map[AttributeName, Seq[JsonEntityRefRecord]]): ReadWriteAction[Int] =
+      // TODO AJ-2008: instead of delete and insert all, find the intersections and only delete/insert where needed?
+      //  alternately, do insert ... on conflict do nothing?
       sqlu"delete from ENTITY_REFS where from_id = $fromId" flatMap { _ =>
         // reduce the references to a set to remove any duplicates
         val toIds: Set[Long] = refs.values.flatten.map(_.id).toSet

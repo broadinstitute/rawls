@@ -29,7 +29,12 @@ import DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{JsonEntityRecord, JsonEntityRefRecord, ReadAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  JsonEntityRecord,
+  JsonEntityRefRecord,
+  JsonEntitySlickRecord,
+  ReadAction
+}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -60,11 +65,13 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   /**
     * Insert a single entity to the db
     */
-  override def createEntity(entity: Entity): Future[Entity] =
+  override def createEntity(entity: Entity): Future[Entity] = {
+    logger.info(s"creating entity $entity")
     dataSource.inTransaction { dataAccess =>
       for {
         // find and validate all references in the entity-to-be-saved
         referenceTargets <- DBIO.from(validateReferences(entity))
+
         // save the entity
         _ <- dataAccess.jsonEntityQuery.createEntity(workspaceId, entity)
         // did it save correctly?
@@ -74,6 +81,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
         _ <- dataAccess.jsonEntityQuery.replaceReferences(savedEntityRecord.id, referenceTargets)
       } yield savedEntityRecord.toEntity
     }
+  }
 
   /**
     * Read a single entity from the db
@@ -149,8 +157,9 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
   ): Future[Iterable[Entity]] = batchUpdateEntitiesImpl(entityUpdates, upsert = true)
 
-  // TODO AJ-2008: this needs some serious optimization, it issues way too many single individual updates
   def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Iterable[Entity]] = {
+    val batchSize = 500 // arbitrary; choose a good value here; perhaps even adapt the value to the size of incoming
+
     // find all attribute names mentioned
     val namesToCheck = for {
       update <- entityUpdates
@@ -173,53 +182,83 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
                             java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
       )
 
-      // identify all the entities mentioned in entityUpdates
-      val allMentionedEntities: Seq[AttributeEntityReference] =
-        entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))
-
       dataSource
         .inTransaction { dataAccess =>
-          // TODO AJ-2008: retrieve all of ${allMentionedEntities} in one query and validate existence if these are not upserts
+          import dataAccess.driver.api._
 
-          // iterate through the desired updates and apply them
-          val queries = entityUpdates.map { entityUpdate =>
-            // attempt to retrieve the existing entity
-            // TODO AJ-2008: pull from the list we retrieved when possible. Only re-retrieve from the db
-            //   if we are updating the same entity multiple times
-            //   see AJ-2009; the existing code does the wrong thing and this code should do better
+          // identify all the entities mentioned in entityUpdates
+          val allMentionedEntities: Set[AttributeEntityReference] =
+            entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)).toSet
 
-            // TODO AJ-2008: find all the inserts (vs updates), and batch them together first, preserving order
-            //   from the entityUpdates list
-            dataAccess.jsonEntityQuery.getEntity(workspaceId, entityUpdate.entityType, entityUpdate.name) flatMap {
-              foundEntityOption =>
-                if (!upsert && foundEntityOption.isEmpty) {
-                  throw new RuntimeException("Entity does not exist")
-                }
-                val baseEntity: Entity =
-                  foundEntityOption
-                    .map(_.toEntity)
-                    .getOrElse(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty))
-                // TODO AJ-2008: collect all the apply errors instead of handling them one-by-one?
-                val updatedEntity: Entity = applyOperationsToEntity(baseEntity, entityUpdate.operations)
-
-                // insert or update
-                foundEntityOption match {
-                  // do insert
-                  case None => dataAccess.jsonEntityQuery.createEntity(workspaceId, updatedEntity)
-                  // do update
-                  case Some(foundEntity) =>
-                    dataAccess.jsonEntityQuery.updateEntity(workspaceId, updatedEntity, foundEntity.recordVersion) map {
-                      updatedCount =>
-                        if (updatedCount == 0) {
-                          throw new RuntimeException("Update failed. Concurrent modifications?")
-                        }
-                    }
-                }
+          // retrieve all of ${allMentionedEntities} in one query and validate existence if these are not upserts
+          dataAccess.jsonEntityQuery.getEntities(workspaceId, allMentionedEntities) flatMap { existingEntities =>
+            if (!upsert && existingEntities.size != allMentionedEntities.size) {
+              throw new RuntimeException(
+                s"Expected all entities being updated to exist; missing ${allMentionedEntities.size - existingEntities.size}"
+              )
             }
+
+            // build map of (entityType, name) -> JsonEntityRecord for efficient lookup
+            val existingEntityMap: Map[(String, String), JsonEntityRecord] =
+              existingEntities.map(rec => (rec.entityType, rec.name) -> rec).toMap
+
+            // iterate through the desired updates and apply them
+            val tableRecords: Seq[JsonEntitySlickRecord] = entityUpdates.map { entityUpdate =>
+              // attempt to retrieve an existing entity
+              val existingRecordOption = existingEntityMap.get((entityUpdate.entityType, entityUpdate.name))
+
+              // this shouldn't happen because we validated above, but we're being defensive
+              if (!upsert && existingRecordOption.isEmpty) {
+                throw new RuntimeException("Expected all entities being updated to exist")
+              }
+
+              // TODO AJ-2008/AJ-2009: Re-retrieve the existing entity if we are updating the same entity multiple times
+              //   see AJ-2009; the existing code does the wrong thing and this code should do better
+              val baseEntity: Entity =
+                existingRecordOption
+                  .map(_.toEntity)
+                  .getOrElse(Entity(entityUpdate.name, entityUpdate.entityType, Map()))
+
+              // TODO AJ-2008: collect all the apply errors instead of handling them one-by-one?
+              val updatedEntity: Entity = applyOperationsToEntity(baseEntity, entityUpdate.operations)
+
+              // TODO AJ-2008: handle references
+
+              // translate back to a JsonEntitySlickRecord for later insert/update
+              // TODO AJ-2008: so far we retrieved a JsonEntityRecord, translated it to an Entity, and are now
+              //  translating it to JsonEntitySlickRecord; we could do better
+              JsonEntitySlickRecord(
+                id = existingRecordOption.map(_.id).getOrElse(0),
+                name = updatedEntity.name,
+                entityType = updatedEntity.entityType,
+                workspaceId = workspaceId,
+                recordVersion = existingRecordOption.map(_.recordVersion).getOrElse(0),
+                deleted = false,
+                deletedDate = None,
+                attributes = Some(updatedEntity.attributes.toJson.compactPrint)
+              )
+            }
+
+            // separate the records-to-be-saved into inserts and updates
+            // we identify inserts as those having recordVersion 0; we could also look for id 0
+            val (inserts, updates) = tableRecords.partition(_.recordVersion == 0)
+
+            // perform the inserts, then perform the updates
+            val insertResult = dataAccess.jsonEntitySlickQuery ++= inserts
+
+            val updateActions = updates.map { upd =>
+              dataAccess.jsonEntityQuery.updateEntity(workspaceId, upd.toEntity, upd.recordVersion) map {
+                updatedCount =>
+                  if (updatedCount == 0) {
+                    throw new RuntimeException("Update failed. Concurrent modifications?")
+                  }
+              }
+            }
+
+            insertResult.flatMap(_ => slick.dbio.DBIO.sequence(updateActions))
           }
-          DBIO.sequence(queries)
         }
-        .map(_ => Seq()) // TODO AJ-2008: return entities, not nothing
+        .map(_ => Seq()) // TODO AJ-2008: return entities, not nothing. What does the current impl return?
     } // end trace
   }
 
@@ -247,29 +286,29 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     // short-circuit
     if (refs.isEmpty) {
       Future.successful(Map())
-    }
+    } else {
+      // validate all refs
+      val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
 
-    // validate all refs
-    val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.jsonEntityQuery.getEntities(workspaceId, allRefs) map { foundRefs =>
+          if (foundRefs.size != allRefs.size) {
+            throw new RuntimeException("Did not find all references")
+          }
+          // convert the foundRefs to a map for easier lookup
+          val foundMap: Map[(String, String), JsonEntityRefRecord] = foundRefs.map { foundRef =>
+            ((foundRef.entityType, foundRef.name), JsonEntityRefRecord(foundRef.id, foundRef.name, foundRef.entityType))
+          }.toMap
 
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.jsonEntityQuery.validateRefs(workspaceId, allRefs) map { foundRefs =>
-        if (foundRefs.size != allRefs.size) {
-          throw new RuntimeException("Did not find all references")
-        }
-        // convert the foundRefs to a map for easier lookup
-        val foundMap: Map[(String, String), JsonEntityRefRecord] = foundRefs.map { foundRef =>
-          ((foundRef.entityType, foundRef.name), foundRef)
-        }.toMap
-
-        // return all the references found in this entity, mapped to the ids they are referencing
-        refs.map { case (name: AttributeName, refs: Seq[AttributeEntityReference]) =>
-          val refRecords: Seq[JsonEntityRefRecord] = refs.map(ref =>
-            foundMap.getOrElse((ref.entityType, ref.entityName),
-                               throw new RuntimeException("unexpected; couldn't find ref")
+          // return all the references found in this entity, mapped to the ids they are referencing
+          refs.map { case (name: AttributeName, refs: Seq[AttributeEntityReference]) =>
+            val refRecords: Seq[JsonEntityRefRecord] = refs.map(ref =>
+              foundMap.getOrElse((ref.entityType, ref.entityName),
+                                 throw new RuntimeException("unexpected; couldn't find ref")
+              )
             )
-          )
-          (name, refRecords)
+            (name, refRecords)
+          }
         }
       }
     }
