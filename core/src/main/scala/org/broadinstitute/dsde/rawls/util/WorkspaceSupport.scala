@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 trait WorkspaceSupport {
   val samDAO: SamDAO
@@ -151,7 +152,12 @@ trait WorkspaceSupport {
                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] = for {
     _ <- userEnabledCheck
-    workspaceContext <- workspaceRepository.getWorkspace(UUID.fromString(workspaceId), attributeSpecs)
+    workspaceUuid = Try(UUID.fromString(workspaceId)) match {
+      case Success(uid) => uid
+      case Failure(_) =>
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "invalid UUID"))
+    }
+    workspaceContext <- workspaceRepository.getWorkspace(workspaceUuid, attributeSpecs)
   } yield workspaceContext match {
     case Some(workspace) => workspace
     case None            => throw NoSuchWorkspaceException(workspaceId)

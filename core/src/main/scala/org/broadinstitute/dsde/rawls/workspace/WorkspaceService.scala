@@ -236,162 +236,168 @@ class WorkspaceService(
                    params: WorkspaceFieldSpecs,
                    parentContext: RawlsRequestContext = ctx
   ): Future[JsObject] = {
-    val (options, attrSpecs) = processOptions(params, fieldNames = WorkspaceFieldNames.workspaceResponseFieldNames)
-
-    // dummy function that returns a Future(None)
-    def noFuture = Future.successful(None)
-
-    val wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
+    val (options, attrSpecs): (Set[LookupExpression], WorkspaceAttributeSpecs) =
+      processOptions(params, fieldNames = WorkspaceFieldNames.workspaceResponseFieldNames)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
-      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
-        workspaceContext =>
-          dataSource.inTransaction { dataAccess =>
-            // some GCP workspaces, like those with linked snapshots, have a stub WSM workspace
-            val wsmContext =
-              try
-                wsmService.fetchAggregatedWorkspace(workspaceContext, ctx)
-              catch {
-                case e: AggregateWorkspaceNotFoundException =>
-                  // return workspace with no WSM information for gcp workspace
-                  if (workspaceContext.workspaceType == WorkspaceType.RawlsWorkspace) {
-                    AggregatedWorkspace(workspaceContext,
-                                        Some(workspaceContext.googleProjectId),
-                                        azureCloudContext = None,
-                                        policies = List.empty
-                    )
-                  } else {
-                    // bubble up an MC workspace exception
-                    throw e
-                  }
-              }
-
-            // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
-            // accessLevel, canCompute, canShare is specified, we have to get it.
-            def accessLevelFuture(): Future[WorkspaceAccessLevel] =
-              if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
-                getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)
-              } else {
-                Future.successful(WorkspaceAccessLevels.NoAccess)
-              }
-
-            // determine whether or not to retrieve attributes
-            val useAttributes = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
-
-            traceDBIOWithParent("accessLevelFuture", s1)(s2 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
-              // we may have calculated accessLevel because canShare/canCompute needs it;
-              // but if the user didn't ask for it, don't return it
-              val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) }
-              else { None }
-
-              // determine which functions to use for the various part of the response
-              def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] =
-                if (options.contains("bucketOptions")) {
-                  wsmContext.googleProjectId match {
-                    case None =>
-                      noFuture
-                    case _ =>
-                      traceFutureWithParent("getBucketDetails", s1)(_ =>
-                        gcsDAO
-                          .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
-                          .map(Option(_))
-                      )
-                  }
-                } else {
-                  noFuture
-                }
-              def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
-                traceFutureWithParent("getUserComputePermissions", s1)(_ =>
-                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
-                                            accessLevel,
-                                            wsmContext.getCloudPlatform
-                  )
-                    .map(Option(_))
-                )
-              } else {
-                noFuture
-              }
-              def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
-                // convoluted but accessLevel for both params because user could at most share with their own access level
-                traceFutureWithParent("getUserSharePermissions", s1)(_ =>
-                  getUserSharePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, accessLevel)
-                    .map(Option(_))
-                )
-              } else {
-                noFuture
-              }
-              def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
-                traceFutureWithParent("getUserCatalogPermissions", s1)(_ =>
-                  getUserCatalogPermissions(workspaceContext.workspaceIdAsUUID.toString).map(Option(_))
-                )
-              } else {
-                noFuture
-              }
-
-              def ownersFuture(): Future[Option[Set[LookupExpression]]] = if (options.contains("owners")) {
-                traceFutureWithParent("getWorkspaceOwners", s1)(_ =>
-                  getWorkspaceOwners(workspaceContext.workspaceIdAsUUID.toString).map(_.map(_.value)).map(Option(_))
-                )
-              } else {
-                noFuture
-              }
-
-              def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] =
-                if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
-                  traceFutureWithParent("loadResourceAuthDomain", s1)(_ =>
-                    loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx.userInfo)
-                      .map(Option(_))
-                  )
-                } else {
-                  noFuture
-                }
-
-              def workspaceSubmissionStatsFuture(): ReadAction[Option[WorkspaceSubmissionStats]] =
-                if (options.contains("workspaceSubmissionStats")) {
-                  getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
-                } else {
-                  DBIO.from(noFuture)
-                }
-
-              // run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
-              val futuresInParallel = (
-                catalogFuture(),
-                canShareFuture(),
-                canComputeFuture(),
-                ownersFuture(),
-                workspaceAuthorizationDomainFuture(),
-                bucketOptionsFuture()
-              ).tupled
-
-              for {
-                (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
-                stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s1)(_ =>
-                  workspaceSubmissionStatsFuture()
-                )
-              } yield {
-                // post-process JSON to remove calculated-but-undesired keys
-                val workspaceResponse = WorkspaceResponse(
-                  optionalAccessLevelForResponse,
-                  canShare,
-                  canCompute,
-                  canCatalog,
-                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
-                                                           authDomain,
-                                                           useAttributes,
-                                                           wsmContext.getCloudPlatform
-                  ),
-                  stats,
-                  bucketDetails,
-                  owners,
-                  wsmContext.azureCloudContext,
-                  Some(wsmContext.policies)
-                )
-                val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
-                filteredJson
-              }
-            }
-          }
-      }
+      for {
+        workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs))
+        workspaceResponse <- getWorkspaceDetails(workspace, options, attrSpecs, s1)
+      } yield
+      // post-process JSON to remove calculated-but-undesired keys
+      deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
     )
+  }
+
+  def getWorkspaceDetails(
+    workspaceContext: Workspace,
+    options: Set[LookupExpression],
+    attrSpecs: WorkspaceAttributeSpecs,
+    context: RawlsRequestContext
+  ): Future[WorkspaceResponse] = {
+    val wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
+    dataSource.inTransaction { dataAccess =>
+      // some GCP workspaces, like those with linked snapshots, have a stub WSM workspace
+      val wsmContext =
+        try
+          wsmService.fetchAggregatedWorkspace(workspaceContext, ctx)
+        catch {
+          case e: AggregateWorkspaceNotFoundException =>
+            // return workspace with no WSM information for gcp workspace
+            if (workspaceContext.workspaceType == WorkspaceType.RawlsWorkspace) {
+              AggregatedWorkspace(workspaceContext,
+                                  Some(workspaceContext.googleProjectId),
+                                  azureCloudContext = None,
+                                  policies = List.empty
+              )
+            } else {
+              // bubble up an MC workspace exception
+              throw e
+            }
+        }
+
+      // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
+      // accessLevel, canCompute, canShare is specified, we have to get it.
+      def accessLevelFuture(): Future[WorkspaceAccessLevel] =
+        if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
+          getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)
+        } else {
+          Future.successful(WorkspaceAccessLevels.NoAccess)
+        }
+
+      // determine whether or not to retrieve attributes
+      val useAttributes = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
+
+      traceDBIOWithParent("accessLevelFuture", context)(s2 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
+        // we may have calculated accessLevel because canShare/canCompute needs it;
+        // but if the user didn't ask for it, don't return it
+        val optionalAccessLevelForResponse = if (options.contains("accessLevel")) {
+          Option(accessLevel)
+        } else {
+          None
+        }
+
+        // determine which functions to use for the various part of the response
+        def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] =
+          if (options.contains("bucketOptions")) {
+            wsmContext.googleProjectId match {
+              case None => Future.successful(None)
+              case _ =>
+                traceFutureWithParent("getBucketDetails", context)(_ =>
+                  gcsDAO
+                    .getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
+                    .map(Option(_))
+                )
+            }
+          } else {
+            Future.successful(None)
+          }
+
+        def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
+          traceFutureWithParent("getUserComputePermissions", context)(_ =>
+            getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString,
+                                      accessLevel,
+                                      wsmContext.getCloudPlatform
+            )
+              .map(Option(_))
+          )
+        } else {
+          Future.successful(None)
+        }
+
+        def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
+          // convoluted but accessLevel for both params because user could at most share with their own access level
+          traceFutureWithParent("getUserSharePermissions", context)(_ =>
+            getUserSharePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, accessLevel)
+              .map(Option(_))
+          )
+        } else {
+          Future.successful(None)
+        }
+
+        def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
+          traceFutureWithParent("getUserCatalogPermissions", context)(_ =>
+            getUserCatalogPermissions(workspaceContext.workspaceIdAsUUID.toString).map(Option(_))
+          )
+        } else {
+          Future.successful(None)
+        }
+
+        def ownersFuture(): Future[Option[Set[LookupExpression]]] = if (options.contains("owners")) {
+          traceFutureWithParent("getWorkspaceOwners", context)(_ =>
+            getWorkspaceOwners(workspaceContext.workspaceIdAsUUID.toString).map(_.map(_.value)).map(Option(_))
+          )
+        } else {
+          Future.successful(None)
+        }
+
+        def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] =
+          if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
+            traceFutureWithParent("loadResourceAuthDomain", context)(_ =>
+              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx.userInfo)
+                .map(Option(_))
+            )
+          } else {
+            Future.successful(None)
+          }
+
+        def workspaceSubmissionStatsFuture(): ReadAction[Option[WorkspaceSubmissionStats]] =
+          if (options.contains("workspaceSubmissionStats")) {
+            getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
+          } else {
+            DBIO.from(Future.successful(None))
+          }
+
+        // run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
+        val futuresInParallel = (
+          catalogFuture(),
+          canShareFuture(),
+          canComputeFuture(),
+          ownersFuture(),
+          workspaceAuthorizationDomainFuture(),
+          bucketOptionsFuture()
+        ).tupled
+
+        for {
+          (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
+          stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", context)(_ => workspaceSubmissionStatsFuture())
+        } yield WorkspaceResponse(
+          optionalAccessLevelForResponse,
+          canShare,
+          canCompute,
+          canCatalog,
+          WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
+                                                   authDomain,
+                                                   useAttributes,
+                                                   wsmContext.getCloudPlatform
+          ),
+          stats,
+          bucketDetails,
+          owners,
+          wsmContext.azureCloudContext,
+          Some(wsmContext.policies)
+        )
+      }
+    }
   }
 
   private def processOptions(params: WorkspaceFieldSpecs,
@@ -421,31 +427,16 @@ class WorkspaceService(
                        params: WorkspaceFieldSpecs,
                        parentContext: RawlsRequestContext = ctx
   ): Future[JsObject] = {
-    val workspaceUuid = Try(UUID.fromString(workspaceId)) match {
-      case Success(uid) => uid
-      case Failure(_) =>
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "invalid UUID"))
-    }
-    // retrieve the namespace/name for this workspace and then delegate to getWorkspace(WorkspaceName).
-    // note that this id -> namespace/name lookup does not enforce security; that's enforced in getWorkspace(WorkspaceName).
-    val workspaceRecords = dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.findV2WorkspaceByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
-    }
-    workspaceRecords.flatMap { recsFound: Seq[(String, String)] =>
-      recsFound.headOption match {
-        case Some(ws) =>
-          // if the call to getWorkspace(WorkspaceName) fails with an exception
-          // map exceptions containing the workspace name to an exception that uses the workspace id instead
-          getWorkspace(WorkspaceName(ws._1, ws._2), params, parentContext).recover { e =>
-            throw e match {
-              case workspaceException: WorkspaceException => workspaceException.usingId(workspaceId)
-              case _                                      => e
-            }
-          }
-        case None =>
-          throw NoSuchWorkspaceException(workspaceId)
-      }
-    }
+    val (options, attrSpecs): (Set[LookupExpression], WorkspaceAttributeSpecs) =
+      processOptions(params, fieldNames = WorkspaceFieldNames.workspaceResponseFieldNames)
+    traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
+      for {
+        workspace <- getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.read, Option(attrSpecs))
+        workspaceResponse <- getWorkspaceDetails(workspace, options, attrSpecs, s1)
+      } yield
+      // post-process JSON to remove calculated-but-undesired keys
+      deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
+    )
   }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] =

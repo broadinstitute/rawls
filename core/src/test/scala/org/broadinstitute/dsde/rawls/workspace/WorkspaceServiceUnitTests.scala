@@ -63,6 +63,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     Map.empty
   )
 
+  // This is just for convenience, so we only need to specify mocks we care about
   def workspaceServiceConstructor(
     datasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
     executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
