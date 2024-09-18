@@ -158,7 +158,11 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[Iterable[Entity]] = batchUpdateEntitiesImpl(entityUpdates, upsert = true)
 
   def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Iterable[Entity]] = {
-    val batchSize = 500 // arbitrary; choose a good value here; perhaps even adapt the value to the size of incoming
+
+    val numUpdates = entityUpdates.size
+    val numOperations = entityUpdates.flatMap(_.operations).size
+
+    logger.info(s"***** batchUpdateEntitiesImpl processing $numUpdates updates with $numOperations operations")
 
     // find all attribute names mentioned
     val namesToCheck = for {
@@ -190,6 +194,8 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
           val allMentionedEntities: Set[AttributeEntityReference] =
             entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)).toSet
 
+          logger.info(s"***** the $numUpdates updates target ${allMentionedEntities.size} distinct entities.")
+
           // retrieve all of ${allMentionedEntities} in one query and validate existence if these are not upserts
           dataAccess.jsonEntityQuery.getEntities(workspaceId, allMentionedEntities) flatMap { existingEntities =>
             if (!upsert && existingEntities.size != allMentionedEntities.size) {
@@ -197,6 +203,10 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
                 s"Expected all entities being updated to exist; missing ${allMentionedEntities.size - existingEntities.size}"
               )
             }
+
+            logger.info(
+              s"***** of the ${allMentionedEntities.size} distinct entities being updated, ${existingEntities.size} already exist."
+            )
 
             // build map of (entityType, name) -> JsonEntityRecord for efficient lookup
             val existingEntityMap: Map[(String, String), JsonEntityRecord] =
@@ -240,8 +250,10 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
             }
 
             // separate the records-to-be-saved into inserts and updates
-            // we identify inserts as those having recordVersion 0; we could also look for id 0
-            val (inserts, updates) = tableRecords.partition(_.recordVersion == 0)
+            // we identify inserts as those having id 0
+            val (inserts, updates) = tableRecords.partition(_.id == 0)
+
+            logger.info(s"***** all updates have been prepared: ${inserts.size} inserts, ${updates.size} updates.")
 
             // perform the inserts, then perform the updates
             val insertResult = dataAccess.jsonEntitySlickQuery ++= inserts
@@ -255,10 +267,17 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               }
             }
 
-            insertResult.flatMap(_ => slick.dbio.DBIO.sequence(updateActions))
+            logger.info(s"***** performing inserts ...")
+            insertResult.flatMap { _ =>
+              logger.info(s"***** performing updates ...")
+              slick.dbio.DBIO.sequence(updateActions)
+            }
           }
         }
-        .map(_ => Seq()) // TODO AJ-2008: return entities, not nothing. What does the current impl return?
+        .map { _ =>
+          logger.info(s"***** all inserts and updates completed.")
+          Seq()
+        } // TODO AJ-2008: return entities, not nothing. What does the current impl return?
     } // end trace
   }
 
