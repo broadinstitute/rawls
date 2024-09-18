@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc._
-import slick.lifted.ProvenShape
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -13,6 +12,9 @@ import java.sql.Timestamp
 import java.util.UUID
 import scala.language.postfixOps
 
+/**
+  * model class for rows in the ENTITY table, used for high-level Slick operations
+  */
 case class JsonEntitySlickRecord(id: Long,
                                  name: String,
                                  entityType: String,
@@ -27,7 +29,7 @@ case class JsonEntitySlickRecord(id: Long,
 }
 
 /**
-  * model class for rows in the ENTITY table
+  * model class for rows in the ENTITY table, used for low-level raw SQL operations
   */
 // TODO AJ-2008: handle the all_attribute_values column
 // TODO AJ-2008: probably don't need deletedDate here
@@ -54,7 +56,15 @@ case class JsonEntityRecord(id: Long,
     )
 }
 
+/**
+  * abbreviated model for rows in the ENTITY table when we don't need all the columns
+  */
 case class JsonEntityRefRecord(id: Long, name: String, entityType: String)
+
+/**
+  * model class for rows in the ENTITY_REFS table
+  */
+case class RefPointerRecord(fromId: Long, toId: Long)
 
 /**
   * companion object for constants, etc.
@@ -75,6 +85,7 @@ trait JsonEntityComponent {
   // json codec for entity attributes
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
+  /** high-level Slick table for ENTITY */
   class JsonEntityTable(tag: Tag) extends Table[JsonEntitySlickRecord](tag, "ENTITY") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def name = column[String]("name", O.Length(254))
@@ -94,11 +105,22 @@ trait JsonEntityComponent {
       )
   }
 
+  /** high-level Slick table for ENTITY_REFS */
+  class JsonEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
+    def fromId = column[Long]("from_id")
+    def toId = column[Long]("to_id")
+
+    def * =
+      (fromId, toId) <> (RefPointerRecord.tupled, RefPointerRecord.unapply)
+  }
+
+  /** high-level Slick query object for ENTITY */
+  object jsonEntityRefSlickQuery extends TableQuery(new JsonEntityRefTable(_)) {}
+
+  /** high-level Slick query object for ENTITY_REFS */
   object jsonEntitySlickQuery extends TableQuery(new JsonEntityTable(_)) {}
 
-  /**
-    * SQL queries for working with the ENTITY table
-    */
+  /** low-level raw SQL queries for ENTITY */
   object jsonEntityQuery extends RawSqlQuery {
     val driver: JdbcProfile = JsonEntityComponent.this.driver
 
@@ -261,23 +283,34 @@ trait JsonEntityComponent {
       unionQuery.as[JsonEntityRecord](getJsonEntityRecord)
     }
 
-    def replaceReferences(fromId: Long, refs: Map[AttributeName, Seq[JsonEntityRefRecord]]): ReadWriteAction[Int] =
-      // TODO AJ-2008: instead of delete and insert all, find the intersections and only delete/insert where needed?
-      //  alternately, do insert ... on conflict do nothing?
-      sqlu"delete from ENTITY_REFS where from_id = $fromId" flatMap { _ =>
-        // reduce the references to a set to remove any duplicates
-        val toIds: Set[Long] = refs.values.flatten.map(_.id).toSet
-        // short-circuit
-        if (toIds.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          // generate bulk-insert SQL
-          val insertValues: Seq[SQLActionBuilder] = toIds.toSeq.map(toId => sql"($fromId, $toId)")
+//    def replaceReferences(fromId: Long, refs: Map[AttributeName, Seq[JsonEntityRefRecord]]): ReadWriteAction[Int] =
+//      // TODO AJ-2008: instead of delete and insert all, find the intersections and only delete/insert where needed?
+//      //  alternately, do insert ... on conflict do nothing?
+//      sqlu"delete from ENTITY_REFS where from_id = $fromId" flatMap { _ =>
+//        // reduce the references to a set to remove any duplicates
+//        val toIds: Set[Long] = refs.values.flatten.map(_.id).toSet
+//        // short-circuit
+//        if (toIds.isEmpty) {
+//          DBIO.successful(0)
+//        } else {
+//          // generate bulk-insert SQL
+//          val insertValues: Seq[SQLActionBuilder] = toIds.toSeq.map(toId => sql"($fromId, $toId)")
+//
+//          val allInsertValues: SQLActionBuilder = reduceSqlActionsWithDelim(insertValues, sql",")
+//
+//          concatSqlActions(sql"insert into ENTITY_REFS(from_id, to_id) values ", allInsertValues).asUpdate
+//        }
+//      }
 
-          val allInsertValues: SQLActionBuilder = reduceSqlActionsWithDelim(insertValues, sql",")
-
-          concatSqlActions(sql"insert into ENTITY_REFS(from_id, to_id) values ", allInsertValues).asUpdate
-        }
+    def bulkInsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] =
+      // short-circuit
+      if (toIds.isEmpty) {
+        DBIO.successful(0)
+      } else {
+        // generate bulk-insert SQL
+        val insertValues: Seq[SQLActionBuilder] = toIds.toSeq.map(toId => sql"($fromId, $toId)")
+        val allInsertValues: SQLActionBuilder = reduceSqlActionsWithDelim(insertValues, sql",")
+        concatSqlActions(sql"insert into ENTITY_REFS(from_id, to_id) values ", allInsertValues).asUpdate
       }
 
   }

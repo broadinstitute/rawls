@@ -33,7 +33,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   JsonEntityRecord,
   JsonEntityRefRecord,
   JsonEntitySlickRecord,
-  ReadAction
+  ReadAction,
+  RefPointerRecord
 }
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -41,6 +42,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent}
 import slick.dbio.DBIO
+import slick.jdbc.TransactionIsolation
 
 import java.time.Duration
 import java.util.UUID
@@ -74,12 +76,18 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
         // save the entity
         _ <- dataAccess.jsonEntityQuery.createEntity(workspaceId, entity)
-        // did it save correctly?
+        // did it save correctly? get its id, we need that id.
         savedEntityRecordOption <- dataAccess.jsonEntityQuery.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new RuntimeException("Could not save entity"))
         // save all references from this entity to other entities
-        _ <- dataAccess.jsonEntityQuery.replaceReferences(savedEntityRecord.id, referenceTargets)
+        _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referenceTargets))
       } yield savedEntityRecord.toEntity
+      //      } yield (savedEntityRecord, referenceTargets)
+      //    } flatMap { case (savedEntityRecord, referenceTargets) =>
+      //      // something in the transaction above causes replaceReferences to deadlock. For now do it in a separate
+      //      // transaction, but that's wrong
+      //      replaceReferences(savedEntityRecord.id, referenceTargets) map { _ => savedEntityRecord.toEntity }
+      //    }
     }
   }
 
@@ -258,6 +266,10 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
             // perform the inserts, then perform the updates
             val insertResult = dataAccess.jsonEntitySlickQuery ++= inserts
 
+            val insertRefFutures: Seq[Future[_]] = inserts.map { ins =>
+              synchronizeReferences(ins.id, ins.toEntity)
+            }
+
             val updateActions = updates.map { upd =>
               dataAccess.jsonEntityQuery.updateEntity(workspaceId, upd.toEntity, upd.recordVersion) map {
                 updatedCount =>
@@ -267,17 +279,31 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               }
             }
 
+            val updateRefFutures: Seq[Future[_]] = updates.map { upd =>
+              synchronizeReferences(upd.id, upd.toEntity)
+            }
+
             logger.info(s"***** performing inserts ...")
             insertResult.flatMap { _ =>
+//              logger.info(s"***** adding references for inserts ...")
+//              slick.dbio.DBIO.from(Future.sequence(insertRefFutures)) flatMap { _ =>
               logger.info(s"***** performing updates ...")
               slick.dbio.DBIO.sequence(updateActions)
+//              flatMap { _ =>
+//                  logger.info(s"***** adding references for updates ...")
+//                  slick.dbio.DBIO.from(Future.sequence(updateRefFutures))
+//                }
+//              }
             }
           }
         }
         .map { _ =>
           logger.info(s"***** all inserts and updates completed.")
+          // returns nothing. EntityApiService explicitly returns a 204 with no response body; so we don't bother
+          // returning anything at all from here.
+          // TODO AJ-2008: does this have any compatibility issues elsewhere? LocalEntityProvider does return entities.
           Seq()
-        } // TODO AJ-2008: return entities, not nothing. What does the current impl return?
+        }
     } // end trace
   }
 
@@ -310,6 +336,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
 
       dataSource.inTransaction { dataAccess =>
+        // TODO AJ-2008: this should only return ids; it doesn't need to return everything about the entities
         dataAccess.jsonEntityQuery.getEntities(workspaceId, allRefs) map { foundRefs =>
           if (foundRefs.size != allRefs.size) {
             throw new RuntimeException("Did not find all references")
@@ -343,4 +370,52 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       .flatten
       .toSeq
       .groupMap(_._1)(_._2)
+
+  private def replaceReferences(fromId: Long, foundRefs: Map[AttributeName, Seq[JsonEntityRefRecord]]) =
+    dataSource.inTransaction { dataAccess =>
+      import dataAccess.driver.api._
+      // we don't actually care about the referencing attribute name or referenced type&name; reduce to just the referenced ids.
+      val currentEntityRefTargets: Set[Long] = foundRefs.values.flatten.map(_.id).toSet
+      logger.trace(s"~~~~~ found ${currentEntityRefTargets.size} ref targets in entity")
+      for {
+        // retrieve all existing refs in ENTITY_REFS for this entity; create a set of the target ids
+        existingRowsSeq <- dataAccess.jsonEntityRefSlickQuery.filter(_.fromId === fromId).map(_.toId).result
+        existingRefTargets = existingRowsSeq.toSet
+
+        _ = logger.trace(s"~~~~~ found ${existingRefTargets.size} ref targets in db for this entity")
+        // find all target ids in the db that are not in the current entity
+        deletes = existingRefTargets diff currentEntityRefTargets
+        // find all target ids in the current entity that are not in the db
+        inserts = currentEntityRefTargets diff existingRefTargets
+        insertPairs = inserts.map(toId => (fromId, toId))
+        insertRecords = inserts.map(toId => RefPointerRecord(fromId, toId))
+        _ = logger.trace(s"~~~~~ prepared ${inserts.size} inserts and ${deletes.size} deletes to perform")
+        _ = logger.trace(s"~~~~~ inserts: $insertPairs")
+        // insert what needs to be inserted
+        insertResult <-
+          if (inserts.nonEmpty) { dataAccess.jsonEntityRefSlickQuery.map(r => (r.fromId, r.toId)) ++= insertPairs }
+          else { slick.dbio.DBIO.successful(0) }
+//        insertResult <- dataAccess.jsonEntityQuery.bulkInsertReferences(fromId, inserts)
+        _ = logger.trace(s"~~~~~ actually inserted ${insertResult} rows")
+        // delete what needs to be deleted
+        deleteResult <-
+          if (deletes.nonEmpty) {
+            dataAccess.jsonEntityRefSlickQuery
+              .filter(x => x.fromId === fromId && x.toId.inSetBind(deletes))
+              .delete
+          } else { slick.dbio.DBIO.successful(0) }
+        _ = logger.trace(s"~~~~~ actually deleted ${deleteResult} rows")
+      } yield foundRefs
+    }
+
+  private def synchronizeReferences(fromId: Long,
+                                    entity: Entity
+  ): Future[Map[AttributeName, Seq[JsonEntityRefRecord]]] = dataSource.inTransaction { _ =>
+    for {
+      // find and validate all references in this entity. This returns the target internal ids for each reference.
+      foundRefs <- DBIO.from(validateReferences(entity))
+      //
+      _ <- DBIO.from(replaceReferences(fromId, foundRefs))
+    } yield foundRefs
+  }
 }
