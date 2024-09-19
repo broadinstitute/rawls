@@ -357,12 +357,7 @@ class WorkspaceService(
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)) map {
-          details =>
-            details
-        }
-      }
+      gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
     }
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName,
