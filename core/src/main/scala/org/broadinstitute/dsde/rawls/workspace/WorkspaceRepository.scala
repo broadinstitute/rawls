@@ -4,7 +4,17 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, PendingCloneWorkspaceFileTransfer, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceState, WorkspaceSubmissionStats, WorkspaceTag}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  PendingCloneWorkspaceFileTransfer,
+  RawlsRequestContext,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName,
+  WorkspaceState,
+  WorkspaceSubmissionStats,
+  WorkspaceTag
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
@@ -111,9 +121,8 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
 
-
   def listSubmissionSummaryStats(workspaceId: UUID): Future[Map[UUID, WorkspaceSubmissionStats]] =
-    dataSource.inTransaction { _.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId)) }
+    dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId)))
 
   /**
     * FIXME: This appears to be using unvalidated input from users in a query.
@@ -124,6 +133,5 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     */
   def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
-
 
 }
