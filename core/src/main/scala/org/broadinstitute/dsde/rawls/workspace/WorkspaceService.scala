@@ -367,10 +367,6 @@ class WorkspaceService(
 
   }
 
-  def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] =
-    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-      gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
-    }
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String
@@ -1784,6 +1780,11 @@ class WorkspaceService(
       case Some(workspace) => op(workspace)
     }
 
+
+  def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] = for {
+    workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+    options <- gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
+  } yield options
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = (for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
