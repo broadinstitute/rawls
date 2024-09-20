@@ -108,7 +108,7 @@ object WorkspaceService {
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
-      fastPassServiceConstructor,
+      (context: RawlsRequestContext)=> fastPassServiceConstructor(context, dataSource),
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource)
     )
@@ -143,7 +143,7 @@ class WorkspaceService(
   val terraBucketWriterRole: String,
   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-  val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
+  val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository
 )(implicit protected val executionContext: ExecutionContext)
@@ -204,7 +204,7 @@ class WorkspaceService(
         )
       ) // read committed to avoid deadlocks on workspace attribute scratch table
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
+        fastPassServiceConstructor(childContext).syncFastPassesForUserInWorkspace(workspace)
       )
     } yield workspace
   }
@@ -247,11 +247,7 @@ class WorkspaceService(
       }
 
       allStats <- options.anyPresentFuture("workspaceSubmissionStats") {
-        dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery
-            .listSubmissionSummaryStats(Seq(workspace.workspaceIdAsUUID))
-
-        }
+        workspaceRepository.listSubmissionSummaryStats(workspace.workspaceIdAsUUID)
       }
       stats = allStats.flatMap(_.values.headOption)
       authDomain <- options.anyPresentFuture("workspace.authorizationDomain", "workspace") {
@@ -507,7 +503,7 @@ class WorkspaceService(
       )
 
       _ <- traceFutureWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
+        fastPassServiceConstructor(childContext).removeFastPassGrantsForWorkspace(workspaceContext)
       )
 
       // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
@@ -731,14 +727,10 @@ class WorkspaceService(
         .collect { case Success(workspaceId) =>
           workspaceId
         }
-      v2WorkspaceIdsForUser <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery
-          .listV2WorkspacesByIds(workspaceIdsForUser)
-          .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
-      }
-      result <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.getTags(query, limit, Some(v2WorkspaceIdsForUser))
-      }
+      // This is just filtering the workspaces for v2 workspace, since the tags query doesn't do this
+      v2WorkspaceIdsForUser <- workspaceRepository.listWorkspacesByIds(workspaceIdsForUser)
+        .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
+      result <- workspaceRepository.getTags(v2WorkspaceIdsForUser, query, limit)
     } yield result
 
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
@@ -985,11 +977,11 @@ class WorkspaceService(
         TransactionIsolation.ReadCommitted
       )
       _ <- traceFutureWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext, dataSource)
+        fastPassServiceConstructor(childContext)
           .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
       )
       _ <- traceFutureWithParent("FastPassService.setupFastPassClonedWorkspaceChild", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext, dataSource)
+        fastPassServiceConstructor(childContext)
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
 
@@ -1077,7 +1069,7 @@ class WorkspaceService(
     }
 
   private def loadV2WorkspaceId(workspaceName: WorkspaceName): Future[String] =
-    dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.getV2WorkspaceId(workspaceName)).map {
+    workspaceRepository.getWorkspaceId(workspaceName).map {
       case None =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "unable to load workspace"))
       case Some(id) => id.toString
@@ -1283,7 +1275,7 @@ class WorkspaceService(
 
           // Sync FastPass grants once ACLs are updated
           _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { email =>
-            fastPassServiceConstructor(ctx, dataSource).syncFastPassesForUserInWorkspace(workspace, email)
+            fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace, email)
           }
         } yield {
           val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
@@ -1638,7 +1630,7 @@ class WorkspaceService(
               .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
               .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.info("checkWorkspaceCloudPermissions: " + message)
-          fastPassServiceConstructor(ctx, dataSource)
+          fastPassServiceConstructor(ctx)
             .syncFastPassesForUserInWorkspace(workspace)
             .flatMap(_ =>
               Future.failed(
@@ -1661,7 +1653,7 @@ class WorkspaceService(
           val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
               .toString()} was unable to get bucket location for ${workspace.googleProjectId.value}/${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.warn("checkWorkspaceCloudPermissions: " + message)
-          fastPassServiceConstructor(ctx, dataSource)
+          fastPassServiceConstructor(ctx)
             .syncFastPassesForUserInWorkspace(workspace)
             .flatMap(_ =>
               Future.failed(
@@ -1681,13 +1673,6 @@ class WorkspaceService(
         }
     } yield ()
 
-  def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] = {
-    val wsCtxFuture = dataSource.inTransaction { dataAccess =>
-      withV2WorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) {
-        workspaceContext =>
-          DBIO.successful(workspaceContext)
-      }
-    }
 
     // don't do the sam REST call inside the db transaction.
     val access: Future[Boolean] = wsCtxFuture flatMap { workspaceContext =>
@@ -1734,6 +1719,10 @@ class WorkspaceService(
         }
       }
     }
+  def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] =
+    getV2WorkspaceContextAndPermissions(workspaceName, samAction, None)
+      .map(_ => true)
+      .recover { case _ => false }
 
   // Admin endpoint, not limited to V2 workspaces
   def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName,
@@ -2044,11 +2033,7 @@ class WorkspaceService(
 
       invalidBillingAccount = !hasAccess
       _ <- Applicative[Future].whenA(billingProject.invalidBillingAccount != invalidBillingAccount) {
-        dataSource.inTransaction { dataAccess =>
-          traceDBIOWithParent("updateInvalidBillingAccountField", parentContext)(_ =>
-            dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, invalidBillingAccount)
-          )
-        }
+        billingRepository.updateBillingAccountValidity(billingAccountName, invalidBillingAccount)
       }
     } yield hasAccess
 
@@ -2389,9 +2374,6 @@ class WorkspaceService(
 
     def anyPresentFuture[T](opts: String*)(present: => Future[T]): Future[Option[T]] =
       if (opts.exists(opt => options.contains(opt))) present.map(Option(_)) else Future(None)
-
-    //   def anyPresentOrElse[T](opts: String*)(present: => T)(absent: () => T): T =
-//      if (opts.exists(opt => options.contains(opt))) present else absent()
 
   }
 }
