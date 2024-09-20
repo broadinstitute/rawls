@@ -115,8 +115,8 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def updatePendingCloneWorkspaceFileTransferRecord(record: PendingCloneWorkspaceFileTransfer): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.update(record))
 
-  def listPendingCloneWorkspaceFileTransferRecords(): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
-    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.listPendingTransfers())
+  def listPendingCloneWorkspaceFileTransferRecords(workspaceId: Option[UUID]): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.listPendingTransfers(workspaceId))
 
   def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))

@@ -1034,8 +1034,8 @@ class WorkspaceService(
   def listPendingFileTransfersForWorkspace(
     workspaceName: WorkspaceName
   ): Future[Seq[PendingCloneWorkspaceFileTransfer]] = for {
-    workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
-    transfers <- workspaceRepository.listPendingCloneWorkspaceFileTransferRecords()
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+    transfers <- workspaceRepository.listPendingCloneWorkspaceFileTransferRecords(Some(workspace.workspaceIdAsUUID))
   } yield transfers
 
   private def withClonedAuthDomain[T](sourceWorkspaceADs: Set[ManagedGroupRef], destWorkspaceADs: Set[ManagedGroupRef])(
