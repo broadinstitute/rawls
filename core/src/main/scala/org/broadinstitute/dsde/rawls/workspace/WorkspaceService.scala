@@ -108,7 +108,7 @@ object WorkspaceService {
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
-      (context: RawlsRequestContext)=> fastPassServiceConstructor(context, dataSource),
+      (context: RawlsRequestContext) => fastPassServiceConstructor(context, dataSource),
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource)
     )
@@ -147,11 +147,10 @@ class WorkspaceService(
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository
 )(implicit protected val executionContext: ExecutionContext)
-    extends RoleSupport
+    extends LazyLogging
     with LibraryPermissionsSupport
     with UserWiths
     with UserUtils
-    with LazyLogging
     with RawlsInstrumented
     with JsonFilterUtils
     with WorkspaceSupport
@@ -728,7 +727,8 @@ class WorkspaceService(
           workspaceId
         }
       // This is just filtering the workspaces for v2 workspace, since the tags query doesn't do this
-      v2WorkspaceIdsForUser <- workspaceRepository.listWorkspacesByIds(workspaceIdsForUser)
+      v2WorkspaceIdsForUser <- workspaceRepository
+        .listWorkspacesByIds(workspaceIdsForUser)
         .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
       result <- workspaceRepository.getTags(v2WorkspaceIdsForUser, query, limit)
     } yield result
@@ -1673,83 +1673,10 @@ class WorkspaceService(
         }
     } yield ()
 
-
-    // don't do the sam REST call inside the db transaction.
-    val access: Future[Boolean] = wsCtxFuture flatMap { workspaceContext =>
-      requireAccessF(workspaceContext, samAction) {
-        Future.successful(true) // if we get here, we passed all the hoops
-      }
-    }
-
-    // if we failed for any reason, the user can't do that thing on the workspace
-    access.recover { case _ => false }
-  }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def listAllWorkspaces(): Future[Seq[WorkspaceDetails]] =
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listAll().map(workspaces => workspaces.map(w => WorkspaceDetails(w, Set.empty)))
-      }
-    }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def adminListWorkspacesWithAttribute(attributeName: AttributeName,
-                                       attributeValue: AttributeValue
-  ): Future[Seq[WorkspaceDetails]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue)
-        }
-        results <- Future.traverse(workspaces) { workspace =>
-          loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId).map(
-            WorkspaceDetails(workspace, _)
-          )
-        }
-      } yield results
-    }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] =
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceFeatureFlagQuery.listAllForWorkspace(workspaceContext.workspaceIdAsUUID)
-        }
-      }
-    }
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] =
     getV2WorkspaceContextAndPermissions(workspaceName, samAction, None)
       .map(_ => true)
       .recover { case _ => false }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName,
-                                          flagNames: List[String]
-  ): Future[Seq[WorkspaceFeatureFlag]] =
-    asFCAdmin {
-      val flags = flagNames.map(WorkspaceFeatureFlag)
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          for {
-            _ <- dataAccess.workspaceFeatureFlagQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceFeatureFlagQuery.saveAll(workspaceContext.workspaceIdAsUUID, flags)
-          } yield flags
-        }
-      }
-    }
-
-  // moved out of WorkspaceSupport because the only usage was in this file,
-  // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
-  private def withWorkspaceContext[T](workspaceName: WorkspaceName,
-                                      dataAccess: DataAccess,
-                                      attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  )(op: Workspace => ReadWriteAction[T]) =
-    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
-      case None            => throw NoSuchWorkspaceException(workspaceName)
-      case Some(workspace) => op(workspace)
-    }
 
   // Finds workspace by workspaceName
   // moved out of WorkspaceSupport because the only usage was in this file,
