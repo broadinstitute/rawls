@@ -10,19 +10,14 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.fastpass.{FastPassService, FastPassServiceImpl}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  UserDisabledException,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -88,8 +83,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     terraBucketWriterRole: String = "",
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-    fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassServiceImpl = (_, _) =>
-      mock[FastPassServiceImpl](RETURNS_SMART_NULLS),
+    fastPassServiceConstructor: RawlsRequestContext => FastPassService =
+      _ => mock[FastPassService](RETURNS_SMART_NULLS),
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
@@ -556,7 +551,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
         workspaceRepository = workspaceRepository,
         samDAO = samDAO,
         requesterPaysSetupService = requesterPaysSetupService,
-        fastPassServiceConstructor = (_, _) => mockFastPassService
+        fastPassServiceConstructor = _ => mockFastPassService
       )(
         defaultRequestContext
       )
@@ -625,7 +620,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
         samDAO = samDAO,
         workspaceManagerDAO = wsmDAO,
         aclManagerDatasource = aclManagerDatasource,
-        fastPassServiceConstructor = (_, _) => mockFastPassService
+        fastPassServiceConstructor = _ => mockFastPassService
       )(defaultRequestContext)
 
     val aclUpdates = Set(
@@ -752,7 +747,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
                                               samDAO = samDAO,
-                                              fastPassServiceConstructor = (_, _) => mockFastPassService
+                                              fastPassServiceConstructor = _ => mockFastPassService
     )(defaultRequestContext)
 
     val writerAclUpdate = Set(
@@ -790,7 +785,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
                                               samDAO = samDAO,
-                                              fastPassServiceConstructor = (_, _) => mockFastPassService
+                                              fastPassServiceConstructor = _ => mockFastPassService
     )(defaultRequestContext)
 
     val aclUpdate = Set(

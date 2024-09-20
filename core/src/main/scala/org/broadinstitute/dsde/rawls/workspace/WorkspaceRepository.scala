@@ -4,15 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  PendingCloneWorkspaceFileTransfer,
-  RawlsRequestContext,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceState
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, PendingCloneWorkspaceFileTransfer, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceState, WorkspaceSubmissionStats, WorkspaceTag}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
@@ -43,6 +35,14 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs)
     }
+
+  def getWorkspaceId(workspaceName: WorkspaceName): Future[Option[UUID]] = dataSource.inTransaction {
+    _.workspaceQuery.getV2WorkspaceId(workspaceName)
+  }
+
+  def listWorkspacesByIds(workspaceIds: Seq[UUID]): Future[Seq[Workspace]] = dataSource.inTransaction {
+    _.workspaceQuery.listV2WorkspacesByIds(workspaceIds)
+  }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =
     dataSource.inTransaction { access =>
@@ -97,10 +97,10 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       } yield newWorkspace
     }
 
-  /*** Clone Workspace File Transfer Operations ***/
-
   def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
     dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+
+  /*** Methods Accessing Auxiliary Data ***/
 
   def updatePendingCloneWorkspaceFileTransferRecord(record: PendingCloneWorkspaceFileTransfer): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.update(record))
@@ -110,5 +110,20 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
 
   def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
+
+
+  def listSubmissionSummaryStats(workspaceId: UUID): Future[Map[UUID, WorkspaceSubmissionStats]] =
+    dataSource.inTransaction { _.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId)) }
+
+  /**
+    * FIXME: This appears to be using unvalidated input from users in a query.
+    * Eventually, this gets used like: withOptionalOwnerFilter.filter(_.valueString.like(s"%$query%"))
+    * So there _may_ be _some_ implicit control around it
+    * For now it's being moved into the repository as is,
+    * but this requires further investigation and potential remediation
+    */
+  def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
+    dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
+
 
 }
