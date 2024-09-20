@@ -817,6 +817,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   }
 
   behavior of "getBucketUsage"
+  // TODO: neither this nor getBucketOptions seem to verify we have a gcp workspace,
+  //  or that googleProjectId/bucketName is available - this should probably be fixed
+  //  note: in Workspace.buildMcWorkspace (WorkspaceModel:285), it's handled like this
+  //    val googleProjectId =
+  //      if (workspaceType == WorkspaceType.RawlsWorkspace) GoogleProjectId("google-id") else GoogleProjectId("")
+  //    practically, if it's a MC workspace, the GoogleProjectId will be invalid, and the bucket name will be an empty string
+  //  this will cause an exception in google, but it won't blow up the world, so maybe it's fine
+  //  but it seems nice to just check before the call and return a more helpful exception
   it should "get the bucket usage for a gcp workspace" in {
     val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
     val repository = mock[WorkspaceRepository]
@@ -923,4 +931,37 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
   }
 
+
+  behavior of "getBucketOptions"
+  it should "get the bucket options for a gcp workspace" in {
+    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
+      SamUserStatusResponse(
+        defaultRequestContext.userInfo.userSubjectId.value,
+        defaultRequestContext.userInfo.userEmail.value,
+        true
+      )
+    )))
+    when(sam.userHasAction(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspaceActions.read,
+      defaultRequestContext)
+    ).thenReturn(Future(true))
+    val bucketDetails = mock[WorkspaceBucketOptions]
+    val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId))
+      .thenReturn(Future.successful(bucketDetails))
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      workspaceRepository = repository,
+      gcsDAO = gcs
+    )(defaultRequestContext)
+
+    Await.result(service.getBucketOptions(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketDetails
+    verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
+  }
 }
