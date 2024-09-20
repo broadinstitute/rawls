@@ -52,7 +52,7 @@ class CloneWorkspaceFileTransferMonitorActor(val workspaceRepository: WorkspaceR
 
   private def checkAll(implicit executionContext: ExecutionContext) =
     for {
-      pendingTransfers <- workspaceRepository.listPendingCloneWorkspaceFileTransferRecords()
+      pendingTransfers <- workspaceRepository.listPendingCloneWorkspaceFileTransferRecords(None)
       _ <- pendingTransfers.toList
         .traverse { pendingTransfer =>
           IO.fromFuture(IO(attemptTransfer(pendingTransfer))).attempt.map {

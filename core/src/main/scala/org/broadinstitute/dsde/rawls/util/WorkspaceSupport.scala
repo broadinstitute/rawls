@@ -60,14 +60,6 @@ trait WorkspaceSupport {
         }
     }
 
-  def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] =
-    accessCheck(workspace, requiredAction, ignoreLock = false) flatMap { _ => codeBlock }
-
-  def requireAccessIgnoreLockF[T](workspace: Workspace, requiredAction: SamResourceAction)(
-    codeBlock: => Future[T]
-  ): Future[T] =
-    accessCheck(workspace, requiredAction, ignoreLock = true) flatMap { _ => codeBlock }
-
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
     for {
       _ <- userEnabledCheck
@@ -131,11 +123,12 @@ trait WorkspaceSupport {
   def getV2WorkspaceContextAndPermissions(
     workspaceName: WorkspaceName,
     requiredAction: SamResourceAction,
-    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    attributeSpecs: Option[WorkspaceAttributeSpecs] = None,
+    ignoreLock: Boolean = false
   ): Future[Workspace] =
     for {
       workspaceContext <- getV2WorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
+      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock) // throws if user does not have permission
     } yield workspaceContext
 
   def getV2WorkspaceContextAndPermissionsById(

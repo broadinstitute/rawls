@@ -1436,55 +1436,15 @@ class WorkspaceService(
       notificationMessages.size.toString
     }
 
-  def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
-    // don't do the sam REST call inside the db transaction.
-    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
-        // if we get here, we passed all the hoops
+  def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own, ignoreLock = true)
+    locked <- workspaceRepository.lockWorkspace(workspace)
+  } yield locked
 
-        dataSource.inTransaction { dataAccess =>
-          lockWorkspaceInternal(workspaceContext, dataAccess)
-        }
-      }
-    }
-
-  private def lockWorkspaceInternal(workspaceContext: Workspace, dataAccess: DataAccess) =
-    dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
-      if (!submissions.forall(_.status.isTerminated)) {
-        DBIO.failed(
-          new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(
-              StatusCodes.Conflict,
-              s"There are running submissions in workspace ${workspaceContext.toWorkspaceName}, so it cannot be locked."
-            )
-          )
-        )
-      } else {
-        import dataAccess.WorkspaceExtensions
-        dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).lock
-      }
-    }
-
-  def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
-    // don't do the sam REST call inside the db transaction.
-    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
-        // if we get here, we passed all the hoops
-
-        dataSource.inTransaction { dataAccess =>
-          import dataAccess.WorkspaceExtensions
-          dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspaceContext).flatMap {
-            case true =>
-              DBIO.failed(
-                new RawlsExceptionWithErrorReport(
-                  ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")
-                )
-              )
-            case false => dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).unlock
-          }
-        }
-      }
-    }
+  def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own, ignoreLock = true)
+    unlocked <- workspaceRepository.unlockWorkspace(workspace)
+  } yield unlocked
 
   /**
    * Applies the sequence of operations in order to the workspace.
