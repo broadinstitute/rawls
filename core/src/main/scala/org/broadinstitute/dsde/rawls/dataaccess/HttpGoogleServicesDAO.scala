@@ -354,7 +354,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def getBucketUsage(googleProject: GoogleProjectId,
                               bucketName: String,
-                              maxResults: Option[Long]
+                              maxResults: Option[Long] = None
   ): Future[BucketUsageResponse] = {
     implicit val service = GoogleInstrumentedService.Storage
 

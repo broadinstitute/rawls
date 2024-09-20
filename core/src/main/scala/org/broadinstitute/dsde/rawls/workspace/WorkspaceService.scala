@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
@@ -1791,20 +1791,19 @@ class WorkspaceService(
       case Some(workspace) => op(workspace)
     }
 
-  def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] =
-    // don't do the sam REST call inside the db transaction.
-    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.read) {
-        // if we get here, we passed all the hoops, otherwise an exception would have been thrown
-        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName).recoverWith {
-          // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
-          // instead of a 500 to avoid Sentry notifications.
-          case t: GoogleJsonResponseException =>
-            val code = getStatusCodeHandlingUnknown(t.getStatusCode)
-            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
-        }
-      }
-    }
+
+  def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = (for {
+    workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+    bucketUsage <- gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName, None)
+  } yield {
+    bucketUsage
+  }).recover {
+    // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
+    // instead of a 500 to avoid Sentry notifications.
+    case t: GoogleJsonResponseException =>
+      val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+      throw new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString))
+  }
 
   def getAccessInstructions(workspaceName: WorkspaceName): Future[Seq[ManagedGroupAccessInstructions]] =
     for {

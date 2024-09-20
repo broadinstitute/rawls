@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
+import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -15,12 +17,7 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  UserDisabledException,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -792,4 +789,132 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
   }
+
+
+  def getTestWorkspace(workspaceType: WorkspaceType): Workspace = {
+  val googleProjectId = workspaceType match {
+    case WorkspaceType.McWorkspace => GoogleProjectId("")
+    case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
+  }
+    Workspace("fake_namespace",
+      "fake_name",
+          UUID.randomUUID().toString,
+          "fake_bucket",
+          None,
+          DateTime.now(),
+          DateTime.now(),
+          "creator@example.com",
+          Map.empty
+        ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
+
+
+  }
+
+  behavior of "getBucketUsage"
+  it should "get the bucket usage for a gcp workspace" in {
+    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
+      SamUserStatusResponse(
+        defaultRequestContext.userInfo.userSubjectId.value,
+        defaultRequestContext.userInfo.userEmail.value,
+        true
+      )
+    )))
+    when(sam.userHasAction(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspaceActions.read,
+      defaultRequestContext)
+    ).thenReturn(Future(true))
+    val bucketUsage = mock[BucketUsageResponse]
+    val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    when(gcs.getBucketUsage(workspace.googleProjectId, workspace.bucketName,None))
+      .thenReturn(Future.successful(bucketUsage))
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      workspaceRepository = repository,
+      gcsDAO = gcs
+    )(defaultRequestContext)
+
+    Await.result(service.getBucketUsage(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketUsage
+    verify(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
+  }
+
+  it should "work on a locked workspace" in {
+    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace).copy(isLocked = true)
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
+      SamUserStatusResponse(
+        defaultRequestContext.userInfo.userSubjectId.value,
+        defaultRequestContext.userInfo.userEmail.value,
+        true
+      )
+    )))
+    when(sam.userHasAction(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspaceActions.read,
+      defaultRequestContext)
+    ).thenReturn(Future(true))
+    val bucketUsage = mock[BucketUsageResponse]
+    val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    when(gcs.getBucketUsage(workspace.googleProjectId, workspace.bucketName, None))
+      .thenReturn(Future.successful(bucketUsage))
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      workspaceRepository = repository,
+      gcsDAO = gcs
+    )(defaultRequestContext)
+
+    Await.result(service.getBucketUsage(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketUsage
+    verify(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
+  }
+
+  it should "map non-standard codes from a GoogleJsonResponseException to a rawls exception" in {
+    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
+      SamUserStatusResponse(
+        defaultRequestContext.userInfo.userSubjectId.value,
+        defaultRequestContext.userInfo.userEmail.value,
+        true
+      )
+    )))
+    when(sam.userHasAction(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspaceActions.read,
+      defaultRequestContext)
+    ).thenReturn(Future(true))
+    val bucketUsage = mock[BucketUsageResponse]
+    val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    doAnswer(_ => {
+      throw new GoogleJsonResponseException(
+        new HttpResponseException.Builder(489, "a weird google error", new HttpHeaders()),
+        new GoogleJsonError()
+      )
+    }).when(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
+
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      workspaceRepository = repository,
+      gcsDAO = gcs
+    )(defaultRequestContext)
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getBucketUsage(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketUsage
+    }
+
+    error.errorReport.statusCode.get.intValue shouldBe 489
+    error.errorReport.statusCode.get.reason() shouldBe "Google API failure"
+    verify(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
+  }
+
 }
