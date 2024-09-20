@@ -114,7 +114,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     )
   }
 
-  it should "handle adding a setting to a workspace with no settings" in {
+  it should "handle a workspace with no settings" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
 
