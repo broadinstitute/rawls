@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  PendingCloneWorkspaceFileTransfer,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
@@ -65,9 +66,6 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.delete(workspaceName)
     }
 
-  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
-    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
-
   def createMCWorkspace(workspaceId: UUID,
                         workspaceName: WorkspaceName,
                         attributes: AttributeMap,
@@ -98,4 +96,19 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
         )
       } yield newWorkspace
     }
+
+  /*** Clone Workspace File Transfer Operations ***/
+
+  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
+    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+
+  def updatePendingCloneWorkspaceFileTransferRecord(record: PendingCloneWorkspaceFileTransfer): Future[Int] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.update(record))
+
+  def listPendingCloneWorkspaceFileTransferRecords(): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.listPendingTransfers())
+
+  def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
+
 }

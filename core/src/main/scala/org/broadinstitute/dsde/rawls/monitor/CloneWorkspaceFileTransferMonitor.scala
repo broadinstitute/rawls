@@ -11,6 +11,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CloneWorkspaceFileTransferMonitor.CheckAll
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.joda.time.DateTime
 
 import scala.concurrent.duration._
@@ -22,14 +23,20 @@ object CloneWorkspaceFileTransferMonitor {
             gcsDAO: GoogleServicesDAO,
             initialDelay: FiniteDuration,
             pollInterval: FiniteDuration
-  )(implicit executionContext: ExecutionContext): Props =
-    Props(new CloneWorkspaceFileTransferMonitorActor(dataSource, gcsDAO, initialDelay, pollInterval))
+  )(implicit executionContext: ExecutionContext): Props = Props(
+    new CloneWorkspaceFileTransferMonitorActor(
+      new WorkspaceRepository(dataSource),
+      gcsDAO,
+      initialDelay,
+      pollInterval
+    )
+  )
 
   sealed trait CloneWorkspaceFileTransferMonitorMessage
   case object CheckAll extends CloneWorkspaceFileTransferMonitorMessage
 }
 
-class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
+class CloneWorkspaceFileTransferMonitorActor(val workspaceRepository: WorkspaceRepository,
                                              val gcsDAO: GoogleServicesDAO,
                                              val initialDelay: FiniteDuration,
                                              val pollInterval: FiniteDuration
@@ -45,9 +52,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
 
   private def checkAll(implicit executionContext: ExecutionContext) =
     for {
-      pendingTransfers <- dataSource.inTransaction { dataAccess =>
-        dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers()
-      }
+      pendingTransfers <- workspaceRepository.listPendingCloneWorkspaceFileTransferRecords()
       _ <- pendingTransfers.toList
         .traverse { pendingTransfer =>
           IO.fromFuture(IO(attemptTransfer(pendingTransfer))).attempt.map {
@@ -128,20 +133,18 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
     transferSucceeded: Boolean
   ): Future[Unit] = {
     val currentTime = DateTime.now()
-
-    dataSource.inTransaction { dataAccess =>
-      for {
-        _ <- dataAccess.cloneWorkspaceFileTransferQuery.update(
-          pendingCloneWorkspaceFileTransfer.copy(finished = currentTime.some,
-                                                 outcome = if (transferSucceeded) "Success".some else "Failure".some
-          )
+    for {
+      _ <- workspaceRepository.updatePendingCloneWorkspaceFileTransferRecord(
+        pendingCloneWorkspaceFileTransfer.copy(
+          finished = currentTime.some,
+          outcome = if (transferSucceeded) "Success".some else "Failure".some
         )
-        _ <- dataAccess.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(
-          pendingCloneWorkspaceFileTransfer.destWorkspaceId,
-          currentTime.toDate
-        )
-      } yield ()
-    }
+      )
+      _ <- workspaceRepository.updateCompletedCloneWorkspaceFileTransfer(
+        pendingCloneWorkspaceFileTransfer.destWorkspaceId,
+        currentTime
+      )
+    } yield ()
   }
 }
 

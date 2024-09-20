@@ -17,7 +17,12 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  UserDisabledException,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -796,23 +801,21 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
   }
 
-
   def getTestWorkspace(workspaceType: WorkspaceType): Workspace = {
-  val googleProjectId = workspaceType match {
-    case WorkspaceType.McWorkspace => GoogleProjectId("")
-    case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
-  }
+    val googleProjectId = workspaceType match {
+      case WorkspaceType.McWorkspace    => GoogleProjectId("")
+      case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
+    }
     Workspace("fake_namespace",
-      "fake_name",
-          UUID.randomUUID().toString,
-          "fake_bucket",
-          None,
-          DateTime.now(),
-          DateTime.now(),
-          "creator@example.com",
-          Map.empty
-        ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
-
+              "fake_name",
+              UUID.randomUUID().toString,
+              "fake_bucket",
+              None,
+              DateTime.now(),
+              DateTime.now(),
+              "creator@example.com",
+              Map.empty
+    ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
 
   }
 
@@ -830,22 +833,27 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
-    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
-      SamUserStatusResponse(
-        defaultRequestContext.userInfo.userSubjectId.value,
-        defaultRequestContext.userInfo.userEmail.value,
-        true
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(
+      Future.successful(
+        Some(
+          SamUserStatusResponse(
+            defaultRequestContext.userInfo.userSubjectId.value,
+            defaultRequestContext.userInfo.userEmail.value,
+            true
+          )
+        )
       )
-    )))
-    when(sam.userHasAction(
-      SamResourceTypeNames.workspace,
-      workspace.workspaceId,
-      SamWorkspaceActions.read,
-      defaultRequestContext)
+    )
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
+      )
     ).thenReturn(Future(true))
     val bucketUsage = mock[BucketUsageResponse]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-    when(gcs.getBucketUsage(workspace.googleProjectId, workspace.bucketName,None))
+    when(gcs.getBucketUsage(workspace.googleProjectId, workspace.bucketName, None))
       .thenReturn(Future.successful(bucketUsage))
     val service = workspaceServiceConstructor(
       samDAO = sam,
@@ -862,18 +870,23 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
-    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
-      SamUserStatusResponse(
-        defaultRequestContext.userInfo.userSubjectId.value,
-        defaultRequestContext.userInfo.userEmail.value,
-        true
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(
+      Future.successful(
+        Some(
+          SamUserStatusResponse(
+            defaultRequestContext.userInfo.userSubjectId.value,
+            defaultRequestContext.userInfo.userEmail.value,
+            true
+          )
+        )
       )
-    )))
-    when(sam.userHasAction(
-      SamResourceTypeNames.workspace,
-      workspace.workspaceId,
-      SamWorkspaceActions.read,
-      defaultRequestContext)
+    )
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
+      )
     ).thenReturn(Future(true))
     val bucketUsage = mock[BucketUsageResponse]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
@@ -894,27 +907,32 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
-    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
-      SamUserStatusResponse(
-        defaultRequestContext.userInfo.userSubjectId.value,
-        defaultRequestContext.userInfo.userEmail.value,
-        true
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(
+      Future.successful(
+        Some(
+          SamUserStatusResponse(
+            defaultRequestContext.userInfo.userSubjectId.value,
+            defaultRequestContext.userInfo.userEmail.value,
+            true
+          )
+        )
       )
-    )))
-    when(sam.userHasAction(
-      SamResourceTypeNames.workspace,
-      workspace.workspaceId,
-      SamWorkspaceActions.read,
-      defaultRequestContext)
+    )
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
+      )
     ).thenReturn(Future(true))
     val bucketUsage = mock[BucketUsageResponse]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-    doAnswer(_ => {
+    doAnswer { _ =>
       throw new GoogleJsonResponseException(
         new HttpResponseException.Builder(489, "a weird google error", new HttpHeaders()),
         new GoogleJsonError()
       )
-    }).when(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
+    }.when(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
 
     val service = workspaceServiceConstructor(
       samDAO = sam,
@@ -931,25 +949,29 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(gcs).getBucketUsage(workspace.googleProjectId, workspace.bucketName, None)
   }
 
-
   behavior of "getBucketOptions"
   it should "get the bucket options for a gcp workspace" in {
     val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
-    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future.successful(Some(
-      SamUserStatusResponse(
-        defaultRequestContext.userInfo.userSubjectId.value,
-        defaultRequestContext.userInfo.userEmail.value,
-        true
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(
+      Future.successful(
+        Some(
+          SamUserStatusResponse(
+            defaultRequestContext.userInfo.userSubjectId.value,
+            defaultRequestContext.userInfo.userEmail.value,
+            true
+          )
+        )
       )
-    )))
-    when(sam.userHasAction(
-      SamResourceTypeNames.workspace,
-      workspace.workspaceId,
-      SamWorkspaceActions.read,
-      defaultRequestContext)
+    )
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
+      )
     ).thenReturn(Future(true))
     val bucketDetails = mock[WorkspaceBucketOptions]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
