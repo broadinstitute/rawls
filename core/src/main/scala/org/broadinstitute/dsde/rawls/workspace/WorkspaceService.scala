@@ -209,9 +209,7 @@ class WorkspaceService(
     } yield workspace
   }
 
-  def getWorkspace(workspaceName: WorkspaceName,
-                   params: WorkspaceFieldSpecs,
-  ): Future[JsObject] = {
+  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[JsObject] = {
     val options = processOptions(params)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
@@ -224,9 +222,7 @@ class WorkspaceService(
     )
   }
 
-  def getWorkspaceById(workspaceId: String,
-                       params: WorkspaceFieldSpecs,
-  ): Future[JsObject] = {
+  def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs): Future[JsObject] = {
     val options = processOptions(params)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
@@ -366,7 +362,6 @@ class WorkspaceService(
     QueryOptions(options, attrSpecs)
 
   }
-
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String
@@ -1023,14 +1018,15 @@ class WorkspaceService(
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint
-      _ <- dataSource.inTransaction { dataAccess =>
-        destWorkspaceRequest.copyFilesWithPrefix.traverse_ { prefix =>
-          dataAccess.cloneWorkspaceFileTransferQuery.save(destWorkspaceContext.workspaceIdAsUUID,
-                                                          sourceWorkspaceContext.workspaceIdAsUUID,
-                                                          prefix
+      _ <- destWorkspaceRequest.copyFilesWithPrefix
+        .map { prefix =>
+          workspaceRepository.savePendingCloneWorkspaceFileTransfer(
+            destWorkspaceContext.workspaceIdAsUUID,
+            sourceWorkspaceContext.workspaceIdAsUUID,
+            prefix
           )
         }
-      }
+        .getOrElse(Future.successful())
     } yield destWorkspaceContext
 
   private def validateFileCopyPrefix(copyFilesWithPrefix: String): Future[Unit] =
@@ -1045,12 +1041,10 @@ class WorkspaceService(
 
   def listPendingFileTransfersForWorkspace(
     workspaceName: WorkspaceName
-  ): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
-    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers(Option(workspaceContext.workspaceIdAsUUID))
-      }
-    }
+  ): Future[Seq[PendingCloneWorkspaceFileTransfer]] = for {
+    workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+    transfers <- workspaceRepository.listPendingCloneWorkspaceFileTransferRecords()
+  } yield transfers
 
   private def withClonedAuthDomain[T](sourceWorkspaceADs: Set[ManagedGroupRef], destWorkspaceADs: Set[ManagedGroupRef])(
     op: Set[ManagedGroupRef] => ReadWriteAction[T]
@@ -1780,7 +1774,6 @@ class WorkspaceService(
       case Some(workspace) => op(workspace)
     }
 
-
   def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] = for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
     options <- gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
@@ -1789,9 +1782,7 @@ class WorkspaceService(
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = (for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
     bucketUsage <- gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName, None)
-  } yield {
-    bucketUsage
-  }).recover {
+  } yield bucketUsage).recover {
     // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
     // instead of a 500 to avoid Sentry notifications.
     case t: GoogleJsonResponseException =>
