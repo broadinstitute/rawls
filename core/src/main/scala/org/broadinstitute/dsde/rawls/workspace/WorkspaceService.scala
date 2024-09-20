@@ -116,7 +116,6 @@ object WorkspaceService {
   val SECURITY_LABEL_KEY: String = "security"
   val HIGH_SECURITY_LABEL: String = "high"
   val LOW_SECURITY_LABEL: String = "low"
-
   val BUCKET_GET_PERMISSION: String = "storage.buckets.get"
 
 }
@@ -212,15 +211,12 @@ class WorkspaceService(
 
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,
-                   parentContext: RawlsRequestContext = ctx
   ): Future[JsObject] = {
     val options = processOptions(params)
-    traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext)(_ =>
+    traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
-        workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
-                                                         SamWorkspaceActions.read,
-                                                         Option(options.attrSpecs)
-        )
+        workspace <-
+          getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(options.attrSpecs))
         workspaceResponse <- getWorkspaceDetails(workspace, options)
       } yield
       // post-process JSON to remove calculated-but-undesired keys
@@ -230,15 +226,12 @@ class WorkspaceService(
 
   def getWorkspaceById(workspaceId: String,
                        params: WorkspaceFieldSpecs,
-                       parentContext: RawlsRequestContext = ctx
   ): Future[JsObject] = {
     val options = processOptions(params)
-    traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext)(_ =>
+    traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
-        workspace <- getV2WorkspaceContextAndPermissionsById(workspaceId,
-                                                             SamWorkspaceActions.read,
-                                                             Option(options.attrSpecs)
-        )
+        workspace <-
+          getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.read, Option(options.attrSpecs))
         workspaceResponse <- getWorkspaceDetails(workspace, options)
       } yield
       // post-process JSON to remove calculated-but-undesired keys
@@ -1547,14 +1540,14 @@ class WorkspaceService(
     getPermissionsFromRoles(googleRoles)
   }
 
-  private def getStatusCodeHandlingUnknown(intCode: Integer) =
+  private def getStatusCodeHandlingUnknown(intCode: Integer): StatusCode =
     StatusCodes
       .getForKey(intCode)
       .getOrElse(
         StatusCodes.custom(intCode, "Google API failure", "failure with non-standard status code", false, true)
       )
 
-  private def getPermissionsFromRoles(googleRoles: Set[String]) =
+  private def getPermissionsFromRoles(googleRoles: Set[String]): Future[Set[IamPermission]] =
     Future
       .traverse(googleRoles) { googleRole =>
         googleIamDao.getOrganizationCustomRole(googleRole)
@@ -2189,6 +2182,7 @@ class WorkspaceService(
       workspaceType,
       state
     )
+
     traceDBIOWithParent("save", parentContext)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
   }

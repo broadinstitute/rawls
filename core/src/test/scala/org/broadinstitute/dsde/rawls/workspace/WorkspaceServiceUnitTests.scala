@@ -127,13 +127,13 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     doReturn(Future.successful(expected))
       .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
 
     val result = Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()),
                               Duration.Inf
     )
     assertResult(expected)(result)
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
   }
 
   it should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
@@ -145,7 +145,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
     doReturn(Future.failed(exception))
       .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
 
     val result = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()),
@@ -154,7 +154,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     assertResult(exception)(result)
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
   }
 
   it should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
@@ -165,7 +165,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123"))))
       .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
 
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
     val exception = intercept[NoSuchWorkspaceException] {
@@ -174,7 +174,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assert(exception.workspace == workspaceId)
     assert(!exception.getMessage.contains("abc"))
     assert(!exception.getMessage.contains("123"))
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
   }
 
   it should "return an exception without the workspace name when getWorkspace(WorkspaceName) fails access checks" in {
@@ -185,7 +185,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
     doReturn(Future.failed(WorkspaceAccessDeniedException(WorkspaceName("abc", "123"))))
       .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
 
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
     val exception = intercept[WorkspaceAccessDeniedException] {
@@ -195,7 +195,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assert(exception.workspace == workspaceId)
     assert(!exception.getMessage.contains("abc"))
     assert(!exception.getMessage.contains("123"))
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
   }
 
   it should "return an exception with the workspaceId when no workspace is found in the initial query" in {
