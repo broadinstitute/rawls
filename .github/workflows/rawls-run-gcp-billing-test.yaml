@@ -6,7 +6,6 @@ name: rawls-run-gcp-billing-test
 # triggered by a dispatch event, it will use the parameters specified on LHS of || in
 # the init-github-context.extract-inputs step.
 on:
-  push:
   schedule:
     # run twice a day at 10:00 and 22:00 UTC every day of the week
     - cron: "0 10/12 * * *"
