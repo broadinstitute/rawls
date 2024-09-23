@@ -1,0 +1,76 @@
+name: rawls-run-gcp-billing-test
+
+# This workflow can be run on schedule OR dispatched (manually or by another dispatcher workflow)
+# When thw workflow is triggered on schedule, it will use the parameters specified on
+# the RHS of || in init-github-context.extract-inputs step. Otherwise, if the workflow is
+# triggered by a dispatch event, it will use the parameters specified on LHS of || in
+# the init-github-context.extract-inputs step.
+on:
+  push:
+  schedule:
+    # run twice a day at 10:00 and 22:00 UTC every day of the week
+    - cron: "0 10/12 * * *"
+  workflow_dispatch:
+    inputs:
+      terra-env:
+        description: 'Terra environment in which this action will run'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+        default: dev
+      owner-subject:
+        description: 'Owner subject (used for creating billing project)'
+        required: false
+        default: 'hermione.owner@test.firecloud.org'
+        type: string
+      billing-account:
+        description: 'Billing account to create the project in'
+        required: false
+        default: 'billingAccounts/00708C-45D19D-27AAFA'
+      service-account:
+        description: 'Email address or unique identifier of the Google Cloud service account for which to generate credentials'
+        required: false
+        default: 'firecloud-dev@broad-dsde-dev.iam.gserviceaccount.com'
+        type: string
+
+env:
+  TOKEN: '${{ secrets.BROADBOT_TOKEN }}' # github token for access to kick off a job in the private repo
+
+jobs:
+  init-github-context:
+    runs-on: ubuntu-latest
+    outputs:
+      terra-env: ${{ steps.extract-inputs.outputs.terra-env }}
+      owner-subject: ${{ steps.extract-inputs.outputs.owner-subject }}
+      billing-account: ${{ steps.extract-inputs.outputs.billing-account }}
+      service-account: ${{ steps.extract-inputs.outputs.service-account }}
+    steps:
+      - name: Get inputs or use defaults
+        id: extract-inputs
+        run: |
+          echo "terra-env=${{ inputs.terra-env || 'dev' }}" >> "$GITHUB_OUTPUT"
+          echo "owner-subject=${{ inputs.owner-subject              || 'hermione.owner@test.firecloud.org' }}" >> "$GITHUB_OUTPUT"
+          echo "billing-account=${{ inputs.billing-account          || 'billingAccounts/00708C-45D19D-27AAFA' }}" >> "$GITHUB_OUTPUT"
+          echo "service-account=${{ inputs.service-account          || 'firecloud-dev@broad-dsde-dev.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
+
+  create-gcp-billing-project-workflow:
+    runs-on: ubuntu-latest
+    needs:
+      - init-github-context
+    steps:
+      - name: dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v4.0.0
+        with:
+          workflow: create-gcp-billing-project.yaml
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ env.TOKEN }}
+          inputs: '{
+            "terra-env": "${{ needs.init-github-context.outputs.terra-env }}",
+            "test-user-email": "${{ needs.init-github-context.outputs.owner-subject }}",
+            "gcp-billing-account": "${{ needs.init-github-context.outputs.billing-account }}",
+            "service-account": "${{ needs.init-github-context.outputs.service-account }}",
+            "terra-service": "rawls"
+          }'
