@@ -49,10 +49,10 @@ jobs:
       - name: Get inputs or use defaults
         id: extract-inputs
         run: |
-          echo "terra-env=${{ inputs.terra-env || 'dev' }}" >> "$GITHUB_OUTPUT"
-          echo "owner-subject=${{ inputs.owner-subject              || 'hermione.owner@test.firecloud.org' }}" >> "$GITHUB_OUTPUT"
-          echo "billing-account=${{ inputs.billing-account          || 'billingAccounts/00708C-45D19D-27AAFA' }}" >> "$GITHUB_OUTPUT"
-          echo "service-account=${{ inputs.service-account          || 'firecloud-dev@broad-dsde-dev.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
+          echo "terra-env=${{ inputs.terra-env              || 'dev' }}" >> "$GITHUB_OUTPUT"
+          echo "owner-subject=${{ inputs.owner-subject      || 'hermione.owner@test.firecloud.org' }}" >> "$GITHUB_OUTPUT"
+          echo "billing-account=${{ inputs.billing-account  || 'billingAccounts/00708C-45D19D-27AAFA' }}" >> "$GITHUB_OUTPUT"
+          echo "service-account=${{ inputs.service-account  || 'firecloud-dev@broad-dsde-dev.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
 
   create-gcp-billing-project-workflow:
     runs-on: ubuntu-latest
