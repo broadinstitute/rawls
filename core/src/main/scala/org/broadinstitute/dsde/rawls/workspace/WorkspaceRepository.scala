@@ -156,13 +156,6 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def listSubmissionSummaryStats(workspaceId: UUID): Future[Map[UUID, WorkspaceSubmissionStats]] =
     dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId)))
 
-  /**
-    * FIXME: This appears to be using unvalidated input from users in a query.
-    * Eventually, this gets used like: withOptionalOwnerFilter.filter(_.valueString.like(s"%$query%"))
-    * So there _may_ be _some_ implicit control around it
-    * For now it's being moved into the repository as is,
-    * but this requires further investigation and potential remediation
-    */
   def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
 

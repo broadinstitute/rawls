@@ -152,6 +152,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       service.getWorkspaceById(workspace.workspaceId, WorkspaceFieldSpecs(Some(Set("workspace")))),
       Duration.Inf
     )
+
     val fields = result.fields.get("workspace").get.asJsObject.getFields("name", "namespace")
     fields should contain(workspace.name)
     fields should contain(workspace.namespace)
@@ -159,11 +160,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   it should "return an exception without the workspace name when the user can't read the workspace" in {
     val repository = mock[WorkspaceRepository]
-    when(repository.getWorkspace(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any))
+    when(repository.getWorkspace(workspace.workspaceIdAsUUID, Some(WorkspaceAttributeSpecs(true))))
       .thenReturn(Future(Some(workspace)))
     val sam = mock[SamDAO]
-    when(sam.getUserStatus(defaultRequestContext))
-      .thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
     when(
       sam.userHasAction(SamResourceTypeNames.workspace,
                         workspace.workspaceId,
@@ -221,8 +221,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(repository.getWorkspace(workspace.toWorkspaceName, Some(WorkspaceAttributeSpecs(false))))
       .thenReturn(Future(Some(workspace)))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any))
-      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val service = workspaceServiceConstructor(
       samDAO = sam,
       workspaceRepository = repository,
@@ -233,7 +232,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       service.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(Some(Set("workspace")))),
       Duration.Inf
     )
-    val fields = result.fields.get("workspace").get.asJsObject.getFields("name", "namespace")
+    val fields = result.fields("workspace").asJsObject.getFields("name", "namespace")
     fields should contain(workspace.name)
     fields should contain(workspace.namespace)
   }
@@ -251,8 +250,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   }
 
   it should "return an unauthorized error if the user is disabled" in {
-    // val datasource = mock[SlickDataSource]
-    // when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val samUserStatus = SamUserStatusResponse("sub", "email", enabled = false)
     when(samDAO.getUserStatus(ArgumentMatchers.eq(defaultRequestContext))).thenReturn(
