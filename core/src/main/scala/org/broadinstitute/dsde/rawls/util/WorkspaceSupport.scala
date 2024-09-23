@@ -83,17 +83,6 @@ trait WorkspaceSupport {
       _ <- accessCheck(workspace, SamWorkspaceActions.compute)
     } yield ()
 
-  def raiseUnlessUserHasAction(action: SamResourceAction,
-                               resType: SamResourceTypeName,
-                               resId: String,
-                               context: RawlsRequestContext = ctx
-  )(
-    throwable: Throwable
-  ): Future[Unit] =
-    samDAO
-      .userHasAction(resType, resId, action, context)
-      .flatMap(ApplicativeThrow[Future].raiseUnless(_)(throwable))
-
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
   def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): Boolean =
     // if the source has any auth domains, the dest must also *at least* have those auth domains
