@@ -32,6 +32,8 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.OptionValues
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.dsl.MatcherWords.not.contain
+import org.scalatest.matchers.must.Matchers.{include, not}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import spray.json.{JsObject, JsString}
 
@@ -67,7 +69,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   // This is just for convenience, so we only need to specify mocks we care about
   def workspaceServiceConstructor(
-    datasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
     executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
     workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
     leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
@@ -95,7 +96,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
-      datasource,
+      mock[SlickDataSource](RETURNS_SMART_NULLS),
       executionServiceCluster,
       workspaceManagerDAO,
       leonardoService,
@@ -122,110 +123,136 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"
-  // TODO:
-  //  These should all now work mostly the same as using the workspace name
-  //  When proper unit tests are added there, these should be converted and re-enabled
-  //  In the meantime, getWorkspace(workspaceId) no longer relies on getWorkspace(WorkspaceName) directly,
-  //  so these (correctly) fail
-  ignore should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
-    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
-    // Note that getWorkspaceById doesn't do any processing to a successful value at all
-    // it will pass on literally any valid JsObject returned by getWorkspace
-    val expected = new JsObject(Map("dummyKey" -> JsString("dummyVal")))
-
-    doReturn(Future.successful(expected))
-      .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
-
-    val result = Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()),
-                              Duration.Inf
-    )
-    assertResult(expected)(result)
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
-  }
-
-  ignore should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
-
-    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
-    val exception =
-      new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
-    doReturn(Future.failed(exception))
-      .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
-
-    val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()),
-                   Duration.Inf
+  it should "return the workspace on success" in {
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
       )
-    }
+    ).thenReturn(Future(true))
+    when(sam.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Seq()))
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.workspaceIdAsUUID, Some(WorkspaceAttributeSpecs(false))))
+      .thenReturn(Future(Some(workspace)))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      workspaceRepository = repository,
+      workspaceManagerDAO = wsm
+    )(defaultRequestContext)
 
-    assertResult(exception)(result)
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any())
+    val result = Await.result(
+      service.getWorkspaceById(workspace.workspaceId, WorkspaceFieldSpecs(Some(Set("workspace")))),
+      Duration.Inf
+    )
+    val fields = result.fields.get("workspace").get.asJsObject.getFields("name", "namespace")
+    fields should contain(workspace.name)
+    fields should contain(workspace.namespace)
   }
 
-  ignore should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
-    val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
-    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
+  it should "return an exception without the workspace name when the user can't read the workspace" in {
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any))
+      .thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext))
+      .thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
+      )
+    ).thenReturn(Future(false))
 
-    doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123"))))
-      .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
-
-    val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
-    val exception = intercept[NoSuchWorkspaceException] {
-      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
-    }
-    assert(exception.workspace == workspaceId)
-    assert(!exception.getMessage.contains("abc"))
-    assert(!exception.getMessage.contains("123"))
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
-  }
-
-  ignore should "return an exception without the workspace name when getWorkspace(WorkspaceName) fails access checks" in {
-    val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
-
-    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
-    doReturn(Future.failed(WorkspaceAccessDeniedException(WorkspaceName("abc", "123"))))
-      .when(service)
-      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
-
-    val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
-    val exception = intercept[WorkspaceAccessDeniedException] {
-      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
-    }
-
-    assert(exception.workspace == workspaceId)
-    assert(!exception.getMessage.contains("abc"))
-    assert(!exception.getMessage.contains("123"))
-    verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any())
-  }
-
-  ignore should "return an exception with the workspaceId when no workspace is found in the initial query" in {
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
-
-    val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
+    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repository)(defaultRequestContext)
 
     val exception = intercept[NoSuchWorkspaceException] {
-      val service = workspaceServiceConstructor(datasource)(defaultRequestContext)
-      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
+      Await.result(service.getWorkspaceById(workspace.workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
     }
 
-    assert(exception.workspace == workspaceId)
+    exception.workspace shouldBe workspace.workspaceId
+    exception.getMessage should (not include workspace.name)
+    exception.getMessage should (not include workspace.namespace)
+    verify(sam).userHasAction(SamResourceTypeNames.workspace,
+                              workspace.workspaceId,
+                              SamWorkspaceActions.read,
+                              defaultRequestContext
+    )
+  }
+
+  it should "return an exception with the workspaceId when no workspace is found" in {
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.workspaceIdAsUUID, Some(WorkspaceAttributeSpecs(true))))
+      .thenReturn(Future(None))
+
+    val exception = intercept[NoSuchWorkspaceException] {
+      val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repository)(defaultRequestContext)
+      Await.result(service.getWorkspaceById(workspace.workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
+    }
+
+    exception.workspace shouldEqual workspace.workspaceId
+  }
+
+  behavior of "getWorkspace"
+
+  it should "return the workspace on success" in {
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(defaultRequestContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
+    when(
+      sam.userHasAction(SamResourceTypeNames.workspace,
+                        workspace.workspaceId,
+                        SamWorkspaceActions.read,
+                        defaultRequestContext
+      )
+    ).thenReturn(Future(true))
+    when(sam.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Seq()))
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, Some(WorkspaceAttributeSpecs(false))))
+      .thenReturn(Future(Some(workspace)))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      workspaceRepository = repository,
+      workspaceManagerDAO = wsm
+    )(defaultRequestContext)
+
+    val result = Await.result(
+      service.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(Some(Set("workspace")))),
+      Duration.Inf
+    )
+    val fields = result.fields.get("workspace").get.asJsObject.getFields("name", "namespace")
+    fields should contain(workspace.name)
+    fields should contain(workspace.namespace)
+  }
+
+  it should "throw an exception when invalid fields are requested" in {
+    val service = workspaceServiceConstructor()(defaultRequestContext)
+    val invalidField = "thisFieldIsInvalid"
+    val fields = WorkspaceFieldSpecs(Some(Set(invalidField)))
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getWorkspace(workspace.toWorkspaceName, fields), Duration.Inf)
+    }
+
+    exception.errorReport.message should include(invalidField)
   }
 
   it should "return an unauthorized error if the user is disabled" in {
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
+    // val datasource = mock[SlickDataSource]
+    // when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val samUserStatus = SamUserStatusResponse("sub", "email", enabled = false)
     when(samDAO.getUserStatus(ArgumentMatchers.eq(defaultRequestContext))).thenReturn(
@@ -233,13 +260,296 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
 
     val exception = intercept[UserDisabledException] {
-      val service = workspaceServiceConstructor(datasource, samDAO = samDAO)(defaultRequestContext)
+      val service = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
       Await.result(service.getWorkspace(WorkspaceName("fake_namespace", "fake_name"), WorkspaceFieldSpecs()),
                    Duration.Inf
       )
     }
-
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
+  }
+
+  behavior of "getWorkspaceDetails"
+
+  it should "not preform operations for fields that are not requested" in {
+    val options = WorkspaceService.QueryOptions(Set(), WorkspaceAttributeSpecs(false))
+    val wsmDao = mock[WorkspaceManagerDAO]
+    when(wsmDao.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.canCompute shouldBe None
+    result.catalog shouldBe None
+    result.canShare shouldBe None
+  }
+
+  it should "check for the catalog permission in sam the field is requested" in {
+    val options = WorkspaceService.QueryOptions(Set("catalog"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(
+      sam.userHasAction(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspaceActions.catalog,
+        defaultRequestContext
+      )
+    ).thenReturn(Future(true))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.catalog shouldBe Some(true)
+    verify(sam).userHasAction(SamResourceTypeNames.workspace,
+                              workspace.workspaceId,
+                              SamWorkspaceActions.catalog,
+                              defaultRequestContext
+    )
+  }
+
+  it should "return the highest access level in accessLevel" in {
+    val options = WorkspaceService.QueryOptions(Set("accessLevel"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("READER"), SamResourceRole("OWNER"))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.accessLevel shouldBe Some(WorkspaceAccessLevels.Owner)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+  }
+
+  // this isn't realistic, since the user should have at least read access to get here,
+  // but it's the default specified
+  it should "return noaccess for accessLevel when sam return no roles for the user" in {
+    val options = WorkspaceService.QueryOptions(Set("accessLevel"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set()))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.accessLevel shouldBe Some(WorkspaceAccessLevels.NoAccess)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+  }
+
+  it should "return true for canCompute if the user is an owner" in {
+    val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("OWNER"))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspace.name shouldBe workspace.name
+    result.workspace.namespace shouldBe workspace.namespace
+    result.canCompute shouldBe Some(true)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+  }
+
+  // TODO: finish with azure codepath
+  ignore should "return true for canCompute if the user is a writer on an azure workspace" in {
+    val workspace = this.workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
+    val wsmDao = mock[WorkspaceManagerDAO]
+    // val aggregatedWorkspace = new AggregatedWorkspace()
+    when(wsmDao.getWorkspace(any, any))
+    // .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("OWNER"))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspace.name shouldBe workspace.name
+    result.workspace.namespace shouldBe workspace.namespace
+    result.canCompute shouldBe Some(true)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+  }
+
+  it should "query sam for canCompute if the user is not an owner on a gcp workspace" in {
+    val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
+    val wsmDao = mock[WorkspaceManagerDAO]
+    when(wsmDao.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("WRITER"))))
+    when(
+      sam.userHasAction(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspaceActions.compute,
+        defaultRequestContext
+      )
+    ).thenReturn(Future(true))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspace.name shouldBe workspace.name
+    result.workspace.namespace shouldBe workspace.namespace
+    result.canCompute shouldBe Some(true)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+    verify(sam).userHasAction(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspaceActions.compute,
+      defaultRequestContext
+    )
+  }
+
+  it should "return true for canShare if the user is a workspace owner" in {
+    val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("OWNER"))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspace.name shouldBe workspace.name
+    result.workspace.namespace shouldBe workspace.namespace
+    result.canShare shouldBe Some(true)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+  }
+
+  it should "return false for canShare if the user is a workspace reader" in {
+    val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("READER"))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspace.name shouldBe workspace.name
+    result.workspace.namespace shouldBe workspace.namespace
+    result.canShare shouldBe Some(false)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+  }
+
+  it should "query sam for canShare if the user is not an owner or reader on the workspace" in {
+    val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
+    val wsmDao = mock[WorkspaceManagerDAO]
+    when(wsmDao.getWorkspace(any, any))
+      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(Set(SamResourceRole("WRITER"))))
+    when(
+      sam.userHasAction(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspaceActions.sharePolicy("writer"),
+        defaultRequestContext
+      )
+    ).thenReturn(Future(true))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspace.name shouldBe workspace.name
+    result.workspace.namespace shouldBe workspace.namespace
+    result.canShare shouldBe Some(true)
+    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+    verify(sam).userHasAction(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspaceActions.sharePolicy("writer"),
+      defaultRequestContext
+    )
+  }
+
+  it should "get the bucket options from gcs when requested" in {
+    val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val gcs = mock[GoogleServicesDAO]
+    val bucketDetails = WorkspaceBucketOptions(true)
+    when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, gcsDAO = gcs)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.bucketOptions shouldBe Some(bucketDetails)
+    verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
+  }
+
+  it should "get the owner emails using the policy from sam when requested" in {
+    val options = WorkspaceService.QueryOptions(Set("owners"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    val ownerEmails = Set("user1@test.com", "user2@test.com")
+    val owners = SamPolicy(ownerEmails.map(WorkbenchEmail), Set(), Set())
+    when(
+      sam.getPolicy(SamResourceTypeNames.workspace,
+                    workspace.workspaceId,
+                    SamWorkspacePolicyNames.owner,
+                    defaultRequestContext
+      )
+    )
+      .thenReturn(Future(owners))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.owners shouldBe Some(ownerEmails)
+  }
+
+  it should "get the auth domain from sam when requested" in {
+    val options = WorkspaceService.QueryOptions(Set("workspace"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val sam = mock[SamDAO]
+    val authDomains = Seq("some-auth-domain")
+    when(sam.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+      .thenReturn(Future(authDomains))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    val expectedAuthDomains = authDomains.map(authDomainName => ManagedGroupRef(RawlsGroupName(authDomainName))).toSet
+    result.workspace.authorizationDomain shouldEqual Some(expectedAuthDomains)
+  }
+
+  it should "get the submissionSummaryStats when requested" in {
+    val options = WorkspaceService.QueryOptions(Set("workspaceSubmissionStats"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val stats = WorkspaceSubmissionStats(None, None, 3)
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.listSubmissionSummaryStats(workspace.workspaceIdAsUUID))
+      .thenReturn(Future(Map(workspace.workspaceIdAsUUID -> stats)))
+    val service = workspaceServiceConstructor(
+      workspaceManagerDAO = wsm,
+      workspaceRepository = workspaceRepository
+    )(defaultRequestContext)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.workspaceSubmissionStats shouldBe Some(stats)
   }
 
   "assertNoGoogleChildrenBlockingWorkspaceDeletion" should "not error if the only child is the google project" in {
@@ -801,24 +1111,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
   }
 
-  def getTestWorkspace(workspaceType: WorkspaceType): Workspace = {
-    val googleProjectId = workspaceType match {
-      case WorkspaceType.McWorkspace    => GoogleProjectId("")
-      case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
-    }
-    Workspace("fake_namespace",
-              "fake_name",
-              UUID.randomUUID().toString,
-              "fake_bucket",
-              None,
-              DateTime.now(),
-              DateTime.now(),
-              "creator@example.com",
-              Map.empty
-    ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
-
-  }
-
   behavior of "getBucketUsage"
   // TODO: neither this nor getBucketOptions seem to verify we have a gcp workspace,
   //  or that googleProjectId/bucketName is available - this should probably be fixed
@@ -829,7 +1121,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   //  this will cause an exception in google, but it won't blow up the world, so maybe it's fine
   //  but it seems nice to just check before the call and return a more helpful exception
   it should "get the bucket usage for a gcp workspace" in {
-    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
+    val workspace = this.workspace.copy(googleProjectId = GoogleProjectId("project-id"), bucketName = "test-bucket")
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
@@ -866,7 +1158,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   }
 
   it should "work on a locked workspace" in {
-    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace).copy(isLocked = true)
+    val workspace = this.workspace.copy(isLocked = true, googleProjectId = GoogleProjectId("project-id"))
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
@@ -903,7 +1195,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   }
 
   it should "map non-standard codes from a GoogleJsonResponseException to a rawls exception" in {
-    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]
@@ -951,7 +1242,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   behavior of "getBucketOptions"
   it should "get the bucket options for a gcp workspace" in {
-    val workspace = getTestWorkspace(WorkspaceType.RawlsWorkspace)
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future.successful(Some(workspace)))
     val sam = mock[SamDAO]

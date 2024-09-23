@@ -34,7 +34,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
@@ -117,6 +117,18 @@ object WorkspaceService {
   val HIGH_SECURITY_LABEL: String = "high"
   val LOW_SECURITY_LABEL: String = "low"
   val BUCKET_GET_PERMISSION: String = "storage.buckets.get"
+
+  case class QueryOptions(options: Set[LookupExpression], attrSpecs: WorkspaceAttributeSpecs) {
+
+    val useAttributes: Boolean = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
+
+    def anyPresent[T](opts: String*)(present: => T): Option[T] =
+      if (opts.exists(opt => options.contains(opt))) Some(present) else None
+
+    def anyPresentFuture[T](opts: String*)(present: => Future[T])(implicit ex: ExecutionContext): Future[Option[T]] =
+      if (opts.exists(opt => options.contains(opt))) present.map(Option(_)) else Future(None)
+
+  }
 
 }
 
@@ -386,29 +398,39 @@ class WorkspaceService(
   }
 
   private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) =
-    dataSource.inTransaction { dataAccess =>
-      for {
-        // Gather any active workflows with external ids
-        workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+    dataSource
+      .inTransaction { dataAccess =>
+        for {
+          // Gather any active workflows with external ids
+          workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
 
-        // If a workflow is not done, automatically change its status to Aborted
-        _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { workflowRecords =>
-          workflowRecords
-            .filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
-            .foreach { workflowRecord =>
-              dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Aborted) { status =>
-                if (config.trackDetailedSubmissionMetrics)
-                  Option(
-                    workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, workflowRecord.submissionId))(
-                      status
+          // If a workflow is not done, automatically change its status to Aborted
+          _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { workflowRecords =>
+            workflowRecords
+              .filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
+              .foreach { workflowRecord =>
+                dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Aborted) { status =>
+                  if (config.trackDetailedSubmissionMetrics)
+                    Option(
+                      workflowStatusCounter(
+                        workspaceSubmissionMetricBuilder(workspaceName, workflowRecord.submissionId)
+                      )(
+                        status
+                      )
                     )
-                  )
-                else None
+                  else None
+                }
               }
-            }
-        }
-      } yield workflowsToAbort
-    }
+          }
+        } yield workflowsToAbort
+      }
+      .recover { case t: Throwable =>
+        logger.warn(
+          s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceContext.toWorkspaceName}`",
+          t
+        )
+        throw t
+      }
 
   private def deleteWorkspaceTransaction(workspaceContext: Workspace) =
     dataSource.inTransaction { dataAccess =>
@@ -466,24 +488,10 @@ class WorkspaceService(
     }
 
     for {
-      _ <- traceFutureWithParent("requesterPaysSetupService.deleteAllRecordsForWorkspace", parentContext)(_ =>
-        requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext) recoverWith { case t: Throwable =>
-          logger.warn(
-            s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceContext.toWorkspaceName}`",
-            t
-          )
-          Future.failed(t)
-        }
-      )
+      // just a simple db operation now - the extra logging is excessive
+      _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspaceContext)
       workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentContext)(_ =>
-        gatherWorkflowsToAbortAndSetStatusToAborted(workspaceContext.toWorkspaceName, workspaceContext) recoverWith {
-          case t: Throwable =>
-            logger.warn(
-              s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceContext.toWorkspaceName}`",
-              t
-            )
-            Future.failed(t)
-        }
+        gatherWorkflowsToAbortAndSetStatusToAborted(workspaceContext.toWorkspaceName, workspaceContext)
       )
 
       // Attempt to abort any running workflows so they don't write any more to the bucket.
@@ -491,14 +499,7 @@ class WorkspaceService(
       // This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
       // ExecutionContext run the futures whenever
       aborts = traceFutureWithParent("abortRunningWorkflows", parentContext)(_ =>
-        Future.traverse(workflowsToAbort)(wf => executionServiceCluster.abort(wf, ctx.userInfo)) recoverWith {
-          case t: Throwable =>
-            logger.warn(
-              s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceContext.toWorkspaceName}`",
-              t
-            )
-            Future.failed(t)
-        }
+        Future.traverse(workflowsToAbort)(wf => executionServiceCluster.abort(wf, ctx.userInfo))
       )
 
       _ <- traceFutureWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
@@ -513,13 +514,6 @@ class WorkspaceService(
       // Delete Google Project
       _ <- traceFutureWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion)
-          .recoverWith { case t: Throwable =>
-            logger.error(
-              s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
-              t
-            )
-            Future.failed(t)
-          }
       )
 
       _ <- traceFutureWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
@@ -1686,7 +1680,8 @@ class WorkspaceService(
         case None            => Future.failed(NoSuchWorkspaceException(workspaceName))
         case Some(workspace) => Future.successful(workspace)
       }
-      _ <- accessCheck(workspace, SamWorkspaceActions.compute, ignoreLock = false)
+      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
+      _ <- checkLock(workspace, SamWorkspaceActions.compute)
       _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(ctx.userInfo, workspace)
     } yield {}
 
@@ -2235,6 +2230,24 @@ class WorkspaceService(
         )
     }
 
+
+  def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
+    bucketRegion.traverse_ { region =>
+      // if the user specifies a region for the workspace bucket, it must be in the proper format
+      // for a single region or the default bucket location (US multi region)
+      val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
+      val validUSPattern = "US"
+      ApplicativeThrow[Future].raiseUnless(region.matches(singleRegionPattern) || region.equals(validUSPattern)) {
+        RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"Workspace bucket location must be a single " +
+              s"region of format: $singleRegionPattern or the default bucket location ('US')."
+          )
+        )
+      }
+    }
+
   // A new workspace request may specify the region where the bucket should be created. In the case of cloning a
   // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
   // as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need
@@ -2252,17 +2265,8 @@ class WorkspaceService(
       case (None, None) => Future(Some(config.defaultLocation))
     }
 
-  case class QueryOptions(options: Set[LookupExpression], attrSpecs: WorkspaceAttributeSpecs) {
 
-    val useAttributes: Boolean = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
 
-    def anyPresent[T](opts: String*)(present: => T): Option[T] =
-      if (opts.exists(opt => options.contains(opt))) Some(present) else None
-
-    def anyPresentFuture[T](opts: String*)(present: => Future[T]): Future[Option[T]] =
-      if (opts.exists(opt => options.contains(opt))) present.map(Option(_)) else Future(None)
-
-  }
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)

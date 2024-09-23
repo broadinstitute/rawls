@@ -35,44 +35,52 @@ trait WorkspaceSupport {
       case _ => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
 
-  def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] =
+  def accessCheck(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] =
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, ctx) flatMap {
       hasRequiredLevel =>
         if (hasRequiredLevel) {
-          val actionsBlockedByLock =
-            Set(SamWorkspaceActions.write, SamWorkspaceActions.compute, SamWorkspaceActions.delete)
-          if (actionsBlockedByLock.contains(requiredAction) && workspace.isLocked && !ignoreLock)
-            Future.failed(LockedWorkspaceException(workspace.toWorkspaceName))
-          else
-            Future.successful(())
+          Future.successful(())
         } else {
           samDAO.userHasAction(SamResourceTypeNames.workspace,
                                workspace.workspaceId,
                                SamWorkspaceActions.read,
                                ctx
           ) flatMap { canRead =>
-            if (canRead) {
-              Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
-            } else {
-              Future.failed(NoSuchWorkspaceException(workspace.toWorkspaceName))
-            }
+            if (canRead) Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
+            else Future.failed(NoSuchWorkspaceException(workspace.toWorkspaceName))
           }
         }
     }
+
+  def accessCheck(workspaceId: String, requiredAction: SamResourceAction): Future[Unit] =
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, requiredAction, ctx) flatMap { hasRequiredLevel =>
+      if (hasRequiredLevel) {
+        Future.successful(())
+      } else if (requiredAction == SamWorkspaceActions.read) {
+        Future.failed(NoSuchWorkspaceException(workspaceId))
+      } else {
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.read, ctx) flatMap {
+          canRead =>
+            if (canRead) Future.failed(WorkspaceAccessDeniedException(workspaceId))
+            else Future.failed(NoSuchWorkspaceException(workspaceId))
+        }
+      }
+    }
+
+  def checkLock(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] = {
+    val actionsBlockedByLock =
+      Set(SamWorkspaceActions.write, SamWorkspaceActions.compute, SamWorkspaceActions.delete)
+    if (actionsBlockedByLock.contains(requiredAction) && workspace.isLocked)
+      Future.failed(LockedWorkspaceException(workspace.toWorkspaceName))
+    else
+      Future.successful(())
+  }
 
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
     for {
       _ <- userEnabledCheck
       workspace <- getWorkspaceContext(workspaceName)
-      workspaceId = workspace.workspaceId
-      _ <- raiseUnlessUserHasAction(SamWorkspaceActions.compute, SamResourceTypeNames.workspace, workspaceId) {
-        WorkspaceAccessDeniedException(workspaceName)
-      }.recoverWith { case t: Throwable =>
-        // verify the user has `read` on the workspace to avoid exposing its existence
-        raiseUnlessUserHasAction(SamWorkspaceActions.read, SamResourceTypeNames.workspace, workspaceId) {
-          NoSuchWorkspaceException(workspaceName)
-        } *> Future.failed(t)
-      }
+      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
     } yield ()
 
   def raiseUnlessUserHasAction(action: SamResourceAction,
@@ -107,9 +115,10 @@ trait WorkspaceSupport {
   ): Future[Workspace] =
     for {
       _ <- userEnabledCheck
-      workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
-    } yield workspaceContext
+      workspace <- getWorkspaceContext(workspaceName, attributeSpecs)
+      _ <- accessCheck(workspace, requiredAction)
+      _ <- checkLock(workspace, requiredAction)
+    } yield workspace
 
   def getWorkspaceContext(
     workspaceName: WorkspaceName,
@@ -127,9 +136,10 @@ trait WorkspaceSupport {
     ignoreLock: Boolean = false
   ): Future[Workspace] =
     for {
-      workspaceContext <- getV2WorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock) // throws if user does not have permission
-    } yield workspaceContext
+      workspace <- getV2WorkspaceContext(workspaceName, attributeSpecs)
+      _ <- accessCheck(workspace, requiredAction)
+      _ <- if (ignoreLock) Future.successful() else checkLock(workspace, requiredAction)
+    } yield workspace
 
   def getV2WorkspaceContextAndPermissionsById(
     workspaceId: String,
@@ -137,9 +147,10 @@ trait WorkspaceSupport {
     attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
-      workspaceContext <- getV2WorkspaceContextByWorkspaceId(workspaceId, attributeSpecs)
-      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
-    } yield workspaceContext
+      workspace <- getV2WorkspaceContextByWorkspaceId(workspaceId, attributeSpecs)
+      _ <- accessCheck(workspaceId, requiredAction)
+      _ <- checkLock(workspace, requiredAction)
+    } yield workspace
 
   def getV2WorkspaceContextByWorkspaceId(workspaceId: String,
                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
@@ -165,22 +176,5 @@ trait WorkspaceSupport {
     case Some(workspace) => workspace
     case None            => throw NoSuchWorkspaceException(workspaceName)
   }
-
-  def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
-    bucketRegion.traverse_ { region =>
-      // if the user specifies a region for the workspace bucket, it must be in the proper format
-      // for a single region or the default bucket location (US multi region)
-      val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
-      val validUSPattern = "US"
-      ApplicativeThrow[Future].raiseUnless(region.matches(singleRegionPattern) || region.equals(validUSPattern)) {
-        RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadRequest,
-            s"Workspace bucket location must be a single " +
-              s"region of format: $singleRegionPattern or the default bucket location ('US')."
-          )
-        )
-      }
-    }
 
 }
