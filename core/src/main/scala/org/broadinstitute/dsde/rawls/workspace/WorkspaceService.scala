@@ -663,7 +663,9 @@ class WorkspaceService(
   ): Future[WorkspaceDetails] =
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        isCurator <- tryIsCurator(ctx.userInfo.userEmail)
+        isCurator <- gcsDAO.isLibraryCurator(ctx.userInfo.userEmail.value) recoverWith { case t =>
+          throw new RawlsException("Unable to query for library curator status.", t)
+        }
         workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
           withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
             dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
