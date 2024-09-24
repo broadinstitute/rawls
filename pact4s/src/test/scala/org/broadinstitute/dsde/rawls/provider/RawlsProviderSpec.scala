@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.RawlsApiServiceImpl
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceAdminService, WorkspaceService, WorkspaceSettingService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{reset, when}
@@ -95,6 +95,11 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
     _ => mockWorkspaceService
   }
+  val mockWorkspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService = {
+    lazy val mockWorkspaceAdminService: WorkspaceAdminService = mock[WorkspaceAdminService]
+    _ => mockWorkspaceAdminService
+  }
+
   val mockWorkspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = {
     lazy val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService]
     _ => mockWorkspaceSettingService
@@ -146,6 +151,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   val rawlsApiService = new RawlsApiServiceImpl(
     mockMultiCloudWorkspaceServiceConstructor,
     mockWorkspaceServiceConstructor,
+    mockWorkspaceAdminServiceConstructor,
     mockWorkspaceSettingServiceConstructor,
     mockEntityServiceConstructor,
     mockUserServiceConstructor,
