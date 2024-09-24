@@ -856,6 +856,23 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/workspaces/{workspaceId}:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: fetch workspace details and settings
+      description: fetch workspace details and settings
+      operationId: adminGetWorkspaceById
+      parameters:
+        - $ref: '#/components/parameters/workspaceIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDetailsWithSettings'
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:
@@ -5797,6 +5814,18 @@ components:
           description: True if the user can launch compute in this workspace, false
             otherwise
       description: ""
+    WorkspaceDetailsWithSettings:
+      required:
+        - workspace
+        - settings
+      type: object
+      properties:
+        workspace:
+          $ref: '#/components/schemas/WorkspaceDetails'
+        settings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceSetting'
     WorkspaceDetails:
       required:
         - bucketName

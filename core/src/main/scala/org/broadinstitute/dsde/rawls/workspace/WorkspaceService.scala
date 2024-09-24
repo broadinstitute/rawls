@@ -2230,7 +2230,6 @@ class WorkspaceService(
         )
     }
 
-
   def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
     bucketRegion.traverse_ { region =>
       // if the user specifies a region for the workspace bucket, it must be in the proper format
@@ -2264,8 +2263,6 @@ class WorkspaceService(
         gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
       case (None, None) => Future(Some(config.defaultLocation))
     }
-
-
 
 }
 
