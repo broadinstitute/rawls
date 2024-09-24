@@ -4,16 +4,19 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
+import org.broadinstitute.dsde.rawls.model._
 
-import scala.collection.Set
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by ahaessly on 3/31/17.
   */
-trait LibraryPermissionsSupport extends RoleSupport {
+trait LibraryPermissionsSupport  {
   val samDAO: SamDAO
+  val gcsDAO: GoogleServicesDAO
+  val ctx: RawlsRequestContext
+  implicit protected val executionContext: ExecutionContext
+
   final val publishedFlag = AttributeName.withLibraryNS("published")
   final val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
