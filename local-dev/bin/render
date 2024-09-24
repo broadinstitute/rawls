@@ -2,6 +2,13 @@
 
 set -eo pipefail
 
+PROJECT_ID="broad-dsde-dev"
+
+# Helper function to fetch secrets
+fetch_secret() {
+  gcloud secrets versions access latest --project "$PROJECT_ID" --secret "$1"
+}
+
 ##Pull mysql instance info for sqlproxy##
 RAWLS_MYSQL_INSTANCE_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-mysql-instance)
 
@@ -28,31 +35,27 @@ cp local-dev/templates/oauth2.conf config/oauth2.conf
 cp local-dev/templates/site.conf config/site.conf
 
 ##Files to download from secrets##
-gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa > config/rawls-account.json
-gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa > config/sqlproxy-service-account.json
-gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa-pem | jq -r '."key.pem"' > config/rawls-account.pem
-gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-bigquery-sa > config/bigquery-account.json
-gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-billing-sa | jq -r '."key.pem"' > config/billing-account.pem
-gcloud secrets versions access latest --project broad-dsde-dev --secret buffer-client-sa-b64 | jq -r '.key' | base64 --decode > config/buffer-account.json
-
+#gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa > config/rawls-account.json
+fetch_secret "rawls-sa" > config/rawls-account.json
+fetch_secret "rawls-sa" > config/sqlproxy-service-account.json
+fetch_secret "rawls-sa-pem" | jq -r '."key.pem"' > config/rawls-account.pem
+fetch_secret "rawls-bigquery-sa" > config/bigquery-account.json
+fetch_secret "rawls-billing-sa" | jq -r '."key.pem"' > config/billing-account.pem
+fetch_secret "buffer-client-sa-b64" | jq -r '.key' | base64 --decode > config/buffer-account.json
 
 gcloud container clusters get-credentials --zone us-central1-a --project broad-dsde-dev terra-dev
 kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.crt"}}' | base64 --decode > config/server.crt
 kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.key"}}' | base64 --decode > config/server.key
 
 ## Secrets to pull for rawls.conf ##
-RAWLS_OAUTH_CREDS_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-oauth-creds)
-RAWLS_CONF_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-conf)
-RAWLS_REFRESH_TOKEN_CRED_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret refresh-token-oauth-credential)
-RAWLS_SAKEY_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-sa)
-CROMWELL_SAKEY_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret cromwell-sa)
-B2C_APPID_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret b2c-application-id)
-LANDING_ZONE_POSTGRES_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret wsm-azure-postgres-creds)
-FIRECLOUD_SECRETS=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret firecloud-misc-secrets)
-
-#Define some reusable variables
-APPS_DOMAIN="test.firecloud.org"
-APPS_SUBDOMAIN="dev.test.firecloud.org"
+RAWLS_OAUTH_CREDS_JSON=$(fetch_secret "rawls-oauth-creds")
+RAWLS_CONF_JSON=$(fetch_secret "rawls-conf")
+RAWLS_REFRESH_TOKEN_CRED_JSON=$(fetch_secret "refresh-token-oauth-credential")
+RAWLS_SAKEY_JSON=$(fetch_secret "rawls-sa")
+CROMWELL_SAKEY_JSON=$(fetch_secret "cromwell-sa")
+B2C_APPID_JSON=$(fetch_secret "b2c-application-id")
+LANDING_ZONE_POSTGRES_JSON=$(fetch_secret "wsm-azure-postgres-creds")
+FIRECLOUD_SECRETS=$(fetch_secret "firecloud-misc-secrets")
 
 # Extract the secret values using jq
 GOOGLE_CLIENT_TOKEN=$(echo "$RAWLS_REFRESH_TOKEN_CRED_JSON" | jq -r '.value | fromjson | .web')
@@ -87,3 +90,5 @@ sed -e "s/{{ \$appsDomain }}/$APPS_DOMAIN/" \
     -e "s/{{ \$rawlsConf.slick_db_password }}/$RAWLS_SLICK_PASSWORD/" \
     -e "s/{{ \$adminBillingAccount }}/$ADMIN_BILLING_ACCOUNT/" \
     "$RAWLS_TEMPLATE_FILE" > "$RAWLS_OUTPUT_FILE"
+
+
