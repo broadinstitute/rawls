@@ -2,26 +2,85 @@
 
 set -eo pipefail
 
-REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
+##Pull mysql instance info for sqlproxy##
+RAWLS_MYSQL_INSTANCE_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-mysql-instance)
 
-IMAGE_NAME="${IMAGE_NAME:-us-central1-docker.pkg.dev/dsp-artifact-registry/firecloud-develop-shim/firecloud-develop-shim}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
-IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
+# Extract the name and zone values using jq
+CLOUDSQL_ZONE=$(echo "$RAWLS_MYSQL_INSTANCE_JSON" | jq -r '.zone')
+CLOUDSQL_INSTANCE=$(echo "$RAWLS_MYSQL_INSTANCE_JSON" | jq -r '.name')
 
-VAULT_TOKEN=$( cat ~/.vault-token )
+# Define the template and output file paths
+MYSQL_TEMPLATE_FILE="local-dev/templates/sqlproxy.env"
+MYSQL_OUTPUT_FILE="config/sqlproxy.env"
 
-docker run --pull always \
-  -e VAULT_TOKEN="${VAULT_TOKEN}" \
-  -v "${REPO_ROOT}:/code" \
-  --rm -it "${IMAGE}" \
-  --secrets /code/local-dev/secrets.yaml \
-  --templates /code/local-dev/templates \
-  --output-dir /code/config
+# Replace placeholders in the template file with the fetched secret values
+sed -e "s/{{ \$secret.zone }}/$CLOUDSQL_ZONE/" \
+    -e "s/{{ \$secret.name }}/$CLOUDSQL_INSTANCE/" \
+    "$MYSQL_TEMPLATE_FILE" > "$MYSQL_OUTPUT_FILE"
 
-cat <<EOF
+#Files to copy directly to config##
+cp local-dev/templates/docker-rsync-local-rawls.sh config/docker-rsync-local-rawls.sh
+cp local-dev/templates/liquibase.properties config/liquibase.properties
+cp local-dev/templates/local-mysql.conf config/local-mysql.conf
+cp local-dev/templates/local-sam.conf config/local-sam.conf
+cp local-dev/templates/mod_security_ignore.conf config/mod_security_ignore.conf
+cp local-dev/templates/oauth2.conf config/oauth2.conf
+cp local-dev/templates/site.conf config/site.conf
 
-Don't forget to add the local.broadinstitute.org alias to your hosts file!
+##Files to download from secrets##
+gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa > config/rawls-account.json
+gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa > config/sqlproxy-service-account.json
+gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa-pem | jq -r '."key.pem"' > config/rawls-account.pem
+gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-bigquery-sa > config/bigquery-account.json
+gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-billing-sa | jq -r '."key.pem"' > config/billing-account.pem
+gcloud secrets versions access latest --project broad-dsde-dev --secret buffer-client-sa-b64 | jq -r '.key' | base64 --decode > config/buffer-account.json
 
-$ sudo sh -c "echo '127.0.0.1       local.broadinstitute.org' >> /etc/hosts"
 
-EOF
+gcloud container clusters get-credentials --zone us-central1-a --project broad-dsde-dev terra-dev
+kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.crt"}}' | base64 --decode > config/server.crt
+kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.key"}}' | base64 --decode > config/server.key
+
+## Secrets to pull for rawls.conf ##
+RAWLS_OAUTH_CREDS_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-oauth-creds)
+RAWLS_CONF_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-conf)
+RAWLS_REFRESH_TOKEN_CRED_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret refresh-token-oauth-credential)
+RAWLS_SAKEY_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-sa)
+CROMWELL_SAKEY_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret cromwell-sa)
+B2C_APPID_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret b2c-application-id)
+LANDING_ZONE_POSTGRES_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret wsm-azure-postgres-creds)
+WEB_OBJECT=$(echo "$RAWLS_REFRESH_TOKEN_CRED_JSON" | jq -r '.value | fromjson | .web')
+
+#Define some reusable variables
+APPS_DOMAIN="test.firecloud.org"
+APPS_SUBDOMAIN="dev.test.firecloud.org"
+
+# Extract the secret values using jq
+CLIENT_EMAIL=$(echo "$RAWLS_SAKEY_JSON" | jq -r '.client_email')
+GCS_TOKENENCRYPTIONKEY=$(echo "$RAWLS_CONF_JSON" | jq -r '.gcs_tokenEncryptionKey')
+RAWLS_SLICK_USER=$(echo "$RAWLS_CONF_JSON" | jq -r '.slick_db_user')
+RAWLS_SLICK_PASSWORD=$(echo "$RAWLS_CONF_JSON" | jq -r '.slick_db_password' | sed -e 's/[\/&]/\\&/g')
+googleClientId=$(echo "$WEB_OBJECT" | jq -r '.client_id')
+POSTGRES_DB_ADMIN=$(echo "$LANDING_ZONE_POSTGRES_JSON" | jq -r '.username')
+POSTGRES_DB_PASSWORD=$(echo "$LANDING_ZONE_POSTGRES_JSON" | jq -r '.password' | sed -e 's/[\/&]/\\&/g')
+b2cAppId=$(echo "$B2C_APPID_JSON" | jq -r '.value')
+ESCAPED_RAWLS_REFRESH_TOKEN_CRED_JSON=$(echo "$RAWLS_REFRESH_TOKEN_CRED_JSON" | jq -r '.value' | sed -e 's/[\/&]/\\&/g')
+ESCAPED_RAWLS_OAUTH_CREDS_JSON=$(echo "$RAWLS_OAUTH_CREDS_JSON" | jq -r '.value' | sed -e 's/[\/&]/\\&/g')
+
+# Define the template and output file paths
+RAWLS_TEMPLATE_FILE="local-dev/templates/rawls.conf"
+RAWLS_OUTPUT_FILE="config/rawls.conf"
+
+# Replace placeholders in the template file with the fetched secret values
+sed -e "s/{{ \$appsDomain }}/$APPS_DOMAIN/" \
+    -e "s/{{ \$appsSubDomain }}/$APPS_SUBDOMAIN/" \
+    -e "s/{{ \$rawlsSaKey.client_email }}/$CLIENT_EMAIL/" \
+    -e "s/{{ \$rawlsConf.gcs_tokenEncryptionKey }}/$GCS_TOKENENCRYPTIONKEY/" \
+    -e "s/{{ \$refreshTokenCredentialWebClientId }}/$googleClientId/" \
+    -e "s/{{ \$landingZonePostgres.username }}/$POSTGRES_DB_ADMIN/" \
+    -e "s/{{ \$landingZonePostgres.password }}/$POSTGRES_DB_PASSWORD/" \
+    -e "s/{{ \$b2cAppId }}/$b2cAppId/" \
+    -e "s/{{ \$rawlsOauthCredential }}/$ESCAPED_RAWLS_OAUTH_CREDS_JSON/" \
+    -e "s/{{ \$refreshTokenCredential }}/$ESCAPED_RAWLS_REFRESH_TOKEN_CRED_JSON/" \
+    -e "s/{{ \$rawlsConf.slick_db_user }}/$RAWLS_SLICK_USER/" \
+    -e "s/{{ \$rawlsConf.slick_db_password }}/$RAWLS_SLICK_PASSWORD/" \
+    "$RAWLS_TEMPLATE_FILE" > "$RAWLS_OUTPUT_FILE"
