@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -77,7 +78,7 @@ object JsonEntityComponent {
 /**
   * Slick component for reading/writing JSON-based entities
   */
-trait JsonEntityComponent {
+trait JsonEntityComponent extends LazyLogging {
   this: DriverComponent =>
 
   import slick.jdbc.MySQLProfile.api._
@@ -255,52 +256,76 @@ trait JsonEntityComponent {
       sql"where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0"
 
     /** Given a set of entity references, retrieve those entities */
-    def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRecord]] = {
-      // group the entity type/name pairs by type
-      val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
+    def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRecord]] =
+      // short-circuit
+      if (refs.isEmpty) {
+        DBIO.successful(Seq.empty[JsonEntityRecord])
+      } else {
+        // group the entity type/name pairs by type
+        val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
 
-      // build select statements for each type
-      val queryParts: Iterable[SQLActionBuilder] = groupedReferences.map {
-        case (entityType: String, entityNames: Set[String]) =>
-          // build the "IN" clause values
-          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
+        // build select statements for each type
+        val queryParts: Iterable[SQLActionBuilder] = groupedReferences.map {
+          case (entityType: String, entityNames: Set[String]) =>
+            // build the "IN" clause values
+            val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
 
-          // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
-          // TODO AJ-2008: include `where deleted=0`? Make that an argument?
-          concatSqlActions(
-            sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
+            // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
+            //   UNION query does use indexes for each select; but it also requires a temporary table to
+            //   combine the results, and we can probably do better. `where (entity_type, name) in ((?, ?), (?, ?))
+            //   looks like it works well
+            // TODO AJ-2008: include `where deleted=0`? Make that an argument?
+            concatSqlActions(
+              sql"""select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
                 from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
                 and name in (""",
-            entityNamesSql,
-            sql")"
-          )
+              entityNamesSql,
+              sql")"
+            )
+        }
+
+        // union the select statements together
+        val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
+
+        // execute
+        unionQuery.as[JsonEntityRecord](getJsonEntityRecord)
       }
 
-      // union the select statements together
-      val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
+    /** Given a set of entity references, retrieve those entities */
+    def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRefRecord]] =
+      // short-circuit
+      if (refs.isEmpty) {
+        DBIO.successful(Seq.empty[JsonEntityRefRecord])
+      } else {
+        // group the entity type/name pairs by type
+        val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
 
-      // execute
-      unionQuery.as[JsonEntityRecord](getJsonEntityRecord)
-    }
+        // build select statements for each type
+        val queryParts: Iterable[SQLActionBuilder] = groupedReferences.map {
+          case (entityType: String, entityNames: Set[String]) =>
+            // build the "IN" clause values
+            val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
 
-//    def replaceReferences(fromId: Long, refs: Map[AttributeName, Seq[JsonEntityRefRecord]]): ReadWriteAction[Int] =
-//      // TODO AJ-2008: instead of delete and insert all, find the intersections and only delete/insert where needed?
-//      //  alternately, do insert ... on conflict do nothing?
-//      sqlu"delete from ENTITY_REFS where from_id = $fromId" flatMap { _ =>
-//        // reduce the references to a set to remove any duplicates
-//        val toIds: Set[Long] = refs.values.flatten.map(_.id).toSet
-//        // short-circuit
-//        if (toIds.isEmpty) {
-//          DBIO.successful(0)
-//        } else {
-//          // generate bulk-insert SQL
-//          val insertValues: Seq[SQLActionBuilder] = toIds.toSeq.map(toId => sql"($fromId, $toId)")
-//
-//          val allInsertValues: SQLActionBuilder = reduceSqlActionsWithDelim(insertValues, sql",")
-//
-//          concatSqlActions(sql"insert into ENTITY_REFS(from_id, to_id) values ", allInsertValues).asUpdate
-//        }
-//      }
+            // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
+            //   UNION query does use indexes for each select; but it also requires a temporary table to
+            //   combine the results, and we can probably do better. `where (entity_type, name) in ((?, ?), (?, ?))
+            //   looks like it works well
+            // TODO AJ-2008: include `where deleted=0`? Make that an argument?
+            concatSqlActions(
+              sql"""select id, name, entity_type
+                from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
+                and name in (""",
+              entityNamesSql,
+              sql")"
+            )
+        }
+
+        // union the select statements together
+        val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
+
+        // execute
+        unionQuery.as[JsonEntityRefRecord](getJsonEntityRefRecord)
+      }
 
     def bulkInsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] =
       // short-circuit

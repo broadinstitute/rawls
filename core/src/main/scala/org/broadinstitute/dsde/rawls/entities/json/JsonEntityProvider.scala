@@ -40,7 +40,11 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{
+  setTraceSpanAttribute,
+  traceDBIOWithParent,
+  traceFutureWithParent
+}
 import slick.dbio.DBIO
 import slick.jdbc.TransactionIsolation
 
@@ -221,7 +225,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               existingEntities.map(rec => (rec.entityType, rec.name) -> rec).toMap
 
             // iterate through the desired updates and apply them
-            val tableRecords: Seq[JsonEntitySlickRecord] = entityUpdates.map { entityUpdate =>
+            val tableRecords: Seq[Option[JsonEntitySlickRecord]] = entityUpdates.map { entityUpdate =>
               // attempt to retrieve an existing entity
               val existingRecordOption = existingEntityMap.get((entityUpdate.entityType, entityUpdate.name))
 
@@ -240,35 +244,49 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               // TODO AJ-2008: collect all the apply errors instead of handling them one-by-one?
               val updatedEntity: Entity = applyOperationsToEntity(baseEntity, entityUpdate.operations)
 
-              // TODO AJ-2008: handle references
-
-              // translate back to a JsonEntitySlickRecord for later insert/update
-              // TODO AJ-2008: so far we retrieved a JsonEntityRecord, translated it to an Entity, and are now
-              //  translating it to JsonEntitySlickRecord; we could do better
-              JsonEntitySlickRecord(
-                id = existingRecordOption.map(_.id).getOrElse(0),
-                name = updatedEntity.name,
-                entityType = updatedEntity.entityType,
-                workspaceId = workspaceId,
-                recordVersion = existingRecordOption.map(_.recordVersion).getOrElse(0),
-                deleted = false,
-                deletedDate = None,
-                attributes = Some(updatedEntity.attributes.toJson.compactPrint)
-              )
+              // TODO AJ-2008: if the entity hasn't changed, skip it
+              if (existingRecordOption.nonEmpty && baseEntity.attributes == updatedEntity.attributes) {
+                Option.empty[JsonEntitySlickRecord]
+              } else {
+                // TODO AJ-2008: handle references
+                // translate back to a JsonEntitySlickRecord for later insert/update
+                // TODO AJ-2008: so far we retrieved a JsonEntityRecord, translated it to an Entity, and are now
+                //  translating it to JsonEntitySlickRecord; we could do better
+                Some(
+                  JsonEntitySlickRecord(
+                    id = existingRecordOption.map(_.id).getOrElse(0),
+                    name = updatedEntity.name,
+                    entityType = updatedEntity.entityType,
+                    workspaceId = workspaceId,
+                    recordVersion = existingRecordOption.map(_.recordVersion).getOrElse(0),
+                    deleted = false,
+                    deletedDate = None,
+                    attributes = Some(updatedEntity.attributes.toJson.compactPrint)
+                  )
+                )
+              }
             }
+
+            // for logging purposes, count the noops
+            val noopCount = tableRecords.count(_.isEmpty)
 
             // separate the records-to-be-saved into inserts and updates
             // we identify inserts as those having id 0
-            val (inserts, updates) = tableRecords.partition(_.id == 0)
+            val (inserts, updates) = tableRecords.flatten.partition(_.id == 0)
 
-            logger.info(s"***** all updates have been prepared: ${inserts.size} inserts, ${updates.size} updates.")
+            logger.info(
+              s"***** all updates have been prepared: ${inserts.size} inserts, ${updates.size} updates, ${noopCount} noop updates."
+            )
 
             // perform the inserts, then perform the updates
+
+            // do NOT use the "returning" syntax above, as it forces individual insert statements for each entity.
+            // instead, we insert using non-returning syntax, then perform a second query to get the ids
             val insertResult = dataAccess.jsonEntitySlickQuery ++= inserts
 
-            val insertRefFutures: Seq[Future[_]] = inserts.map { ins =>
-              synchronizeReferences(ins.id, ins.toEntity)
-            }
+//            val insertRefFutures: Seq[Future[_]] = inserts.map { ins =>
+//              synchronizeReferences(ins.id, ins.toEntity)
+//            }
 
             val updateActions = updates.map { upd =>
               dataAccess.jsonEntityQuery.updateEntity(workspaceId, upd.toEntity, upd.recordVersion) map {
@@ -283,17 +301,43 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               synchronizeReferences(upd.id, upd.toEntity)
             }
 
+            // TODO AJ-2008: can we bulk/batch the ENTITY_REFS work?
             logger.info(s"***** performing inserts ...")
             insertResult.flatMap { _ =>
-//              logger.info(s"***** adding references for inserts ...")
-//              slick.dbio.DBIO.from(Future.sequence(insertRefFutures)) flatMap { _ =>
-              logger.info(s"***** performing updates ...")
-              slick.dbio.DBIO.sequence(updateActions)
-//              flatMap { _ =>
-//                  logger.info(s"***** adding references for updates ...")
-//                  slick.dbio.DBIO.from(Future.sequence(updateRefFutures))
-//                }
-//              }
+              // skip any inserts that have zero references
+              val insertsWithReferences =
+                inserts.flatMap(ins =>
+                  if (findAllReferences(ins.toEntity).isEmpty) { None }
+                  else { Some(ins) }
+                )
+              logger.info(s"***** adding references for ${insertsWithReferences.size} inserts ...")
+
+              // retrieve the ids for the inserts that do have references
+              dataAccess.jsonEntityQuery.getEntityRefs(
+                workspaceId,
+                insertsWithReferences.map(x => AttributeEntityReference(x.entityType, x.name)).toSet
+              ) flatMap { inserted =>
+                // map the inserted ids back to the full entities that were inserted
+                val insertedIds = inserted.map(x => (x.entityType, x.name) -> x.id).toMap
+                slick.dbio.DBIO.sequence(
+                  insertsWithReferences
+                    .map { ins =>
+                      val id = insertedIds.getOrElse((ins.entityType, ins.name),
+                                                     throw new RuntimeException("couldn't find inserted id")
+                      )
+                      slick.dbio.DBIO.from(synchronizeReferences(id, ins.toEntity, isInsert = true))
+                    }
+                ) flatMap { _ =>
+                  logger.info(s"***** performing updates ...")
+                  slick.dbio.DBIO.sequence(updateActions) flatMap { _ =>
+                    logger.info(s"***** adding references for updates ...")
+                    slick.dbio.DBIO.sequence(updateRefFutures.map(x => slick.dbio.DBIO.from(x))) flatMap { _ =>
+                      logger.info(s"***** all writes complete.")
+                      slick.dbio.DBIO.successful(())
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -336,14 +380,13 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
 
       dataSource.inTransaction { dataAccess =>
-        // TODO AJ-2008: this should only return ids; it doesn't need to return everything about the entities
-        dataAccess.jsonEntityQuery.getEntities(workspaceId, allRefs) map { foundRefs =>
+        dataAccess.jsonEntityQuery.getEntityRefs(workspaceId, allRefs) map { foundRefs =>
           if (foundRefs.size != allRefs.size) {
             throw new RuntimeException("Did not find all references")
           }
           // convert the foundRefs to a map for easier lookup
           val foundMap: Map[(String, String), JsonEntityRefRecord] = foundRefs.map { foundRef =>
-            ((foundRef.entityType, foundRef.name), JsonEntityRefRecord(foundRef.id, foundRef.name, foundRef.entityType))
+            ((foundRef.entityType, foundRef.name), foundRef)
           }.toMap
 
           // return all the references found in this entity, mapped to the ids they are referencing
@@ -371,32 +414,45 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       .toSeq
       .groupMap(_._1)(_._2)
 
-  private def replaceReferences(fromId: Long, foundRefs: Map[AttributeName, Seq[JsonEntityRefRecord]]) =
+  private def replaceReferences(fromId: Long,
+                                foundRefs: Map[AttributeName, Seq[JsonEntityRefRecord]],
+                                isInsert: Boolean = false
+  ) =
     dataSource.inTransaction { dataAccess =>
       import dataAccess.driver.api._
       // we don't actually care about the referencing attribute name or referenced type&name; reduce to just the referenced ids.
       val currentEntityRefTargets: Set[Long] = foundRefs.values.flatten.map(_.id).toSet
-      logger.trace(s"~~~~~ found ${currentEntityRefTargets.size} ref targets in entity")
+      logger.trace(s"~~~~~ found ${currentEntityRefTargets.size} ref targets in entity $fromId")
       for {
+        // TODO AJ-2008: instead of (retrieve all, then calculate diffs, then execute diffs), try doing it all in the db:
+        //  - delete from ENTITY_REFS where from_id = $fromId and to_id not in ($currentEntityRefTargets)
+        //  - insert into ENTITY_REFS (from_id, to_id) values ($fromId, $currentEntityRefTargets:_*) on duplicate key update from_id=from_id (noop)
         // retrieve all existing refs in ENTITY_REFS for this entity; create a set of the target ids
-        existingRowsSeq <- dataAccess.jsonEntityRefSlickQuery.filter(_.fromId === fromId).map(_.toId).result
+        existingRowsSeq <-
+          if (isInsert) {
+            slick.dbio.DBIO.successful(Seq.empty[Long])
+          } else {
+            dataAccess.jsonEntityRefSlickQuery.filter(_.fromId === fromId).map(_.toId).result
+          }
         existingRefTargets = existingRowsSeq.toSet
 
-        _ = logger.trace(s"~~~~~ found ${existingRefTargets.size} ref targets in db for this entity")
+        _ = logger.trace(s"~~~~~ found ${existingRefTargets.size} ref targets in db for entity $fromId")
         // find all target ids in the db that are not in the current entity
         deletes = existingRefTargets diff currentEntityRefTargets
         // find all target ids in the current entity that are not in the db
         inserts = currentEntityRefTargets diff existingRefTargets
         insertPairs = inserts.map(toId => (fromId, toId))
         insertRecords = inserts.map(toId => RefPointerRecord(fromId, toId))
-        _ = logger.trace(s"~~~~~ prepared ${inserts.size} inserts and ${deletes.size} deletes to perform")
-        _ = logger.trace(s"~~~~~ inserts: $insertPairs")
+        _ = logger.trace(
+          s"~~~~~ prepared ${inserts.size} inserts and ${deletes.size} deletes to perform for entity $fromId"
+        )
+        _ = logger.trace(s"~~~~~ inserts: $insertPairs for entity $fromId")
         // insert what needs to be inserted
         insertResult <-
           if (inserts.nonEmpty) { dataAccess.jsonEntityRefSlickQuery.map(r => (r.fromId, r.toId)) ++= insertPairs }
           else { slick.dbio.DBIO.successful(0) }
 //        insertResult <- dataAccess.jsonEntityQuery.bulkInsertReferences(fromId, inserts)
-        _ = logger.trace(s"~~~~~ actually inserted ${insertResult} rows")
+        _ = logger.trace(s"~~~~~ actually inserted ${insertResult} rows for entity $fromId")
         // delete what needs to be deleted
         deleteResult <-
           if (deletes.nonEmpty) {
@@ -404,18 +460,19 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               .filter(x => x.fromId === fromId && x.toId.inSetBind(deletes))
               .delete
           } else { slick.dbio.DBIO.successful(0) }
-        _ = logger.trace(s"~~~~~ actually deleted ${deleteResult} rows")
+        _ = logger.trace(s"~~~~~ actually deleted ${deleteResult} rows for entity $fromId")
       } yield foundRefs
     }
 
   private def synchronizeReferences(fromId: Long,
-                                    entity: Entity
+                                    entity: Entity,
+                                    isInsert: Boolean = false
   ): Future[Map[AttributeName, Seq[JsonEntityRefRecord]]] = dataSource.inTransaction { _ =>
     for {
       // find and validate all references in this entity. This returns the target internal ids for each reference.
       foundRefs <- DBIO.from(validateReferences(entity))
       //
-      _ <- DBIO.from(replaceReferences(fromId, foundRefs))
+      _ <- DBIO.from(replaceReferences(fromId, foundRefs, isInsert))
     } yield foundRefs
   }
 }
