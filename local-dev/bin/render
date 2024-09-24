@@ -35,7 +35,6 @@ cp local-dev/templates/oauth2.conf config/oauth2.conf
 cp local-dev/templates/site.conf config/site.conf
 
 ##Files to download from secrets##
-#gcloud secrets versions access latest --project broad-dsde-dev --secret rawls-sa > config/rawls-account.json
 fetch_secret "rawls-sa" > config/rawls-account.json
 fetch_secret "rawls-sa" > config/sqlproxy-service-account.json
 fetch_secret "rawls-sa-pem" | jq -r '."key.pem"' > config/rawls-account.pem
@@ -66,7 +65,7 @@ RAWLS_SLICK_PASSWORD=$(echo "$RAWLS_CONF_JSON" | jq -r '.slick_db_password' | se
 GOOGLE_CLIENT_ID=$(echo "$GOOGLE_CLIENT_TOKEN" | jq -r '.client_id')
 POSTGRES_DB_ADMIN=$(echo "$LANDING_ZONE_POSTGRES_JSON" | jq -r '.username')
 POSTGRES_DB_PASSWORD=$(echo "$LANDING_ZONE_POSTGRES_JSON" | jq -r '.password' | sed -e 's/[\/&]/\\&/g')
-b2cAppId=$(echo "$B2C_APPID_JSON" | jq -r '.value')
+B2C_APP_ID=$(echo "$B2C_APPID_JSON" | jq -r '.value')
 ESCAPED_RAWLS_REFRESH_TOKEN_CRED_JSON=$(echo "$RAWLS_REFRESH_TOKEN_CRED_JSON" | jq -r '.value' | sed -e 's/[\/&]/\\&/g')
 ESCAPED_RAWLS_OAUTH_CREDS_JSON=$(echo "$RAWLS_OAUTH_CREDS_JSON" | jq -r '.value' | sed -e 's/[\/&]/\\&/g')
 ADMIN_BILLING_ACCOUNT=$(echo "$FIRECLOUD_SECRETS" | jq -r '.trial_billing_account' | sed -e 's/[\/&]/\\&/g')
@@ -76,14 +75,12 @@ RAWLS_TEMPLATE_FILE="local-dev/templates/rawls.conf"
 RAWLS_OUTPUT_FILE="config/rawls.conf"
 
 # Replace placeholders in the template file with the fetched secret values
-sed -e "s/{{ \$appsDomain }}/$APPS_DOMAIN/" \
-    -e "s/{{ \$appsSubDomain }}/$APPS_SUBDOMAIN/" \
-    -e "s/{{ \$rawlsSaKey.client_email }}/$CLIENT_EMAIL/" \
+sed -e "s/{{ \$rawlsSaKey.client_email }}/$CLIENT_EMAIL/" \
     -e "s/{{ \$rawlsConf.gcs_tokenEncryptionKey }}/$GCS_TOKENENCRYPTIONKEY/" \
     -e "s/{{ \$refreshTokenCredentialWebClientId }}/$GOOGLE_CLIENT_ID/" \
     -e "s/{{ \$landingZonePostgres.username }}/$POSTGRES_DB_ADMIN/" \
     -e "s/{{ \$landingZonePostgres.password }}/$POSTGRES_DB_PASSWORD/" \
-    -e "s/{{ \$b2cAppId }}/$b2cAppId/" \
+    -e "s/{{ \$b2cAppId }}/$B2C_APP_ID/" \
     -e "s/{{ \$rawlsOauthCredential }}/$ESCAPED_RAWLS_OAUTH_CREDS_JSON/" \
     -e "s/{{ \$refreshTokenCredential }}/$ESCAPED_RAWLS_REFRESH_TOKEN_CRED_JSON/" \
     -e "s/{{ \$rawlsConf.slick_db_user }}/$RAWLS_SLICK_USER/" \
