@@ -284,7 +284,7 @@ class WorkspaceService(
       owners = ownersPolicy.map(policy => policy.memberEmails.map(_.value))
       canShare <- options.anyPresentFuture("canShare") {
         if (accessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
-        else if(accessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+        else if (accessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
         else {
           val sharePolicy = SamWorkspaceActions.sharePolicy(accessLevel.toString.toLowerCase())
           samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
@@ -2229,7 +2229,6 @@ class WorkspaceService(
         )
     }
 
-
   def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
     bucketRegion.traverse_ { region =>
       // if the user specifies a region for the workspace bucket, it must be in the proper format
@@ -2263,8 +2262,6 @@ class WorkspaceService(
         gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
       case (None, None) => Future(Some(config.defaultLocation))
     }
-
-
 
 }
 
