@@ -43,19 +43,6 @@ trait LibraryPermissionsSupport extends RoleSupport {
       case _                                        => changeMetadataChecker(workspaceId) _
     }
 
-  def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
-    val namespaces = attributeNames.map(_.namespace).toSet
-
-    // only allow library namespace
-    val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
-    if (invalidNamespaces.isEmpty) op
-    else {
-      val err =
-        ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
-    }
-  }
-
   private def maybeExecuteOp(canModify: Future[Boolean], cantModifyMessage: String, op: => Future[Workspace]) =
     canModify.flatMap {
       case true => op
