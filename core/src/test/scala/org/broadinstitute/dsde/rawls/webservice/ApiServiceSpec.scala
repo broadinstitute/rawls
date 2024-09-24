@@ -53,6 +53,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceAdminService,
   WorkspaceRepository,
   WorkspaceService,
   WorkspaceSettingRepository,
@@ -384,6 +385,14 @@ trait ApiServiceSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor
     ) _
+
+    override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
+      WorkspaceAdminService.constructor(
+        slickDataSource,
+        gcsDAO,
+        samDAO,
+        workbenchMetricBaseName
+      )
 
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
       slickDataSource,

@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrat
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceAdminService
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -28,7 +28,8 @@ trait AdminApiService extends UserInfoDirectives {
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  // val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService
   val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService
   val userServiceConstructor: RawlsRequestContext => UserService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
@@ -98,19 +99,21 @@ trait AdminApiService extends UserInfoDirectives {
             parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) {
               (nameOption, stringOption, numberOption, booleanOption) =>
                 val resultFuture = nameOption match {
-                  case None => workspaceServiceConstructor(ctx).listAllWorkspaces()
+                  case None => workspaceAdminServiceConstructor(ctx).listAllWorkspaces()
                   case Some(attributeName) =>
                     val name = AttributeName.fromDelimitedName(attributeName)
                     (stringOption, numberOption, booleanOption) match {
                       case (Some(string), None, None) =>
-                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(name, AttributeString(string))
+                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(name,
+                                                                                               AttributeString(string)
+                        )
                       case (None, Some(number), None) =>
-                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(
+                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(
                           name,
                           AttributeNumber(number.toDouble)
                         )
                       case (None, None, Some(boolean)) =>
-                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(
+                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(
                           name,
                           AttributeBoolean(boolean.toBoolean)
                         )
@@ -211,7 +214,7 @@ trait AdminApiService extends UserInfoDirectives {
         path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
-              workspaceServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
+              workspaceAdminServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
                 WorkspaceName(workspaceNamespace, workspaceName)
               )
             }
@@ -219,10 +222,9 @@ trait AdminApiService extends UserInfoDirectives {
             put {
               entity(as[List[String]]) { flagNames =>
                 complete {
-                  workspaceServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace,
-                                                                                                     workspaceName
-                                                                                       ),
-                                                                                       flagNames
+                  workspaceAdminServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(
+                    WorkspaceName(workspaceNamespace, workspaceName),
+                    flagNames
                   )
                 }
               }
