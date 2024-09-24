@@ -16,10 +16,12 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule,
+  GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
   GcpBucketLifecycle,
+  GcpBucketRequesterPays,
   GcpBucketSoftDelete,
   WorkspaceSettingType
 }
@@ -581,6 +583,9 @@ case class GcpBucketLifecycleSetting(override val config: GcpBucketLifecycleConf
 case class GcpBucketSoftDeleteSetting(override val config: GcpBucketSoftDeleteConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketSoftDelete, config)
 
+case class GcpBucketRequesterPaysSetting(override val config: GcpBucketRequesterPaysConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketRequesterPays, config)
+
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -588,14 +593,17 @@ object WorkspaceSettingTypes {
   }
 
   def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
-    case "gcpbucketlifecycle"  => GcpBucketLifecycle
-    case "gcpbucketsoftdelete" => GcpBucketSoftDelete
-    case _                     => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
+    case "gcpbucketlifecycle"     => GcpBucketLifecycle
+    case "gcpbucketsoftdelete"    => GcpBucketSoftDelete
+    case "gcpbucketrequesterpays" => GcpBucketRequesterPays
+    case _                        => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
   case object GcpBucketLifecycle extends WorkspaceSettingType
 
   case object GcpBucketSoftDelete extends WorkspaceSettingType
+
+  case object GcpBucketRequesterPays extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig
@@ -609,6 +617,8 @@ object WorkspaceSettingConfig {
 
   type Seconds = Long
   case class GcpBucketSoftDeleteConfig(retentionDurationInSeconds: Seconds) extends WorkspaceSettingConfig
+
+  case class GcpBucketRequesterPaysConfig(enabled: Boolean) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1232,6 +1242,9 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val GcpBucketSoftDeleteConfigFormat: RootJsonFormat[GcpBucketSoftDeleteConfig] = jsonFormat1(
     GcpBucketSoftDeleteConfig.apply
   )
+  implicit val GcpBucketRequesterPaysConfigFormat: RootJsonFormat[GcpBucketRequesterPaysConfig] = jsonFormat1(
+    GcpBucketRequesterPaysConfig.apply
+  )
 
   implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
     override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
@@ -1244,8 +1257,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit object WorkspaceSettingConfigFormat extends RootJsonFormat[WorkspaceSettingConfig] {
     def write(obj: WorkspaceSettingConfig): JsValue = obj match {
-      case config: GcpBucketLifecycleConfig  => config.toJson
-      case config: GcpBucketSoftDeleteConfig => config.toJson
+      case config: GcpBucketLifecycleConfig     => config.toJson
+      case config: GcpBucketSoftDeleteConfig    => config.toJson
+      case config: GcpBucketRequesterPaysConfig => config.toJson
     }
 
     // We prevent reading WorkspaceSettingConfig directly because we need
@@ -1267,7 +1281,9 @@ class WorkspaceJsonSupport extends JsonSupport {
       settingType match {
         case GcpBucketLifecycle  => GcpBucketLifecycleSetting(fields("config").convertTo[GcpBucketLifecycleConfig])
         case GcpBucketSoftDelete => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
-        case _                   => throw DeserializationException(s"unexpected setting type $settingType")
+        case GcpBucketRequesterPays =>
+          GcpBucketRequesterPaysSetting(fields("config").convertTo[GcpBucketRequesterPaysConfig])
+        case _ => throw DeserializationException(s"unexpected setting type $settingType")
       }
     }
   }

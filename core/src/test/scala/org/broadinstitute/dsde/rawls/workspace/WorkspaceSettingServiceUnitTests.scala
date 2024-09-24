@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
@@ -11,11 +11,13 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule,
+  GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GcpBucketLifecycleSetting,
+  GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   RawlsRequestContext,
   RawlsUserEmail,
@@ -25,7 +27,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   UserInfo,
   Workspace,
-  WorkspaceSetting,
   WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -40,7 +41,7 @@ import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import java.util.UUID
 import scala.jdk.CollectionConverters._
 import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, DurationInt}
 
 class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
@@ -177,7 +178,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
   "setWorkspaceSettings" should "set the workspace settings if there aren't any set" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
-    val workspaceSetting = GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty))
+    val workspaceSettings = List(
+      GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty)),
+      GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(7.days.toSeconds)),
+      GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true))
+    )
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
@@ -186,13 +191,15 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
     when(
       workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
-                                                                List(workspaceSetting),
+                                                                workspaceSettings,
                                                                 defaultRequestContext.userInfo.userSubjectId
       )
     )
-      .thenReturn(Future.successful(List(workspaceSetting)))
-    when(workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.settingType))
-      .thenReturn(Future.successful(1))
+      .thenReturn(Future.successful(workspaceSettings))
+    workspaceSettings.foreach(workspaceSetting =>
+      when(workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.settingType))
+        .thenReturn(Future.successful(1))
+    )
 
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(any()))
@@ -206,7 +213,16 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     ).thenReturn(Future.successful(true))
 
     val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List())).thenReturn(Future.successful())
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(), workspace.googleProjectId))
+      .thenReturn(Future.successful())
+    when(
+      gcsDAO.setSoftDeletePolicy(ArgumentMatchers.eq(workspace.bucketName),
+                                 any[SoftDeletePolicy](),
+                                 ArgumentMatchers.eq(workspace.googleProjectId)
+      )
+    ).thenReturn(Future.successful())
+    when(gcsDAO.setRequesterPays(workspace.bucketName, requesterPaysEnabled = true, workspace.googleProjectId))
+      .thenReturn(Future.successful())
 
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO,
@@ -215,8 +231,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
                                          workspaceSettingRepository = workspaceSettingRepository
       )
 
-    val res = Await.result(service.setWorkspaceSettings(workspaceName, List(workspaceSetting)), Duration.Inf)
-    res.successes should contain theSameElementsAs List(workspaceSetting)
+    val res = Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    res.successes should contain theSameElementsAs workspaceSettings
     res.failures shouldEqual Map.empty
   }
 
@@ -275,7 +291,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       LifecycleAction.newDeleteAction(),
       LifecycleCondition.newBuilder().setMatchesPrefix(List("muchBetterPrefix").asJava).setAge(31).build()
     )
-    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule))).thenReturn(Future.successful())
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule), workspace.googleProjectId))
+      .thenReturn(Future.successful())
 
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO,
@@ -434,7 +451,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       LifecycleAction.newDeleteAction(),
       LifecycleCondition.newBuilder().setMatchesPrefix(List("muchBetterPrefix").asJava).setAge(31).build()
     )
-    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule)))
+    when(gcsDAO.setBucketLifecycle(workspace.bucketName, List(newSettingGoogleRule), workspace.googleProjectId))
       .thenReturn(Future.failed(new Exception("failed to apply settings")))
 
     val service =
