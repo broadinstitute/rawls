@@ -33,7 +33,7 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.util.{LibraryPermissionsSupport, UserWiths, UserUtils,JsonFilterUtils, WorkspaceSupport, BillingProjectSupport, AttributeSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -2267,6 +2267,18 @@ class WorkspaceService(
       case (None, None) => Future(Some(config.defaultLocation))
     }
 
+  private def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
+    val namespaces = attributeNames.map(_.namespace).toSet
+
+    // only allow library namespace
+    val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
+    if (invalidNamespaces.isEmpty) op
+    else {
+      val err =
+        ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
+      throw new RawlsExceptionWithErrorReport(errorReport = err)
+    }
+  }
 
 
 }
