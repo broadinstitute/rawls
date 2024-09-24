@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
-  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID)
+  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID, costCapThreshold: Option[BigDecimal])
   case object StartMonitorPass
   case object SubmissionMonitorPassComplete
 
@@ -133,8 +133,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   override def receive = {
     case StartMonitorPass =>
       startMonitoringNewSubmissions pipeTo self
-    case SubmissionStarted(workspaceName, submissionId) =>
-      val child = startSubmissionMonitor(workspaceName, submissionId)
+    case SubmissionStarted(workspaceName, submissionId, costCapThreshold) =>
+      val child = startSubmissionMonitor(workspaceName, submissionId, costCapThreshold)
       scheduleNextCheckCurrentWorkflowStatus(child)
       registerDetailedJobExecGauges(workspaceName, submissionId)
 
@@ -179,7 +179,10 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     // we want to track them over a longer time frame.
     workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand("cause", cause).asCounter("monitorRestarted")
 
-  private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID) =
+  private def startSubmissionMonitor(workspaceName: WorkspaceName,
+                                     submissionId: UUID,
+                                     costCapThreshold: Option[BigDecimal]
+  ) =
     actorOf(
       SubmissionMonitorActor
         .props(
@@ -192,7 +195,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           executionServiceCluster,
           submissionMonitorConfig,
           entityQueryTimeout,
-          workbenchMetricBaseName
+          workbenchMetricBaseName,
+          costCapThreshold
         )
         .withDispatcher("submission-monitor-dispatcher"),
       submissionId.toString
@@ -218,15 +222,15 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     val monitoredSubmissions = context.children.map(_.path.name).toSet
 
     datasource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.listActiveSubmissionIdsWithWorkspace(limit =
+      dataAccess.submissionQuery.listActiveSubmissionIdsWithWorkspaceAndCostCapThreshold(limit =
         submissionMonitorConfig.submissionPollExpiration
       ) map { activeSubs =>
-        val unmonitoredSubmissions = activeSubs.filterNot { case (subId, _) =>
+        val unmonitoredSubmissions = activeSubs.filterNot { case (subId, _, _) =>
           monitoredSubmissions.contains(subId.toString)
         }
 
-        unmonitoredSubmissions.foreach { case (subId, wsName) =>
-          self ! SubmissionStarted(wsName, subId)
+        unmonitoredSubmissions.foreach { case (subId, wsName, costCapThreshold) =>
+          self ! SubmissionStarted(wsName, subId, costCapThreshold)
         }
         SubmissionMonitorPassComplete
       }

@@ -57,7 +57,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
       } ~
         path("workspaces" / "tags") {
-          parameters('q.?, "limit".as[Int].optional) { (queryString, limit) =>
+          parameters(Symbol("q").?, "limit".as[Int].optional) { (queryString, limit) =>
             get {
               complete {
                 workspaceServiceConstructor(ctx).getTags(queryString, limit)
@@ -79,13 +79,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         } ~
         path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-          /* we enforce a 6-character minimum for workspaceNamespace, as part of billing project creation.
-           the previous "mc", "tags", and "id" paths rely on this convention to avoid path-matching conflicts.
-           we might want to change the first Segment above to a regex a la """[^/.]{6,}""".r
-           but note that would be a behavior change: if a user entered fewer than 6 chars it would result in an
-           unmatched path rejection instead of the custom error handling inside WorkspaceService.
-           */
-
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
               complete {
@@ -152,12 +145,18 @@ trait WorkspaceApiService extends UserInfoDirectives {
             }
           } ~
             patch {
-              parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
+              parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound: Option[String] =>
                 entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
+                  val inviteUsersNotFoundValue = inviteUsersNotFound match {
+                    case Some(str) if str.isEmpty => false
+                    case Some(str)                => str.toBoolean
+                    case None                     => false
+                  }
+
                   complete {
                     workspaceServiceConstructor(ctx).updateACL(WorkspaceName(workspaceNamespace, workspaceName),
                                                                aclUpdate,
-                                                               inviteUsersNotFound.getOrElse("false").toBoolean
+                                                               inviteUsersNotFoundValue
                     )
                   }
                 }
