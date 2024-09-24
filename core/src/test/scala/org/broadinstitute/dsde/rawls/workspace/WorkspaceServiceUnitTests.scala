@@ -428,14 +428,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
   }
 
-  it should "return false for canShare if the user is a workspace reader" in {
+  it should "return false for canShare if the user has access lower than a workspace reader" in {
     val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
     when(wsm.getWorkspace(any, any))
       .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(Future(Set(SamResourceRole("READER"))))
+      .thenReturn(Future(Set(SamResourceRole("NO ACCESS"))))
     val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
@@ -446,19 +446,19 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
   }
 
-  it should "query sam for canShare if the user is not an owner or reader on the workspace" in {
+  it should "query sam for canShare if the user is not an owner" in {
     val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
     val wsmDao = mock[WorkspaceManagerDAO]
     when(wsmDao.getWorkspace(any, any))
       .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(Future(Set(SamResourceRole("WRITER"))))
+      .thenReturn(Future(Set(SamResourceRole("READER"))))
     when(
       sam.userHasAction(
         SamResourceTypeNames.workspace,
         workspace.workspaceId,
-        SamWorkspaceActions.sharePolicy("writer"),
+        SamWorkspaceActions.sharePolicy("reader"),
         defaultRequestContext
       )
     ).thenReturn(Future(true))
@@ -473,7 +473,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(sam).userHasAction(
       SamResourceTypeNames.workspace,
       workspace.workspaceId,
-      SamWorkspaceActions.sharePolicy("writer"),
+      SamWorkspaceActions.sharePolicy("reader"),
       defaultRequestContext
     )
   }
