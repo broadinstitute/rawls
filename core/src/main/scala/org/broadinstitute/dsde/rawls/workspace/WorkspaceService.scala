@@ -283,12 +283,11 @@ class WorkspaceService(
       }
       owners = ownersPolicy.map(policy => policy.memberEmails.map(_.value))
       canShare <- options.anyPresentFuture("canShare") {
-        accessLevel match {
-          case WorkspaceAccessLevels.Read  => Future.successful(false)
-          case WorkspaceAccessLevels.Owner => Future.successful(true)
-          case _ =>
-            val sharePolicy = SamWorkspaceActions.sharePolicy(accessLevel.toString.toLowerCase())
-            samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
+        if (accessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
+        else if (accessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+        else {
+          val sharePolicy = SamWorkspaceActions.sharePolicy(accessLevel.toString.toLowerCase())
+          samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
         }
       }
       wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
