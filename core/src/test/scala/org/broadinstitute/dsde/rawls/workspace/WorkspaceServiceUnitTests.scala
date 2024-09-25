@@ -529,8 +529,7 @@ class WorkspaceServiceUnitTests
     when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val stats = WorkspaceSubmissionStats(None, None, 3)
     val workspaceRepository = mock[WorkspaceRepository]
-    when(workspaceRepository.listSubmissionSummaryStats(workspace.workspaceIdAsUUID))
-      .thenReturn(Future(Map(workspace.workspaceIdAsUUID -> stats)))
+    when(workspaceRepository.getSubmissionSummaryStats(workspace.workspaceIdAsUUID)).thenReturn(Future(Some(stats)))
     val service = workspaceServiceConstructor(
       workspaceManagerDAO = wsm,
       workspaceRepository = workspaceRepository

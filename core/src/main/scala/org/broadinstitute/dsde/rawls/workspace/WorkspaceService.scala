@@ -265,10 +265,9 @@ class WorkspaceService(
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx)
       }
 
-      allStats <- options.anyPresentFuture("workspaceSubmissionStats") {
-        workspaceRepository.listSubmissionSummaryStats(workspace.workspaceIdAsUUID)
+      stats <- options.anyPresentFuture("workspaceSubmissionStats") {
+        workspaceRepository.getSubmissionSummaryStats (workspace.workspaceIdAsUUID)
       }
-      stats = allStats.flatMap(_.values.headOption)
       authDomain <- options.anyPresentFuture("workspace.authorizationDomain", "workspace") {
         loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId)
       }
@@ -326,7 +325,7 @@ class WorkspaceService(
         options.useAttributes,
         wsmContext.getCloudPlatform
       ),
-      stats,
+      stats.flatten,
       bucketDetails,
       owners,
       wsmContext.azureCloudContext,
