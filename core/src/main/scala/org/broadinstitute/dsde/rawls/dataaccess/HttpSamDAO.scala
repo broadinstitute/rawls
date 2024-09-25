@@ -683,6 +683,17 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
         callback.future.map(_ => ())
       }
+
+    override def userHasAction(resourceTypeName: SamResourceTypeName,
+                               action: SamResourceAction,
+                               ctx: RawlsRequestContext
+    ): Future[Boolean] = retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[java.lang.Boolean]("resourceTypeAdminPermission")
+
+      adminApi(ctx).resourceTypeAdminPermission(resourceTypeName.value, action.value)
+
+      callback.future.map(_.booleanValue())
+    }
   }
 
   override def getStatus(): Future[SubsystemStatus] = {

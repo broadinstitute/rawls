@@ -1,18 +1,21 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.NoSuchWorkspaceException
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeValue,
+  ErrorReport,
   ErrorReportSource,
   ManagedGroupRef,
   RawlsGroupName,
   RawlsRequestContext,
+  SamResourceTypeAdminActions,
   SamResourceTypeName,
   SamResourceTypeNames,
   Workspace,
@@ -115,15 +118,24 @@ class WorkspaceAdminService(
       }
     }
 
-  def getWorkspaceById(workspaceId: UUID): Future[WorkspaceAdminResponse] = asFCAdmin {
-    for {
-      workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
-      workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
-      settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
-    } yield WorkspaceAdminResponse(WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
-                                   settings
-    )
-  }
+  def getWorkspaceById(workspaceId: UUID): Future[WorkspaceAdminResponse] =
+    samDAO.admin
+      .userHasAction(SamResourceTypeNames.workspace, SamResourceTypeAdminActions.readSummaryInformation, ctx)
+      .flatMap { userIsAdmin =>
+        if (userIsAdmin) {
+          for {
+            workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
+            workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
+            settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
+          } yield WorkspaceAdminResponse(
+            WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
+            settings
+          )
+        } else
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.Forbidden, "You must be an admin to call this API.")
+          )
+      }
 
   // moved out of WorkspaceSupport because the only usage was in this file,
   // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport

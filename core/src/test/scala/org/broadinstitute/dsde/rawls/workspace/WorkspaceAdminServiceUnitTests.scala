@@ -2,11 +2,13 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamAdminDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
+  SamResourceTypeAdminActions,
+  SamResourceTypeNames,
   UserInfo,
   Workspace,
   WorkspaceAdminResponse,
@@ -15,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
@@ -71,11 +74,18 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
     when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
 
-    val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.isAdmin(defaultRequestContext.userInfo.userEmail.value)).thenReturn(Future.successful(true))
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+                                ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
 
     val service =
-      workspaceAdminServiceConstructor(gcsDAO = gcsDAO,
+      workspaceAdminServiceConstructor(samDAO = samDAO,
                                        workspaceRepository = workspaceRepository,
                                        workspaceSettingRepository = workspaceSettingRepository
       )
@@ -88,10 +98,17 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
   }
 
   it should "throw if the user is not an admin" in {
-    val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.isAdmin(defaultRequestContext.userInfo.userEmail.value)).thenReturn(Future.successful(false))
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+                                ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(false))
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
 
-    val service = workspaceAdminServiceConstructor(gcsDAO = gcsDAO)
+    val service = workspaceAdminServiceConstructor(samDAO = samDAO)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.getWorkspaceById(UUID.randomUUID()), Duration.Inf)
@@ -105,11 +122,18 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceId)).thenReturn(Future.successful(None))
 
-    val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.isAdmin(defaultRequestContext.userInfo.userEmail.value)).thenReturn(Future.successful(true))
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+                                ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
 
     val service =
-      workspaceAdminServiceConstructor(gcsDAO = gcsDAO, workspaceRepository = workspaceRepository)
+      workspaceAdminServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)
 
     intercept[NoSuchWorkspaceException] {
       Await.result(service.getWorkspaceById(workspaceId), Duration.Inf)

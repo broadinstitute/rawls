@@ -182,6 +182,11 @@ trait SamAdminDAO {
                            memberEmail: String,
                            ctx: RawlsRequestContext
   ): Future[Unit]
+
+  def userHasAction(resourceTypeName: SamResourceTypeName,
+                    action: SamResourceAction,
+                    ctx: RawlsRequestContext
+  ): Future[Boolean]
 }
 
 object SamDAO {
