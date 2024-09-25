@@ -17,12 +17,7 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  UserDisabledException,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -35,7 +30,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.dsl.MatcherWords.not.contain
 import org.scalatest.matchers.must.Matchers.{include, not}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
-import spray.json.{JsObject, JsString}
+import org.scalatest.prop.TableDrivenPropertyChecks
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -46,7 +41,11 @@ import scala.language.postfixOps
 /**
   * Unit tests kept separate from WorkspaceServiceSpec to separate true unit tests from tests requiring external resources
   */
-class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with MockitoTestUtils {
+class WorkspaceServiceUnitTests
+    extends AnyFlatSpec
+    with OptionValues
+    with MockitoTestUtils
+    with TableDrivenPropertyChecks {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
@@ -410,74 +409,65 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
   }
 
-  it should "return true for canShare if the user is a workspace owner" in {
-    val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any))
-      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
-    val sam = mock[SamDAO]
-    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(Future(Set(SamResourceRole("OWNER"))))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
+  it should "return true for canShare if the user is a workspace or project owner" in {
+    forAll(Table("role", "OWNER", "PROJECT_OWNER")) { (role: String) =>
+      val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
+      val wsm = mock[WorkspaceManagerDAO]
+      when(wsm.getWorkspace(any, any))
+        .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+      val sam = mock[SamDAO]
+      when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+        .thenReturn(Future(Set(SamResourceRole(role))))
+      val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
 
-    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+      val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
-    result.workspace.name shouldBe workspace.name
-    result.workspace.namespace shouldBe workspace.namespace
-    result.canShare shouldBe Some(true)
-    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+      result.workspace.name shouldBe workspace.name
+      result.workspace.namespace shouldBe workspace.namespace
+      result.canShare shouldBe Some(true)
+      verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+    }
   }
-
-
-  it should "return false for canShare if the user has access lower than a workspace reader" in {
-    val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any))
-      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
-    val sam = mock[SamDAO]
-    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(Future(Set(SamResourceRole("NO ACCESS"))))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(defaultRequestContext)
-
-    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
-
-    result.workspace.name shouldBe workspace.name
-    result.workspace.namespace shouldBe workspace.namespace
-    result.canShare shouldBe Some(false)
-    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
-  }
-
 
   it should "query sam for canShare if the user is not an owner" in {
-    val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
-    val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.getWorkspace(any, any))
-      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
-    val sam = mock[SamDAO]
-    when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(Future(Set(SamResourceRole("READER"))))
-    when(
-      sam.userHasAction(
+    forAll(
+      Table(
+        ("role", "samAnswer"),
+        ("WRITER", true),
+        ("READER", true),
+        ("NO ACCESS", false)
+      )
+    ) { (role: String, samAnswer: Boolean) =>
+      val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
+      val wsmDao = mock[WorkspaceManagerDAO]
+      when(wsmDao.getWorkspace(any, any))
+        .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+      val sam = mock[SamDAO]
+      when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
+        .thenReturn(Future(Set(SamResourceRole(role))))
+      when(
+        sam.userHasAction(
+          SamResourceTypeNames.workspace,
+          workspace.workspaceId,
+          SamWorkspaceActions.sharePolicy(role.toLowerCase),
+          defaultRequestContext
+        )
+      ).thenReturn(Future(samAnswer))
+      val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(defaultRequestContext)
+
+      val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+      result.workspace.name shouldBe workspace.name
+      result.workspace.namespace shouldBe workspace.namespace
+      result.canShare shouldBe Some(samAnswer)
+      verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
+      verify(sam).userHasAction(
         SamResourceTypeNames.workspace,
         workspace.workspaceId,
-        SamWorkspaceActions.sharePolicy("reader"),
+        SamWorkspaceActions.sharePolicy(role.toLowerCase),
         defaultRequestContext
       )
-    ).thenReturn(Future(true))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(defaultRequestContext)
-
-    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
-
-    result.workspace.name shouldBe workspace.name
-    result.workspace.namespace shouldBe workspace.namespace
-    result.canShare shouldBe Some(true)
-    verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
-    verify(sam).userHasAction(
-      SamResourceTypeNames.workspace,
-      workspace.workspaceId,
-      SamWorkspaceActions.sharePolicy("reader"),
-      defaultRequestContext
-    )
+    }
   }
 
   it should "get the bucket options from gcs when requested" in {

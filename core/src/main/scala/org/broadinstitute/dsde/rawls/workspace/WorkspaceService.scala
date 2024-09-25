@@ -33,7 +33,15 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{LibraryPermissionsSupport, UserWiths, UserUtils,JsonFilterUtils, WorkspaceSupport, BillingProjectSupport, AttributeSupport}
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeSupport,
+  BillingProjectSupport,
+  JsonFilterUtils,
+  LibraryPermissionsSupport,
+  UserUtils,
+  UserWiths,
+  WorkspaceSupport
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -133,12 +141,12 @@ object WorkspaceService {
 }
 
 class WorkspaceService(
-  protected val ctx: RawlsRequestContext,
+  val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   executionServiceCluster: ExecutionServiceCluster,
   val workspaceManagerDAO: WorkspaceManagerDAO,
   val leonardoService: LeonardoService,
-  protected val gcsDAO: GoogleServicesDAO,
+  val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
   notificationDAO: NotificationDAO,
   userServiceConstructor: RawlsRequestContext => UserService,
@@ -283,8 +291,7 @@ class WorkspaceService(
       }
       owners = ownersPolicy.map(policy => policy.memberEmails.map(_.value))
       canShare <- options.anyPresentFuture("canShare") {
-        if (accessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
-        else if (accessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+        if (accessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
         else {
           val sharePolicy = SamWorkspaceActions.sharePolicy(accessLevel.toString.toLowerCase())
           samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
@@ -2231,7 +2238,6 @@ class WorkspaceService(
         )
     }
 
-
   def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
     bucketRegion.traverse_ { region =>
       // if the user specifies a region for the workspace bucket, it must be in the proper format
@@ -2278,7 +2284,6 @@ class WorkspaceService(
       throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
-
 
 }
 
