@@ -32,7 +32,7 @@ case class JsonEntitySlickRecord(id: Long,
 /**
   * model class for rows in the ENTITY table, used for low-level raw SQL operations
   */
-// TODO AJ-2008: handle the all_attribute_values column
+// TODO AJ-2008: handle the all_attribute_values column?
 // TODO AJ-2008: probably don't need deletedDate here
 case class JsonEntityRecord(id: Long,
                             name: String,
@@ -97,6 +97,7 @@ trait JsonEntityComponent extends LazyLogging {
     def deletedDate = column[Option[Timestamp]]("deleted_date")
     def attributes = column[Option[String]]("attributes")
 
+    // TODO AJ-2008: are these useful?
     // def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     // def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
 
@@ -190,6 +191,7 @@ trait JsonEntityComponent extends LazyLogging {
       * The ENTITY_KEYS table is automatically populated via triggers on the ENTITY table; see the db
       * to understand those triggers.
       */
+    // TODO AJ-2008: assess performance of ENTITY_KEYS.attribute_keys vs JSON_KEYS(ENTITY.attributes)
     def typesAndAttributes(workspaceId: UUID): ReadAction[Seq[(String, String)]] =
       sql"""SELECT DISTINCT entity_type, json_key FROM ENTITY_KEYS,
               JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(json_key VARCHAR(256) PATH '$$')) t
@@ -212,9 +214,7 @@ trait JsonEntityComponent extends LazyLogging {
 
       // TODO AJ-2008: full-table text search
       // TODO AJ-2008: filter by column
-      // TODO AJ-2008: arbitrary sorting
       // TODO AJ-2008: result projection
-      // TODO AJ-2008: total/filtered counts
 
       val query = concatSqlActions(
         sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes from ENTITY ",
@@ -292,6 +292,7 @@ trait JsonEntityComponent extends LazyLogging {
       }
 
     /** Given a set of entity references, retrieve those entities */
+    // TODO AJ-2008: address lots of copy/paste between getEntities and getEntityRefs
     def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[JsonEntityRefRecord]] =
       // short-circuit
       if (refs.isEmpty) {
@@ -326,18 +327,6 @@ trait JsonEntityComponent extends LazyLogging {
         // execute
         unionQuery.as[JsonEntityRefRecord](getJsonEntityRefRecord)
       }
-
-    def bulkInsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] =
-      // short-circuit
-      if (toIds.isEmpty) {
-        DBIO.successful(0)
-      } else {
-        // generate bulk-insert SQL
-        val insertValues: Seq[SQLActionBuilder] = toIds.toSeq.map(toId => sql"($fromId, $toId)")
-        val allInsertValues: SQLActionBuilder = reduceSqlActionsWithDelim(insertValues, sql",")
-        concatSqlActions(sql"insert into ENTITY_REFS(from_id, to_id) values ", allInsertValues).asUpdate
-      }
-
   }
 
   private def singleResult[V](results: ReadAction[Seq[V]]): ReadAction[V] =

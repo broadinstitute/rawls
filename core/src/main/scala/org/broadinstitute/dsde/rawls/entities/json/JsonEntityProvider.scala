@@ -53,7 +53,11 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Try}
 
-// TODO AJ-2008: tracing
+// TODO AJ-2008:
+//    - tracing
+//    - mark transactions as read-only where possible (does this actually help?)
+//    - error-handling
+//    - logging
 class JsonEntityProvider(requestArguments: EntityRequestArguments,
                          implicit protected val dataSource: SlickDataSource,
                          cacheEnabled: Boolean,
@@ -71,8 +75,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   /**
     * Insert a single entity to the db
     */
-  override def createEntity(entity: Entity): Future[Entity] = {
-    logger.info(s"creating entity $entity")
+  override def createEntity(entity: Entity): Future[Entity] =
     dataSource.inTransaction { dataAccess =>
       for {
         // find and validate all references in the entity-to-be-saved
@@ -80,35 +83,33 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
         // save the entity
         _ <- dataAccess.jsonEntityQuery.createEntity(workspaceId, entity)
-        // did it save correctly? get its id, we need that id.
-        // TODO AJ-2008: return just the id; we don't need the whole record
+        // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
+        // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
+        // normalized version.
         savedEntityRecordOption <- dataAccess.jsonEntityQuery.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new RuntimeException("Could not save entity"))
         // save all references from this entity to other entities
         _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referenceTargets, isInsert = true))
       } yield savedEntityRecord.toEntity
-      //      } yield (savedEntityRecord, referenceTargets)
-      //    } flatMap { case (savedEntityRecord, referenceTargets) =>
-      //      // something in the transaction above causes replaceReferences to deadlock. For now do it in a separate
-      //      // transaction, but that's wrong
-      //      replaceReferences(savedEntityRecord.id, referenceTargets) map { _ => savedEntityRecord.toEntity }
-      //    }
     }
-  }
 
   /**
     * Read a single entity from the db
     */
-  // TODO AJ-2008: mark transaction as read-only
   override def getEntity(entityType: String, entityName: String): Future[Entity] = dataSource.inTransaction {
     dataAccess =>
       dataAccess.jsonEntityQuery.getEntity(workspaceId, entityType, entityName)
   } map { result => result.map(_.toEntity).get }
 
+  /**
+    * Soft-delete specified entities
+    */
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 
-  // TODO AJ-2008: mark transaction as read-only
-  // TODO AJ-2008: probably needs caching for the attribute calculations
+  /**
+    * Return type/count/attribute metadata
+    * TODO AJ-2008: assess performance and add caching if necessary
+    */
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     dataSource.inTransaction { dataAccess =>
       // get the types and counts
@@ -131,6 +132,9 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
+  /**
+    * stream a page of entities
+    */
   override def queryEntitiesSource(entityType: String,
                                    entityQuery: EntityQuery,
                                    parentContext: RawlsRequestContext
@@ -140,6 +144,9 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       (queryResponse.resultMetadata, Source.apply(queryResponse.results))
     }
 
+  /**
+    * return a page of entities
+    */
   override def queryEntities(entityType: String,
                              entityQuery: EntityQuery,
                              parentContext: RawlsRequestContext
@@ -162,14 +169,23 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
+  /**
+    * update multiple entities; they must pre-exist
+    */
   override def batchUpdateEntities(
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
   ): Future[Iterable[Entity]] = batchUpdateEntitiesImpl(entityUpdates, upsert = false)
 
+  /**
+    * upsert multiple entities; will create if they do not pre-exist
+    */
   override def batchUpsertEntities(
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
   ): Future[Iterable[Entity]] = batchUpdateEntitiesImpl(entityUpdates, upsert = true)
 
+  /**
+    * internal implementation for both batchUpsert and batchUpdate
+    */
   def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Iterable[Entity]] = {
 
     val numUpdates = entityUpdates.size
@@ -245,11 +261,10 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               // TODO AJ-2008: collect all the apply errors instead of handling them one-by-one?
               val updatedEntity: Entity = applyOperationsToEntity(baseEntity, entityUpdate.operations)
 
-              // TODO AJ-2008: if the entity hasn't changed, skip it
+              // if the entity hasn't changed, skip it
               if (existingRecordOption.nonEmpty && baseEntity.attributes == updatedEntity.attributes) {
                 Option.empty[JsonEntitySlickRecord]
               } else {
-                // TODO AJ-2008: handle references
                 // translate back to a JsonEntitySlickRecord for later insert/update
                 // TODO AJ-2008: so far we retrieved a JsonEntityRecord, translated it to an Entity, and are now
                 //  translating it to JsonEntitySlickRecord; we could do better
@@ -279,16 +294,11 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               s"***** all updates have been prepared: ${inserts.size} inserts, ${updates.size} updates, ${noopCount} noop updates."
             )
 
-            // perform the inserts, then perform the updates
-
             // do NOT use the "returning" syntax above, as it forces individual insert statements for each entity.
             // instead, we insert using non-returning syntax, then perform a second query to get the ids
             val insertResult = dataAccess.jsonEntitySlickQuery ++= inserts
 
-//            val insertRefFutures: Seq[Future[_]] = inserts.map { ins =>
-//              synchronizeReferences(ins.id, ins.toEntity)
-//            }
-
+            // TODO AJ-2008: don't eagerly kick these off; can cause parallelism problems
             val updateActions = updates.map { upd =>
               dataAccess.jsonEntityQuery.updateEntity(workspaceId, upd.toEntity, upd.recordVersion) map {
                 updatedCount =>
@@ -298,6 +308,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               }
             }
 
+            // TODO AJ-2008: don't eagerly kick these off; can cause parallelism problems
             val updateRefFutures: Seq[Future[_]] = updates.map { upd =>
               synchronizeReferences(upd.id, upd.toEntity)
             }
@@ -369,6 +380,12 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
   override def expressionValidator: ExpressionValidator = ???
 
+  // ====================================================================================================
+  //  helper methods
+  // ====================================================================================================
+
+  // given potential references from an entity, verify that the reference targets all exist,
+  // and return their ids.
   private def validateReferences(entity: Entity): Future[Map[AttributeName, Seq[JsonEntityRefRecord]]] = {
     // find all refs in the entity
     val refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
@@ -415,10 +432,16 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       .toSeq
       .groupMap(_._1)(_._2)
 
+  // given already-validated references, including target ids, update the ENTITY_REFS table for a given source
+  // entity
   private def replaceReferences(fromId: Long,
                                 foundRefs: Map[AttributeName, Seq[JsonEntityRefRecord]],
                                 isInsert: Boolean = false
-  ) =
+  ): Future[Map[AttributeName, Seq[JsonEntityRefRecord]]] = {
+    // short-circuit
+    if (isInsert && foundRefs.isEmpty) {
+      return Future.successful(Map())
+    }
     dataSource.inTransaction { dataAccess =>
       import dataAccess.driver.api._
       // we don't actually care about the referencing attribute name or referenced type&name; reduce to just the referenced ids.
@@ -443,7 +466,6 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
         // find all target ids in the current entity that are not in the db
         inserts = currentEntityRefTargets diff existingRefTargets
         insertPairs = inserts.map(toId => (fromId, toId))
-        insertRecords = inserts.map(toId => RefPointerRecord(fromId, toId))
         _ = logger.trace(
           s"~~~~~ prepared ${inserts.size} inserts and ${deletes.size} deletes to perform for entity $fromId"
         )
@@ -464,7 +486,9 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
         _ = logger.trace(s"~~~~~ actually deleted ${deleteResult} rows for entity $fromId")
       } yield foundRefs
     }
+  }
 
+  // helper to call validateReferences followed by replaceReferences
   private def synchronizeReferences(fromId: Long,
                                     entity: Entity,
                                     isInsert: Boolean = false
