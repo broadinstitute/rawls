@@ -16,11 +16,11 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeName,
   SamResourceTypeNames,
   Workspace,
+  WorkspaceAdminResponse,
   WorkspaceAttributeSpecs,
   WorkspaceDetails,
   WorkspaceFeatureFlag,
-  WorkspaceName,
-  WorkspaceWithSettings
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util._
 
@@ -115,13 +115,13 @@ class WorkspaceAdminService(
       }
     }
 
-  def getWorkspaceById(workspaceId: UUID): Future[WorkspaceWithSettings] = asFCAdmin {
+  def getWorkspaceById(workspaceId: UUID): Future[WorkspaceAdminResponse] = asFCAdmin {
     for {
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
       workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
       settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
-    } yield WorkspaceWithSettings(WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
-                                  settings
+    } yield WorkspaceAdminResponse(WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
+                                   settings
     )
   }
 

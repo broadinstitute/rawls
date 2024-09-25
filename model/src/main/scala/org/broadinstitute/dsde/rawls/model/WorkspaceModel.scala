@@ -901,7 +901,7 @@ case class WorkspacePolicy(name: String, namespace: String, additionalData: List
 
 }
 
-case class WorkspaceWithSettings(workspace: WorkspaceDetails, settings: List[WorkspaceSetting])
+case class WorkspaceAdminResponse(workspace: WorkspaceDetails, settings: List[WorkspaceSetting])
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -1441,7 +1441,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat7(WorkspaceListResponse)
 
-  implicit val WorkspaceWithSettingsFormat: RootJsonFormat[WorkspaceWithSettings] = jsonFormat2(WorkspaceWithSettings)
+  implicit val WorkspaceAdminResponseFormat: RootJsonFormat[WorkspaceAdminResponse] = jsonFormat2(
+    WorkspaceAdminResponse
+  )
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 
