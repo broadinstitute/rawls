@@ -198,6 +198,12 @@ trait JsonEntityComponent extends LazyLogging {
             where workspace_id = $workspaceId;"""
         .as[(String, String)]
 
+    def typesAndAttributesV2(workspaceId: UUID): ReadAction[Seq[(String, String)]] =
+      sql"""SELECT DISTINCT entity_type, json_key FROM ENTITY,
+              JSON_TABLE(json_keys(attributes), '$$[*]' COLUMNS(json_key VARCHAR(256) PATH '$$')) t
+            where workspace_id = $workspaceId;"""
+        .as[(String, String)]
+
     def queryEntities(workspaceId: UUID, entityType: String, queryParams: EntityQuery): ReadAction[Seq[Entity]] = {
 
       val offset = queryParams.pageSize * (queryParams.page - 1)
@@ -348,6 +354,16 @@ trait JsonEntityComponent extends LazyLogging {
       * Returns the set of entities which directly AND RECURSIVELY reference the supplied targets
       */
     def getRecursiveReferrers(workspaceId: UUID, targets: Set[AttributeEntityReference]) = {
+
+      // max number of rows to consider in the recursive query.
+      // this function will never return more than this many results. When called to validate delete requests,
+      // it means that we will never return more than 10000 referrers for any given set of entities to be deleted.
+      val recursionLimit = 10000
+
+      // a recursive SQL query to retrieve all entities that refer to the ${targets} entities, plus all entities that
+      // refer to the referring entities, plus all entities that refer to those, plus ...
+      //
+      // recursive SQL: https://dev.mysql.com/doc/refman/8.4/en/with.html#common-table-expressions-recursive
       val startSql =
         sql"""WITH RECURSIVE ancestor AS (
 	            select r.from_id, r.to_id
@@ -362,7 +378,8 @@ trait JsonEntityComponent extends LazyLogging {
         sql"""    UNION ALL
                 select r.from_id, r.to_id
                 from ancestor, ENTITY_REFS r
-                where ancestor.from_id = r.to_id)
+                where ancestor.from_id = r.to_id
+                limit #$recursionLimit)
             select a.from_id, e.entity_type, e.name from ancestor a, ENTITY e
             where a.from_id = e.id;"""
 

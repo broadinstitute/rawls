@@ -29,8 +29,10 @@ import DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.common.exception.NotImplementedException
 import io.opentelemetry.api.common.AttributeKey
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
   JsonEntityRecord,
   JsonEntityRefRecord,
   JsonEntitySlickRecord,
@@ -124,12 +126,33 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     * Return type/count/attribute metadata
     * TODO AJ-2008: assess performance and add caching if necessary
     */
-  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
+  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
+
+    def attrsV1(dataAccess: DataAccess) = {
+      val stopwatch = StopWatch.createStarted()
+      dataAccess.jsonEntityQuery.typesAndAttributes(workspaceId) map { result =>
+        stopwatch.stop()
+        logger.info(s"***** attrsV1 complete in ${stopwatch.getTime}ms")
+        result
+      }
+    }
+
+    def attrsV2(dataAccess: DataAccess) = {
+      val stopwatch = StopWatch.createStarted()
+      dataAccess.jsonEntityQuery.typesAndAttributesV2(workspaceId) map { result =>
+        stopwatch.stop()
+        logger.info(s"***** attrsV2 complete in ${stopwatch.getTime}ms")
+        result
+      }
+    }
+
+    val stopwatch = StopWatch.create()
     dataSource.inTransaction { dataAccess =>
       // get the types and counts
       for {
         typesAndCounts <- dataAccess.jsonEntityQuery.typesAndCounts(workspaceId)
-        typesAndAttributes <- dataAccess.jsonEntityQuery.typesAndAttributes(workspaceId)
+        typesAndAttributes <- attrsV1(dataAccess)
+        typesAndAttributesV2 <- attrsV2(dataAccess)
       } yield {
         // group attribute names by entity type
         val groupedAttributeNames: Map[String, Seq[String]] =
@@ -145,6 +168,7 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
         }.toMap
       }
     }
+  }
 
   /**
     * stream a page of entities
@@ -201,21 +225,6 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     * internal implementation for both batchUpsert and batchUpdate
     */
   def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Iterable[Entity]] = {
-
-    val numUpdates = entityUpdates.size
-    val numOperations = entityUpdates.flatMap(_.operations).size
-
-    logger.info(s"***** batchUpdateEntitiesImpl processing $numUpdates updates with $numOperations operations")
-
-    // find all attribute names mentioned
-    val namesToCheck = for {
-      update <- entityUpdates
-      operation <- update.operations
-    } yield operation.name
-
-    // validate all attribute names
-    withAttributeNamespaceCheck(namesToCheck)(() => ())
-
     // start tracing
     traceFutureWithParent("JsonEntityProvider.batchUpdateEntitiesImpl", requestArguments.ctx) { localContext =>
       setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceId.toString)
@@ -228,6 +237,22 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
                             AttributeKey.longKey("entityOperationsCount"),
                             java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
       )
+
+      val stopwatch = StopWatch.createStarted()
+
+      val numUpdates = entityUpdates.size
+      val numOperations = entityUpdates.flatMap(_.operations).size
+
+      logger.info(s"***** batchUpdateEntitiesImpl processing $numUpdates updates with $numOperations operations")
+
+      // find all attribute names mentioned
+      val namesToCheck = for {
+        update <- entityUpdates
+        operation <- update.operations
+      } yield operation.name
+
+      // validate all attribute names
+      withAttributeNamespaceCheck(namesToCheck)(() => ())
 
       dataSource
         .inTransaction { dataAccess =>
@@ -358,7 +383,8 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
                   slick.dbio.DBIO.sequence(updateActions) flatMap { _ =>
                     logger.info(s"***** adding references for updates ...")
                     slick.dbio.DBIO.sequence(updateRefFutures.map(x => slick.dbio.DBIO.from(x))) flatMap { _ =>
-                      logger.info(s"***** all writes complete.")
+                      stopwatch.stop()
+                      logger.info(s"***** all writes complete in ${stopwatch.getTime}ms")
                       slick.dbio.DBIO.successful(())
                     }
                   }
