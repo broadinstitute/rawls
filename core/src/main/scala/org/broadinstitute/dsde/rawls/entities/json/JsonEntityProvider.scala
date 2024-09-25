@@ -81,10 +81,11 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
         // save the entity
         _ <- dataAccess.jsonEntityQuery.createEntity(workspaceId, entity)
         // did it save correctly? get its id, we need that id.
+        // TODO AJ-2008: return just the id; we don't need the whole record
         savedEntityRecordOption <- dataAccess.jsonEntityQuery.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new RuntimeException("Could not save entity"))
         // save all references from this entity to other entities
-        _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referenceTargets))
+        _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referenceTargets, isInsert = true))
       } yield savedEntityRecord.toEntity
       //      } yield (savedEntityRecord, referenceTargets)
       //    } flatMap { case (savedEntityRecord, referenceTargets) =>
