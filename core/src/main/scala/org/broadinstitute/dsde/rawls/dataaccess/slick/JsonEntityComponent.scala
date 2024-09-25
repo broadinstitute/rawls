@@ -10,7 +10,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.sql.Timestamp
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.language.postfixOps
 
 /**
@@ -327,6 +327,73 @@ trait JsonEntityComponent extends LazyLogging {
         // execute
         unionQuery.as[JsonEntityRefRecord](getJsonEntityRefRecord)
       }
+
+    /**
+      * Returns the set of entities which directly reference the supplied targets
+      */
+    def getReferrers(workspaceId: UUID, targets: Set[AttributeEntityReference]) = {
+      val inFragment = refsInFragment(targets)
+
+      val baseSql = sql"""select referrer.id, referrer.name, referrer.entity_type
+               from ENTITY referrer, ENTITY_REFS refs, ENTITY target
+               where target.id = refs.to_id
+               and referrer.id = refs.from_id
+               and target.workspace_id = $workspaceId
+               and (target.entity_type, target.name) in """
+
+      concatSqlActions(baseSql, inFragment, sql";").as[JsonEntityRefRecord]
+    }
+
+    /**
+      * Returns the set of entities which directly AND RECURSIVELY reference the supplied targets
+      */
+    def getRecursiveReferrers(workspaceId: UUID, targets: Set[AttributeEntityReference]) = {
+      val startSql =
+        sql"""WITH RECURSIVE ancestor AS (
+	            select r.from_id, r.to_id
+                from ENTITY_REFS r, ENTITY e
+                where e.id = r.to_id
+                and e.workspace_id = $workspaceId
+                and (e.entity_type, e.name) in """
+
+      val inFragment = refsInFragment(targets)
+
+      val endSql =
+        sql"""    UNION ALL
+                select r.from_id, r.to_id
+                from ancestor, ENTITY_REFS r
+                where ancestor.from_id = r.to_id)
+            select a.from_id, e.entity_type, e.name from ancestor a, ENTITY e
+            where a.from_id = e.id;"""
+
+      concatSqlActions(startSql, inFragment, endSql).as[JsonEntityRefRecord]
+
+    }
+
+    def softDelete(workspaceId: UUID, targets: Set[AttributeEntityReference]): ReadWriteAction[Int] = {
+      // short-circuit
+      if (targets.isEmpty) {
+        return DBIO.successful(0)
+      }
+      val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000)
+      val deletedDate = new Timestamp(new Date().getTime)
+
+      val inFragment = refsInFragment(targets)
+
+      val baseSql = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix)
+             where deleted=0 AND workspace_id=$workspaceId and (entity_type, name) in """
+
+      concatSqlActions(baseSql, inFragment, sql";").asUpdate
+    }
+
+    private def refsInFragment(refs: Set[AttributeEntityReference]) = {
+      // build select statements for each type
+      val pairs = refs.map { ref =>
+        sql"""(${ref.entityType}, ${ref.entityName})"""
+      }
+      concatSqlActions(sql"(", reduceSqlActionsWithDelim(pairs.toSeq, sql","), sql")")
+    }
+
   }
 
   private def singleResult[V](results: ReadAction[Seq[V]]): ReadAction[V] =

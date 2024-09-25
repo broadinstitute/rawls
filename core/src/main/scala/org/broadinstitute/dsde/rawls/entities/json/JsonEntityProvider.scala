@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import spray.json._
 import DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.common.exception.NotImplementedException
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
@@ -36,7 +37,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   ReadAction,
   RefPointerRecord
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
@@ -104,7 +105,20 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   /**
     * Soft-delete specified entities
     */
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = ???
+  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
+    val deleteTargets = entityRefs.toSet
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.jsonEntityQuery.getRecursiveReferrers(workspaceId, deleteTargets)
+    } flatMap { referrers =>
+      val referringSet = referrers.map(x => AttributeEntityReference(x.entityType, x.name)).toSet
+      if (referringSet != deleteTargets)
+        throw new DeleteEntitiesConflictException(referringSet)
+      else
+        dataSource.inTransaction { dataAccess =>
+          dataAccess.jsonEntityQuery.softDelete(workspaceId, deleteTargets)
+        }
+    }
+  }
 
   /**
     * Return type/count/attribute metadata
