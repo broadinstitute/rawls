@@ -10,7 +10,7 @@ fetch_secret() {
 }
 
 ##Pull mysql instance info for sqlproxy##
-RAWLS_MYSQL_INSTANCE_JSON=$(gcloud secrets versions access latest  --project broad-dsde-dev --secret rawls-mysql-instance)
+RAWLS_MYSQL_INSTANCE_JSON=$(fetch_secret "rawls-mysql-instance")
 
 # Extract the name and zone values using jq
 CLOUDSQL_ZONE=$(echo "$RAWLS_MYSQL_INSTANCE_JSON" | jq -r '.zone')
@@ -25,6 +25,9 @@ sed -e "s/{{ \$secret.zone }}/$CLOUDSQL_ZONE/" \
     -e "s/{{ \$secret.name }}/$CLOUDSQL_INSTANCE/" \
     "$MYSQL_TEMPLATE_FILE" > "$MYSQL_OUTPUT_FILE"
 
+echo $MYSQL_OUTPUT_FILE "generated"
+
+echo "Copying template files to config/ ..."
 #Files to copy directly to config##
 cp local-dev/templates/docker-rsync-local-rawls.sh config/docker-rsync-local-rawls.sh
 cp local-dev/templates/liquibase.properties config/liquibase.properties
@@ -34,6 +37,7 @@ cp local-dev/templates/mod_security_ignore.conf config/mod_security_ignore.conf
 cp local-dev/templates/oauth2.conf config/oauth2.conf
 cp local-dev/templates/site.conf config/site.conf
 
+echo "Fetching secrets from GSM..."
 ##Files to download from secrets##
 fetch_secret "rawls-sa" > config/rawls-account.json
 fetch_secret "rawls-sa" > config/sqlproxy-service-account.json
@@ -45,6 +49,7 @@ fetch_secret "buffer-client-sa-b64" | jq -r '.key' | base64 --decode > config/bu
 gcloud container clusters get-credentials --zone us-central1-a --project broad-dsde-dev terra-dev
 kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.crt"}}' | base64 --decode > config/server.crt
 kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.key"}}' | base64 --decode > config/server.key
+kubectl -n local-dev get configmaps kube-root-ca.crt -o 'go-template={{ index .data "ca.crt" }}' > config/ca-bundle.crt
 
 ## Secrets to pull for rawls.conf ##
 RAWLS_OAUTH_CREDS_JSON=$(fetch_secret "rawls-oauth-creds")
@@ -74,6 +79,7 @@ ADMIN_BILLING_ACCOUNT=$(echo "$FIRECLOUD_SECRETS" | jq -r '.trial_billing_accoun
 RAWLS_TEMPLATE_FILE="local-dev/templates/rawls.conf"
 RAWLS_OUTPUT_FILE="config/rawls.conf"
 
+Echo "Generating rawls.conf..."
 # Replace placeholders in the template file with the fetched secret values
 sed -e "s/{{ \$rawlsSaKey.client_email }}/$CLIENT_EMAIL/" \
     -e "s/{{ \$rawlsConf.gcs_tokenEncryptionKey }}/$GCS_TOKENENCRYPTIONKEY/" \

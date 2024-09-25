@@ -126,9 +126,9 @@ start_server () {
     -e PROXY_URL='http://rawls-sbt:8080/' \
     -e PROXY_URL2='http://rawls-sbt:8080/api' \
     -e PROXY_URL3='http://rawls-sbt:8080/register' \
-    -e CALLBACK_URI='https://local.broadinstitute.org/oauth2callback' \
+    -e CALLBACK_URI='https://local.dsde-dev.broadinstitute.org/oauth2callback' \
     -e LOG_LEVEL='debug' \
-    -e SERVER_NAME='local.broadinstitute.org' \
+    -e SERVER_NAME='local.dsde-dev.broadinstitute.org' \
     -e APACHE_HTTPD_TIMEOUT='650' \
     -e APACHE_HTTPD_KEEPALIVE='On' \
     -e APACHE_HTTPD_KEEPALIVETIMEOUT='650' \
@@ -150,6 +150,11 @@ start_server () {
     docker start sqlproxy
     echo "Starting proxy..."
     docker start rawls-proxy
+     # Check if rawls-proxy started successfully
+      if [[ $(docker inspect -f '{{.State.Running}}' rawls-proxy) != "true" ]]; then
+          echo "Failed to start rawls-proxy. Exiting..."
+          exit 1
+      fi
     echo "Starting SBT..."
     docker start -ai rawls-sbt
 }

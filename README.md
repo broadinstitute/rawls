@@ -61,14 +61,14 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 * [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
 * Broad internal internet connection (or VPN, non-split recommended)
 * Make sure you have `kubectl` and `gcloud` installed.
-* You will then need to authenticated in gcloud; if you are not already then running the script will ask you to.
+* You will then need to authenticate in gcloud; if you are not already then running the script will ask you to.
 * Render the local configuration files. From the root of the Rawls repo, run:
 ```sh
 ./local-dev/bin/render
 ```
 *  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
 ```sh
-127.0.0.1	local.broadinstitute.org
+127.0.0.1	local.dsde-dev.broadinstitute.org
 ```
 
 ### Running:
@@ -84,7 +84,7 @@ It will also set up a process that will watch the local files for changes, and r
 
 See docker-rsync-local-rawls.sh for more configuration options.
 
-If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.broadinstitute.org:20443/
+If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.dsde-dev.broadinstitute.org:20443/
 
 ### Useful Tricks:
 
