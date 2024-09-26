@@ -348,21 +348,10 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
             val insertResult = dataAccess.jsonEntitySlickQuery ++= inserts
 
             // TODO AJ-2008: don't eagerly kick these off; can cause parallelism problems
-            val updateActions = updates.map { upd =>
-              dataAccess.jsonEntityQuery.updateEntity(workspaceId, upd.toEntity, upd.recordVersion) map {
-                updatedCount =>
-                  if (updatedCount == 0) {
-                    throw new RuntimeException("Update failed. Concurrent modifications?")
-                  }
-              }
-            }
+//            val updateRefFutures: Seq[Future[_]] = updates.map { upd =>
+//              synchronizeReferences(upd.id, upd.toEntity)
+//            }
 
-            // TODO AJ-2008: don't eagerly kick these off; can cause parallelism problems
-            val updateRefFutures: Seq[Future[_]] = updates.map { upd =>
-              synchronizeReferences(upd.id, upd.toEntity)
-            }
-
-            // TODO AJ-2008: can we bulk/batch the ENTITY_REFS work?
             logger.info(s"***** performing inserts ...")
             insertResult.flatMap { _ =>
               // skip any inserts that have zero references
@@ -380,22 +369,36 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
               ) flatMap { inserted =>
                 // map the inserted ids back to the full entities that were inserted
                 val insertedIds = inserted.map(x => (x.entityType, x.name) -> x.id).toMap
-                slick.dbio.DBIO.sequence(
-                  insertsWithReferences
-                    .map { ins =>
-                      val id = insertedIds.getOrElse((ins.entityType, ins.name),
-                                                     throw new RuntimeException("couldn't find inserted id")
-                      )
-                      slick.dbio.DBIO.from(synchronizeReferences(id, ins.toEntity, isInsert = true))
-                    }
-                ) flatMap { _ =>
+
+                val insertsWithReferencesAndIds: Seq[JsonEntitySlickRecord] = insertsWithReferences.map { ins =>
+                  val id = insertedIds.getOrElse((ins.entityType, ins.name),
+                                                 throw new RuntimeException("couldn't find inserted id")
+                  )
+                  ins.copy(id = id)
+                }
+
+                slick.dbio.DBIO.from(synchronizeInsertedReferences(insertsWithReferencesAndIds)) flatMap { _ =>
                   logger.info(s"***** performing updates ...")
-                  slick.dbio.DBIO.sequence(updateActions) flatMap { _ =>
+                  val idsBeingUpdated: Seq[Long] = updates.map(_.id)
+
+                  slick.dbio.DBIO.sequence(updates.map { upd =>
+                    dataAccess.jsonEntityQuery.updateEntity(workspaceId, upd.toEntity, upd.recordVersion) map {
+                      updatedCount =>
+                        if (updatedCount == 0) {
+                          throw new RuntimeException("Update failed. Concurrent modifications?")
+                        }
+                    }
+                  }) flatMap { _ =>
                     logger.info(s"***** adding references for updates ...")
-                    slick.dbio.DBIO.sequence(updateRefFutures.map(x => slick.dbio.DBIO.from(x))) flatMap { _ =>
-                      stopwatch.stop()
-                      logger.info(s"***** all writes complete in ${stopwatch.getTime}ms")
-                      slick.dbio.DBIO.successful(())
+                    // delete all from ENTITY_REFS where from_id in (entities being updated)
+                    dataAccess.jsonEntityRefSlickQuery.filter(_.fromId inSetBind idsBeingUpdated).delete flatMap { _ =>
+                      // insert all references for the records being updated
+                      // TODO AJ-2008: instead of delete all/insert all, can we optimize?
+                      slick.dbio.DBIO.from(synchronizeInsertedReferences(updates)) flatMap { _ =>
+                        stopwatch.stop()
+                        logger.info(s"***** all writes complete in ${stopwatch.getTime}ms")
+                        slick.dbio.DBIO.successful(())
+                      }
                     }
                   }
                 }
@@ -471,6 +474,15 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
+  private def findReferences(entity: Entity): Seq[AttributeEntityReference] =
+    entity.attributes
+      .collect {
+        case (_: AttributeName, aer: AttributeEntityReference)      => Seq(aer)
+        case (_: AttributeName, aerl: AttributeEntityReferenceList) => aerl.list
+      }
+      .flatten
+      .toSeq
+
   // given an entity, finds all references in that entity, grouped by their attribute names
   private def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
     entity.attributes
@@ -535,6 +547,53 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
           } else { slick.dbio.DBIO.successful(0) }
         _ = logger.trace(s"~~~~~ actually deleted ${deleteResult} rows for entity $fromId")
       } yield foundRefs
+    }
+  }
+
+  private def synchronizeInsertedReferences(inserted: Seq[JsonEntitySlickRecord]): Future[Int] = {
+    // find all references for all records
+    val referenceRequestsByEntityId: Map[Long, Seq[AttributeEntityReference]] =
+      inserted.map(ins => ins.id -> findReferences(ins.toEntity)).toMap
+
+    // validate all references for all records
+    val uniqueReferences: Set[AttributeEntityReference] = referenceRequestsByEntityId.values.flatten.toSet
+
+    // short-circuit
+    if (uniqueReferences.isEmpty) {
+      return Future.successful(0)
+    }
+
+    dataSource.inTransaction { dataAccess =>
+      import dataAccess.driver.api._
+
+      dataAccess.jsonEntityQuery.getEntityRefs(workspaceId, uniqueReferences) flatMap { foundRefs =>
+        if (foundRefs.size != uniqueReferences.size) {
+          throw new RuntimeException("Did not find all references")
+        }
+
+        // convert the foundRefs to a map for easier lookup
+        val foundMap: Map[(String, String), Long] = foundRefs.map { foundRef =>
+          ((foundRef.entityType, foundRef.name), foundRef.id)
+        }.toMap
+
+        // generate the (from_id, to_id) pairs to insert into ENTITY_REFS
+        val targetIdsByFromId: Map[Long, Seq[Long]] = referenceRequestsByEntityId.map {
+          case (fromId, desiredReferences) =>
+            val targetIds = desiredReferences.map { desiredRef =>
+              foundMap.getOrElse((desiredRef.entityType, desiredRef.entityName),
+                                 throw new RuntimeException("this shouldn't happen")
+              )
+            }
+            (fromId, targetIds)
+        }
+        val pairsToInsert: Seq[RefPointerRecord] = targetIdsByFromId.flatMap { case (fromId, toIds) =>
+          toIds.map(toId => RefPointerRecord(fromId, toId))
+        }.toSeq
+
+        // perform the insert
+        (dataAccess.jsonEntityRefSlickQuery ++= pairsToInsert).map(x => x.sum)
+
+      }
     }
   }
 
