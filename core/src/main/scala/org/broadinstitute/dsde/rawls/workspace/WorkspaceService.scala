@@ -416,7 +416,6 @@ class WorkspaceService(
     } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
   }
 
-
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
     * Legal field names are any member of `WorkspaceResponse`, `WorkspaceDetails`,
@@ -817,7 +816,6 @@ class WorkspaceService(
         .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
       result <- workspaceRepository.getTags(v2WorkspaceIdsForUser, query, limit)
     } yield result
-
 
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
   def cloneWorkspace(sourceWorkspace: Workspace,
