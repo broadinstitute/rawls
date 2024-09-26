@@ -123,10 +123,21 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
-  override def setBucketLifecycle(bucketName: String, lifecycle: List[BucketInfo.LifecycleRule]): Future[Unit] = ???
+  override def setBucketLifecycle(bucketName: String,
+                                  lifecycle: List[BucketInfo.LifecycleRule],
+                                  userProject: GoogleProjectId
+  ): Future[Unit] = ???
 
-  override def setSoftDeletePolicy(bucketName: String, softDeletePolicy: BucketInfo.SoftDeletePolicy): Future[Unit] =
+  override def setSoftDeletePolicy(bucketName: String,
+                                   softDeletePolicy: BucketInfo.SoftDeletePolicy,
+                                   userProject: GoogleProjectId
+  ): Future[Unit] =
     ???
+
+  override def setRequesterPays(bucketName: String,
+                                requesterPaysEnabled: Boolean,
+                                userProject: GoogleProjectId
+  ): Future[Unit] = ???
 
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
