@@ -822,13 +822,16 @@ class WorkspaceService(
                      billingProject: RawlsBillingProject,
                      destWorkspaceRequest: WorkspaceRequest,
                      parentContext: RawlsRequestContext = ctx
-  ): Future[Workspace] =
+  ): Future[Workspace] = {
+    if (destWorkspaceRequest.copyFilesWithPrefix.exists(_.isEmpty))
+      throw RawlsExceptionWithErrorReport(
+        StatusCodes.BadRequest,
+        """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
+      )
+    val (libraryAttributeNames, workspaceAttributeNames) =
+      destWorkspaceRequest.attributes.keys.partition(_.namespace == AttributeName.libraryNamespace)
+
     for {
-      _ <- destWorkspaceRequest.copyFilesWithPrefix.traverse_(validateFileCopyPrefix)
-
-      (libraryAttributeNames, workspaceAttributeNames) =
-        destWorkspaceRequest.attributes.keys.partition(_.namespace == AttributeName.libraryNamespace)
-
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- withLibraryAttributeNamespaceCheck(libraryAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
@@ -951,16 +954,7 @@ class WorkspaceService(
         }
         .getOrElse(Future.successful())
     } yield destWorkspaceContext
-
-  private def validateFileCopyPrefix(copyFilesWithPrefix: String): Future[Unit] =
-    ApplicativeThrow[Future].raiseWhen(copyFilesWithPrefix.isEmpty) {
-      RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.BadRequest,
-          """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
-        )
-      )
-    }
+  }
 
   def listPendingFileTransfersForWorkspace(
     workspaceName: WorkspaceName
