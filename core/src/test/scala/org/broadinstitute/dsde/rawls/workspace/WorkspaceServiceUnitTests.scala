@@ -368,14 +368,22 @@ class WorkspaceServiceUnitTests
     verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext)
   }
 
-  // TODO: finish with azure codepath
-  ignore should "return true for canCompute if the user is a writer on an azure workspace" in {
+  it should "return true for canCompute if the user is a writer on an azure workspace" in {
     val workspace = this.workspace.copy(workspaceType = WorkspaceType.McWorkspace)
     val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
     val wsmDao = mock[WorkspaceManagerDAO]
-    // val aggregatedWorkspace = new AggregatedWorkspace()
-    when(wsmDao.getWorkspace(any, any))
-    // .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext))
+      .thenReturn(
+        new WorkspaceDescription()
+          .azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID().toString)
+              .subscriptionId(UUID.randomUUID().toString)
+              .resourceGroupId(UUID.randomUUID().toString)
+          )
+          .id(workspace.workspaceIdAsUUID)
+          .stage(WorkspaceStageModel.MC_WORKSPACE)
+      )
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
       .thenReturn(Future(Set(SamResourceRole("OWNER"))))
@@ -916,16 +924,6 @@ class WorkspaceServiceUnitTests
     val wsRepo = mock[WorkspaceRepository]
     when(wsRepo.listWorkspacesByIds(ArgumentMatchers.eq(workspaceIds), any))
       .thenReturn(Future(Seq(workspace1, workspace2)))
-    val workspace1Stats = WorkspaceSubmissionStats(None, None, 1)
-    val workspace2Stats = WorkspaceSubmissionStats(None, None, 3)
-    when(wsRepo.listSubmissionSummaryStats(workspaceIds)).thenReturn(
-      Future(
-        Map(
-          workspace1.workspaceIdAsUUID -> workspace1Stats,
-          workspace2.workspaceIdAsUUID -> workspace2Stats
-        )
-      )
-    )
     val wsm = mock[WorkspaceManagerDAO]
     val workspace1WSMDescription = new WorkspaceDescription()
       .azureContext(
@@ -945,7 +943,7 @@ class WorkspaceServiceUnitTests
     )(defaultRequestContext)
 
     val params =
-      WorkspaceFieldSpecs(fields = Some(Set("workspace", "accessLevel", "public", "workspaceSubmissionStats")))
+      WorkspaceFieldSpecs(fields = Some(Set("workspace", "accessLevel", "public")))
     val result = Await.result(service.listWorkspaces(params, -1), Duration.Inf)
 
     val resultWorkspaces: Map[String, WorkspaceListResponse] = result match {
@@ -959,11 +957,11 @@ class WorkspaceServiceUnitTests
     val details1 =
       WorkspaceDetails.fromWorkspaceAndOptions(workspace1, Some(Set()), false, Some(WorkspaceCloudPlatform.Azure))
     val expectedResult1 =
-      WorkspaceListResponse(WorkspaceAccessLevels.Owner, None, None, details1, Some(workspace1Stats), false, None)
+      WorkspaceListResponse(WorkspaceAccessLevels.Owner, None, None, details1, None, false, None)
     val details2 =
       WorkspaceDetails.fromWorkspaceAndOptions(workspace2, Some(Set()), false, Some(WorkspaceCloudPlatform.Gcp))
     val expectedResult2 =
-      WorkspaceListResponse(WorkspaceAccessLevels.Write, None, None, details2, Some(workspace2Stats), false, None)
+      WorkspaceListResponse(WorkspaceAccessLevels.Write, None, None, details2, None, false, None)
 
     resultWorkspaces(workspace1.workspaceId) shouldBe expectedResult1
     resultWorkspaces(workspace2.workspaceId) shouldBe expectedResult2
