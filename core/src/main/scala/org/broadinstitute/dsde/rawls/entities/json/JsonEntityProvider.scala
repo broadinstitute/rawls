@@ -108,16 +108,23 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
     * Soft-delete specified entities
     */
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
+    val stopwatch = StopWatch.createStarted()
     val deleteTargets = entityRefs.toSet
     dataSource.inTransaction { dataAccess =>
       dataAccess.jsonEntityQuery.getRecursiveReferrers(workspaceId, deleteTargets)
     } flatMap { referrers =>
       val referringSet = referrers.map(x => AttributeEntityReference(x.entityType, x.name)).toSet
-      if (referringSet != deleteTargets)
+      if (referringSet != deleteTargets) {
+        stopwatch.stop()
+        logger.info(s"***** deleteEntities complete in ${stopwatch.getTime}ms")
         throw new DeleteEntitiesConflictException(referringSet)
-      else
+      } else
         dataSource.inTransaction { dataAccess =>
-          dataAccess.jsonEntityQuery.softDelete(workspaceId, deleteTargets)
+          dataAccess.jsonEntityQuery.softDelete(workspaceId, deleteTargets) map { result =>
+            stopwatch.stop()
+            logger.info(s"***** deleteEntities complete in ${stopwatch.getTime}ms")
+            result
+          }
         }
     }
   }
@@ -146,13 +153,12 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-    val stopwatch = StopWatch.create()
     dataSource.inTransaction { dataAccess =>
       // get the types and counts
       for {
         typesAndCounts <- dataAccess.jsonEntityQuery.typesAndCounts(workspaceId)
-        typesAndAttributes <- attrsV1(dataAccess)
-        typesAndAttributesV2 <- attrsV2(dataAccess)
+        // typesAndAttributes <- attrsV1(dataAccess)
+        typesAndAttributes <- attrsV2(dataAccess)
       } yield {
         // group attribute names by entity type
         val groupedAttributeNames: Map[String, Seq[String]] =
@@ -176,11 +182,15 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
   override def queryEntitiesSource(entityType: String,
                                    entityQuery: EntityQuery,
                                    parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
+    val stopwatch = StopWatch.createStarted()
     queryEntities(entityType, entityQuery, parentContext).map { queryResponse =>
+      stopwatch.stop()
+      logger.info(s"***** queryEntitiesSource complete in ${stopwatch.getTime}ms")
       // TODO AJ-2008: actually stream!
       (queryResponse.resultMetadata, Source.apply(queryResponse.results))
     }
+  }
 
   /**
     * return a page of entities
