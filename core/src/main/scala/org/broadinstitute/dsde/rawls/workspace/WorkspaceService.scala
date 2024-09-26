@@ -266,7 +266,7 @@ class WorkspaceService(
       }
 
       stats <- options.anyPresentFuture("workspaceSubmissionStats") {
-        workspaceRepository.getSubmissionSummaryStats (workspace.workspaceIdAsUUID)
+        workspaceRepository.getSubmissionSummaryStats(workspace.workspaceIdAsUUID)
       }
       authDomain <- options.anyPresentFuture("workspace.authorizationDomain", "workspace") {
         loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId)
@@ -336,33 +336,37 @@ class WorkspaceService(
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
     val options = processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
 
-    def processDetails(workspace: AggregatedWorkspace, samResource: SamUserResource, accessLevel: WorkspaceAccessLevel, stats: Option[WorkspaceSubmissionStats]): WorkspaceListResponse = {
+    def processDetails(workspace: AggregatedWorkspace,
+                       samResource: SamUserResource,
+                       accessLevel: WorkspaceAccessLevel,
+                       stats: Option[WorkspaceSubmissionStats]
+    ): WorkspaceListResponse = {
       val workspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(
           workspace.baseWorkspace,
           Option(
-            samResource.authDomainGroups.map(groupName =>
-              ManagedGroupRef(RawlsGroupName(groupName.value))
-            )
+            samResource.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))
           ),
           useAttributes = options.attrSpecs.all || options.attrSpecs.attrsToSelect.nonEmpty,
           workspace.getCloudPlatform
         )
 
-      val canShare: Option[Boolean] = options.anyPresent("canShare") {
+      val canShare = options.anyPresent("canShare") {
         accessLevel match {
-          case WorkspaceAccessLevels.Read => samResource.hasRole(SamWorkspaceRoles.shareReader)
+          case WorkspaceAccessLevels.Read  => samResource.hasRole(SamWorkspaceRoles.shareReader)
           case WorkspaceAccessLevels.Write => samResource.hasRole(SamWorkspaceRoles.shareWriter)
-          case _ => accessLevel < WorkspaceAccessLevels.Write
+          case _                           => accessLevel > WorkspaceAccessLevels.Write
         }
       }
-      val canCompute: Option[Boolean] = options.anyPresent("canCompute") {
-        workspace.getCloudPlatform.map {
-          case WorkspaceCloudPlatform.Azure => accessLevel >= WorkspaceAccessLevels.Write
-          case WorkspaceCloudPlatform.Gcp if accessLevel >= WorkspaceAccessLevels.Owner => true
-          case WorkspaceCloudPlatform.Gcp => samResource.hasRole(SamWorkspaceRoles.canCompute)
+      val canCompute: Option[Boolean] = options
+        .anyPresent("canCompute") {
+          workspace.getCloudPlatform.map {
+            case WorkspaceCloudPlatform.Azure => accessLevel >= WorkspaceAccessLevels.Write
+            case WorkspaceCloudPlatform.Gcp if accessLevel >= WorkspaceAccessLevels.Owner => true
+            case WorkspaceCloudPlatform.Gcp => samResource.hasRole(SamWorkspaceRoles.canCompute)
+          }
         }
-      }.flatten
+        .flatten
       WorkspaceListResponse(
         accessLevel,
         canShare,
@@ -395,13 +399,14 @@ class WorkspaceService(
       aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
         .fetchAggregatedWorkspaces(workspaces, ctx)
         // Filter out workspaces with no cloud contexts, logging cloud context exceptions
-        .filter { ws => Try(ws.getCloudPlatform).map(context => context.isDefined).getOrElse(false) }
+        .filter(ws => Try(ws.getCloudPlatform).map(context => context.isDefined).getOrElse(false))
 
       responseWorkspaces = aggregatedWorkspaces.map { wsmContext =>
         val workspace = wsmContext.baseWorkspace
         val workspaceResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
-        val accessLevel = if (workspaceResource.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess
-        else highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
+        val accessLevel =
+          if (workspaceResource.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess
+          else highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
         val stats = submissionSummaryStats.flatMap {
           _.get(wsmContext.baseWorkspace.workspaceIdAsUUID)
         }
