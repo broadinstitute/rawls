@@ -6,15 +6,19 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  PendingCloneWorkspaceFileTransfer,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceName,
-  WorkspaceState
+  WorkspaceState,
+  WorkspaceSubmissionStats,
+  WorkspaceTag
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
+import slick.dbio.DBIO
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -43,6 +47,14 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs)
     }
 
+  def getWorkspaceId(workspaceName: WorkspaceName): Future[Option[UUID]] = dataSource.inTransaction {
+    _.workspaceQuery.getV2WorkspaceId(workspaceName)
+  }
+
+  def listWorkspacesByIds(workspaceIds: Seq[UUID]): Future[Seq[Workspace]] = dataSource.inTransaction {
+    _.workspaceQuery.listV2WorkspacesByIds(workspaceIds)
+  }
+
   def createWorkspace(workspace: Workspace): Future[Workspace] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.createOrUpdate(workspace)
@@ -64,9 +76,6 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspaceName)
     }
-
-  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
-    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
 
   def createMCWorkspace(workspaceId: UUID,
                         workspaceName: WorkspaceName,
@@ -98,4 +107,56 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
         )
       } yield newWorkspace
     }
+
+  def lockWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Boolean] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.list(workspace).flatMap { submissions =>
+        if (!submissions.forall(_.status.isTerminated)) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Conflict,
+              s"There are running submissions in workspace ${workspace.toWorkspaceName}, so it cannot be locked."
+            )
+          )
+        } else {
+          import dataAccess.WorkspaceExtensions
+          dataAccess.workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID).lock
+        }
+      }
+    }
+
+  def unlockWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Boolean] =
+    dataSource.inTransaction { dataAccess =>
+      import dataAccess.WorkspaceExtensions
+      dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspace).flatMap {
+        case true =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")
+          )
+        case false => dataAccess.workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID).unlock
+      }
+    }
+
+  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
+    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+
+  /*** Methods Accessing Auxiliary Data ***/
+
+  def updatePendingCloneWorkspaceFileTransferRecord(record: PendingCloneWorkspaceFileTransfer): Future[Int] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.update(record))
+
+  def listPendingCloneWorkspaceFileTransferRecords(
+    workspaceId: Option[UUID]
+  ): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.listPendingTransfers(workspaceId))
+
+  def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
+
+  def listSubmissionSummaryStats(workspaceId: UUID): Future[Map[UUID, WorkspaceSubmissionStats]] =
+    dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId)))
+
+  def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
+    dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
+
 }

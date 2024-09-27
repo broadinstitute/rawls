@@ -84,6 +84,8 @@ class MockExecutionServiceDAO(timeout: Boolean = false, val identifier: String =
     Future.successful(ExecutionServiceLabelResponse(id, labels))
   }
 
+  override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] = ???
+
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 
   override def getStatus() = {

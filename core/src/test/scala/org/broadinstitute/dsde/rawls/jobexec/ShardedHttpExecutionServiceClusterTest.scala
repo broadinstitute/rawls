@@ -57,6 +57,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem)
                                           Some(1),
                                           1,
                                           Some("default"),
+                                          None,
                                           None
   )
 

@@ -126,4 +126,5 @@
     <include file="changesets/20240723_workspace_settings.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20240820_submission_cost_cap_threshold.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20240910_entity_json_support.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20240830_workflow_cost.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

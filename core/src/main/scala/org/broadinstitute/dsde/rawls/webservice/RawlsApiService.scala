@@ -32,7 +32,12 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceService,
+  WorkspaceAdminService,
+  WorkspaceService,
+  WorkspaceSettingService
+}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 
 import java.sql.{SQLException, SQLTransactionRollbackException}
@@ -126,7 +131,7 @@ trait RawlsApiService
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = (otelContext: Context) =>
+  val baseApiRoutes: Context => Route = (otelContext: Context) =>
     workspaceRoutesV2(otelContext) ~
       workspaceRoutes(otelContext) ~
       entityRoutes(otelContext) ~
@@ -212,6 +217,7 @@ trait VersionApiService {
 
 class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
                           val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+                          val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService,
                           val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
                           val entityServiceConstructor: RawlsRequestContext => EntityService,
                           val userServiceConstructor: RawlsRequestContext => UserService,
