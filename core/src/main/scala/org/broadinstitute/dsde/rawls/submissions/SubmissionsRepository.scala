@@ -21,8 +21,9 @@ class SubmissionsRepository(
 
   import dataSource.dataAccess.driver.api._
 
-
-  def getActiveWorkflowsAndSetStatusToAborted(workspace: Workspace)(implicit ex: ExecutionContext): Future[Seq[WorkflowRecord]] =
+  def getActiveWorkflowsAndSetStatusToAborted(
+    workspace: Workspace
+  )(implicit ex: ExecutionContext): Future[Seq[WorkflowRecord]] =
     dataSource
       .inTransaction { dataAccess =>
         for {
