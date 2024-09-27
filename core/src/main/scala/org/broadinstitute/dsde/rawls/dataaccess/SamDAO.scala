@@ -183,9 +183,9 @@ trait SamAdminDAO {
                            ctx: RawlsRequestContext
   ): Future[Unit]
 
-  def userHasAction(resourceTypeName: SamResourceTypeName,
-                    action: SamResourceAction,
-                    ctx: RawlsRequestContext
+  def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
+                                         action: SamResourceAction,
+                                         ctx: RawlsRequestContext
   ): Future[Boolean]
 }
 

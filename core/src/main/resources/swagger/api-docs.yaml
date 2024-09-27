@@ -872,7 +872,7 @@ paths:
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/WorkspaceDetailsWithSettings'
+                $ref: '#/components/schemas/WorkspaceAdminResponse'
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:
@@ -5814,7 +5814,7 @@ components:
           description: True if the user can launch compute in this workspace, false
             otherwise
       description: ""
-    WorkspaceDetailsWithSettings:
+    WorkspaceAdminResponse:
       required:
         - workspace
         - settings

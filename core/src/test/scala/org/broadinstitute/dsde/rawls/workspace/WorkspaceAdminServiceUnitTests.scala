@@ -76,9 +76,10 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val samAdminDAO = mock[SamAdminDAO]
     when(
-      samAdminDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                                ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
-                                ArgumentMatchers.any()
+      samAdminDAO.userHasResourceTypeAdminPermission(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+        ArgumentMatchers.any()
       )
     ).thenReturn(Future.successful(true))
     val samDAO = mock[SamDAO]
@@ -100,9 +101,10 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
   it should "throw if the user is not an admin" in {
     val samAdminDAO = mock[SamAdminDAO]
     when(
-      samAdminDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                                ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
-                                ArgumentMatchers.any()
+      samAdminDAO.userHasResourceTypeAdminPermission(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+        ArgumentMatchers.any()
       )
     ).thenReturn(Future.successful(false))
     val samDAO = mock[SamDAO]
@@ -124,9 +126,10 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val samAdminDAO = mock[SamAdminDAO]
     when(
-      samAdminDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                                ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
-                                ArgumentMatchers.any()
+      samAdminDAO.userHasResourceTypeAdminPermission(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+        ArgumentMatchers.any()
       )
     ).thenReturn(Future.successful(true))
     val samDAO = mock[SamDAO]

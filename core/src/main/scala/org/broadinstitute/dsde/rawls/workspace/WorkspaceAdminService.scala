@@ -119,23 +119,23 @@ class WorkspaceAdminService(
     }
 
   def getWorkspaceById(workspaceId: UUID): Future[WorkspaceAdminResponse] =
-    samDAO.admin
-      .userHasAction(SamResourceTypeNames.workspace, SamResourceTypeAdminActions.readSummaryInformation, ctx)
-      .flatMap { userIsAdmin =>
-        if (userIsAdmin) {
-          for {
-            workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
-            workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
-            settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
-          } yield WorkspaceAdminResponse(
-            WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
-            settings
-          )
-        } else
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.Forbidden, "You must be an admin to call this API.")
-          )
-      }
+    for {
+      userIsAdmin <- samDAO.admin
+        .userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
+                                            SamResourceTypeAdminActions.readSummaryInformation,
+                                            ctx
+        )
+      _ = if (!userIsAdmin)
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.Forbidden, "You must be an admin to call this API.")
+        )
+      workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
+      workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
+      settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
+    } yield WorkspaceAdminResponse(
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
+      settings
+    )
 
   // moved out of WorkspaceSupport because the only usage was in this file,
   // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
