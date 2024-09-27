@@ -182,6 +182,21 @@ trait JsonEntityComponent extends LazyLogging {
     }
 
     /**
+      * Read a single entity from the db
+      */
+    // TODO AJ-2008: return Entity instead of JsonEntityRecord?
+    def getEntityRef(workspaceId: UUID,
+                     entityType: String,
+                     entityName: String
+    ): ReadAction[Option[JsonEntityRefRecord]] = {
+      val selectStatement: SQLActionBuilder =
+        sql"""select id, name, entity_type
+              from ENTITY where workspace_id = $workspaceId and entity_type = $entityType and name = $entityName"""
+
+      uniqueResult(selectStatement.as[JsonEntityRefRecord])
+    }
+
+    /**
       * All entity types for the given workspace, with their counts of active entities
       */
     def typesAndCounts(workspaceId: UUID): ReadAction[Seq[(String, Int)]] =
@@ -405,12 +420,36 @@ trait JsonEntityComponent extends LazyLogging {
       concatSqlActions(baseSql, inFragment, sql";").asUpdate
     }
 
+    def renameSingleEntity(workspaceId: UUID, entity: AttributeEntityReference, newName: String): ReadWriteAction[Int] =
+      sql"""update ENTITY set name = $newName
+            where workspace_id = $workspaceId
+            and entity_type = ${entity.entityType}
+            and name = ${entity.entityName};""".asUpdate
+
     private def refsInFragment(refs: Set[AttributeEntityReference]) = {
       // build select statements for each type
       val pairs = refs.map { ref =>
         sql"""(${ref.entityType}, ${ref.entityName})"""
       }
       concatSqlActions(sql"(", reduceSqlActionsWithDelim(pairs.toSeq, sql","), sql")")
+    }
+
+    def renameEmbeddedReferences(workspaceId: UUID,
+                                 toId: Long,
+                                 oldReference: AttributeEntityReference,
+                                 newReference: AttributeEntityReference
+    ): ReadWriteAction[Int] = {
+      // build string to be replaced
+      val oldStr = s"""{"entityName": "${oldReference.entityName}", "entityType": "${oldReference.entityType}"}"""
+      // build string to be the replacement
+      val newStr = s"""{"entityName": "${newReference.entityName}", "entityType": "${newReference.entityType}"}"""
+
+      // perform replacements
+      sql"""update ENTITY set attributes = REPLACE(attributes, $oldStr, $newStr)
+            where workspace_id = $workspaceId and id in (
+                select from_id from ENTITY_REFS er
+                where er.to_id = $toId
+            )""".asUpdate
     }
 
   }

@@ -569,4 +569,18 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         )
       }
     )
+
+  override def renameEntity(entity: AttributeEntityReference, newName: String): Future[Int] =
+    dataSource.inTransaction { dataAccess =>
+      withEntity(workspaceContext, entity.entityType, entity.entityName, dataAccess) { entity =>
+        dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
+          case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
+          case Some(_) =>
+            throw new RawlsExceptionWithErrorReport(
+              errorReport =
+                ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
+            )
+        }
+      }
+    }
 }

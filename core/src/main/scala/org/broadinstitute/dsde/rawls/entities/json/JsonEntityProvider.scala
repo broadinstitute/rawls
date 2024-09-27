@@ -433,6 +433,42 @@ class JsonEntityProvider(requestArguments: EntityRequestArguments,
 
   override def expressionValidator: ExpressionValidator = ???
 
+  override def renameEntity(entity: AttributeEntityReference, newName: String): Future[Int] =
+    dataSource.inTransaction { dataAccess =>
+      import dataAccess.driver.api._
+
+      // get the entity. This validates it exists, as well as retrieves its id which we will need later
+      dataAccess.jsonEntityQuery.getEntityRef(workspaceId, entity.entityType, entity.entityName) flatMap {
+        existingOption =>
+          val existing = existingOption.getOrElse(throw new DataEntityException("Entity not found"))
+          // rename the specific entity
+          dataAccess.jsonEntityQuery.renameSingleEntity(workspaceId, entity, newName) flatMap { numRenamed =>
+            if (numRenamed == 0) {
+              // this shouldn't happen, since we just verified its existence
+              throw new DataEntityException("Entity not renamed")
+            } else if (numRenamed > 1) {
+              // this shouldn't happen, since the db enforces uniqueness of workspaceId+entityType+name
+              throw new DataEntityException(
+                "Unexpected error; found more than one entity to rename"
+              )
+            } else {
+              // replace the reference in all referrers
+              // TODO!
+              dataAccess.jsonEntityQuery.renameEmbeddedReferences(workspaceId,
+                                                                  existing.id,
+                                                                  entity,
+                                                                  entity.copy(entityName = newName)
+              ) map { embeddedUpdates =>
+                logger.info(s"***** renameEntity updated $embeddedUpdates embedded references")
+                // return the number of entities renamed, which should be one
+                numRenamed
+              }
+            }
+          }
+      }
+
+    }
+
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================

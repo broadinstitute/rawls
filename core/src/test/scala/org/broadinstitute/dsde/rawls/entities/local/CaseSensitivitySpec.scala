@@ -453,7 +453,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
             // rename entity of target type
             services.entityService
-              .renameEntity(testWorkspace.workspace.toWorkspaceName, typeUnderTest, "003", "my-new-name")
+              .renameEntity(testWorkspace.workspace.toWorkspaceName, typeUnderTest, "003", "my-new-name", None, None)
               .futureValue
 
             // get actual entities

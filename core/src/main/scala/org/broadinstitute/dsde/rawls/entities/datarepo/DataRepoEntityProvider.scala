@@ -547,4 +547,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] =
     throw new UnsupportedEntityOperationException("copy entities not supported by this provider.")
+
+  override def renameEntity(entity: AttributeEntityReference, newName: EntityName): Future[Int] =
+    throw new UnsupportedEntityOperationException("renameEntity not supported by this provider.")
 }
