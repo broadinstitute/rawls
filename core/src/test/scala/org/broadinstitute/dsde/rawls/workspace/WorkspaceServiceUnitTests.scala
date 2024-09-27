@@ -936,17 +936,13 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     val repo = mock[WorkspaceRepository]
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
-    val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(workspace.workspaceIdAsUUID, ctx))
-      .thenReturn(new WorkspaceDescription().azureContext(new AzureContext))
-    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repo, workspaceManagerDAO = wsm)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repo)(ctx)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
     }
 
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
-    verify(sam).userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx)
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "delete the workspace in sam and the database" in {
@@ -956,7 +952,6 @@ class WorkspaceServiceUnitTests
     val submissionsRepository = mock[SubmissionsRepository]
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
-    val wsm = mock[WorkspaceManagerDAO]
     val gcs = mock[GoogleServicesDAO]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
@@ -972,8 +967,6 @@ class WorkspaceServiceUnitTests
     when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
     // notify leo to clean up resources
     when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
-    // try to delete the workspace in wsm (expected to throw 404 b/c it's a rawls workspace)
-    when(wsm.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).thenAnswer(_ => throw new ApiException(404, ""))
     // delete google project
     when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
       .thenReturn(Future(Set()))
@@ -992,7 +985,6 @@ class WorkspaceServiceUnitTests
       requesterPaysSetupService = requesterPaysService,
       fastPassServiceConstructor = _ => fastPass,
       leonardoService = leo,
-      workspaceManagerDAO = wsm,
       workspaceRepository = repo,
       gcsDAO = gcs,
       submissionsRepository = submissionsRepository

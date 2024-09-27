@@ -470,11 +470,7 @@ class WorkspaceService(
     workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
     _ = workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
-        Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)).map { mcWorkspace =>
-          if (Option(mcWorkspace.getAzureContext).isDefined) {
-            throw RawlsExceptionWithErrorReport(StatusCodes.InternalServerError, "MC workspaces not supported")
-          }
-        }
+        throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Multi Cloud workspaces not supported")
       case WorkspaceType.RawlsWorkspace => ()
     }
     deleteResult <- traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 => deleteWorkspaceInternal(workspace, s1))
@@ -511,8 +507,6 @@ class WorkspaceService(
         deleteGoogleProject(workspace.googleProjectId)
       )
 
-      _ = trace("deleteWorkspaceInWSM", parentContext)(_ => maybeDeleteWsmWorkspace(workspace))
-
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
       _ <- traceFutureWithParent("deleteWorkspaceTransaction", parentContext)(_ =>
         workspaceRepository.deleteRawlsWorkspace(workspace)
@@ -522,43 +516,34 @@ class WorkspaceService(
       _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
         workspace.workflowCollectionName
           .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
-          .getOrElse(Future.successful(())) recoverWith {
+          .getOrElse(Future.successful(())) recover {
           case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
             logger.warn(
               s"Received 404 from delete workflowCollection resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
             )
-            Future.successful()
           case t: RawlsExceptionWithErrorReport =>
             logger.error(
               s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspace.toWorkspaceName}`.",
               t
             )
-            Future.failed(t)
+            throw t
         }
       )
 
       _ <- traceFutureWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
-        if (workspace.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
-          samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
-            case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-              logger.warn(
-                s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
-              )
-            case t: RawlsExceptionWithErrorReport
+        samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.warn(
+              s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
+            )
+          case t: RawlsExceptionWithErrorReport
               if t.errorReport.message.contains("Cannot delete a resource with children") =>
-              MetricsHelper.incrementCounter(
-                "leakingSamResourceError",
-                labels = Map("cloud" -> "gcp", "projectType" -> workspace.projectType)
-              )
-              throw t
-            case t: RawlsExceptionWithErrorReport =>
-              logger.error(
-                s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspace.toWorkspaceName}`.",
-                t
-              )
-              throw t
-          }
-        } else { Future.successful() }
+            MetricsHelper.incrementCounter(
+              "leakingSamResourceError",
+              labels = Map("cloud" -> "gcp", "projectType" -> workspace.projectType)
+            )
+            throw t
+        }
       )
     } yield {
       aborts.onComplete {
@@ -567,20 +552,6 @@ class WorkspaceService(
         case _ => /* ok */
       }
       WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
-    }
-
-  private def maybeDeleteWsmWorkspace(workspace: Workspace): Unit =
-    Try(workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).recover {
-      // 404 == workspace manager does not know about this workspace, move on
-      case e: ApiException if e.getCode == StatusCodes.NotFound.intValue => ()
-      // fail out if this was an mc workspace (aka azure)
-      // if it's NOT an MC workspace, this will only ever succeed if it's a TDR snapshot so we handle all exceptions otherwise
-      case e: ApiException if workspace.workspaceType == WorkspaceType.McWorkspace =>
-        throw RawlsExceptionWithErrorReport(StatusCodes.InternalServerError, s"Unable to delete ${workspace.name}", e)
-      case e: ApiException =>
-        logger.warn(
-          s"Unexpected failure deleting workspace in Workspace Manager for workspace `${workspace.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
-        )
     }
 
   private def deleteGoogleProject(googleProjectId: GoogleProjectId): Future[Unit] = {
