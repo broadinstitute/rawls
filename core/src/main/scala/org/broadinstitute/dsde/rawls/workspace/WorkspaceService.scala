@@ -466,7 +466,6 @@ class WorkspaceService(
       .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
-  // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
   def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] = for {
     workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
     _ = workspace.workspaceType match {
@@ -546,12 +545,11 @@ class WorkspaceService(
                 s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
               )
             case t: RawlsExceptionWithErrorReport
-                if t.errorReport.message.contains("Cannot delete a resource with children") =>
-              MetricsHelper
-                .incrementCounter("leakingSamResourceError",
-                                  labels = Map("cloud" -> "gcp", "projectType" -> workspace.projectType)
-                )
-                .unsafeToFuture()
+              if t.errorReport.message.contains("Cannot delete a resource with children") =>
+              MetricsHelper.incrementCounter(
+                "leakingSamResourceError",
+                labels = Map("cloud" -> "gcp", "projectType" -> workspace.projectType)
+              )
               throw t
             case t: RawlsExceptionWithErrorReport =>
               logger.error(
