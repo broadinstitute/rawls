@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -26,7 +25,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
-import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService

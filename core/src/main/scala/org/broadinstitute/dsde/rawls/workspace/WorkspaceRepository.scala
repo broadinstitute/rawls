@@ -18,7 +18,6 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
-import slick.dbio.DBIO
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}

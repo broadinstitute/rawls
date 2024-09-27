@@ -20,7 +20,6 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
