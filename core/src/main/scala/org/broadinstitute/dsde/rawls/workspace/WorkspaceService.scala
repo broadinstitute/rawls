@@ -483,41 +483,6 @@ class WorkspaceService(
     deleteResult <- traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 => deleteWorkspaceInternal(workspace, s1))
   } yield deleteResult
 
-  private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) =
-    dataSource
-      .inTransaction { dataAccess =>
-        for {
-          // Gather any active workflows with external ids
-          workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
-
-          // If a workflow is not done, automatically change its status to Aborted
-          _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { workflowRecords =>
-            workflowRecords
-              .filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
-              .foreach { workflowRecord =>
-                dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Aborted) { status =>
-                  if (config.trackDetailedSubmissionMetrics)
-                    Option(
-                      workflowStatusCounter(
-                        workspaceSubmissionMetricBuilder(workspaceName, workflowRecord.submissionId)
-                      )(
-                        status
-                      )
-                    )
-                  else None
-                }
-              }
-          }
-        } yield workflowsToAbort
-      }
-      .recover { case t: Throwable =>
-        logger.warn(
-          s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceContext.toWorkspaceName}`",
-          t
-        )
-        throw t
-      }
-
   private def deleteWorkspaceInternal(workspace: Workspace,
                                       parentContext: RawlsRequestContext
   ): Future[WorkspaceDeletionResult] =
