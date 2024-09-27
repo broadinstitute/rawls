@@ -5,17 +5,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  PendingCloneWorkspaceFileTransfer,
-  RawlsRequestContext,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceState,
-  WorkspaceSubmissionStats,
-  WorkspaceTag
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, PendingCloneWorkspaceFileTransfer, RawlsBillingProjectName, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceState, WorkspaceSubmissionStats, WorkspaceTag}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
@@ -55,6 +45,10 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Seq[Workspace]] = dataSource.inTransaction {
     _.workspaceQuery.listV2WorkspacesByIds(workspaceIds, attributeSpecs)
+  }
+
+  def listWorkspacesByBillingProject(billingProjectName: RawlsBillingProjectName): Future[Seq[Workspace]] = dataSource.inTransaction {
+    _.workspaceQuery.listWithBillingProject(billingProjectName)
   }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =

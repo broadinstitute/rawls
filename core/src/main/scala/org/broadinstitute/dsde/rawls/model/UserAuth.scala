@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
 
+import java.util.UUID
 import scala.language.implicitConversions
 
 case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName,
@@ -132,6 +133,8 @@ object RawlsBillingProjectResponse {
     organization
   )
 }
+
+case class BillingProjectAdminResponse(billingProject: RawlsBillingProject, workspaces: Map[WorkspaceName, UUID])
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -330,6 +333,8 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val BillingProjectOrganizationFormat: RootJsonFormat[RawlsBillingProjectOrganization] = jsonFormat2(
     RawlsBillingProjectOrganization.apply
   )
+
+  implicit val billingProjectAdminResponse: RootJsonFormat[BillingProjectAdminResponse] = jsonFormat2(BillingProjectAdminResponse)
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
     jsonFormat13(RawlsBillingProjectResponse.apply)

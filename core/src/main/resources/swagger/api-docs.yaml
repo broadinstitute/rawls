@@ -710,6 +710,36 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/billing/{projectId}:
+    get:
+      tags:
+        - admin
+      summary: get support summary information for billing project
+      description: get support summary information for billing project
+      operationId: adminGetBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BillingProjectAdminResponse'
+        403:
+          description: You must be an admin to call this API
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions:
     get:
       tags:
@@ -6726,6 +6756,16 @@ components:
           $ref: '#/components/schemas/ProjectRole'
           description: the role of the user in the project
       description: an element of a list of project users and their role
+    BillingProjectAdminResponse:
+      required:
+        - billingProject
+        - workspaces
+      type: object
+      properties:
+        billingProject:
+          type: string
+        workspaces:
+          type: string
     RawlsBillingProjectResponse:
       required:
         - projectName
