@@ -52,7 +52,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   }
 
   def listWorkspacesByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Seq[Workspace]] = dataSource.inTransaction {
-    _.workspaceQuery.listV2WorkspacesByIds(workspaceIds,attributeSpecs)
+    _.workspaceQuery.listV2WorkspacesByIds(workspaceIds, attributeSpecs)
   }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =
