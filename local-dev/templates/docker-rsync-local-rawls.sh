@@ -148,6 +148,11 @@ start_server () {
 
     echo "Starting sqlproxy..."
     docker start sqlproxy
+   # Check if sqlproxy started successfully
+    if [[ $(docker inspect -f '{{.State.Running}}' sqlproxy) != "true" ]]; then
+        echo "Failed to start sqlproxy. Exiting..."
+        exit 1
+    fi
     echo "Starting proxy..."
     docker start rawls-proxy
      # Check if rawls-proxy started successfully

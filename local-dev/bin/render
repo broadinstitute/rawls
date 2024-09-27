@@ -8,17 +8,19 @@ PROJECT_ID="broad-dsde-dev"
 fetch_secret() {
   gcloud secrets versions access latest --project "$PROJECT_ID" --secret "$1"
 }
+mkdir -p config
 
 ##Pull mysql instance info for sqlproxy##
+# Define the template and output file paths
+MYSQL_TEMPLATE_FILE="local-dev/templates/sqlproxy.env"
+MYSQL_OUTPUT_FILE="config/sqlproxy.env"
+echo "Generating" $MYSQL_OUTPUT_FILE
+
 RAWLS_MYSQL_INSTANCE_JSON=$(fetch_secret "rawls-mysql-instance")
 
 # Extract the name and zone values using jq
 CLOUDSQL_ZONE=$(echo "$RAWLS_MYSQL_INSTANCE_JSON" | jq -r '.zone')
 CLOUDSQL_INSTANCE=$(echo "$RAWLS_MYSQL_INSTANCE_JSON" | jq -r '.name')
-
-# Define the template and output file paths
-MYSQL_TEMPLATE_FILE="local-dev/templates/sqlproxy.env"
-MYSQL_OUTPUT_FILE="config/sqlproxy.env"
 
 # Replace placeholders in the template file with the fetched secret values
 sed -e "s/{{ \$secret.zone }}/$CLOUDSQL_ZONE/" \
@@ -37,6 +39,14 @@ cp local-dev/templates/mod_security_ignore.conf config/mod_security_ignore.conf
 cp local-dev/templates/oauth2.conf config/oauth2.conf
 cp local-dev/templates/site.conf config/site.conf
 
+echo "Template files copied."
+echo "Fetching server certs..."
+gcloud container clusters get-credentials --zone us-central1-a --project broad-dsde-dev terra-dev
+kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.crt"}}' | base64 --decode > config/server.crt
+kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.key"}}' | base64 --decode > config/server.key
+kubectl -n local-dev get configmaps kube-root-ca.crt -o 'go-template={{ index .data "ca.crt" }}' > config/ca-bundle.crt
+echo "Certs fetched."
+
 echo "Fetching secrets from GSM..."
 ##Files to download from secrets##
 fetch_secret "rawls-sa" > config/rawls-account.json
@@ -45,11 +55,6 @@ fetch_secret "rawls-sa-pem" | jq -r '."key.pem"' > config/rawls-account.pem
 fetch_secret "rawls-bigquery-sa" > config/bigquery-account.json
 fetch_secret "rawls-billing-sa" | jq -r '."key.pem"' > config/billing-account.pem
 fetch_secret "buffer-client-sa-b64" | jq -r '.key' | base64 --decode > config/buffer-account.json
-
-gcloud container clusters get-credentials --zone us-central1-a --project broad-dsde-dev terra-dev
-kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.crt"}}' | base64 --decode > config/server.crt
-kubectl -n local-dev get secrets local-dev-cert -o 'go-template={{index .data "tls.key"}}' | base64 --decode > config/server.key
-kubectl -n local-dev get configmaps kube-root-ca.crt -o 'go-template={{ index .data "ca.crt" }}' > config/ca-bundle.crt
 
 ## Secrets to pull for rawls.conf ##
 RAWLS_OAUTH_CREDS_JSON=$(fetch_secret "rawls-oauth-creds")
@@ -75,11 +80,12 @@ ESCAPED_RAWLS_REFRESH_TOKEN_CRED_JSON=$(echo "$RAWLS_REFRESH_TOKEN_CRED_JSON" | 
 ESCAPED_RAWLS_OAUTH_CREDS_JSON=$(echo "$RAWLS_OAUTH_CREDS_JSON" | jq -r '.value' | sed -e 's/[\/&]/\\&/g')
 ADMIN_BILLING_ACCOUNT=$(echo "$FIRECLOUD_SECRETS" | jq -r '.trial_billing_account' | sed -e 's/[\/&]/\\&/g')
 
+echo "Secrets fetched."
 # Define the template and output file paths
 RAWLS_TEMPLATE_FILE="local-dev/templates/rawls.conf"
 RAWLS_OUTPUT_FILE="config/rawls.conf"
 
-Echo "Generating rawls.conf..."
+echo "Generating rawls.conf..."
 # Replace placeholders in the template file with the fetched secret values
 sed -e "s/{{ \$rawlsSaKey.client_email }}/$CLIENT_EMAIL/" \
     -e "s/{{ \$rawlsConf.gcs_tokenEncryptionKey }}/$GCS_TOKENENCRYPTIONKEY/" \
@@ -93,5 +99,6 @@ sed -e "s/{{ \$rawlsSaKey.client_email }}/$CLIENT_EMAIL/" \
     -e "s/{{ \$rawlsConf.slick_db_password }}/$RAWLS_SLICK_PASSWORD/" \
     -e "s/{{ \$adminBillingAccount }}/$ADMIN_BILLING_ACCOUNT/" \
     "$RAWLS_TEMPLATE_FILE" > "$RAWLS_OUTPUT_FILE"
+echo "rawls.conf generated."
 
 
