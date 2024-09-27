@@ -536,15 +536,14 @@ class WorkspaceService(
       } yield ()
     }
 
-  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
-    _ <- ApplicativeThrow[Future].raiseWhen(workspace.googleProjectId.value.isEmpty) {
-      RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.InternalServerError,
-          s"Cannot call this method on workspace ${workspace.workspaceId} with no googleProjectId"
-        )
+  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = {
+    if(workspace.googleProjectId.value.isEmpty) {
+      throw RawlsExceptionWithErrorReport(
+        StatusCodes.InternalServerError,
+        s"Cannot call this method on workspace ${workspace.workspaceId} with no googleProjectId"
       )
     }
+    for {
     workspaceChildren <- samDAO
       .listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       .map(
@@ -564,6 +563,7 @@ class WorkspaceService(
         ErrorReport(StatusCodes.BadRequest, "Workspace deletion blocked by child resources", reports)
       )
     }
+  }
 
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
