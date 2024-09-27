@@ -993,7 +993,390 @@ class WorkspaceServiceUnitTests
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
 
     result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    verify(repo).deleteRawlsWorkspace(workspace)
+    verify(sam).deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
   }
+
+  it should "ignore 404 errors from sam when deleting the google project resource" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete google project
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set()))
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    // throw 404 when deleting the google project resource in sam
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future.failed(RawlsExceptionWithErrorReport(StatusCodes.NotFound, "")))
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+
+    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    verify(sam).deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx)
+  }
+
+  it should "ignore 404 errors from sam when deleting the workflow collection resource" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete google project
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set()))
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // throw 404 when deleting workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future.failed(RawlsExceptionWithErrorReport(StatusCodes.NotFound, "")))
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+
+    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    verify(sam).deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx)
+  }
+
+  it should "throw non 404 errors from sam when deleting the workflow collection resource" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete google project
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set()))
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // throw exception when deleting workflow collection in sam
+    val workflowDeletionException = RawlsExceptionWithErrorReport(StatusCodes.BadGateway, "")
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future.failed(workflowDeletionException))
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+    }
+    exception shouldBe workflowDeletionException
+    verify(sam).deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx)
+  }
+
+  it should "ignore 404 errors when deleting the workspace resource in sam" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete google project
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set()))
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future())
+    // throw 404 when deleting workspace in sam
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future.failed(RawlsExceptionWithErrorReport(StatusCodes.NotFound, "")))
+
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+
+    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    verify(sam).deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+  }
+
+
+  it should "rethrow errors for resource children when deleting the workspace resource in sam" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete google project
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set()))
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future())
+    // throw exception for child resources when deleting workspace in sam
+    val samError = RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Cannot delete a resource with children")
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future.failed(samError))
+
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+      result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    }
+
+    exception shouldBe samError
+  }
+
+
+  it should "delete pets when deleting the google project" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete pets in project
+    val pet = UserIdInfo(UUID.randomUUID().toString, "pet-email", None)
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set(pet)))
+    val petKeyJson = "fake-json"
+    when(sam.getPetServiceAccountKeyForUser(workspace.googleProjectId, RawlsUserEmail(pet.userEmail)))
+      .thenReturn(Future(petKeyJson))
+    val petUserInfo = mock[UserInfo]
+    when(gcs.getUserInfoUsingJson(petKeyJson)).thenReturn(Future(petUserInfo))
+    when(sam.deleteUserPetServiceAccount(workspace.googleProjectId, ctx.copy(userInfo = petUserInfo)))
+      .thenReturn(Future())
+    // delete google project
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future())
+    // delete workspace in sam
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+
+    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    verify(sam).listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx)
+    verify(sam).getPetServiceAccountKeyForUser(workspace.googleProjectId, RawlsUserEmail(pet.userEmail))
+    verify(gcs).getUserInfoUsingJson(petKeyJson)
+    verify(sam).deleteUserPetServiceAccount(workspace.googleProjectId, ctx.copy(userInfo = petUserInfo))
+  }
+
+  it should "ignore 404s from Sam when retrieving pets" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // delete pets in project
+    val pet = UserIdInfo(UUID.randomUUID().toString, "pet-email", None)
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future.failed(RawlsExceptionWithErrorReport(StatusCodes.NotFound, "")))
+    // delete google project
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future())
+    // delete workspace in sam
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+
+    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    verify(sam).listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx)
+  }
+
 
   behavior of "getAcl"
 

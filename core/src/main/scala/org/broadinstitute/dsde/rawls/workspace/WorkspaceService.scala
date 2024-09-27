@@ -51,7 +51,6 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
-import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 
@@ -473,86 +472,70 @@ class WorkspaceService(
         throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Multi Cloud workspaces not supported")
       case WorkspaceType.RawlsWorkspace => ()
     }
-    deleteResult <- traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 => deleteWorkspaceInternal(workspace, s1))
-  } yield deleteResult
-
-  private def deleteWorkspaceInternal(workspace: Workspace,
-                                      parentContext: RawlsRequestContext
-  ): Future[WorkspaceDeletionResult] =
-    for {
-      _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
-      workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentContext)(_ =>
-        submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)
-      )
-
-      // Attempt to abort any running workflows so they don't write any more to the bucket.
-      // Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
-      // This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
-      // ExecutionContext run the futures whenever
-      aborts = traceFutureWithParent("abortRunningWorkflows", parentContext)(_ =>
-        Future.traverse(workflowsToAbort)(wf => executionServiceCluster.abort(wf, ctx.userInfo))
-      )
-
-      _ <- traceFutureWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext).removeFastPassGrantsForWorkspace(workspace)
-      )
-
-      // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
-      _ <- traceFutureWithParent("notifyLeonardo", parentContext)(_ =>
-        leonardoService.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)
-      )
-
-      // Delete Google Project
-      _ <- traceFutureWithParent("deleteGoogleProject", parentContext)(_ =>
-        deleteGoogleProject(workspace.googleProjectId)
-      )
-
-      // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
-      _ <- traceFutureWithParent("deleteWorkspaceTransaction", parentContext)(_ =>
-        workspaceRepository.deleteRawlsWorkspace(workspace)
-      )
-
-      // Delete workflowCollection resource in sam outside of DB transaction
-      _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
-        workspace.workflowCollectionName
-          .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
-          .getOrElse(Future.successful(())) recover {
-          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.warn(
-              s"Received 404 from delete workflowCollection resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
-            )
-          case t: RawlsExceptionWithErrorReport =>
-            logger.error(
-              s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspace.toWorkspaceName}`.",
-              t
-            )
-            throw t
-        }
-      )
-
-      _ <- traceFutureWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
-        samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
-          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.warn(
-              s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
-            )
-          case t: RawlsExceptionWithErrorReport
-              if t.errorReport.message.contains("Cannot delete a resource with children") =>
-            MetricsHelper.incrementCounter(
-              "leakingSamResourceError",
-              labels = Map("cloud" -> "gcp", "projectType" -> workspace.projectType)
-            )
-            throw t
-        }
-      )
-    } yield {
-      aborts.onComplete {
-        case Failure(t) =>
-          logger.info(s"failure aborting workflows while deleting workspace ${workspace.toWorkspaceName}", t)
-        case _ => /* ok */
+    _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
+    workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", ctx)(_ =>
+      submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)
+    )
+    // Attempt to abort any running workflows so they don't write any more to the bucket.
+    // Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
+    // This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
+    // ExecutionContext run the futures whenever
+    aborts = traceFutureWithParent("abortRunningWorkflows", ctx)(_ =>
+      Future.traverse(workflowsToAbort)(wf => executionServiceCluster.abort(wf, ctx.userInfo))
+    )
+    _ <- traceFutureWithParent("deleteFastPassGrantsTransaction", ctx)(childContext =>
+      fastPassServiceConstructor(childContext).removeFastPassGrantsForWorkspace(workspace)
+    )
+    // notify leonardo so it can cleanup any dangling sam resources and other non-cloud state
+    _ <- traceFutureWithParent("notifyLeonardo", ctx)(_ =>
+      leonardoService.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)
+    )
+    // Delete Google Project
+    _ <- traceFutureWithParent("deleteGoogleProject", ctx)(_ => deleteGoogleProject(workspace.googleProjectId))
+    // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
+    _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx)(_ =>
+      workspaceRepository.deleteRawlsWorkspace(workspace)
+    )
+    // Delete workflowCollection resource in sam outside of DB transaction
+    _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", ctx)(_ =>
+      workspace.workflowCollectionName
+        .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
+        .getOrElse(Future.successful(())) recover {
+        case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+          logger.warn(
+            s"Received 404 from delete workflowCollection resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
+          )
+        case t: RawlsExceptionWithErrorReport =>
+          logger.error(
+            s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspace.toWorkspaceName}`.",
+            t
+          )
+          throw t
       }
-      WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+    )
+    _ <- traceFutureWithParent("deleteWorkspaceSamResource", ctx)(_ =>
+      samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
+        case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+          logger.warn(
+            s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
+          )
+        case t: RawlsExceptionWithErrorReport
+            if t.errorReport.message.contains("Cannot delete a resource with children") =>
+          MetricsHelper.incrementCounter(
+            "leakingSamResourceError",
+            labels = Map("cloud" -> "gcp", "projectType" -> workspace.projectType)
+          )
+          throw t
+      }
+    )
+  } yield {
+    aborts.onComplete {
+      case Failure(t) =>
+        logger.info(s"failure aborting workflows while deleting workspace ${workspace.toWorkspaceName}", t)
+      case _ => /* ok */
     }
+    WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+  }
 
   private def deleteGoogleProject(googleProjectId: GoogleProjectId): Future[Unit] = {
     def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId): Future[Unit] =

@@ -1014,12 +1014,9 @@ class WorkspaceServiceSpec
     // delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[RawlsRequestContext])
-
     // check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
+
 
   }
 
@@ -1032,13 +1029,8 @@ class WorkspaceServiceSpec
     // delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[RawlsRequestContext])
-
     // check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
   }
 
   it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
@@ -1351,17 +1343,6 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
-    )
-
     val workspace = Await.result(
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
@@ -1377,9 +1358,9 @@ class WorkspaceServiceSpec
                    Duration.Inf
       )
     }
-    assertResult(Some(StatusCodes.InternalServerError)) {
-      error.errorReport.statusCode
-    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+
   }
 
   behavior of "getTags"
