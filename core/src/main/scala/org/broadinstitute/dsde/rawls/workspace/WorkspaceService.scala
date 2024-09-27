@@ -400,7 +400,7 @@ class WorkspaceService(
       workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
       aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
         .fetchAggregatedWorkspaces(workspaces, ctx)
-        // Filter out workspaces with no cloud contexts, logging cloud context exceptions
+        // Filter out workspaces with no cloud contexts
         .filter(ws => Try(ws.getCloudPlatform).map(context => context.isDefined).getOrElse(false))
 
       responseWorkspaces = aggregatedWorkspaces.map { wsmContext =>
