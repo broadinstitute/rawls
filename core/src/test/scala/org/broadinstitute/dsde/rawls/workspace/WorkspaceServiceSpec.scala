@@ -1017,7 +1017,6 @@ class WorkspaceServiceSpec
     // check that the workspace has been deleted
     runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
 
-
   }
 
   it should "delete a workspace with no submissions" in withTestDataServices { services =>

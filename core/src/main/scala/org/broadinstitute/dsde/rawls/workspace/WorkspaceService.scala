@@ -32,7 +32,9 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
+  AttributeNotFoundException,
   AttributeSupport,
+  AttributeUpdateOperationException,
   BillingProjectSupport,
   JsonFilterUtils,
   LibraryPermissionsSupport,
@@ -2035,6 +2037,4 @@ class WorkspaceService(
 
 }
 
-class AttributeUpdateOperationException(message: String) extends RawlsException(message)
-class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

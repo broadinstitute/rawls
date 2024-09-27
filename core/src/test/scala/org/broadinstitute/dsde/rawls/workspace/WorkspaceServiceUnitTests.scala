@@ -1203,7 +1203,6 @@ class WorkspaceServiceUnitTests
     verify(sam).deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
   }
 
-
   it should "rethrow errors for resource children when deleting the workspace resource in sam" in {
     val sam = mock[SamDAO]
     val repo = mock[WorkspaceRepository]
@@ -1259,7 +1258,6 @@ class WorkspaceServiceUnitTests
 
     exception shouldBe samError
   }
-
 
   it should "delete pets when deleting the google project" in {
     val sam = mock[SamDAO]
@@ -1376,7 +1374,6 @@ class WorkspaceServiceUnitTests
     result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
     verify(sam).listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx)
   }
-
 
   behavior of "getAcl"
 
