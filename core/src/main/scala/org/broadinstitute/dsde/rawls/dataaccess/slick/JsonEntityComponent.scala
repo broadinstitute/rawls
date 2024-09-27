@@ -158,6 +158,8 @@ trait JsonEntityComponent extends LazyLogging {
       * Update a single entity in the db
       */
     // TODO AJ-2008: return Entity instead of JsonEntityRecord?
+    // TODO AJ-2008: can this use INSERT ... ON DUPLICATE KEY UPDATE instead? That would allow batching multiple updates
+    //  into a single statement. But, how would that work with record_version checking?
     def updateEntity(workspaceId: UUID, entity: Entity, recordVersion: Long): ReadWriteAction[Int] = {
       val attributesJson: JsValue = entity.attributes.toJson
 
