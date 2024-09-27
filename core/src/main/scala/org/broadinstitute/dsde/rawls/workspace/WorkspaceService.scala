@@ -466,24 +466,19 @@ class WorkspaceService(
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
   // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
-  def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] = {
-    def maybeLoadMcWorkspace(workspace: Workspace): Future[Option[WorkspaceDescription]] =
-      workspace.workspaceType match {
-        case WorkspaceType.McWorkspace =>
-          Future(Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)))
-        case WorkspaceType.RawlsWorkspace => Future(None)
-      }
-    traceFutureWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
-        traceFutureWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap {
-          maybeMcWorkspace =>
-            traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 =>
-              deleteWorkspaceInternal(workspace, maybeMcWorkspace, s1)
-            )
+  def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] = for {
+    workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
+    _ = workspace.workspaceType match {
+      case WorkspaceType.McWorkspace =>
+        Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)).map { mcWorkspace =>
+          if (Option(mcWorkspace.getAzureContext).isDefined) {
+            throw RawlsExceptionWithErrorReport(StatusCodes.InternalServerError, "MC workspaces not supported")
+          }
         }
-      }
-    )
-  }
+      case WorkspaceType.RawlsWorkspace => ()
+    }
+    deleteResult <- traceFutureWithParent("deleteWorkspaceInternal", ctx)(s1 => deleteWorkspaceInternal(workspace, s1))
+  } yield deleteResult
 
   private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) =
     dataSource

@@ -905,6 +905,47 @@ class WorkspaceServiceUnitTests
     resultWorkspaces(workspace2.workspaceId) shouldBe expectedResult2
   }
 
+  behavior of "deleteWorkspace"
+
+  it should "fail if the user does not have the delete permission for the workspace" in {
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(false))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    val repo = mock[WorkspaceRepository]
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repo)(ctx)
+
+    intercept[WorkspaceAccessDeniedException] {
+      Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    verify(sam).userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx)
+  }
+
+  it should "fail if called for a multi cloud workspace" in {
+    val workspace = this.workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    val repo = mock[WorkspaceRepository]
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(workspace.workspaceIdAsUUID, ctx))
+      .thenReturn(new WorkspaceDescription().azureContext(new AzureContext))
+    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repo, workspaceManagerDAO = wsm)(ctx)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    verify(sam).userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx)
+  }
+
   behavior of "assertNoGoogleChildrenBlockingWorkspaceDeletion"
 
   it should "not error if the only child is the google project" in {
