@@ -6,7 +6,21 @@ import org.broadinstitute.dsde.rawls.NoSuchWorkspaceException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeValue,WorkspaceAttributeSpecs, ErrorReportSource, ManagedGroupRef, RawlsGroupName, RawlsRequestContext, SamResourceTypeName, SamResourceTypeNames, Workspace, WorkspaceDetails, WorkspaceFeatureFlag, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeName,
+  AttributeValue,
+  ErrorReportSource,
+  ManagedGroupRef,
+  RawlsGroupName,
+  RawlsRequestContext,
+  SamResourceTypeName,
+  SamResourceTypeNames,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceDetails,
+  WorkspaceFeatureFlag,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.rawls.util._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -14,20 +28,19 @@ import scala.language.postfixOps
 
 object WorkspaceAdminService {
   def constructor(dataSource: SlickDataSource,
-
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
-                  workbenchMetricBaseName: String,
-                 )(
-                   ctx: RawlsRequestContext
-                 )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceAdminService =
+                  workbenchMetricBaseName: String
+  )(
+    ctx: RawlsRequestContext
+  )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceAdminService =
     new WorkspaceAdminService(
       ctx,
       dataSource,
       gcsDAO,
       samDAO,
       workbenchMetricBaseName,
-      new WorkspaceRepository(dataSource),
+      new WorkspaceRepository(dataSource)
     )
 }
 
@@ -37,14 +50,14 @@ class WorkspaceAdminService(
   protected val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
   override val workbenchMetricBaseName: String,
-  val workspaceRepository: WorkspaceRepository,
-  ) (implicit protected val executionContext: ExecutionContext)
-extends LazyLogging
-  with RawlsInstrumented
-  with RoleSupport
-  with WorkspaceSupport {
+  val workspaceRepository: WorkspaceRepository
+)(implicit protected val executionContext: ExecutionContext)
+    extends LazyLogging
+    with RawlsInstrumented
+    with RoleSupport
+    with WorkspaceSupport {
 
-  implicit val errorReportSource: ErrorReportSource = ErrorReportSource ("rawls")
+  implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   // Admin endpoint, not limited to V2 workspaces
   def listAllWorkspaces(): Future[Seq[WorkspaceDetails]] =
@@ -57,7 +70,7 @@ extends LazyLogging
   // Admin endpoint, not limited to V2 workspaces
   def adminListWorkspacesWithAttribute(attributeName: AttributeName,
                                        attributeValue: AttributeValue
-                                      ): Future[Seq[WorkspaceDetails]] =
+  ): Future[Seq[WorkspaceDetails]] =
     asFCAdmin {
       for {
         workspaces <- dataSource.inTransaction { dataAccess =>
@@ -84,7 +97,7 @@ extends LazyLogging
   // Admin endpoint, not limited to V2 workspaces
   def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName,
                                           flagNames: List[String]
-                                         ): Future[Seq[WorkspaceFeatureFlag]] =
+  ): Future[Seq[WorkspaceFeatureFlag]] =
     asFCAdmin {
       val flags = flagNames.map(WorkspaceFeatureFlag)
 
@@ -103,18 +116,17 @@ extends LazyLogging
   private def withWorkspaceContext[T](workspaceName: WorkspaceName,
                                       dataAccess: DataAccess,
                                       attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-                                     )(op: Workspace => ReadWriteAction[T]) =
+  )(op: Workspace => ReadWriteAction[T]) =
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
-      case None => throw NoSuchWorkspaceException(workspaceName)
+      case None            => throw NoSuchWorkspaceException(workspaceName)
       case Some(workspace) => op(workspace)
     }
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String
-                                    ): Future[Set[ManagedGroupRef]] =
+  ): Future[Set[ManagedGroupRef]] =
     samDAO
       .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
-
 
 }
