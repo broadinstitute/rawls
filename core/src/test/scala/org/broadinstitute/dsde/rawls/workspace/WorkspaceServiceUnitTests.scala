@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{
   AzureContext,
   IamRole,
@@ -18,12 +19,12 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.fastpass.{FastPassService, FastPassServiceImpl}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{
@@ -47,6 +48,7 @@ import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.prop.TableDrivenPropertyChecks
 import spray.json.{JsArray, JsObject}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -99,9 +101,9 @@ class WorkspaceServiceUnitTests
     userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
     workbenchMetricBaseName: String = "",
     config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
-    requesterPaysSetupService: RequesterPaysSetupServiceImpl = mock[RequesterPaysSetupServiceImpl](RETURNS_SMART_NULLS),
-    resourceBufferService: ResourceBufferServiceImpl = mock[ResourceBufferServiceImpl](RETURNS_SMART_NULLS),
-    servicePerimeterService: ServicePerimeterServiceImpl = mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS),
+    requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS),
+    resourceBufferService: ResourceBufferService = mock[ResourceBufferService](RETURNS_SMART_NULLS),
+    servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS),
     googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
     terraBillingProjectOwnerRole: String = "",
     terraWorkspaceCanComputeRole: String = "",
@@ -113,7 +115,8 @@ class WorkspaceServiceUnitTests
     fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
       mock[FastPassService](RETURNS_SMART_NULLS),
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-    billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
+    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -140,7 +143,8 @@ class WorkspaceServiceUnitTests
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource),
       fastPassServiceConstructor,
       workspaceRepository,
-      billingRepository
+      billingRepository,
+      submissionsRepository
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"
@@ -946,6 +950,60 @@ class WorkspaceServiceUnitTests
     verify(sam).userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx)
   }
 
+  it should "delete the workspace in sam and the database" in {
+    val sam = mock[SamDAO]
+    val repo = mock[WorkspaceRepository]
+    val requesterPaysService = mock[RequesterPaysSetupService]
+    val submissionsRepository = mock[SubmissionsRepository]
+    val leo = mock[LeonardoService]
+    val fastPass = mock[FastPassService]
+    val wsm = mock[WorkspaceManagerDAO]
+    val gcs = mock[GoogleServicesDAO]
+    // mocked operations are defined in the order they are called by the service
+    // initial auth checks/workspace retrieval
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
+      .thenReturn(Future(true))
+    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    // delete requester pays records
+    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
+    // abort workflows
+    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
+    // delete fast pass grants
+    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
+    // notify leo to clean up resources
+    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
+    // try to delete the workspace in wsm (expected to throw 404 b/c it's a rawls workspace)
+    when(wsm.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).thenAnswer(_ => throw new ApiException(404, ""))
+    // delete google project
+    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Set()))
+    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
+    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future())
+    // delete workspace and associated records
+    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workflow collection in sam
+    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
+      .thenReturn(Future())
+    // delete workspace in sam
+    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
+    val service = workspaceServiceConstructor(
+      samDAO = sam,
+      requesterPaysSetupService = requesterPaysService,
+      fastPassServiceConstructor = _ => fastPass,
+      leonardoService = leo,
+      workspaceManagerDAO = wsm,
+      workspaceRepository = repo,
+      gcsDAO = gcs,
+      submissionsRepository = submissionsRepository
+    )(ctx)
+
+    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
+
+    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
+  }
+
   behavior of "assertNoGoogleChildrenBlockingWorkspaceDeletion"
 
   it should "not error if the only child is the google project" in {
@@ -1201,10 +1259,10 @@ class WorkspaceServiceUnitTests
 
     val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
 
-    val requesterPaysSetupService = mock[RequesterPaysSetupServiceImpl](RETURNS_SMART_NULLS)
+    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
     when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future(Seq.empty))
 
-    val mockFastPassService = mock[FastPassServiceImpl]
+    val mockFastPassService = mock[FastPassService]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
 
     val service = workspaceServiceConstructor(
@@ -1269,7 +1327,7 @@ class WorkspaceServiceUnitTests
       )
     )
 
-    val mockFastPassService = mock[FastPassServiceImpl]
+    val mockFastPassService = mock[FastPassService]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
     val service =
       workspaceServiceConstructor(
@@ -1379,7 +1437,7 @@ class WorkspaceServiceUnitTests
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future())
 
     val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
-    val mockFastPassService = mock[FastPassServiceImpl]
+    val mockFastPassService = mock[FastPassService]
     when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
 
     val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
@@ -1411,9 +1469,8 @@ class WorkspaceServiceUnitTests
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future())
 
     val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
-    val mockFastPassService = mock[FastPassServiceImpl]
-    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
-      .thenReturn(Future())
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
 
     val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
                                               samDAO = samDAO,
