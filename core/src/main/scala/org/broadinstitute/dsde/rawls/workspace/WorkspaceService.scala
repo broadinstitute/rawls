@@ -3,8 +3,6 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import cats.implicits._
-import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
@@ -26,7 +24,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -564,7 +561,7 @@ class WorkspaceService(
               )
               Set[UserIdInfo]()
           }
-        _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
+        _ <- Future.traverse(projectUsers.toList)(destroyPet(_, projectName))
       } yield ()
     for {
       _ <- deletePetsInProject(googleProjectId)
@@ -733,8 +730,7 @@ class WorkspaceService(
                   methodConfigShort.namespace,
                   methodConfigShort.name
                 )
-                _ <- methodConfig.traverse_(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
-              } yield ()
+              } yield methodConfig.foreach(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
             })
             _ = clonedWorkspaceCounter.inc()
 
@@ -848,7 +844,7 @@ class WorkspaceService(
               ctx
             )
             .map { _ =>
-              Success(Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true)))
+              Success(Right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true)))
             }
             .recover {
               case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
@@ -865,7 +861,7 @@ class WorkspaceService(
               ctx
             )
             .map { _ =>
-              Success(Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false)))
+              Success(Right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false)))
             }
             .recover {
               case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
@@ -929,9 +925,9 @@ class WorkspaceService(
     def aclUpdateToPolicies(workspaceACLUpdate: WorkspaceACLUpdate): Set[SamResourcePolicyName] = {
       val sharePolicy = workspaceACLUpdate match {
         case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
-          SamWorkspacePolicyNames.shareReader.some
+          Some(SamWorkspacePolicyNames.shareReader)
         case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
-          SamWorkspacePolicyNames.shareWriter.some
+          Some(SamWorkspacePolicyNames.shareWriter)
         case _ => None
       }
 
@@ -939,7 +935,7 @@ class WorkspaceService(
       val computePolicy = workspaceACLUpdate.canCompute match {
         case Some(false) => None
         case _ if workspaceACLUpdate.accessLevel == WorkspaceAccessLevels.Write =>
-          SamWorkspacePolicyNames.canCompute.some
+          Some(SamWorkspacePolicyNames.canCompute)
         case _ => None
       }
 
@@ -1060,7 +1056,7 @@ class WorkspaceService(
   private def revokeRequesterPaysForLinkedSAs(workspace: Workspace,
                                               policyRemovals: Set[(SamResourcePolicyName, String)],
                                               policyAdditions: Set[(SamResourcePolicyName, String)]
-  ): Future[Unit] = {
+  ): Future[Set[Seq[BondServiceAccountEmail]]] = {
     val applicablePolicies = Set(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer)
     val applicableRemovals = policyRemovals.collect {
       case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
@@ -1068,11 +1064,9 @@ class WorkspaceService(
     val applicableAdditions = policyAdditions.collect {
       case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
     }
-    Future
-      .traverse(applicableRemovals -- applicableAdditions) { emailToRevoke =>
-        requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspace)
-      }
-      .void
+    Future.traverse(applicableRemovals -- applicableAdditions) { emailToRevoke =>
+      requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspace)
+    }
   }
 
   private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
@@ -1319,8 +1313,8 @@ class WorkspaceService(
         GcsBucketName(workspace.bucketName),
         petKey
       )
-      _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
-        new RawlsException("user has workspace read-only access yet has expected google project permissions")
+      _ = if (useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
+        throw new RawlsException("user has workspace read-only access yet has expected google project permissions")
       }
 
       projectIamResults <- gcsDAO
@@ -1518,10 +1512,12 @@ class WorkspaceService(
       }
 
       _ <- traceFutureWithParent("maybeMoveGoogleProjectToFolder", parentContext) { _ =>
-        billingProject.servicePerimeter.traverse_ {
-          logger.info(s"Moving google project $googleProjectId to service perimeter folder.")
-          userServiceConstructor(ctx).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
-        }
+        billingProject.servicePerimeter
+          .map {
+            logger.info(s"Moving google project $googleProjectId to service perimeter folder.")
+            userServiceConstructor(ctx).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
+          }
+          .getOrElse(Future.successful())
       }
 
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
@@ -1570,28 +1566,29 @@ class WorkspaceService(
 
       // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
       // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-      List(
-        billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole,
-                                              terraWorkspaceCanComputeRole,
-                                              terraWorkspaceNextflowRole
-        ),
-        policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole,
-                                                                 terraWorkspaceNextflowRole
-        ),
-        policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole,
-                                                                      terraWorkspaceNextflowRole
-        )
-      )
-        .traverse_ { case (email, roles) =>
-          googleIamDao.addRoles(
-            GoogleProject(googleProjectId.value),
-            email,
-            IamMemberTypes.Group,
-            roles,
-            retryIfGroupDoesNotExist = true
+      Future.traverse(
+        List(
+          billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole,
+                                                terraWorkspaceCanComputeRole,
+                                                terraWorkspaceNextflowRole
+          ),
+          policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole,
+                                                                   terraWorkspaceNextflowRole
+          ),
+          policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole,
+                                                                        terraWorkspaceNextflowRole
           )
-        }
-    }
+        )
+      ) { case (email, roles) =>
+        googleIamDao.addRoles(
+          GoogleProject(googleProjectId.value),
+          email,
+          IamMemberTypes.Group,
+          roles,
+          retryIfGroupDoesNotExist = true
+        )
+      }
+    }.map(_ => ())
 
   /**
     * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues
@@ -1630,9 +1627,11 @@ class WorkspaceService(
   private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject,
                                                    dataAccess: DataAccess
   ): ReadWriteAction[Unit] =
-    billingProject.servicePerimeter.traverse_ { servicePerimeterName =>
-      servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
-    }
+    billingProject.servicePerimeter
+      .map { servicePerimeterName =>
+        servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+      }
+      .getOrElse(DBIO.successful())
 
   private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
                                                 parentContext: RawlsRequestContext = ctx
@@ -1677,9 +1676,12 @@ class WorkspaceService(
       )
 
       invalidBillingAccount = !hasAccess
-      _ <- Applicative[Future].whenA(billingProject.invalidBillingAccount != invalidBillingAccount) {
-        billingRepository.updateBillingAccountValidity(billingAccountName, invalidBillingAccount)
-      }
+      _ <-
+        if (billingProject.invalidBillingAccount != invalidBillingAccount) {
+          billingRepository.updateBillingAccountValidity(billingAccountName, invalidBillingAccount)
+        } else {
+          Future.successful()
+        }
     } yield hasAccess
 
   private def createWorkspaceResourceInSam(workspaceId: String,
@@ -1739,28 +1741,26 @@ class WorkspaceService(
                            policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                            workspaceRequest: WorkspaceRequest,
                            parentContext: RawlsRequestContext
-  ) =
+  ): Future[Iterable[Unit]] =
     traceFutureWithParent("traversePolicies", parentContext)(s1 =>
       Future.traverse(policyEmailsByName.keys) { policyName =>
         if (
-          policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
-            .getOrElse(Set.empty)
-            .isEmpty
+          policyName == SamWorkspacePolicyNames.projectOwner
+          && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty
         ) {
           // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
           // the limit of 2000
           Future.successful(())
         } else if (
-          WorkspaceAccessLevels
-            .withPolicyName(policyName.value)
-            .isDefined || policyName == SamWorkspacePolicyNames.canCompute
+          WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined
+          || policyName == SamWorkspacePolicyNames.canCompute
         ) {
           // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
           // granted bucket access (and thus need a google group)
           traceFutureWithParent(s"syncPolicy-$policyName", s1)(_ =>
             samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName)
-          )
+          ).map(_ => ())
         } else {
           Future.successful(())
         }
@@ -1830,12 +1830,13 @@ class WorkspaceService(
 
     for {
       _ <- failIfWorkspaceExists(workspaceRequest.toWorkspaceName)
-      _ <- Applicative[ReadWriteAction].whenA(workspaceRequest.noWorkspaceOwner.contains(true)) {
-        traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentContext) { s =>
-          DBIO.from(requireBillingProjectOwnerAccess(RawlsBillingProjectName(workspaceRequest.namespace), s))
-        }.asInstanceOf[ReadWriteAction[Unit]]
-      }
-
+      _ = DBIO.from(if (workspaceRequest.noWorkspaceOwner.contains(true)) {
+        traceFutureWithParent("maybeRequireBillingProjectOwnerAccess", parentContext) { s =>
+          requireBillingProjectOwnerAccess(RawlsBillingProjectName(workspaceRequest.namespace), s)
+        }
+      } else {
+        Future.successful()
+      })
       workspaceId = UUID.randomUUID.toString
       _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:$workspaceId")
       bucketName = getBucketName(
@@ -1878,11 +1879,10 @@ class WorkspaceService(
         .map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email))
         .toMap
       _ <- DBIO.from {
-        // declare these next two Futures so they start in parallel
-        List(
-          createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, parentContext),
-          syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
-        ).sequence_
+        createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, parentContext)
+      }
+      _ <- DBIO.from {
+        syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
       }
       (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentContext) { span =>
         DBIO.from(
@@ -1993,22 +1993,18 @@ class WorkspaceService(
         )
     }
 
-  def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
-    bucketRegion.traverse_ { region =>
-      // if the user specifies a region for the workspace bucket, it must be in the proper format
-      // for a single region or the default bucket location (US multi region)
-      val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
-      val validUSPattern = "US"
-      ApplicativeThrow[Future].raiseUnless(region.matches(singleRegionPattern) || region.equals(validUSPattern)) {
-        RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadRequest,
-            s"Workspace bucket location must be a single " +
-              s"region of format: $singleRegionPattern or the default bucket location ('US')."
-          )
-        )
-      }
+  def failIfBucketRegionInvalid(bucketRegion: Option[String]): Unit = bucketRegion.foreach { region =>
+    // if the user specifies a region for the workspace bucket, it must be in the proper format
+    // for a single region or the default bucket location (US multi region)
+    val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
+    val validUSPattern = "US"
+    if (!region.matches(singleRegionPattern) && !region.equals(validUSPattern)) {
+      throw RawlsExceptionWithErrorReport(
+        StatusCodes.BadRequest,
+        s"Workspace bucket location must be a single region of format: $singleRegionPattern or the default bucket location ('US')."
+      )
     }
+  }
 
   // A new workspace request may specify the region where the bucket should be created. In the case of cloning a
   // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
