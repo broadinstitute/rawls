@@ -690,7 +690,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
     ): Future[Boolean] = retry(when401or5xx) { () =>
       val callback = new SamApiCallback[java.lang.Boolean]("resourceTypeAdminPermission")
 
-      adminApi(ctx).resourceTypeAdminPermission(resourceTypeName.value, action.value)
+      adminApi(ctx).resourceTypeAdminPermissionAsync(resourceTypeName.value, action.value, callback)
 
       callback.future.map(_.booleanValue())
     }
