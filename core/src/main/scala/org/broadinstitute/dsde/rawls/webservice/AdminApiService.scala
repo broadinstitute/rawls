@@ -44,7 +44,7 @@ trait AdminApiService extends UserInfoDirectives {
         val billingProjectName = RawlsBillingProjectName(projectId)
         get {
           complete {
-            billingAdminServiceConstructor(ctx).getBillingProject(billingProjectName)
+            billingAdminServiceConstructor(ctx).getBillingProject(billingProjectName).map(StatusCodes.OK -> _)
           }
         } ~
         delete {
