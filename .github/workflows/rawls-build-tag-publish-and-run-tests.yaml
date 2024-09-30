@@ -193,7 +193,7 @@ jobs:
           run-name: "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}-${{ matrix.terra-env }}-${{ matrix.testing-env }}-${{ matrix.test-group.group_name }}"
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/DDO-3838-update-owner-scopes
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{
@@ -203,6 +203,7 @@ jobs:
             "ENV": "${{ matrix.testing-env }}",
             "test-group-name": "${{ matrix.test-group.group_name }}",
             "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
+            "e2e-env": "users.env",
             "test-context": "${{ env.test-context }}",
             "ref": "${{ needs.init-github-context.outputs.ref }}"
           }'

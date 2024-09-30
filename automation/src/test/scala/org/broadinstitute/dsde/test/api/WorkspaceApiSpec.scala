@@ -51,8 +51,11 @@ class WorkspaceApiSpec
   val studentAToken: AuthToken = studentA.makeAuthToken()
   val studentBToken: AuthToken = studentB.makeAuthToken()
 
+  val bee = PipelineInjector(PipelineInjector.e2eEnv())
+
   val owner: Credentials = UserPool.chooseProjectOwner
-  val ownerAuthToken: AuthToken = owner.makeAuthToken()
+  val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
+  val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.student.makeAuthToken).get
 
   val operations = Array(
     Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
@@ -98,8 +101,6 @@ class WorkspaceApiSpec
     }
 
     "should set labels on the underlying Google Project when creating a new Workspace" in {
-      val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val billingProjectName =
         s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
       Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
