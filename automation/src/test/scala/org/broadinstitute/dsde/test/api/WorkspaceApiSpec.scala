@@ -54,7 +54,7 @@ class WorkspaceApiSpec
   val bee = PipelineInjector(PipelineInjector.e2eEnv())
 
   val owner: Credentials = UserPool.chooseProjectOwner
-  val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
+  implicit val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
   val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.student.makeAuthToken).get
 
   val operations = Array(
