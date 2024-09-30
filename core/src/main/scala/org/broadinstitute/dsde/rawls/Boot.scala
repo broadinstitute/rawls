@@ -419,7 +419,8 @@ object Boot extends IOApp with LazyLogging {
           appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
-        fastPassServiceConstructor
+        fastPassServiceConstructor,
+        dataRepoDAO
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

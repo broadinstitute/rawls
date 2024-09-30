@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
+import bio.terra.datarepo.model.{PolicyResponse, WorkspacePolicyModel}
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
@@ -55,6 +56,7 @@ import spray.json._
 import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
 import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 
 import java.io.IOException
 import java.util.UUID
@@ -89,7 +91,8 @@ object WorkspaceService {
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
+                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
+                  dataRepoDao: DataRepoDAO
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -117,6 +120,7 @@ object WorkspaceService {
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       (context: RawlsRequestContext) => fastPassServiceConstructor(context, dataSource),
+      dataRepoDao,
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource)
     )
@@ -164,6 +168,7 @@ class WorkspaceService(
   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
   val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
+  val dataRepoDao: DataRepoDAO,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository
 )(implicit protected val executionContext: ExecutionContext)
@@ -574,6 +579,11 @@ class WorkspaceService(
         new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "MC workspaces not supported"))
       )
     }
+    val resourceList =
+      workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, 0, 100, ctx)
+    val snapshotIds = resourceList.getResources.asScala.flatMap { resource =>
+      Option(resource.getResourceAttributes.getGcpDataRepoSnapshot).map(_.getSnapshot)
+    }.toList
 
     for {
       // just a simple db operation now - the extra logging is excessive
@@ -588,6 +598,32 @@ class WorkspaceService(
       // ExecutionContext run the futures whenever
       aborts = traceFutureWithParent("abortRunningWorkflows", parentContext)(_ =>
         Future.traverse(workflowsToAbort)(wf => executionServiceCluster.abort(wf, ctx.userInfo))
+      )
+
+      _ <- traceFutureWithParent("getSnapshotPolicies", parentContext)(_ =>
+        Future
+          .traverse(snapshotIds) { snapshotId =>
+            val filteredWorkspaces =
+              dataRepoDao
+                .retrieveSnapshotPolicies(UUID.fromString(snapshotId), ctx.userInfo.accessToken)
+                .getWorkspaces
+                .asScala
+                .filter(wsPM => wsPM.getWorkspaceId == workspaceContext.workspaceIdAsUUID)
+                .toList
+            logger.info(s"FilteredWorkspaces: $filteredWorkspaces")
+
+            Future.successful {
+              filteredWorkspaces.map { workspace =>
+                workspace.getWorkspacePolicies.asScala.foreach { wsPolicy =>
+                  wsPolicy.getMembers.asScala.foreach { member =>
+                    logger.info(s"removing policyMember: $member")
+                    dataRepoDao.removeSnapshotPolicy(UUID.fromString(snapshotId), member, ctx.userInfo.accessToken)
+
+                  }
+                }
+              }
+            }
+          }
       )
 
       _ <- traceFutureWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
@@ -622,7 +658,9 @@ class WorkspaceService(
       // Delete workflowCollection resource in sam outside of DB transaction
       _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
         workspaceContext.workflowCollectionName
-          .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
+          .map { cn =>
+            samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx)
+          }
           .getOrElse(Future.successful(())) recoverWith {
           case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
             logger.warn(
