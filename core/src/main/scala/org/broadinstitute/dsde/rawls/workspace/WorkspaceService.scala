@@ -497,7 +497,7 @@ class WorkspaceService(
     // attempt to delete workspace in WSM, in case thsi is a TDR snapshot - but don't fail on it
     _ = Try(workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).recover {
       case e: ApiException if e.getCode != StatusCodes.NotFound.intValue =>
-        logger.warn (s"Unexpected failure deleting workspace in WSM for workspace `${workspace.toWorkspaceName}]", e)
+        logger.warn(s"Unexpected failure deleting workspace in WSM for workspace `${workspace.toWorkspaceName}]", e)
     }
     // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
     _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx)(_ =>
