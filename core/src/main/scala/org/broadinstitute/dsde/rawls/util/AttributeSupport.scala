@@ -31,6 +31,16 @@ import scala.concurrent.Future
 
 trait AttributeSupport {
 
+  def validateAttributeNamespace(hasAttributes: Attributable): Unit =
+    attributeNamespaceCheck(hasAttributes.attributes.keys) match {
+      case errors if errors.nonEmpty =>
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.Forbidden,
+          s"Attribute namespace validation failed: [${errors.values.mkString(", ")}]"
+        )
+      case _ => ()
+    }
+
   // note: success is indicated by  Map.empty
   def attributeNamespaceCheck(attributeNames: Iterable[AttributeName]): Map[String, String] = {
     val namespaces = attributeNames.map(_.namespace).toSet

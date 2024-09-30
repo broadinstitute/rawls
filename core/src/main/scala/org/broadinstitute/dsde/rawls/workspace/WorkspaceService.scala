@@ -184,27 +184,18 @@ class WorkspaceService(
   def createWorkspace(workspaceRequest: WorkspaceRequest,
                       parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
-    def failIfPoliciesIncluded(workspaceRequest: WorkspaceRequest): Future[Unit] =
-      workspaceRequest.policies match {
-        case None                               => Future.successful()
-        case Some(policies) if policies.isEmpty => Future.successful()
-        case Some(_) =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, "Policies are not supported for GCP workspaces")
-            )
-          )
-      }
+    // policies are not supported on GCP workspaces
+    workspaceRequest.policies match {
+      case Some(policies) if policies.nonEmpty =>
+        throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Policies are not supported for GCP workspaces")
+      case _ => ()
+    }
+    validateAttributeNamespace(workspaceRequest)
+    failIfBucketRegionInvalid(workspaceRequest.bucketLocation)
     for {
-      _ <- traceFutureWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
-        withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
-      )
-      _ <- failIfBucketRegionInvalid(workspaceRequest.bucketLocation)
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
-      // policies are not supported on GCP workspaces
-      _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       workspace <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
@@ -664,7 +655,7 @@ class WorkspaceService(
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- withLibraryAttributeNamespaceCheck(libraryAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
-      _ <- failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)
+      _ = failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)
       // if bucket location is specified, then we just use that for the destination workspace's bucket location.
       // if bucket location is NOT specified then we want to use the same location as the source workspace.
       // Since the destination workspace's Google project has not been claimed at this point, we cannot charge
@@ -1316,7 +1307,6 @@ class WorkspaceService(
       _ = if (useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
         throw new RawlsException("user has workspace read-only access yet has expected google project permissions")
       }
-
       projectIamResults <- gcsDAO
         .testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
                                 petKey,
