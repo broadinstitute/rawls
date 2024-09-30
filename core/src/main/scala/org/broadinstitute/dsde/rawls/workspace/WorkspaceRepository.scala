@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -50,7 +51,9 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     _.workspaceQuery.getV2WorkspaceId(workspaceName)
   }
 
-  def listWorkspacesByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Seq[Workspace]] = dataSource.inTransaction {
+  def listWorkspacesByIds(workspaceIds: Seq[UUID],
+                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Seq[Workspace]] = dataSource.inTransaction {
     _.workspaceQuery.listV2WorkspacesByIds(workspaceIds, attributeSpecs)
   }
 
@@ -74,6 +77,22 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspaceName)
+    }
+
+  def deleteRawlsWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Delete components of the workspace
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspace)
+
+        // Schedule bucket for deletion
+        _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspace.bucketName))
+
+        // Delete the workspace
+        _ <- dataAccess.workspaceQuery.delete(workspace.toWorkspaceName)
+      } yield ()
     }
 
   def createMCWorkspace(workspaceId: UUID,
@@ -152,13 +171,13 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
 
-  def getSubmissionSummaryStats(workspaceId: UUID)(implicit ex: ExecutionContext): Future[Option[WorkspaceSubmissionStats]] =
+  def getSubmissionSummaryStats(workspaceId: UUID)(implicit
+    ex: ExecutionContext
+  ): Future[Option[WorkspaceSubmissionStats]] =
     dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId))).map(_.values.headOption)
 
   def listSubmissionSummaryStats(workspaceIds: Seq[UUID]): Future[Map[UUID, WorkspaceSubmissionStats]] =
-  dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(workspaceIds))
-
-
+    dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(workspaceIds))
 
   def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
