@@ -5,6 +5,7 @@ import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.test.pipeline._
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
