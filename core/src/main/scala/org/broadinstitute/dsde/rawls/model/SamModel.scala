@@ -93,6 +93,10 @@ object SamServicePerimeterActions {
   val addProject = SamResourceAction("add_project")
 }
 
+object SamResourceTypeAdminActions {
+  val readSummaryInformation = SamResourceAction("admin_read_summary_information")
+}
+
 /*
   Resource policy names
  */

@@ -2213,7 +2213,6 @@ class WorkspaceService(
       throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
-
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
