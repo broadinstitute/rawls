@@ -393,6 +393,7 @@ class WorkspaceServiceSpec
       apiService.cleanupSupervisor
   }
 
+  behavior of "WorkspaceService ACL methods"
   it should "retrieve ACLs" in withTestDataServicesCustomSam { services =>
     populateWorkspacePolicies(services)
 
@@ -710,6 +711,27 @@ class WorkspaceServiceSpec
     }
   }
 
+  it should "invite a user to a workspace" in withTestDataServicesCustomSam { services =>
+    val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
+    val vComplete2 =
+      Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true),
+                   Duration.Inf
+      )
+    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(
+      Set.empty,
+      Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, Some(true), Some(true))),
+      Set.empty
+    )
+
+    assertResult(responseFromUpdate2, "Add ACL shouldn't error") {
+      vComplete2
+    }
+
+    services.samDAO.invitedUsers.keySet should contain theSameElementsAs Set("obama@whitehouse.gov")
+  }
+
+  behavior of "checkSamActionWithLock"
+
   it should "pass sam read action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(
     testData.userReader
   ) { services =>
@@ -804,24 +826,7 @@ class WorkspaceServiceSpec
       }
   }
 
-  it should "invite a user to a workspace" in withTestDataServicesCustomSam { services =>
-    val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
-    val vComplete2 =
-      Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true),
-                   Duration.Inf
-      )
-    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(
-      Set.empty,
-      Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, Some(true), Some(true))),
-      Set.empty
-    )
-
-    assertResult(responseFromUpdate2, "Add ACL shouldn't error") {
-      vComplete2
-    }
-
-    services.samDAO.invitedUsers.keySet should contain theSameElementsAs Set("obama@whitehouse.gov")
-  }
+  behavior of "WorkspaceService catalog methods"
 
   it should "retrieve catalog permission" in withTestDataServicesCustomSam { services =>
     val populateAcl = for {
@@ -908,6 +913,8 @@ class WorkspaceServiceSpec
       )
     )
   }
+
+  behavior of "WorkspaceService workspace locking and unlocking"
 
   it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
     // check workspace is not locked

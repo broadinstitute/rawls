@@ -4,16 +4,19 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
+import org.broadinstitute.dsde.rawls.model._
 
-import scala.collection.Set
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by ahaessly on 3/31/17.
   */
-trait LibraryPermissionsSupport extends RoleSupport {
+trait LibraryPermissionsSupport  {
   val samDAO: SamDAO
+  val gcsDAO: GoogleServicesDAO
+  val ctx: RawlsRequestContext
+  implicit protected val executionContext: ExecutionContext
+
   final val publishedFlag = AttributeName.withLibraryNS("published")
   final val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
@@ -42,19 +45,6 @@ trait LibraryPermissionsSupport extends RoleSupport {
       case x if x.contains(discoverableWSAttribute) => changeDiscoverabilityAndMetadataChecker(workspaceId) _
       case _                                        => changeMetadataChecker(workspaceId) _
     }
-
-  def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
-    val namespaces = attributeNames.map(_.namespace).toSet
-
-    // only allow library namespace
-    val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
-    if (invalidNamespaces.isEmpty) op
-    else {
-      val err =
-        ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
-    }
-  }
 
   private def maybeExecuteOp(canModify: Future[Boolean], cantModifyMessage: String, op: => Future[Workspace]) =
     canModify.flatMap {

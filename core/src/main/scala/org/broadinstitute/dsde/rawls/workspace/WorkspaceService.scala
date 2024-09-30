@@ -33,7 +33,15 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeSupport,
+  BillingProjectSupport,
+  JsonFilterUtils,
+  LibraryPermissionsSupport,
+  UserUtils,
+  UserWiths,
+  WorkspaceSupport
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -133,12 +141,12 @@ object WorkspaceService {
 }
 
 class WorkspaceService(
-  protected val ctx: RawlsRequestContext,
+  val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   executionServiceCluster: ExecutionServiceCluster,
   val workspaceManagerDAO: WorkspaceManagerDAO,
   val leonardoService: LeonardoService,
-  protected val gcsDAO: GoogleServicesDAO,
+  val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
   notificationDAO: NotificationDAO,
   userServiceConstructor: RawlsRequestContext => UserService,
@@ -257,10 +265,9 @@ class WorkspaceService(
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx)
       }
 
-      allStats <- options.anyPresentFuture("workspaceSubmissionStats") {
-        workspaceRepository.listSubmissionSummaryStats(workspace.workspaceIdAsUUID)
+      stats <- options.anyPresentFuture("workspaceSubmissionStats") {
+        workspaceRepository.getSubmissionSummaryStats(workspace.workspaceIdAsUUID)
       }
-      stats = allStats.flatMap(_.values.headOption)
       authDomain <- options.anyPresentFuture("workspace.authorizationDomain", "workspace") {
         loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId)
       }
@@ -283,12 +290,10 @@ class WorkspaceService(
       }
       owners = ownersPolicy.map(policy => policy.memberEmails.map(_.value))
       canShare <- options.anyPresentFuture("canShare") {
-        accessLevel match {
-          case WorkspaceAccessLevels.Read  => Future.successful(false)
-          case WorkspaceAccessLevels.Owner => Future.successful(true)
-          case _ =>
-            val sharePolicy = SamWorkspaceActions.sharePolicy(accessLevel.toString.toLowerCase())
-            samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
+        if (accessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+        else {
+          val sharePolicy = SamWorkspaceActions.sharePolicy(accessLevel.toString.toLowerCase())
+          samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
         }
       }
       wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
@@ -320,12 +325,95 @@ class WorkspaceService(
         options.useAttributes,
         wsmContext.getCloudPlatform
       ),
-      stats,
+      stats.flatten,
       bucketDetails,
       owners,
       wsmContext.azureCloudContext,
       Some(wsmContext.policies)
     )
+  }
+
+  def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
+    val options = processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
+
+    def processDetails(workspace: AggregatedWorkspace,
+                       samResource: SamUserResource,
+                       accessLevel: WorkspaceAccessLevel,
+                       stats: Option[WorkspaceSubmissionStats]
+    ): WorkspaceListResponse = {
+      val workspaceDetails =
+        WorkspaceDetails.fromWorkspaceAndOptions(
+          workspace.baseWorkspace,
+          Option(
+            samResource.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))
+          ),
+          useAttributes = options.attrSpecs.all || options.attrSpecs.attrsToSelect.nonEmpty,
+          workspace.getCloudPlatform
+        )
+
+      val canShare = options.anyPresent("canShare") {
+        accessLevel match {
+          case WorkspaceAccessLevels.Read  => samResource.hasRole(SamWorkspaceRoles.shareReader)
+          case WorkspaceAccessLevels.Write => samResource.hasRole(SamWorkspaceRoles.shareWriter)
+          case _                           => accessLevel > WorkspaceAccessLevels.Write
+        }
+      }
+      val canCompute: Option[Boolean] = options
+        .anyPresent("canCompute") {
+          workspace.getCloudPlatform.map {
+            case WorkspaceCloudPlatform.Azure => accessLevel >= WorkspaceAccessLevels.Write
+            case WorkspaceCloudPlatform.Gcp if accessLevel >= WorkspaceAccessLevels.Owner => true
+            case WorkspaceCloudPlatform.Gcp => samResource.hasRole(SamWorkspaceRoles.canCompute)
+          }
+        }
+        .flatten
+      WorkspaceListResponse(
+        accessLevel,
+        canShare,
+        canCompute,
+        workspaceDetails,
+        stats,
+        samResource.public.roles.nonEmpty || samResource.public.actions.nonEmpty,
+        Some(workspace.policies)
+      )
+    }
+
+    for {
+      workspaceResources <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
+
+      // filter out the resources that do not have any roles related to access levels
+      // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
+      accessLevelWorkspaceResources = workspaceResources.filter(resource =>
+        resource.allRoles.exists(role => WorkspaceAccessLevels.withRoleName(role.value).nonEmpty) &&
+          Try(UUID.fromString(resource.resourceId)).isSuccess
+      )
+      accessLevelWorkspaceUUIDs = accessLevelWorkspaceResources.map(resource => UUID.fromString(resource.resourceId))
+      submissionSummaryStats <- options.anyPresentFuture("workspaceSubmissionStats") {
+        workspaceRepository.listSubmissionSummaryStats(accessLevelWorkspaceUUIDs)
+      }
+      workspaces <- workspaceRepository.listWorkspacesByIds(accessLevelWorkspaceUUIDs, Option(options.attrSpecs))
+      highestAccessLevelByWorkspaceId = accessLevelWorkspaceResources.map { resource =>
+        resource.resourceId -> resource.allRoles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).max
+      }.toMap
+      workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
+      aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
+        .fetchAggregatedWorkspaces(workspaces, ctx)
+        // Filter out workspaces with no cloud contexts
+        .filter(ws => Try(ws.getCloudPlatform).map(context => context.isDefined).getOrElse(false))
+
+      responseWorkspaces = aggregatedWorkspaces.map { wsmContext =>
+        val workspace = wsmContext.baseWorkspace
+        val workspaceResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
+        val accessLevel =
+          if (workspaceResource.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess
+          else highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
+        val stats = submissionSummaryStats.flatMap {
+          _.get(wsmContext.baseWorkspace.workspaceIdAsUUID)
+        }
+        processDetails(wsmContext, workspaceResource, accessLevel, stats)
+      }
+
+    } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
   }
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
@@ -663,7 +751,9 @@ class WorkspaceService(
   ): Future[WorkspaceDetails] =
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        isCurator <- tryIsCurator(ctx.userInfo.userEmail)
+        isCurator <- gcsDAO.isLibraryCurator(ctx.userInfo.userEmail.value) recoverWith { case t =>
+          throw new RawlsException("Unable to query for library curator status.", t)
+        }
         workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
           withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
             dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
@@ -726,159 +816,6 @@ class WorkspaceService(
         .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
       result <- workspaceRepository.getTags(v2WorkspaceIdsForUser, query, limit)
     } yield result
-
-  def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
-    val queryOptions =
-      processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
-    val options = queryOptions.options
-    val attributeSpecs = queryOptions.attrSpecs
-
-    // Can this be shared with get-workspace somehow?
-    val optionsExist = options.nonEmpty
-    val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
-    val attributesEnabled = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
-    val canComputeRequested = options.contains("canCompute")
-    val canShareRequested = options.contains("canShare")
-
-    for {
-      workspaceResources <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
-
-      // filter out the resources that do not have any roles related to access levels
-      // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
-      accessLevelWorkspaceResources = workspaceResources.filter(resource =>
-        resource.allRoles.exists(role => WorkspaceAccessLevels.withRoleName(role.value).nonEmpty) &&
-          Try(UUID.fromString(resource.resourceId)).isSuccess
-      )
-      accessLevelWorkspaceUUIDs = accessLevelWorkspaceResources.map(resource => UUID.fromString(resource.resourceId))
-      result <- dataSource.inTransaction(
-        { dataAccess =>
-          def workspaceSubmissionStatsFuture(): slick.ReadAction[Map[UUID, WorkspaceSubmissionStats]] =
-            if (submissionStatsEnabled) {
-              dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspaceUUIDs)
-            } else {
-              DBIO.from(Future(Map()))
-            }
-
-          val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
-            submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
-            workspaces <- traceDBIOWithParent("listByIds", ctx)(_ =>
-              dataAccess.workspaceQuery.listV2WorkspacesByIds(accessLevelWorkspaceUUIDs, Option(attributeSpecs))
-            )
-          } yield (submissionSummaryStats, workspaces)
-
-          val results = traceDBIOWithParent("finalResults", ctx)(_ =>
-            query.map { case (submissionSummaryStats, workspaces) =>
-              val highestAccessLevelByWorkspaceId =
-                accessLevelWorkspaceResources.map { resource =>
-                  resource.resourceId -> resource.allRoles
-                    .flatMap(role => WorkspaceAccessLevels.withRoleName(role.value))
-                    .max
-                }.toMap
-              val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
-              val aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
-                .fetchAggregatedWorkspaces(workspaces, ctx)
-                // Filter out workspaces with no cloud contexts, logging cloud context exceptions
-                .filter { ws =>
-                  Try(ws.getCloudPlatform)
-                    .map(context => context.isDefined)
-                    .recover { case e: InvalidCloudContextException =>
-                      logger.warn(e.getMessage)
-                      false
-                    }
-                    .get
-                }
-
-              aggregatedWorkspaces.mapFilter { wsmContext =>
-                val workspace = wsmContext.baseWorkspace
-                val wsId = UUID.fromString(workspace.workspaceId)
-                val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
-                val accessLevel =
-                  if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
-                    WorkspaceAccessLevels.NoAccess
-                  } else {
-                    highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
-                  }
-
-                // remove attributes if they were not requested
-                val workspaceDetails =
-                  WorkspaceDetails.fromWorkspaceAndOptions(
-                    workspace,
-                    Option(
-                      workspaceSamResource.authDomainGroups.map(groupName =>
-                        ManagedGroupRef(RawlsGroupName(groupName.value))
-                      )
-                    ),
-                    attributesEnabled,
-                    wsmContext.getCloudPlatform
-                  )
-                // remove submission stats if they were not requested
-                val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-                  Option(submissionSummaryStats(wsId))
-                } else {
-                  None
-                }
-                // only add canCompute and canShare if they were requested
-                val canCompute: Option[Boolean] = if (canComputeRequested) {
-                  wsmContext.getCloudPlatform match {
-                    case None => None
-                    case Some(WorkspaceCloudPlatform.Azure) =>
-                      Option(accessLevel >= WorkspaceAccessLevels.Write)
-                    case _ if accessLevel >= WorkspaceAccessLevels.Owner =>
-                      Option(true)
-                    case _ =>
-                      val canCompute = workspaceSamResource.hasRole(SamWorkspaceRoles.canCompute)
-                      Option(canCompute)
-                  }
-                } else {
-                  None
-                }
-                val canShare: Option[Boolean] = if (canShareRequested) {
-                  accessLevel match {
-                    case _ if accessLevel < WorkspaceAccessLevels.Read => Option(false)
-                    case WorkspaceAccessLevels.Read =>
-                      Option(workspaceSamResource.hasRole(SamWorkspaceRoles.shareReader))
-                    case WorkspaceAccessLevels.Write =>
-                      Option(workspaceSamResource.hasRole(SamWorkspaceRoles.shareWriter))
-                    case _ => Option(true)
-                  }
-                } else {
-                  None
-                }
-
-                // Remove workspaces that are non-ready with no cloud context (Ready workspaces with no
-                // cloud context will throw a WorkspaceAggregationException, which is handled below)
-                wsmContext.getCloudPlatform match {
-                  case None => None
-                  case _ =>
-                    Option(
-                      WorkspaceListResponse(
-                        accessLevel,
-                        canShare,
-                        canCompute,
-                        workspaceDetails,
-                        submissionStats,
-                        workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
-                        Some(wsmContext.policies)
-                      )
-                    )
-                }
-              }
-            }
-          )
-
-          results.map { responses =>
-            if (!optionsExist) {
-              responses.toJson
-            } else {
-              // perform json-filtering of payload
-              deepFilterJsValue(responses.toJson, options)
-            }
-          }
-        },
-        TransactionIsolation.ReadCommitted
-      )
-    } yield result
-  }
 
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
   def cloneWorkspace(sourceWorkspace: Workspace,
@@ -2264,6 +2201,18 @@ class WorkspaceService(
       case (None, None) => Future(Some(config.defaultLocation))
     }
 
+  private def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
+    val namespaces = attributeNames.map(_.namespace).toSet
+
+    // only allow library namespace
+    val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
+    if (invalidNamespaces.isEmpty) op
+    else {
+      val err =
+        ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
+      throw new RawlsExceptionWithErrorReport(errorReport = err)
+    }
+  }
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
