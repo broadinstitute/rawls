@@ -51,7 +51,9 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     _.workspaceQuery.getV2WorkspaceId(workspaceName)
   }
 
-  def listWorkspacesByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Seq[Workspace]] = dataSource.inTransaction {
+  def listWorkspacesByIds(workspaceIds: Seq[UUID],
+                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Seq[Workspace]] = dataSource.inTransaction {
     _.workspaceQuery.listV2WorkspacesByIds(workspaceIds, attributeSpecs)
   }
 
@@ -153,13 +155,13 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
     dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
 
-  def getSubmissionSummaryStats(workspaceId: UUID)(implicit ex: ExecutionContext): Future[Option[WorkspaceSubmissionStats]] =
+  def getSubmissionSummaryStats(workspaceId: UUID)(implicit
+    ex: ExecutionContext
+  ): Future[Option[WorkspaceSubmissionStats]] =
     dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId))).map(_.values.headOption)
 
   def listSubmissionSummaryStats(workspaceIds: Seq[UUID]): Future[Map[UUID, WorkspaceSubmissionStats]] =
-  dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(workspaceIds))
-
-
+    dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(workspaceIds))
 
   def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
