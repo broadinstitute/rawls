@@ -17,12 +17,14 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
   GcpBucketLifecycle,
   GcpBucketRequesterPays,
   GcpBucketSoftDelete,
+  SeparateSubmissionFinalOutputs,
   WorkspaceSettingType
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
@@ -586,6 +588,9 @@ case class GcpBucketSoftDeleteSetting(override val config: GcpBucketSoftDeleteCo
 case class GcpBucketRequesterPaysSetting(override val config: GcpBucketRequesterPaysConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketRequesterPays, config)
 
+case class SeparateSubmissionFinalOutputsSetting(override val config: SeparateSubmissionFinalOutputsConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.SeparateSubmissionFinalOutputs, config)
+
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -593,10 +598,11 @@ object WorkspaceSettingTypes {
   }
 
   def withName(name: String): WorkspaceSettingType = name.toLowerCase match {
-    case "gcpbucketlifecycle"     => GcpBucketLifecycle
-    case "gcpbucketsoftdelete"    => GcpBucketSoftDelete
-    case "gcpbucketrequesterpays" => GcpBucketRequesterPays
-    case _                        => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
+    case "gcpbucketlifecycle"             => GcpBucketLifecycle
+    case "gcpbucketsoftdelete"            => GcpBucketSoftDelete
+    case "gcpbucketrequesterpays"         => GcpBucketRequesterPays
+    case "separatesubmissionfinaloutputs" => SeparateSubmissionFinalOutputs
+    case _                                => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
   case object GcpBucketLifecycle extends WorkspaceSettingType
@@ -604,6 +610,8 @@ object WorkspaceSettingTypes {
   case object GcpBucketSoftDelete extends WorkspaceSettingType
 
   case object GcpBucketRequesterPays extends WorkspaceSettingType
+
+  case object SeparateSubmissionFinalOutputs extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig
@@ -619,6 +627,8 @@ object WorkspaceSettingConfig {
   case class GcpBucketSoftDeleteConfig(retentionDurationInSeconds: Seconds) extends WorkspaceSettingConfig
 
   case class GcpBucketRequesterPaysConfig(enabled: Boolean) extends WorkspaceSettingConfig
+
+  case class SeparateSubmissionFinalOutputsConfig(enabled: Boolean) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1247,6 +1257,10 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val GcpBucketRequesterPaysConfigFormat: RootJsonFormat[GcpBucketRequesterPaysConfig] = jsonFormat1(
     GcpBucketRequesterPaysConfig.apply
   )
+  implicit val SeparateSubmissionFinalOutputsConfigFormat: RootJsonFormat[SeparateSubmissionFinalOutputsConfig] =
+    jsonFormat1(
+      SeparateSubmissionFinalOutputsConfig.apply
+    )
 
   implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
     override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
@@ -1259,9 +1273,10 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit object WorkspaceSettingConfigFormat extends RootJsonFormat[WorkspaceSettingConfig] {
     def write(obj: WorkspaceSettingConfig): JsValue = obj match {
-      case config: GcpBucketLifecycleConfig     => config.toJson
-      case config: GcpBucketSoftDeleteConfig    => config.toJson
-      case config: GcpBucketRequesterPaysConfig => config.toJson
+      case config: GcpBucketLifecycleConfig             => config.toJson
+      case config: GcpBucketSoftDeleteConfig            => config.toJson
+      case config: GcpBucketRequesterPaysConfig         => config.toJson
+      case config: SeparateSubmissionFinalOutputsConfig => config.toJson
     }
 
     // We prevent reading WorkspaceSettingConfig directly because we need
@@ -1285,6 +1300,8 @@ class WorkspaceJsonSupport extends JsonSupport {
         case GcpBucketSoftDelete => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
         case GcpBucketRequesterPays =>
           GcpBucketRequesterPaysSetting(fields("config").convertTo[GcpBucketRequesterPaysConfig])
+        case SeparateSubmissionFinalOutputs =>
+          SeparateSubmissionFinalOutputsSetting(fields("config").convertTo[SeparateSubmissionFinalOutputsConfig])
         case _ => throw DeserializationException(s"unexpected setting type $settingType")
       }
     }
