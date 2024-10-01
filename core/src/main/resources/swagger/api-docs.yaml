@@ -6763,9 +6763,80 @@ components:
       type: object
       properties:
         billingProject:
-          type: string
+          $ref: '#/components/schemas/RawlsBillingProject'
         workspaces:
+          type: object
+          additionalProperties:
+            type: string
+            format: uuid
+          example:
+            "workspace1": "00000000-0000-0000-0000-000000000000"
+            "workspace2": "11111111-1111-1111-1111-111111111111"
+          description: "workspaces in the billing project with their IDs"
+    RawlsBillingProject:
+      required:
+        - projectName
+        - status
+        - invalidBillingAccount
+      type: object
+      description: internal representation of a billing project, returned by admin API only
+      properties:
+        projectName:
           type: string
+          description: the name of the project
+        billingAccount:
+          type: string
+          description: the billing account to use in google projects
+        invalidBillingAccount:
+          type: boolean
+          description: whether or not the billing account is usable by Terra
+        status:
+          type: string
+          enum:
+            - Creating
+            - Ready
+            - Error
+            - Deleting
+            - DeletionFailed
+            - AddingToPerimeter
+            - CreatingLandingZone
+          description: the status of allocating the billing project's resources.
+        message:
+          type: string
+          description: informational message about the project
+        azureManagedAppCoordinates:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
+        cloudPlatform:
+          type: string
+          enum:
+            - GCP
+            - AZURE
+            - UNKNOWN
+        landingZoneId:
+          type: string
+          format: uuid
+          description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        billingProfileId:
+          type: string
+          description: the billing profile ID associated with the project
+        cromwellBackend:
+          type: string
+          description: the cromwell backend to use for this billing project
+        servicePerimeter:
+          type: string
+          description: the name of the service perimeter for this billing project
+        googleProjectNumber:
+          type: string
+          description: the google project number for this billing project
+        spendReportDataset:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data
+        spendReportTable:
+          type: string
+          description: the name of the BigQuery table containing project spend data
+        spendReportDatasetGoogleProject:
+          type: string
+          description: the name of the Google Project where the BigQuery dataset resides
     RawlsBillingProjectResponse:
       required:
         - projectName
