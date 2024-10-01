@@ -334,7 +334,9 @@ class UserAuthJsonSupport extends JsonSupport {
     RawlsBillingProjectOrganization.apply
   )
 
-  implicit val billingProjectAdminResponse: RootJsonFormat[BillingProjectAdminResponse] = jsonFormat2(BillingProjectAdminResponse)
+  implicit val billingProjectAdminResponse: RootJsonFormat[BillingProjectAdminResponse] = jsonFormat2(
+    BillingProjectAdminResponse
+  )
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
     jsonFormat13(RawlsBillingProjectResponse.apply)
