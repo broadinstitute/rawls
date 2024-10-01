@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.billing.BillingAdminService
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceAdminService
@@ -339,5 +340,32 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
 
     verify(workspaceAdminService).getWorkspaceById(workspaceId)
+  }
+
+  it should "get a billing project with a list of its workspaces" in {
+    val billingProjectName = RawlsBillingProjectName("project")
+    val billingAdminService = mock[BillingAdminService]
+
+    when(billingAdminService.getBillingProject(billingProjectName)).thenReturn(
+      Future.successful(
+        BillingProjectAdminResponse(
+          RawlsBillingProject(billingProjectName,
+                              CreationStatuses.Ready,
+                              Option(RawlsBillingAccountName("account")),
+                              None
+          ),
+          Map("ws1" -> UUID.randomUUID, "ws2" -> UUID.randomUUID)
+        )
+      )
+    )
+    val service = new MockApiService(billingAdminServiceConstructor = _ => billingAdminService)
+
+    Get(
+      s"/admin/billing/${billingProjectName.value}"
+    ) ~> service.testRoutes ~> check {
+      assertResult(StatusCodes.OK)(status)
+    }
+
+    verify(billingAdminService).getBillingProject(billingProjectName)
   }
 }

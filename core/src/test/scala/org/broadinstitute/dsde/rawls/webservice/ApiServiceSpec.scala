@@ -286,6 +286,11 @@ trait ApiServiceSpec
       spendReportingServiceConfig
     )
 
+    override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
+      new BillingAdminService(samDAO, billingRepository, new WorkspaceRepository(slickDataSource), _)(
+        testExecutionContext
+      )
+
     override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
       BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)
 
