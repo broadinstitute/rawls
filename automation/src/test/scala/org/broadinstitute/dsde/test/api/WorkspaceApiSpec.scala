@@ -253,7 +253,7 @@ class WorkspaceApiSpec
           intercept[RestException] {
             Orchestration.workspaces.create(billingProject, workspaceName, Set.empty, Option(invalidRegion))
           }.message.parseJson.asJsObject
-        }(owner.makeAuthToken(billingScopes))
+        }(owner.makeAuthToken(AuthTokenScopes.billingScopes))
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
         exception.fields("message").convertTo[String] should startWith(
