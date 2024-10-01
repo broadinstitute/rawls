@@ -4,7 +4,14 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{ErrorReport, _}
+import bio.terra.workspace.model.{
+  AzureContext,
+  IamRole,
+  RoleBinding,
+  RoleBindingList,
+  WorkspaceDescription,
+  WorkspaceStageModel
+}
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
