@@ -238,7 +238,6 @@ class WorkspaceApiSpec
       }
 
       "to get an error message when they try to create a workspace with a bucket region that is invalid" ignore {
-        implicit val token: AuthToken = ownerAuthToken
         // Note that this invalid region passes the regexp in `withWorkspaceBucketRegionCheck`, so workspace creation is
         // attempted and fails with the bucket creation error. However, due to bug WOR-296, `withTemporaryBillingProject`
         // is unable to delete the temporary project, causing the test to fail (when this test was first introduced,
@@ -253,7 +252,7 @@ class WorkspaceApiSpec
           intercept[RestException] {
             Orchestration.workspaces.create(billingProject, workspaceName, Set.empty, Option(invalidRegion))
           }.message.parseJson.asJsObject
-        }(owner.makeAuthToken(AuthTokenScopes.billingScopes))
+        }(owner.makeAuthToken(billingScopes))
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
         exception.fields("message").convertTo[String] should startWith(
