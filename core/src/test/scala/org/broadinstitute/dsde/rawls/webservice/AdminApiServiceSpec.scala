@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceAdminService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{
   ActiveSubmissionFormat,
   WorkflowQueueStatusByUserResponseFormat
@@ -14,9 +15,11 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeRefere
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
 
-import scala.concurrent.ExecutionContext
+import java.util.UUID
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Created by tsharpe on 9/28/15.
@@ -315,4 +318,26 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "get a workspace with its current settings" in {
+    val workspaceId = UUID.randomUUID
+    val workspaceAdminService = mock[WorkspaceAdminService]
+
+    when(workspaceAdminService.getWorkspaceById(workspaceId)).thenReturn(
+      Future.successful(
+        WorkspaceAdminResponse(
+          WorkspaceDetails.fromWorkspaceAndOptions(constantData.workspace, None, useAttributes = false),
+          List.empty
+        )
+      )
+    )
+    val service = new MockApiService(workspaceAdminServiceConstructor = _ => workspaceAdminService)
+
+    Get(
+      s"/admin/workspaces/$workspaceId"
+    ) ~> service.testRoutes ~> check {
+      assertResult(StatusCodes.OK)(status)
+    }
+
+    verify(workspaceAdminService).getWorkspaceById(workspaceId)
+  }
 }
