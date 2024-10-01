@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -18,7 +19,6 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
-import slick.dbio.DBIO
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -77,6 +77,22 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.delete(workspaceName)
+    }
+
+  def deleteRawlsWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Delete components of the workspace
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspace)
+
+        // Schedule bucket for deletion
+        _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspace.bucketName))
+
+        // Delete the workspace
+        _ <- dataAccess.workspaceQuery.delete(workspace.toWorkspaceName)
+      } yield ()
     }
 
   def createMCWorkspace(workspaceId: UUID,
