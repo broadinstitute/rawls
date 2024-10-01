@@ -134,7 +134,7 @@ object RawlsBillingProjectResponse {
   )
 }
 
-case class BillingProjectAdminResponse(billingProject: RawlsBillingProject, workspaces: Map[WorkspaceName, UUID])
+case class BillingProjectAdminResponse(billingProject: RawlsBillingProject, workspaces: Map[String, UUID])
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 

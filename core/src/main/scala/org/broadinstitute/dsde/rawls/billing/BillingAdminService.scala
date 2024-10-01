@@ -29,6 +29,6 @@ class BillingAdminService(samDAO: SamDAO, billingRepository: BillingRepository, 
       _ = logger.info(s"gettingWorkspaces")
       workspaces <- workspaceRepository.listWorkspacesByBillingProject(billingProjectName)
       _ = logger.info(s"workspaces: $workspaces")
-    } yield BillingProjectAdminResponse(billingProject, workspaces.map(ws => (ws.toWorkspaceName, ws.workspaceIdAsUUID)).toMap)
+    } yield BillingProjectAdminResponse(billingProject, workspaces.map(ws => (ws.toWorkspaceName.toString, ws.workspaceIdAsUUID)).toMap)
   }
 }
