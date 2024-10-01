@@ -6786,32 +6786,19 @@ components:
           description: the name of the project
         billingAccount:
           type: string
-          description: the billing account to use in google projects
+          description: the billing account to use in google projects (cloudPlatform GCP only)
         invalidBillingAccount:
           type: boolean
           description: whether or not the billing account is usable by Terra
         status:
-          type: string
-          enum:
-            - Creating
-            - Ready
-            - Error
-            - Deleting
-            - DeletionFailed
-            - AddingToPerimeter
-            - CreatingLandingZone
-          description: the status of allocating the billing project's resources.
+          $ref: '#/components/schemas/BillingProjectStatus'
         message:
           type: string
           description: informational message about the project
         azureManagedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
         cloudPlatform:
-          type: string
-          enum:
-            - GCP
-            - AZURE
-            - UNKNOWN
+          $ref: '#/components/schemas/BillingProjectCloudPlatform'
         landingZoneId:
           type: string
           format: uuid
@@ -6824,19 +6811,19 @@ components:
           description: the cromwell backend to use for this billing project
         servicePerimeter:
           type: string
-          description: the name of the service perimeter for this billing project
+          description: the name of the service perimeter for this billing project (cloudPlatform GCP only)
         googleProjectNumber:
           type: string
-          description: the google project number for this billing project
+          description: the google project number for this billing project (cloudPlatform GCP only)
         spendReportDataset:
           type: string
-          description: the name of the BigQuery dataset containing project spend data
+          description: the name of the BigQuery dataset containing project spend data (cloudPlatform GCP only)
         spendReportTable:
           type: string
-          description: the name of the BigQuery table containing project spend data
+          description: the name of the BigQuery table containing project spend data (cloudPlatform GCP only)
         spendReportDatasetGoogleProject:
           type: string
-          description: the name of the Google Project where the BigQuery dataset resides
+          description: the name of the Google Project where the BigQuery dataset resides (cloudPlatform GCP only)
     RawlsBillingProjectResponse:
       required:
         - projectName
@@ -6862,27 +6849,14 @@ components:
             $ref: '#/components/schemas/ProjectRole'
           description: the roles the caller has on the project
         status:
-          type: string
-          enum:
-            - Creating
-            - Ready
-            - Error
-            - Deleting
-            - DeletionFailed
-            - AddingToPerimeter
-            - CreatingLandingZone
-          description: the status of allocating the billing project's resources.
+          $ref: '#/components/schemas/BillingProjectStatus'
         message:
           type: string
           description: informational message about the project
         azureManagedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
         cloudPlatform:
-          type: string
-          enum:
-            - GCP
-            - AZURE
-            - UNKNOWN
+          $ref: '#/components/schemas/BillingProjectCloudPlatform'
         landingZoneId:
           type: string
           format: uuid
@@ -6895,6 +6869,24 @@ components:
           description: whether this billing project supports protected data (cloudPlatform AZURE only)
         organization:
           $ref: '#/components/schemas/RawlsBillingProjectOrganization'
+    BillingProjectStatus:
+      type: string
+      enum:
+        - Creating
+        - Ready
+        - Error
+        - Deleting
+        - DeletionFailed
+        - AddingToPerimeter
+        - CreatingLandingZone
+      description: the status of allocating the billing project's resources.
+    BillingProjectCloudPlatform:
+      type: string
+      enum:
+        - GCP
+        - AZURE
+        - UNKNOWN
+      description: the cloud platform of the billing project
     AzureManagedAppCoordinates:
       required:
         - tenantId
