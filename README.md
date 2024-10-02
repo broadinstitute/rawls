@@ -133,8 +133,7 @@ Running the `publishRelease.sh` script publishes a release of rawls-model, workb
 You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 
 Note: We have started just using the automatically generated `-SNAP` versions published by [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml) on every dev build. Here are detailed instructions for finding the name of the jar file:
-* Navigate to the [`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml).
-  github action for your commit
+* Navigate to the [`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml) github action for your commit
 * Navigate to the rawls-build-publish-job job of that workflow
 * Open the "dispatch build" step, and click over to the run in terra-github-workflows
 * Expand the "Publish model library" step
