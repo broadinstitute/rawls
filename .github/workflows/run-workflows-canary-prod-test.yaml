@@ -26,8 +26,7 @@ jobs:
   report-workflow:
     uses: broadinstitute/sherlock/.github/workflows/client-report-workflow.yaml@main
     with:
-#      notify-slack-channels-upon-workflow-failure: "#batch-servers"
-      notify-slack-channels-upon-workflow-completion: "#batch-servers" #use failure instead before merging
-      notify-slack-custom-icon: ":terra:"
+      notify-slack-channels-upon-workflow-failure: "#batch-servers"
+      notify-slack-custom-icon: ":sad-terra:"
     permissions:
       id-token: write
