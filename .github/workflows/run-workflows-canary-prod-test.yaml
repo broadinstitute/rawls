@@ -3,8 +3,8 @@ name: run-workflows-canary-prod-test
   schedule:
     - cron: "0 * * * *"  # run hourly
   workflow_dispatch:
-  push: #remove this before merging
-    branches: [ sps_canary_gha ]
+#  push: #remove this before merging
+#    branches: [ sps_canary_gha ]
   pull_request: #remove this before merging
     branches: [ develop ]
 
@@ -27,6 +27,7 @@ jobs:
     uses: broadinstitute/sherlock/.github/workflows/client-report-workflow.yaml@main
     with:
 #      notify-slack-channels-upon-workflow-failure: "#batch-servers"
-      notify-slack-channels-upon-workflow-completion: "#cromwell_jenkins_ci_errors" #use failure instead before merging
+      notify-slack-channels-upon-workflow-completion: "#batch-servers" #use failure instead before merging
+      notify-slack-custom-icon: ":terra:"
     permissions:
       id-token: write
