@@ -44,18 +44,20 @@ trait AdminApiService extends UserInfoDirectives {
         val billingProjectName = RawlsBillingProjectName(projectId)
         get {
           complete {
-            billingAdminServiceConstructor(ctx).getBillingProject(billingProjectName).map(StatusCodes.OK -> _)
+            billingAdminServiceConstructor(ctx)
+              .getBillingProjectSupportSummary(billingProjectName)
+              .map(StatusCodes.OK -> _)
           }
         } ~
-        delete {
-          entity(as[Map[String, String]]) { ownerInfo =>
-            complete {
-              userServiceConstructor(ctx)
-                .adminDeleteBillingProject(billingProjectName, ownerInfo)
-                .map(_ => StatusCodes.NoContent)
+          delete {
+            entity(as[Map[String, String]]) { ownerInfo =>
+              complete {
+                userServiceConstructor(ctx)
+                  .adminDeleteBillingProject(billingProjectName, ownerInfo)
+                  .map(_ => StatusCodes.NoContent)
+              }
             }
           }
-        }
       } ~
         path("admin" / "submissions") {
           get {

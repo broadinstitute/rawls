@@ -100,7 +100,8 @@ class BillingAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
         workspaceRepository = workspaceRepository
       )
 
-    val returnedBillingProject = Await.result(service.getBillingProject(billingProject.projectName), Duration.Inf)
+    val returnedBillingProject =
+      Await.result(service.getBillingProjectSupportSummary(billingProject.projectName), Duration.Inf)
     returnedBillingProject shouldEqual BillingProjectAdminResponse(billingProject,
                                                                    Map(workspace.name -> workspace.workspaceIdAsUUID)
     )
@@ -121,7 +122,7 @@ class BillingAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     val service = billingAdminServiceConstructor(samDAO = samDAO)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getBillingProject(RawlsBillingProjectName("project")), Duration.Inf)
+      Await.result(service.getBillingProjectSupportSummary(RawlsBillingProjectName("project")), Duration.Inf)
     }
     exception.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
   }
@@ -149,7 +150,7 @@ class BillingAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
       )
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getBillingProject(projectName), Duration.Inf)
+      Await.result(service.getBillingProjectSupportSummary(projectName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldEqual Option(StatusCodes.NotFound)
   }

@@ -346,7 +346,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val billingProjectName = RawlsBillingProjectName("project")
     val billingAdminService = mock[BillingAdminService]
 
-    when(billingAdminService.getBillingProject(billingProjectName)).thenReturn(
+    when(billingAdminService.getBillingProjectSupportSummary(billingProjectName)).thenReturn(
       Future.successful(
         BillingProjectAdminResponse(
           RawlsBillingProject(billingProjectName,
@@ -366,6 +366,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       assertResult(StatusCodes.OK)(status)
     }
 
-    verify(billingAdminService).getBillingProject(billingProjectName)
+    verify(billingAdminService).getBillingProjectSupportSummary(billingProjectName)
   }
 }

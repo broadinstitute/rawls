@@ -23,7 +23,9 @@ class BillingAdminService(samDAO: SamDAO,
 )(implicit protected val ec: ExecutionContext)
     extends LazyLogging {
 
-  def getBillingProject(billingProjectName: RawlsBillingProjectName): Future[BillingProjectAdminResponse] =
+  def getBillingProjectSupportSummary(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[BillingProjectAdminResponse] =
     for {
       userIsAdmin <- samDAO.admin.userHasResourceTypeAdminPermission(SamResourceTypeNames.billingProject,
                                                                      SamResourceTypeAdminActions.readSummaryInformation,
