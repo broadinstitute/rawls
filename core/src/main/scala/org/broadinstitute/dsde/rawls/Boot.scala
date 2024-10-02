@@ -518,6 +518,9 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
+      val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
+        new BillingAdminService(samDAO, billingRepository, workspaceRepository, _)
+
       val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
         BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
 
@@ -532,6 +535,7 @@ object Boot extends IOApp with LazyLogging {
         workspaceSettingServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,
+        billingAdminServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
