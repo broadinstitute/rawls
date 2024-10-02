@@ -73,7 +73,6 @@ class WorkspaceApiSpec
     // disabled, see WOR-1323
     "should add workspace Google project to billing project's service perimeter" ignore {
       val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
       val servicePerimeterName = "automation_test_perimeter"
       val fullyQualifiedServicePerimeterId =
@@ -143,9 +142,6 @@ class WorkspaceApiSpec
     }
 
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
-      val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken =
-        owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
       withTemporaryBillingProject(billingAccountId) { billingProjectName =>
         withCleanUp {
           val workspaceName = prependUUID("rbs-project-iam-test")
@@ -200,8 +196,6 @@ class WorkspaceApiSpec
 
     "should allow project owners" - {
       "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
-        val owner: Credentials = UserPool.chooseProjectOwner
-        implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
         withTemporaryBillingProject(billingAccountId) { billingProjectName =>
           val workspaceName = prependUUID("rbs-delete-workspace")
 
@@ -252,7 +246,7 @@ class WorkspaceApiSpec
           intercept[RestException] {
             Orchestration.workspaces.create(billingProject, workspaceName, Set.empty, Option(invalidRegion))
           }.message.parseJson.asJsObject
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
         exception.fields("message").convertTo[String] should startWith(
@@ -309,7 +303,7 @@ class WorkspaceApiSpec
                 Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
             }(ownerAuthToken)
           }(user.makeAuthToken(billingScopes))
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
       }
     }
 
@@ -358,7 +352,7 @@ class WorkspaceApiSpec
               }(ownerAuthToken)
             }(ownerAuthToken)
           }(ownerAuthToken)
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
       }
 
       "to import method configs from the method repo" in {
@@ -394,7 +388,7 @@ class WorkspaceApiSpec
               }
             }(ownerAuthToken)
           }(ownerAuthToken)
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
       }
     }
   }
