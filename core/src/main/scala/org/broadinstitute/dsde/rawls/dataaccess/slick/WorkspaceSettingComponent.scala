@@ -3,12 +3,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   GcpBucketLifecycleConfigFormat,
   GcpBucketRequesterPaysConfigFormat,
-  GcpBucketSoftDeleteConfigFormat
+  GcpBucketSoftDeleteConfigFormat,
+  SeparateSubmissionFinalOutputsConfigFormat
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
@@ -65,6 +67,10 @@ object WorkspaceSettingRecord {
         GcpBucketSoftDeleteSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig])
       case WorkspaceSettingTypes.GcpBucketRequesterPays =>
         GcpBucketRequesterPaysSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketRequesterPaysConfig])
+      case WorkspaceSettingTypes.SeparateSubmissionFinalOutputs =>
+        SeparateSubmissionFinalOutputsSetting(
+          workspaceSettingRecord.config.parseJson.convertTo[SeparateSubmissionFinalOutputsConfig]
+        )
     }
   }
 }

@@ -1,21 +1,25 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.NoSuchWorkspaceException
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeValue,
+  ErrorReport,
   ErrorReportSource,
   ManagedGroupRef,
   RawlsGroupName,
   RawlsRequestContext,
+  SamResourceTypeAdminActions,
   SamResourceTypeName,
   SamResourceTypeNames,
   Workspace,
+  WorkspaceAdminResponse,
   WorkspaceAttributeSpecs,
   WorkspaceDetails,
   WorkspaceFeatureFlag,
@@ -23,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util._
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
@@ -40,7 +45,8 @@ object WorkspaceAdminService {
       gcsDAO,
       samDAO,
       workbenchMetricBaseName,
-      new WorkspaceRepository(dataSource)
+      new WorkspaceRepository(dataSource),
+      new WorkspaceSettingRepository(dataSource)
     )
 }
 
@@ -50,7 +56,8 @@ class WorkspaceAdminService(
   protected val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
   override val workbenchMetricBaseName: String,
-  val workspaceRepository: WorkspaceRepository
+  val workspaceRepository: WorkspaceRepository,
+  val workspaceSettingRepository: WorkspaceSettingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented
@@ -110,6 +117,25 @@ class WorkspaceAdminService(
         }
       }
     }
+
+  def getWorkspaceById(workspaceId: UUID): Future[WorkspaceAdminResponse] =
+    for {
+      userIsAdmin <- samDAO.admin
+        .userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
+                                            SamResourceTypeAdminActions.readSummaryInformation,
+                                            ctx
+        )
+      _ = if (!userIsAdmin)
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.Forbidden, "You must be an admin to call this API.")
+        )
+      workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
+      workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
+      settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
+    } yield WorkspaceAdminResponse(
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
+      settings
+    )
 
   // moved out of WorkspaceSupport because the only usage was in this file,
   // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport

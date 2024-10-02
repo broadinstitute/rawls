@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceAdminService
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait AdminApiService extends UserInfoDirectives {
@@ -211,21 +212,34 @@ trait AdminApiService extends UserInfoDirectives {
                 }
             }
         } ~
-        path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceAdminServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
-                WorkspaceName(workspaceNamespace, workspaceName)
-              )
+        pathPrefix("admin" / "workspaces") {
+          pathPrefix(Segment / Segment) { (workspaceNamespace, workspaceName) =>
+            path("flags") {
+              get {
+                complete {
+                  workspaceAdminServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
+                    WorkspaceName(workspaceNamespace, workspaceName)
+                  )
+                }
+              } ~
+                put {
+                  entity(as[List[String]]) { flagNames =>
+                    complete {
+                      workspaceAdminServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(
+                        WorkspaceName(workspaceNamespace, workspaceName),
+                        flagNames
+                      )
+                    }
+                  }
+                }
             }
           } ~
-            put {
-              entity(as[List[String]]) { flagNames =>
+            path(Segment) { workspaceId =>
+              get {
                 complete {
-                  workspaceAdminServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(
-                    WorkspaceName(workspaceNamespace, workspaceName),
-                    flagNames
-                  )
+                  workspaceAdminServiceConstructor(ctx)
+                    .getWorkspaceById(UUID.fromString(workspaceId))
+                    .map(StatusCodes.OK -> _)
                 }
               }
             }
