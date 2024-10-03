@@ -1874,7 +1874,7 @@ class WorkspaceServiceUnitTests
     thrown.errorReport.message shouldBe "you do not have sufficient permissions to make these changes"
   }
 
-  it should "verify the calling user is not trying to change roles higher than their own" in {
+  it should "verify the calling user is not trying to change access levels higher than their own" in {
     val projectOwnerEmail = "projectOwner@example.com"
     val ownerEmail = "owner@example.com"
     val readerEmail = "reader@example.com"
@@ -1936,7 +1936,7 @@ class WorkspaceServiceUnitTests
     val thrown = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
     }
-    thrown.errorReport.message shouldBe "do not have access to change permissions for this workspace"
+    thrown.errorReport.message shouldBe "you do not have access to change permissions for this workspace"
   }
 
   behavior of "getBucketUsage"
