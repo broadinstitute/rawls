@@ -1080,6 +1080,33 @@ class WorkspaceService(
                                  workspace: Workspace
   ): Unit = {
     val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
+    val currentUserAcl = existingAcls.find(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))
+    if (currentUserAcl.exists(_.accessLevel == WorkspaceAccessLevels.NoAccess) || currentUserAcl.isEmpty) {
+      throw new InvalidWorkspaceAclUpdateException(
+        ErrorReport(StatusCodes.BadRequest, "do not have access to change permissions for this workspace")
+      )
+    }
+    // Add the existingAcl entries that are being modified so we can check what we will
+    // be removing as well as what we are adding.
+    val allRolePermissionChanges =
+      aclChanges ++ existingAcls.filter(existingAcl => emailsBeingChanged.contains(existingAcl.email.toLowerCase))
+    if (currentUserAcl.exists(_.accessLevel < WorkspaceAccessLevels.Owner)) {
+      val invalidAclUpdates = allRolePermissionChanges.collect {
+        case aclChange if aclChange.accessLevel > currentUserAcl.get.accessLevel =>
+          "cannot change roles higher than your own"
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
+          "cannot change reader share access"
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
+          "cannot change writer share access"
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
+          "cannot change writer can compute access"
+      }.toSeq
+      if (invalidAclUpdates.nonEmpty) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you do not have sufficient permissions to make these changes")
+        )
+      }
+    }
     if (
       aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
         existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)

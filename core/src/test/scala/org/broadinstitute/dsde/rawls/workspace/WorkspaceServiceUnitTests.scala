@@ -1573,7 +1573,7 @@ class WorkspaceServiceUnitTests
   behavior of "updateAcl"
   it should "call Sam for Rawls workspaces" in {
     val projectOwnerEmail = "projectOwner@example.com"
-    val ownerEmail = "owner@example.com"
+    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1630,7 +1630,7 @@ class WorkspaceServiceUnitTests
   }
 
   it should "call WSM for McWorkspaces" in {
-    val ownerEmail = "owner@example.com"
+    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1682,7 +1682,6 @@ class WorkspaceServiceUnitTests
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val workspaceId = UUID.randomUUID()
 
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
     val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace)
@@ -1706,7 +1705,6 @@ class WorkspaceServiceUnitTests
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val workspaceId = UUID.randomUUID()
 
     val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
     val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace)
@@ -1753,7 +1751,7 @@ class WorkspaceServiceUnitTests
 
   it should "not allow readers to have compute access but should allow writers for Rawls workspaces" in {
     val projectOwnerEmail = "projectOwner@example.com"
-    val ownerEmail = "owner@example.com"
+    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1784,7 +1782,7 @@ class WorkspaceServiceUnitTests
 
   it should "allow readers with and without share access for Rawls workspaces" in {
     val projectOwnerEmail = "projectOwner@example.com"
-    val ownerEmail = "owner@example.com"
+    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1809,6 +1807,136 @@ class WorkspaceServiceUnitTests
     )
 
     Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+  }
+
+  it should "not allow users to change their own ACL" in {
+    val projectOwnerEmail = "projectOwner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+
+    val callingUserEmail = ctx.userInfo.userEmail.value
+
+    val samDAO = mockSamForAclTests()
+    // Mock caller being an owner.
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, callingUserEmail, writerEmail, readerEmail))
+    )
+
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
+
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                              samDAO = samDAO,
+                                              fastPassServiceConstructor = _ => mockFastPassService
+    )(ctx)
+
+    val aclUpdate = Set(
+      WorkspaceACLUpdate(callingUserEmail, WorkspaceAccessLevels.Read, Option(true), Option(false))
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+    }
+    thrown.errorReport.message shouldBe "you may not change your own permissions"
+  }
+
+  it should "verify the calling user has sufficient permissions to modify canCompute and canShare" in {
+    val projectOwnerEmail = "projectOwner@example.com"
+    val ownerEmail = "owner@example.com"
+    val readerEmail = "reader@example.com"
+
+    val callingUserEmail = ctx.userInfo.userEmail.value
+
+    val samDAO = mockSamForAclTests()
+    // Mock caller being a writer.
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, callingUserEmail, readerEmail))
+    )
+
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
+
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                              samDAO = samDAO,
+                                              fastPassServiceConstructor = _ => mockFastPassService
+    )(ctx)
+
+    // Try to give the reader canShare privileges (did not have it previously)
+    val aclUpdate = Set(
+      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false))
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+    }
+    thrown.errorReport.message shouldBe "you do not have sufficient permissions to make these changes"
+  }
+
+  it should "verify the calling user is not trying to change roles higher than their own" in {
+    val projectOwnerEmail = "projectOwner@example.com"
+    val ownerEmail = "owner@example.com"
+    val readerEmail = "reader@example.com"
+
+    val callingUserEmail = ctx.userInfo.userEmail.value
+
+    val samDAO = mockSamForAclTests()
+    // Mock caller being a writer.
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, callingUserEmail, readerEmail))
+    )
+
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
+
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                              samDAO = samDAO,
+                                              fastPassServiceConstructor = _ => mockFastPassService
+    )(ctx)
+
+    // Try to change owner to be a reader.
+    val aclUpdate = Set(
+      WorkspaceACLUpdate(ownerEmail, WorkspaceAccessLevels.Read, Option(false), Option(false))
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+    }
+    thrown.errorReport.message shouldBe "you do not have sufficient permissions to make these changes"
+  }
+
+  it should "verify the calling user has access on the workspace" in {
+    val projectOwnerEmail = "projectOwner@example.com"
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+
+    val samDAO = mockSamForAclTests()
+
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      // Note that calling user is not included
+      Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
+    )
+
+    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.RawlsWorkspace)
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String])).thenReturn(Future())
+
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository,
+                                              samDAO = samDAO,
+                                              fastPassServiceConstructor = _ => mockFastPassService
+    )(ctx)
+
+    val aclUpdate = Set(
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false))
+    )
+
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdate, true), Duration.Inf)
+    }
+    thrown.errorReport.message shouldBe "do not have access to change permissions for this workspace"
   }
 
   behavior of "getBucketUsage"
