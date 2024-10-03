@@ -63,16 +63,16 @@ object HealthMonitor {
     Props(
       new HealthMonitor(
         List(
-          (Agora, checkAgora(methodRepoDAO)),
-          (Cromwell, checkCromwell(executionServiceServers)),
+          // (Agora, checkAgora(methodRepoDAO)),
+          // (Cromwell, checkCromwell(executionServiceServers)),
           (Database, checkDB(slickDataSource)),
-          (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
-          (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
-          (GoogleGenomics, checkGoogleGenomics(googleServicesDAO)),
-          (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
-          (Sam, checkSam(samDAO)),
-          (BillingProfileManager, checkBPM(billingProfileManagerDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+//          (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
+//          (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
+//          (GoogleGenomics, checkGoogleGenomics(googleServicesDAO)),
+//          (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
+          (Sam, checkSam(samDAO))
+          // (BillingProfileManager, checkBPM(billingProfileManagerDAO))
+          // (WorkspaceManager, checkWSM(workspaceManagerDAO))
         ),
         futureTimeout,
         staleThreshold
