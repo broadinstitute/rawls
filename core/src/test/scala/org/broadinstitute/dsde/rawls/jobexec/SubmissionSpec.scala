@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -538,7 +538,8 @@ class SubmissionSpec(_system: ActorSystem)
         mockSubmissionCostService,
         genomicsServiceConstructor,
         workspaceServiceConfig,
-        new WorkspaceRepository(slickDataSource)
+        new WorkspaceRepository(slickDataSource),
+        new WorkspaceSettingRepository(slickDataSource),
       ) _
       lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(testContext)
       try

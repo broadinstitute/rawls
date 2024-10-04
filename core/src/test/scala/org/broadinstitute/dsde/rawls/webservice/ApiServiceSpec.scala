@@ -443,7 +443,8 @@ trait ApiServiceSpec
       submissionCostService,
       genomicsServiceConstructor,
       workspaceServiceConfig,
-      new WorkspaceRepository(slickDataSource)
+      new WorkspaceRepository(slickDataSource),
+      new WorkspaceSettingRepository(slickDataSource)
     ) _
 
     override val entityServiceConstructor = EntityService.constructor(

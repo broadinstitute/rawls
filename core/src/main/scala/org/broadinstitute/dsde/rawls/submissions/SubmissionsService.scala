@@ -5,16 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  ExecutionServiceCluster,
-  ExecutionServiceDAO,
-  ExecutionServiceId,
-  GoogleServicesDAO,
-  MethodRepoDAO,
-  SamDAO,
-  SlickDataSource,
-  SubmissionCostService
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceDAO, ExecutionServiceId, GoogleServicesDAO, MethodRepoDAO, SamDAO, SlickDataSource, SubmissionCostService}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
@@ -26,55 +17,11 @@ import org.broadinstitute.dsde.rawls.methods.MethodConfigurationUtils
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{
-  ActiveSubmission,
-  AttributeEntityReference,
-  AttributeString,
-  AttributeValue,
-  ErrorReport,
-  ErrorReportSource,
-  ExecutionServiceLogs,
-  ExecutionServiceOutputs,
-  ExternalEntityInfo,
-  MetadataParams,
-  MethodConfiguration,
-  PreparedSubmission,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RetriedSubmissionReport,
-  SamWorkspaceActions,
-  Submission,
-  SubmissionListResponse,
-  SubmissionReport,
-  SubmissionRequest,
-  SubmissionRetry,
-  SubmissionStatuses,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationHeader,
-  SubmissionValidationInput,
-  SubmissionValidationReport,
-  TaskOutput,
-  UserCommentUpdateOperation,
-  Workflow,
-  WorkflowCost,
-  WorkflowFailureModes,
-  WorkflowOutputs,
-  WorkflowQueueStatusByUserResponse,
-  WorkflowQueueStatusResponse,
-  WorkflowStatuses,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName
-}
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
-  extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate,
-  submissionRootPath
-}
+import org.broadinstitute.dsde.rawls.model.{ActiveSubmission, AttributeEntityReference, AttributeString, AttributeValue, ErrorReport, ErrorReportSource, ExecutionServiceLogs, ExecutionServiceOutputs, ExternalEntityInfo, MetadataParams, MethodConfiguration, PreparedSubmission, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RetriedSubmissionReport, SamWorkspaceActions, Submission, SubmissionListResponse, SubmissionReport, SubmissionRequest, SubmissionRetry, SubmissionStatuses, SubmissionValidationEntityInputs, SubmissionValidationHeader, SubmissionValidationInput, SubmissionValidationReport, TaskOutput, UserCommentUpdateOperation, Workflow, WorkflowCost, WorkflowFailureModes, WorkflowOutputs, WorkflowQueueStatusByUserResponse, WorkflowQueueStatusResponse, WorkflowStatuses, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{extractOperationIdsFromCromwellMetadata, getTerminalStatusDate, submissionRootPath}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.util.FutureSupport.toFutureTry
 import org.joda.time.DateTime
@@ -103,7 +50,8 @@ object SubmissionsService {
     submissionCostService: SubmissionCostService,
     genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
     config: WorkspaceServiceConfig,
-    workspaceRepository: WorkspaceRepository
+    workspaceRepository: WorkspaceRepository,
+    workspaceSettingRepository: WorkspaceSettingRepository
   )(
     ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): SubmissionsService =
@@ -123,7 +71,8 @@ object SubmissionsService {
       submissionCostService,
       genomicsServiceConstructor,
       config,
-      workspaceRepository
+      workspaceRepository,
+      workspaceSettingRepository
     )
 
   def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
@@ -183,7 +132,8 @@ class SubmissionsService(
   submissionCostService: SubmissionCostService,
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
   config: WorkspaceServiceConfig,
-  val workspaceRepository: WorkspaceRepository
+  val workspaceRepository: WorkspaceRepository,
+  workspaceSettingRepository: WorkspaceSettingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport

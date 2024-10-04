@@ -30,13 +30,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceRepository,
-  WorkspaceService
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -48,6 +42,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
+
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -261,6 +256,7 @@ class SubmissionsServiceSpec
     ) _
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -320,7 +316,8 @@ class SubmissionsServiceSpec
         submissionCostService,
         genomicsServiceConstructor,
         workspaceServiceConfig,
-        workspaceRepository
+        workspaceRepository,
+        workspaceSettingRepository
       ) _
 
     def cleanupSupervisor =
