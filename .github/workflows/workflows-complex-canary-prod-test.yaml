@@ -1,13 +1,13 @@
-name: workflows-simple-canary-prod-test
+name: workflows-complex-canary-prod-test
 'on':
   schedule:
-    - cron: "0 * * * *"  # run hourly
+    - cron: "0 */4 * * *"  # run every 4 hours
   workflow_dispatch:
   pull_request: # TODO: remove this before merging
     branches: [ develop ]
 
 jobs:
-  run-simple-canary-prod-test:
+  run-complex-canary-prod-test:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -22,11 +22,11 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
           inputs: '{
             "workspace-namespace": "broad-firecloud-dsde",
-            "workspace-name": "CanaryTest",
-            "method-namespace": "wdl-testing",
-            "method-name": "hello-world",
-            "entity-type": "participant",
-            "entity-id": "subject_HCC1143"
+            "workspace-name": "complex-featured-workflow",
+            "method-namespace": "gatk",
+            "method-name": "five-dollar-genome-analysis-pipeline",
+            "entity-type": "sample",
+            "entity-id": "na12878_real_small"
           }'
 
   report-workflow:
