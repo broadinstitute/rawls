@@ -18,7 +18,7 @@ jobs:
         with:
           workflow: workflows-canary-prod-test
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/sps_canary_test # TODO: change to refs/heads/main before merging
+          ref: refs/heads/main
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
 
   report-workflow:
