@@ -1,10 +1,8 @@
 name: workflows-complex-canary-prod-test
 'on':
   schedule:
-    - cron: "0 */4 * * *"  # run every 4 hours
+    - cron: "0 */3 * * *"  # run every 3 hours
   workflow_dispatch:
-  pull_request: # TODO: remove this before merging
-    branches: [ develop ]
 
 jobs:
   run-complex-canary-prod-test:
