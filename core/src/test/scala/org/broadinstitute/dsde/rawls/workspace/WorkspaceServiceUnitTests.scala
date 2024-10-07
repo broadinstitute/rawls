@@ -1464,6 +1464,8 @@ class WorkspaceServiceUnitTests
     when(samDAO.getUserIdInfo(any(), any()))
       .thenReturn(Future(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id")))))
     when(samDAO.getUserStatus(any())).thenReturn(Future(Option(enabledUser)))
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Set(SamWorkspaceRoles.projectOwner)))
     samDAO
   }
 
@@ -1573,7 +1575,7 @@ class WorkspaceServiceUnitTests
   behavior of "updateAcl"
   it should "call Sam for Rawls workspaces" in {
     val projectOwnerEmail = "projectOwner@example.com"
-    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
+    val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1630,7 +1632,7 @@ class WorkspaceServiceUnitTests
   }
 
   it should "call WSM for McWorkspaces" in {
-    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
+    val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1751,7 +1753,7 @@ class WorkspaceServiceUnitTests
 
   it should "not allow readers to have compute access but should allow writers for Rawls workspaces" in {
     val projectOwnerEmail = "projectOwner@example.com"
-    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
+    val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1782,7 +1784,7 @@ class WorkspaceServiceUnitTests
 
   it should "allow readers with and without share access for Rawls workspaces" in {
     val projectOwnerEmail = "projectOwner@example.com"
-    val ownerEmail = ctx.userInfo.userEmail.value // user making the request is an owner
+    val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
@@ -1818,6 +1820,8 @@ class WorkspaceServiceUnitTests
 
     val samDAO = mockSamForAclTests()
     // Mock caller being an owner.
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Set(SamWorkspaceRoles.owner)))
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
       Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, callingUserEmail, writerEmail, readerEmail))
     )
@@ -1850,6 +1854,8 @@ class WorkspaceServiceUnitTests
 
     val samDAO = mockSamForAclTests()
     // Mock caller being a writer.
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Set(SamWorkspaceRoles.writer)))
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
       Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, callingUserEmail, readerEmail))
     )
@@ -1883,6 +1889,8 @@ class WorkspaceServiceUnitTests
 
     val samDAO = mockSamForAclTests()
     // Mock caller being a writer.
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Set(SamWorkspaceRoles.writer)))
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
       Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, callingUserEmail, readerEmail))
     )
@@ -1914,9 +1922,10 @@ class WorkspaceServiceUnitTests
     val readerEmail = "reader@example.com"
 
     val samDAO = mockSamForAclTests()
-
+    // Note that calling user is not included
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Set()))
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
-      // Note that calling user is not included
       Future(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
     )
 
