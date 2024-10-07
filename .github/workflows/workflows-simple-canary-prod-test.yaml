@@ -3,8 +3,6 @@ name: workflows-simple-canary-prod-test
   schedule:
     - cron: "0 * * * *"  # run hourly
   workflow_dispatch:
-  pull_request: # TODO: remove this before merging
-    branches: [ develop ]
 
 jobs:
   run-simple-canary-prod-test:
