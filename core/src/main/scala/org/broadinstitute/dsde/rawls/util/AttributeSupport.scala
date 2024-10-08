@@ -32,7 +32,10 @@ import scala.concurrent.Future
 trait AttributeSupport {
 
   def validateAttributeNamespace(hasAttributes: Attributable): Unit =
-    attributeNamespaceCheck(hasAttributes.attributes.keys) match {
+    validateAttributeNamespace(hasAttributes.attributes.keys)
+
+  def validateAttributeNamespace(attributeNames: Iterable[AttributeName]): Unit =
+    attributeNamespaceCheck(attributeNames) match {
       case errors if errors.nonEmpty =>
         throw RawlsExceptionWithErrorReport(
           StatusCodes.Forbidden,
@@ -55,9 +58,7 @@ trait AttributeSupport {
     if (errors.isEmpty) op
     else {
       val reasons = errors.values.mkString(", ")
-      val err =
-        ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
+      throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, s"Attribute namespace validation failed: [$reasons]")
     }
   }
 
