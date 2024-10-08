@@ -132,10 +132,12 @@ Supported Scala versions: 2.13
 Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory.
 You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 
-- The [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml)
-publishes these libraries, but it makes "unofficial" `-SNAP` versions. This action runs on every dev build as part of the
-[`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml).
-
+Note: We have started just using the automatically generated `-SNAP` versions published by [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml) on every dev build. Here are detailed instructions for finding the name of the jar file:
+* Navigate to the [`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml) github action for your commit
+* Navigate to the rawls-build-publish-job job of that workflow
+* Open the "dispatch build" step, and click over to the run in terra-github-workflows
+* Expand the "Publish model library" step
+* Note that version published, e.g. "rawls-model_2.13-v0.0.180-SNAP.jar"
 
 To publish a temporary or test version, use `publishSnapshot.sh` like so:
 

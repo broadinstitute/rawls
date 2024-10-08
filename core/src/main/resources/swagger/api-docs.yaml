@@ -710,6 +710,36 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/billing/{projectId}:
+    get:
+      tags:
+        - admin
+      summary: get support summary information for billing project
+      description: get support summary information for billing project
+      operationId: adminGetBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BillingProjectAdminResponse'
+        403:
+          description: You must be an admin to call this API
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions:
     get:
       tags:
@@ -6736,6 +6766,74 @@ components:
           $ref: '#/components/schemas/ProjectRole'
           description: the role of the user in the project
       description: an element of a list of project users and their role
+    BillingProjectAdminResponse:
+      required:
+        - billingProject
+        - workspaces
+      type: object
+      properties:
+        billingProject:
+          $ref: '#/components/schemas/RawlsBillingProject'
+        workspaces:
+          type: object
+          additionalProperties:
+            type: string
+            format: uuid
+          example:
+            "workspace1": "00000000-0000-0000-0000-000000000000"
+            "workspace2": "11111111-1111-1111-1111-111111111111"
+          description: "workspaces in the billing project with their IDs"
+    RawlsBillingProject:
+      required:
+        - projectName
+        - status
+        - invalidBillingAccount
+      type: object
+      description: internal representation of a billing project, returned by admin API only
+      properties:
+        projectName:
+          type: string
+          description: the name of the project
+        billingAccount:
+          type: string
+          description: the billing account to use in google projects (cloudPlatform GCP only)
+        invalidBillingAccount:
+          type: boolean
+          description: whether or not the billing account is usable by Terra
+        status:
+          $ref: '#/components/schemas/BillingProjectStatus'
+        message:
+          type: string
+          description: informational message about the project
+        azureManagedAppCoordinates:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
+        cloudPlatform:
+          $ref: '#/components/schemas/BillingProjectCloudPlatform'
+        landingZoneId:
+          type: string
+          format: uuid
+          description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        billingProfileId:
+          type: string
+          description: the billing profile ID associated with the project
+        cromwellBackend:
+          type: string
+          description: the cromwell backend to use for this billing project
+        servicePerimeter:
+          type: string
+          description: the name of the service perimeter for this billing project (cloudPlatform GCP only)
+        googleProjectNumber:
+          type: string
+          description: the google project number for this billing project (cloudPlatform GCP only)
+        spendReportDataset:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data (cloudPlatform GCP only)
+        spendReportTable:
+          type: string
+          description: the name of the BigQuery table containing project spend data (cloudPlatform GCP only)
+        spendReportDatasetGoogleProject:
+          type: string
+          description: the name of the Google Project where the BigQuery dataset resides (cloudPlatform GCP only)
     RawlsBillingProjectResponse:
       required:
         - projectName
@@ -6761,27 +6859,14 @@ components:
             $ref: '#/components/schemas/ProjectRole'
           description: the roles the caller has on the project
         status:
-          type: string
-          enum:
-            - Creating
-            - Ready
-            - Error
-            - Deleting
-            - DeletionFailed
-            - AddingToPerimeter
-            - CreatingLandingZone
-          description: the status of allocating the billing project's resources.
+          $ref: '#/components/schemas/BillingProjectStatus'
         message:
           type: string
           description: informational message about the project
         azureManagedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
         cloudPlatform:
-          type: string
-          enum:
-            - GCP
-            - AZURE
-            - UNKNOWN
+          $ref: '#/components/schemas/BillingProjectCloudPlatform'
         landingZoneId:
           type: string
           format: uuid
@@ -6794,6 +6879,24 @@ components:
           description: whether this billing project supports protected data (cloudPlatform AZURE only)
         organization:
           $ref: '#/components/schemas/RawlsBillingProjectOrganization'
+    BillingProjectStatus:
+      type: string
+      enum:
+        - Creating
+        - Ready
+        - Error
+        - Deleting
+        - DeletionFailed
+        - AddingToPerimeter
+        - CreatingLandingZone
+      description: the status of allocating the billing project's resources.
+    BillingProjectCloudPlatform:
+      type: string
+      enum:
+        - GCP
+        - AZURE
+        - UNKNOWN
+      description: the cloud platform of the billing project
     AzureManagedAppCoordinates:
       required:
         - tenantId
