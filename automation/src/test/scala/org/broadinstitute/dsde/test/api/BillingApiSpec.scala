@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.test.pipeline._
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
