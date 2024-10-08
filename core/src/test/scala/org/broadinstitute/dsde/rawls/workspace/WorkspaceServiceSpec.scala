@@ -50,7 +50,12 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils,
+  TestExecutionContext
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
@@ -79,7 +84,6 @@ import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
-//noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class WorkspaceServiceSpec
     extends AnyFlatSpec
     with ScalatestRouteTest
@@ -94,7 +98,7 @@ class WorkspaceServiceSpec
     with OptionValues {
   import driver.api._
 
-  val workspace = Workspace(
+  val workspace: Workspace = Workspace(
     testData.wsName.namespace,
     testData.wsName.name,
     "aWorkspaceId",
@@ -106,7 +110,7 @@ class WorkspaceServiceSpec
     Map.empty
   )
 
-  val mockServer = RemoteServicesMockServer()
+  val mockServer: RemoteServicesMockServer = RemoteServicesMockServer()
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
@@ -121,12 +125,14 @@ class WorkspaceServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
-    override val executionContext: ExecutionContext
-  ) extends WorkspaceApiService
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)
+      extends WorkspaceApiService
       with MethodConfigApiService
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
+
+    implicit override val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
+
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
 
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
@@ -350,9 +356,8 @@ class WorkspaceServiceSpec
       submissionSupervisor ! PoisonPill
   }
 
-  class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(implicit
-    override val executionContext: ExecutionContext
-  ) extends TestApiService(dataSource, user) {
+  class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)
+      extends TestApiService(dataSource, user) {
     override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomizableMockSamDAO(dataSource))
 
     // these need to be overridden to use the new samDAO
@@ -374,7 +379,7 @@ class WorkspaceServiceSpec
   def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T =
     withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
 
-  def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
+  def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user)
     try
       testCode(apiService)
@@ -383,7 +388,7 @@ class WorkspaceServiceSpec
   }
 
   private def withServicesCustomSam[T](dataSource: SlickDataSource, user: RawlsUser)(
-    testCode: (TestApiServiceWithCustomSamDAO) => T
+    testCode: TestApiServiceWithCustomSamDAO => T
   ) = {
     val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)
 
@@ -415,7 +420,7 @@ class WorkspaceServiceSpec
   private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(
     UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
   )
-  private def populateWorkspacePolicies(services: TestApiService, workspace: Workspace = testData.workspace) = {
+  private def populateWorkspacePolicies(services: TestApiService, workspace: Workspace = testData.workspace): Unit = {
     val populateAcl = for {
       _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
       _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userWriter))
@@ -951,7 +956,7 @@ class WorkspaceServiceSpec
     val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
         services.workspaceService.lockWorkspace(
-          new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)
+          WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)
         ),
         Duration.Inf
       )
@@ -1009,12 +1014,8 @@ class WorkspaceServiceSpec
     // delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[RawlsRequestContext])
-
     // check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
 
   }
 
@@ -1027,13 +1028,8 @@ class WorkspaceServiceSpec
     // delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[RawlsRequestContext])
-
     // check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
   }
 
   it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
@@ -1346,17 +1342,6 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription()
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
-    )
-
     val workspace = Await.result(
       services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
@@ -1372,9 +1357,9 @@ class WorkspaceServiceSpec
                    Duration.Inf
       )
     }
-    assertResult(Some(StatusCodes.InternalServerError)) {
-      error.errorReport.statusCode
-    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+
   }
 
   behavior of "getTags"
@@ -1390,8 +1375,8 @@ class WorkspaceServiceSpec
     Await.result(
       services.workspaceService.updateWorkspace(
         testData.wsName,
-        Seq(AddListMember(AttributeName.withTagsNS, AttributeString("cancer")),
-            AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe"))
+        Seq(AddListMember(AttributeName.withTagsNS(), AttributeString("cancer")),
+            AddListMember(AttributeName.withTagsNS(), AttributeString("cantaloupe"))
         )
       ),
       Duration.Inf
@@ -1400,8 +1385,8 @@ class WorkspaceServiceSpec
     Await.result(
       services.workspaceService.updateWorkspace(
         testData.wsName7,
-        Seq(AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")),
-            AddListMember(AttributeName.withTagsNS, AttributeString("buffalo"))
+        Seq(AddListMember(AttributeName.withTagsNS(), AttributeString("cantaloupe")),
+            AddListMember(AttributeName.withTagsNS(), AttributeString("buffalo"))
         )
       ),
       Duration.Inf
@@ -1445,11 +1430,11 @@ class WorkspaceServiceSpec
 
     // remove tags
     Await.result(
-      services.workspaceService.updateWorkspace(testData.wsName, Seq(RemoveAttribute(AttributeName.withTagsNS))),
+      services.workspaceService.updateWorkspace(testData.wsName, Seq(RemoveAttribute(AttributeName.withTagsNS()))),
       Duration.Inf
     )
     Await.result(
-      services.workspaceService.updateWorkspace(testData.wsName7, Seq(RemoveAttribute(AttributeName.withTagsNS))),
+      services.workspaceService.updateWorkspace(testData.wsName7, Seq(RemoveAttribute(AttributeName.withTagsNS()))),
       Duration.Inf
     )
 
@@ -1484,13 +1469,13 @@ class WorkspaceServiceSpec
                                    email
         )
         if (shouldShare) {
-          services.samDAO.callsToAddToPolicy should contain theSameElementsAs (Set(expectedPolicyEntry))
+          services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set(expectedPolicyEntry)
         } else {
-          services.samDAO.callsToAddToPolicy should contain theSameElementsAs (Set.empty)
+          services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
         }
     }
 
-  val aclTestUser =
+  val aclTestUser: UserInfo =
     UserInfo(RawlsUserEmail("acl-test-user"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("acl-test-user-subject-id"))
 
   def allWorkspaceAclUpdatePermutations(emailString: String): Seq[WorkspaceACLUpdate] = for {
@@ -1644,7 +1629,10 @@ class WorkspaceServiceSpec
     }
   }
 
-  def addEmailToPolicy(services: TestApiServiceWithCustomSamDAO, policyName: SamResourcePolicyName, email: String) = {
+  def addEmailToPolicy(services: TestApiServiceWithCustomSamDAO,
+                       policyName: SamResourcePolicyName,
+                       email: String
+  ): Option[SamPolicyWithNameAndEmail] = {
     val policy = services.samDAO.policies((SamResourceTypeNames.workspace, testData.workspace.workspaceId))(policyName)
     val updateMembers = policy.policy.memberEmails + WorkbenchEmail(email)
     val updatedPolicy = policy.copy(policy = policy.policy.copy(memberEmails = updateMembers))
@@ -1653,7 +1641,7 @@ class WorkspaceServiceSpec
       .put(policyName, updatedPolicy)
   }
 
-  val testPolicyNames = Set(
+  val testPolicyNames: Set[SamResourcePolicyName] = Set(
     SamWorkspacePolicyNames.canCompute,
     SamWorkspacePolicyNames.writer,
     SamWorkspacePolicyNames.reader,
@@ -1753,8 +1741,8 @@ class WorkspaceServiceSpec
   behavior of "RequesterPays"
 
   it should "return Unit when adding linked service accounts to workspace" in withTestDataServices { services =>
-    withWorkspaceContext(testData.workspace) { ctx =>
-      val rqComplete =
+    withWorkspaceContext(testData.workspace) { _ =>
+      val rqComplete: Unit =
         Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
                      Duration.Inf
         )
@@ -1766,7 +1754,7 @@ class WorkspaceServiceSpec
 
   it should "return a 404 ErrorReport when adding linked service accounts to workspace which does not exist" in withTestDataServices {
     services =>
-      withWorkspaceContext(testData.workspace) { ctx =>
+      withWorkspaceContext(testData.workspace) { _ =>
         val error = intercept[RawlsExceptionWithErrorReport] {
           Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(
                          testData.workspace.toWorkspaceName.copy(name = "DNE")
@@ -1784,7 +1772,7 @@ class WorkspaceServiceSpec
     RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))
   ) { services =>
     populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { ctx =>
+    withWorkspaceContext(testData.workspace) { _ =>
       val error = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
                      Duration.Inf
@@ -1800,7 +1788,7 @@ class WorkspaceServiceSpec
     testData.userReader
   ) { services =>
     populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { ctx =>
+    withWorkspaceContext(testData.workspace) { _ =>
       val error = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
                      Duration.Inf
@@ -1813,8 +1801,8 @@ class WorkspaceServiceSpec
   }
 
   it should "return Unit when removing linked service accounts from workspace" in withTestDataServices { services =>
-    withWorkspaceContext(testData.workspace) { ctx =>
-      val rqComplete =
+    withWorkspaceContext(testData.workspace) { _ =>
+      val rqComplete: Unit =
         Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
                      Duration.Inf
         )
@@ -1826,11 +1814,11 @@ class WorkspaceServiceSpec
 
   it should "return Unit when removing linked service accounts from workspace which does not exist" in withTestDataServices {
     services =>
-      withWorkspaceContext(testData.workspace) { ctx =>
-        val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(
-                                        testData.workspace.toWorkspaceName.copy(name = "DNE")
-                                      ),
-                                      Duration.Inf
+      withWorkspaceContext(testData.workspace) { _ =>
+        val rqComplete: Unit = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(
+                                              testData.workspace.toWorkspaceName.copy(name = "DNE")
+                                            ),
+                                            Duration.Inf
         )
         assertResult(()) {
           rqComplete
@@ -1842,8 +1830,8 @@ class WorkspaceServiceSpec
     RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))
   ) { services =>
     populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { ctx =>
-      val rqComplete =
+    withWorkspaceContext(testData.workspace) { _ =>
+      val rqComplete: Unit =
         Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
                      Duration.Inf
         )
@@ -1857,8 +1845,8 @@ class WorkspaceServiceSpec
     testData.userReader
   ) { services =>
     populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { ctx =>
-      val rqComplete =
+    withWorkspaceContext(testData.workspace) { _ =>
+      val rqComplete: Unit =
         Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
                      Duration.Inf
         )
@@ -2120,7 +2108,7 @@ class WorkspaceServiceSpec
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
@@ -2139,7 +2127,7 @@ class WorkspaceServiceSpec
       val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
       val captor = ArgumentCaptor.forClass(classOf[Project])
 
-      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
       verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
                                                   captor.capture()
@@ -2226,9 +2214,6 @@ class WorkspaceServiceSpec
       // Use the WorkspaceServiceConfig to determine which static projects exist for which perimeter
       val servicePerimeterName: ServicePerimeterName =
         services.servicePerimeterServiceConfig.staticProjectsInPerimeters.keys.head
-      val staticProjectNumbersInPerimeter: Set[String] =
-        services.servicePerimeterServiceConfig.staticProjectsInPerimeters(servicePerimeterName).map(_.value).toSet
-
       val billingProject1 = testData.testProject1
       val billingProject2 = testData.testProject2
       val billingProjects = Seq(billingProject1, billingProject2)
@@ -2236,7 +2221,7 @@ class WorkspaceServiceSpec
 
       // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
       // the Billing Projects and therefore in the Perimeter
-      val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
+      billingProjects.foreach { bp =>
         runAndWait {
           for {
             _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(bp.projectName,
@@ -2570,13 +2555,14 @@ class WorkspaceServiceSpec
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        baseWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+    Await.result(
+      services.mcWorkspaceService.cloneMultiCloudWorkspace(
+        services.workspaceService,
+        baseWorkspace.toWorkspaceName,
+        workspaceRequest
+      ),
+      Duration.Inf
+    )
 
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
@@ -2693,13 +2679,14 @@ class WorkspaceServiceSpec
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        baseWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+    Await.result(
+      services.mcWorkspaceService.cloneMultiCloudWorkspace(
+        services.workspaceService,
+        baseWorkspace.toWorkspaceName,
+        workspaceRequest
+      ),
+      Duration.Inf
+    )
 
     verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
       ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
@@ -2728,13 +2715,14 @@ class WorkspaceServiceSpec
       )
     ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
 
-    val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        baseWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
-                   ),
-                   Duration.Inf
-      )
+    Await.result(
+      services.mcWorkspaceService.cloneMultiCloudWorkspace(
+        services.workspaceService,
+        baseWorkspace.toWorkspaceName,
+        workspaceRequest
+      ),
+      Duration.Inf
+    )
 
     verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
       ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
@@ -2791,9 +2779,6 @@ class WorkspaceServiceSpec
       // Use the WorkspaceServiceConfig to determine which static projects exist for which perimeter
       val servicePerimeterName: ServicePerimeterName =
         services.servicePerimeterServiceConfig.staticProjectsInPerimeters.keys.head
-      val staticProjectNumbersInPerimeter: Set[String] =
-        services.servicePerimeterServiceConfig.staticProjectsInPerimeters(servicePerimeterName).map(_.value).toSet
-
       val billingProject1 = testData.testProject1
       val billingProject2 = testData.testProject2
       val billingProjects = Seq(billingProject1, billingProject2)
@@ -2801,7 +2786,7 @@ class WorkspaceServiceSpec
 
       // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
       // the Billing Projects and therefore in the Perimeter
-      val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
+      billingProjects.flatMap { bp =>
         runAndWait {
           for {
             _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(bp.projectName,
@@ -3136,11 +3121,6 @@ class WorkspaceServiceSpec
 
   it should "return the policies of a GCP workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = WorkspaceRequest(
-      testData.testProject1Name.value,
-      workspaceName,
-      Map.empty
-    )
     val wsmPolicyInput = new WsmPolicyInput()
       .name("test_name")
       .namespace("test_namespace")

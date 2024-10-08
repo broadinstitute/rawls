@@ -11,7 +11,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * Created by ahaessly on 3/31/17.
   */
-trait LibraryPermissionsSupport  {
+trait LibraryPermissionsSupport {
   val samDAO: SamDAO
   val gcsDAO: GoogleServicesDAO
   val ctx: RawlsRequestContext
