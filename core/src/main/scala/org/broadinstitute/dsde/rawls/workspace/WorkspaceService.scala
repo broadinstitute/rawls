@@ -521,7 +521,7 @@ class WorkspaceService(
       }
     )
     _ <- traceFutureWithParent("deleteWorkspaceSamResource", ctx)(_ =>
-      samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
+      samDAO.deleteResourceCascade(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
         case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
           logger.warn(
             s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"

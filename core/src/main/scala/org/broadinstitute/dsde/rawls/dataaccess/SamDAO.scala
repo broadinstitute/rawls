@@ -56,6 +56,8 @@ trait SamDAO {
 
   def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Unit]
 
+  def deleteResourceCascade(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Unit]
+
   def userHasAction(resourceTypeName: SamResourceTypeName,
                     resourceId: String,
                     action: SamResourceAction,
