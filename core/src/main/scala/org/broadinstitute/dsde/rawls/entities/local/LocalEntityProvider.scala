@@ -7,6 +7,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
@@ -181,7 +182,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     }
 
   // EntityApiServiceSpec has good test coverage for this api
-  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] =
+  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
+    val stopwatch = StopWatch.createStarted()
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIOWithParent("LocalEntityProvider.deleteEntities", requestArguments.ctx) { localContext =>
@@ -191,13 +193,19 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
           traceDBIOWithParent("entityQuery.getAllReferringEntities", localContext)(innerSpan =>
             dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap {
               referringEntities =>
-                if (referringEntities != entRefs.toSet)
+                if (referringEntities != entRefs.toSet) {
+                  stopwatch.stop()
+                  logger.info(s"***** deleteEntities complete in ${stopwatch.getTime}ms")
                   throw new DeleteEntitiesConflictException(referringEntities)
-                else {
+                } else {
                   traceDBIOWithParent("entityQuery.hide", innerSpan)(_ =>
                     dataAccess.entityQuery
                       .hide(workspaceContext, entRefs)
-                      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
+                      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds)) map { result =>
+                      stopwatch.stop()
+                      logger.info(s"***** deleteEntities complete in ${stopwatch.getTime}ms")
+                      result
+                    }
                   )
                 }
             }
@@ -205,6 +213,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         }
       }
     }
+  }
 
   override def deleteEntitiesOfType(entityType: String): Future[Int] =
     dataSource.inTransaction { dataAccess =>
@@ -310,6 +319,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
+    val stopwatch = StopWatch.createStarted()
     // look for a columnFilter that specifies the primary key for this entityType;
     // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
     val nameFilter: Option[String] = query.columnFilter match {
@@ -353,7 +363,10 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
           for {
             metadata <- queryForMetadata(entityType, query, childContext)
             entitySource = queryForResultSource(entityType, query, childContext)
-          } yield (metadata, entitySource)
+          } yield {
+            logger.info(s"***** queryEntitiesSource complete in ${stopwatch.getTime}ms")
+            (metadata, entitySource)
+          }
         }
     }
   }
@@ -457,6 +470,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                             java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
       )
 
+      val stopwatch = StopWatch.createStarted()
+
       withAttributeNamespaceCheck(namesToCheck) {
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
           val updateTrialsAction = traceDBIOWithParent("getActiveEntities", localContext)(_ =>
@@ -503,7 +518,13 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
             }
           }
 
-          traceDBIOWithParent("saveAction", localContext)(_ => saveAction)
+          traceDBIOWithParent("saveAction", localContext)(_ =>
+            saveAction map { result =>
+              stopwatch.stop()
+              logger.info(s"***** all writes complete in ${stopwatch.getTime}ms")
+              result
+            }
+          )
         } recover {
           case icve: java.sql.SQLIntegrityConstraintViolationException =>
             val userMessage =
@@ -548,4 +569,18 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         )
       }
     )
+
+  override def renameEntity(entity: AttributeEntityReference, newName: String): Future[Int] =
+    dataSource.inTransaction { dataAccess =>
+      withEntity(workspaceContext, entity.entityType, entity.entityName, dataAccess) { entity =>
+        dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
+          case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
+          case Some(_) =>
+            throw new RawlsExceptionWithErrorReport(
+              errorReport =
+                ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
+            )
+        }
+      }
+    }
 }

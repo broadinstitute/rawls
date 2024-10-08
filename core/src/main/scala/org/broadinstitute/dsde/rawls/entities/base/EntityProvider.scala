@@ -16,7 +16,8 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityTypeMetadata,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
-  Workspace
+  Workspace,
+  WorkspaceName
 }
 
 import scala.concurrent.Future
@@ -88,4 +89,6 @@ trait EntityProvider {
                    linkExistingEntities: Boolean,
                    parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse]
+
+  def renameEntity(entity: AttributeEntityReference, newName: String): Future[Int]
 }

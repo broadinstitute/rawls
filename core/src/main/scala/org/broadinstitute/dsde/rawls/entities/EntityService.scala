@@ -102,6 +102,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO AJ-2008: move to EntityProvider
   def updateEntity(workspaceName: WorkspaceName,
                    entityType: String,
                    entityName: String,
@@ -196,6 +197,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO AJ-2008: move to EntityProvider
   def deleteEntityAttributes(workspaceName: WorkspaceName,
                              entityType: String,
                              attributeNames: Set[AttributeName]
@@ -219,27 +221,31 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
     )
 
-  def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
+  // TODO AJ-2008: move to EntityProvider
+  def renameEntity(workspaceName: WorkspaceName,
+                   entityType: String,
+                   entityName: String,
+                   newName: String,
+                   dataReference: Option[DataReferenceName],
+                   billingProject: Option[GoogleProjectId]
+  ): Future[Int] =
     (getV2WorkspaceContextAndPermissions(workspaceName,
                                          SamWorkspaceActions.write,
                                          Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
-            case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
-            case Some(_) =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
-              )
-          }
-        }
-      }
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
+      for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        numberOfEntitiesRenamed <- entityProvider.renameEntity(AttributeEntityReference(entityType, entityName),
+                                                               newName
+        )
+      } yield numberOfEntitiesRenamed
+
     }).recover(
       sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
     )
 
+  // TODO AJ-2008: move to EntityProvider
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
@@ -292,6 +298,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     )
   }
 
+  // TODO AJ-2008: move to EntityProvider
   def evaluateExpression(workspaceName: WorkspaceName,
                          entityType: String,
                          entityName: String,
@@ -381,6 +388,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     Source.fromPublisher(dataSource.database.stream(allAttrsStream))
   }
 
+  // TODO AJ-2008: move to EntityProvider
   def listEntities(workspaceName: WorkspaceName, entityType: String) =
     (getWorkspaceContextAndPermissions(workspaceName,
                                        SamWorkspaceActions.read,
@@ -419,6 +427,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
   }
 
+  // TODO AJ-2008: move to EntityProvider
   def copyEntities(entityCopyDef: EntityCopyDefinition, linkExistingEntities: Boolean): Future[EntityCopyResponse] =
     (for {
       destWsCtx <- getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
@@ -490,6 +499,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
       )
 
+  // TODO AJ-2008: move to EntityProvider
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       oldAttributeName: AttributeName,

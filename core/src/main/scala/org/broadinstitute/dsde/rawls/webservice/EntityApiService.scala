@@ -231,7 +231,9 @@ trait EntityApiService extends UserInfoDirectives {
                       .renameEntity(WorkspaceName(workspaceNamespace, workspaceName),
                                     entityType,
                                     entityName,
-                                    newEntityName.name
+                                    newEntityName.name,
+                                    dataReference,
+                                    billingProject
                       )
                       .map(_ => StatusCodes.NoContent)
                   }

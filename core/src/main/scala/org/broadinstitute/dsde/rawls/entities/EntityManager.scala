@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
+import org.broadinstitute.dsde.rawls.entities.json.{JsonEntityProvider, JsonEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceType}
 
@@ -57,10 +58,12 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
-    val targetTag = if (requestArguments.dataReference.isDefined) {
-      typeTag[DataRepoEntityProvider]
-    } else {
-      typeTag[LocalEntityProvider]
+
+    // TODO AJ-2008: this is a temporary hack to get JsonEntityProvider working
+    val targetTag = (requestArguments.dataReference, requestArguments.workspace) match {
+      case (Some(_), _)                         => typeTag[DataRepoEntityProvider]
+      case (_, x) if x.name.contains("AJ-2008") => typeTag[JsonEntityProvider]
+      case _                                    => typeTag[LocalEntityProvider]
     }
 
     providerBuilders.find(_.builds == targetTag) match {
@@ -110,6 +113,8 @@ object EntityManager {
                                                                           config
     ) // implicit executionContext
 
-    new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
+    val jsonEntityProviderBuilder = new JsonEntityProviderBuilder(dataSource, cacheEnabled, queryTimeout, metricsPrefix)
+
+    new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, jsonEntityProviderBuilder))
   }
 }

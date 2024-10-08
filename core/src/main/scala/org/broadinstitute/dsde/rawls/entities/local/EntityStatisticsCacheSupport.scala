@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -161,9 +162,15 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
   /** wrapper for uncached type-attributes lookup, includes performance tracing */
   def uncachedTypeAttributes(dataAccess: DataAccess,
                              parentContext: RawlsRequestContext
-  ): ReadAction[Map[String, Seq[AttributeName]]] =
+  ): ReadAction[Map[String, Seq[AttributeName]]] = {
+    val stopwatch = StopWatch.createStarted()
     traceDBIOWithParent("getAttrNamesAndEntityTypes", parentContext) { _ =>
-      dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID)
+      dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID) map { result =>
+        stopwatch.stop()
+        logger.info(s"***** getAttrNamesAndEntityTypes complete in ${stopwatch.getTime}ms")
+        result
+      }
     }
+  }
 
 }
