@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   PendingCloneWorkspaceFileTransfer,
+  RawlsBillingProjectName,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
@@ -56,6 +57,11 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   ): Future[Seq[Workspace]] = dataSource.inTransaction {
     _.workspaceQuery.listV2WorkspacesByIds(workspaceIds, attributeSpecs)
   }
+
+  def listWorkspacesByBillingProject(billingProjectName: RawlsBillingProjectName): Future[Seq[Workspace]] =
+    dataSource.inTransaction {
+      _.workspaceQuery.listWithBillingProject(billingProjectName)
+    }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =
     dataSource.inTransaction { access =>

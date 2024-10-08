@@ -9,6 +9,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.billing.BillingAdminService
 import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -34,20 +35,29 @@ trait AdminApiService extends UserInfoDirectives {
   val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService
   val userServiceConstructor: RawlsRequestContext => UserService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
+  val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService
 
   def adminRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("admin" / "billing" / Segment) { projectId =>
-        delete {
-          entity(as[Map[String, String]]) { ownerInfo =>
-            complete {
-              userServiceConstructor(ctx)
-                .adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
-                .map(_ => StatusCodes.NoContent)
+        val billingProjectName = RawlsBillingProjectName(projectId)
+        get {
+          complete {
+            billingAdminServiceConstructor(ctx)
+              .getBillingProjectSupportSummary(billingProjectName)
+              .map(StatusCodes.OK -> _)
+          }
+        } ~
+          delete {
+            entity(as[Map[String, String]]) { ownerInfo =>
+              complete {
+                userServiceConstructor(ctx)
+                  .adminDeleteBillingProject(billingProjectName, ownerInfo)
+                  .map(_ => StatusCodes.NoContent)
+              }
             }
           }
-        }
       } ~
         path("admin" / "submissions") {
           get {
