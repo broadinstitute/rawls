@@ -495,16 +495,21 @@ class WorkspaceService(
     // Delete Google Project
     _ <- traceFutureWithParent("deleteGoogleProject", ctx)(_ => deleteGoogleProject(workspace.googleProjectId))
     // attempt to delete workspace in WSM, in case thsi is a TDR snapshot - but don't fail on it
-    _ = Try(workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).recover {
+    _ = Try {
+      logger.warn(s"Deleting workspace in WSM")
+      workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)
+    }.recover {
       case e: ApiException if e.getCode != StatusCodes.NotFound.intValue =>
         logger.warn(s"Unexpected failure deleting workspace in WSM for workspace `${workspace.toWorkspaceName}]", e)
     }
     // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
-    _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx)(_ =>
+    _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx) { _ =>
+      logger.warn("deleting rawlsworkspace in ws repo")
       workspaceRepository.deleteRawlsWorkspace(workspace)
-    )
+    }
     // Delete workflowCollection resource in sam outside of DB transaction
-    _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", ctx)(_ =>
+    _ <- traceFutureWithParent("deleteWorkflowCollectionSamResource", ctx) { _ =>
+      logger.warn("deleting workflow collection in sam")
       workspace.workflowCollectionName
         .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
         .getOrElse(Future.successful(())) recover {
@@ -519,9 +524,10 @@ class WorkspaceService(
           )
           throw t
       }
-    )
-    _ <- traceFutureWithParent("deleteWorkspaceSamResource", ctx)(_ =>
-      samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
+    }
+    _ <- traceFutureWithParent("deleteWorkspaceSamResource", ctx) { _ =>
+      logger.warn("deleting sam workspace resource with cascade")
+      samDAO.deleteResourceCascade(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
         case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
           logger.warn(
             s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspace.toWorkspaceName}`: [${t.errorReport.message}]"
@@ -534,7 +540,7 @@ class WorkspaceService(
           )
           throw t
       }
-    )
+    }
   } yield {
     aborts.onComplete {
       case Failure(t) =>

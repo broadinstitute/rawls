@@ -327,6 +327,18 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       callback.future.map(_ => ())
     }
 
+  override def deleteResourceCascade(resourceTypeName: SamResourceTypeName,
+                                     resourceId: String,
+                                     ctx: RawlsRequestContext
+  ): Future[Unit] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[Void]("deleteResourceCascadeV2")
+
+      resourcesApi(ctx).deleteResourceCascadeV2Async(resourceTypeName.value, resourceId, callback)
+
+      callback.future.map(_ => ())
+    }
+
   override def userHasAction(resourceTypeName: SamResourceTypeName,
                              resourceId: String,
                              action: SamResourceAction,
