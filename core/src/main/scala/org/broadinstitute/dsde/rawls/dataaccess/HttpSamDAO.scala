@@ -322,7 +322,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[Void]("deleteResourceV2")
 
-      resourcesApi(ctx).deleteResourceV2Async(resourceTypeName.value, resourceId, false, callback)
+      resourcesApi(ctx).deleteResourceV2Async(resourceTypeName.value, resourceId, callback)
 
       callback.future.map(_ => ())
     }
@@ -332,9 +332,9 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
                                      ctx: RawlsRequestContext
   ): Future[Unit] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[Void]("deleteResourceV2")
+      val callback = new SamApiCallback[Void]("deleteResourceCascadeV2")
 
-      resourcesApi(ctx).deleteResourceV2Async(resourceTypeName.value, resourceId, true, callback)
+      resourcesApi(ctx).deleteResourceCascadeV2Async(resourceTypeName.value, resourceId, callback)
 
       callback.future.map(_ => ())
     }
