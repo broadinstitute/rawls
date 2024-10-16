@@ -137,7 +137,7 @@ jobs:
                           -v jar-cache:/root/.ivy2 \
                           -w /working \
                           sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.2_2.13.15 \
-                          sbt -J-Xmx2g -J-XX:+UseG1GC "project pact4s" clean "testOnly org.broadinstitute.dsde.rawls.consumer.*"
+                          bash -c "git config --global --add safe.directory /working && sbt -J-Xmx2g -J-XX:+UseG1GC \"project pact4s\" clean \"testOnly org.broadinstitute.dsde.rawls.consumer.*\""
 
       - name: Output consumer contract as non-breaking base64 string
         id: encode-pact
