@@ -328,7 +328,7 @@ jobs:
                           -e POSTGRES_READ_URL=localhost:5432 \
                           -e POSTGRES_USERNAME=rawls-test \
                           -e POSTGRES_PASSWORD=rawls-test \
-                          sbtscala/scala-sbt:openjdk-17.0.2_1.7.2_2.13.10 \
+                          sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.2_2.13.15 \
                           sbt -J-Xmx2g -J-XX:+UseG1GC \
                           "project pact4s" clean coverage "testOnly org.broadinstitute.dsde.rawls.provider.*"  coverageReport
 
