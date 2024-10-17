@@ -7,9 +7,9 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.17.2"
 
-  val workbenchLibsHash = "d47b6d4"
+  val workbenchLibsHash = "80e4b8d"
   val serviceTestV = s"5.0-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.32-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.33-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
   val workbenchModelV  = s"0.20-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.8-${workbenchLibsHash}"
@@ -39,7 +39,7 @@ object Dependencies {
     "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV,
     "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
     "com.fasterxml.jackson.module" % ("jackson-module-scala_" + scalaV) % jacksonV,
-    "ch.qos.logback" % "logback-classic" % "1.5.7",
+    "ch.qos.logback" % "logback-classic" % "1.5.10",
     "net.logstash.logback" % "logstash-logback-encoder" % "6.6",
     "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.22.0" excludeAll (
       ExclusionRule("com.google.guava", "guava-jdk5"),
