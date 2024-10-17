@@ -56,7 +56,7 @@ class WorkspaceApiSpec
 
   val owner: Credentials = UserPool.chooseProjectOwner
   implicit val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
-  implicit val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.makeAuthToken).get
+  val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.makeAuthToken).get
 
   val operations = Array(
     Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
