@@ -5,6 +5,7 @@ import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.test.pipeline._
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
@@ -51,8 +52,11 @@ class WorkspaceApiSpec
   val studentAToken: AuthToken = studentA.makeAuthToken()
   val studentBToken: AuthToken = studentB.makeAuthToken()
 
+  val bee = PipelineInjector(PipelineInjector.e2eEnv())
+
   val owner: Credentials = UserPool.chooseProjectOwner
-  val ownerAuthToken: AuthToken = owner.makeAuthToken()
+  implicit val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
+  val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.makeAuthToken).get
 
   val operations = Array(
     Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
@@ -69,7 +73,6 @@ class WorkspaceApiSpec
     // disabled, see WOR-1323
     "should add workspace Google project to billing project's service perimeter" ignore {
       val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
       val servicePerimeterName = "automation_test_perimeter"
       val fullyQualifiedServicePerimeterId =
@@ -98,8 +101,6 @@ class WorkspaceApiSpec
     }
 
     "should set labels on the underlying Google Project when creating a new Workspace" in {
-      val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val billingProjectName =
         s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
       Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
@@ -141,9 +142,6 @@ class WorkspaceApiSpec
     }
 
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
-      val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken =
-        owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
       withTemporaryBillingProject(billingAccountId) { billingProjectName =>
         withCleanUp {
           val workspaceName = prependUUID("rbs-project-iam-test")
@@ -198,8 +196,6 @@ class WorkspaceApiSpec
 
     "should allow project owners" - {
       "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
-        val owner: Credentials = UserPool.chooseProjectOwner
-        implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
         withTemporaryBillingProject(billingAccountId) { billingProjectName =>
           val workspaceName = prependUUID("rbs-delete-workspace")
 
@@ -236,7 +232,6 @@ class WorkspaceApiSpec
       }
 
       "to get an error message when they try to create a workspace with a bucket region that is invalid" ignore {
-        implicit val token: AuthToken = ownerAuthToken
         // Note that this invalid region passes the regexp in `withWorkspaceBucketRegionCheck`, so workspace creation is
         // attempted and fails with the bucket creation error. However, due to bug WOR-296, `withTemporaryBillingProject`
         // is unable to delete the temporary project, causing the test to fail (when this test was first introduced,
@@ -251,7 +246,7 @@ class WorkspaceApiSpec
           intercept[RestException] {
             Orchestration.workspaces.create(billingProject, workspaceName, Set.empty, Option(invalidRegion))
           }.message.parseJson.asJsObject
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
         exception.fields("message").convertTo[String] should startWith(
@@ -274,7 +269,7 @@ class WorkspaceApiSpec
         implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
         val user: Credentials = UserPool.chooseAdmin
-        val userToken: AuthToken = user.makeAuthToken()
+        val userToken: AuthToken = nonOwnerAuthToken
 
         val workspaceName = prependUUID("requester-pays")
         val workspaceCloneName = s"$workspaceName-copy"
@@ -308,7 +303,7 @@ class WorkspaceApiSpec
                 Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
             }(ownerAuthToken)
           }(user.makeAuthToken(billingScopes))
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
       }
     }
 
@@ -357,7 +352,7 @@ class WorkspaceApiSpec
               }(ownerAuthToken)
             }(ownerAuthToken)
           }(ownerAuthToken)
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
       }
 
       "to import method configs from the method repo" in {
@@ -393,7 +388,7 @@ class WorkspaceApiSpec
               }
             }(ownerAuthToken)
           }(ownerAuthToken)
-        }(owner.makeAuthToken(billingScopes))
+        }(ownerAuthToken)
       }
     }
   }
