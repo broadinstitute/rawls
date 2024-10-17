@@ -84,13 +84,13 @@ object Dependencies {
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.8"
 
-  val workbenchLibsHash = "157f079"
+  val workbenchLibsHash = "80e4b8d"
 
   val workbenchModelV  = s"0.20-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.33-${workbenchLibsHash}"
-  val workbenchNotificationsV = s"0.7-${workbenchLibsHash}"
+  val workbenchNotificationsV = s"0.8-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
-  val workbenchOauth2V = s"0.7-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.8-${workbenchLibsHash}"
   val workbenchOpenTelemetryV = s"0.8-$workbenchLibsHash"
 
   def excludeWorkbenchGoogle = ExclusionRule("org.broadinstitute.dsde.workbench", "workbench-google_2.13")
