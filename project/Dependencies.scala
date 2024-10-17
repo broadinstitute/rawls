@@ -35,7 +35,7 @@ object Dependencies {
   // allowing for Rawls to upgrade its Scala version without requiring any changes to this artifact.
   val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
 
-  val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.8" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
+  val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.9" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
   val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.4" // Needed for connection pooling with the Bard client
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
@@ -69,7 +69,7 @@ object Dependencies {
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.12.0"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.7"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.10"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
