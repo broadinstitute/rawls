@@ -21,6 +21,11 @@ object RawlsExceptionWithErrorReport {
 
   def apply(status: StatusCode, t: Throwable)(implicit source: ErrorReportSource): RawlsExceptionWithErrorReport =
     RawlsExceptionWithErrorReport(ErrorReport(status, t))
+
+  def apply(status: StatusCode, message: String, t: Throwable)(implicit
+    source: ErrorReportSource
+  ): RawlsExceptionWithErrorReport =
+    RawlsExceptionWithErrorReport(ErrorReport(status, message, t))
 }
 
 /**
