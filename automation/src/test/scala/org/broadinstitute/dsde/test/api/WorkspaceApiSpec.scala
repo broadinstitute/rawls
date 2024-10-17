@@ -56,7 +56,7 @@ class WorkspaceApiSpec
 
   val owner: Credentials = UserPool.chooseProjectOwner
   implicit val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
-  val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.makeAuthToken).get
+  implicit val nonOwnerAuthToken: AuthToken = bee.chooseStudent.map(_.makeAuthToken).get
 
   val operations = Array(
     Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
@@ -269,7 +269,7 @@ class WorkspaceApiSpec
         implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
         val user: Credentials = UserPool.chooseAdmin
-        val userToken: AuthToken = user.makeAuthToken()
+        val userToken: AuthToken = nonOwnerAuthToken
 
         val workspaceName = prependUUID("requester-pays")
         val workspaceCloneName = s"$workspaceName-copy"
