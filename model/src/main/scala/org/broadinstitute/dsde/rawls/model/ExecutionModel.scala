@@ -144,6 +144,8 @@ case class WorkflowCost(
   cost: Option[Float]
 )
 
+case class WorkflowCostBreakdown(id: String, cost: BigDecimal, currency: String, status: String, errors: Seq[String])
+
 case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
 
 // Status of a submission
@@ -480,6 +482,8 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val WorkflowOutputsFormat: RootJsonFormat[WorkflowOutputs] = jsonFormat2(WorkflowOutputs)
 
   implicit val WorkflowCostFormat: RootJsonFormat[WorkflowCost] = jsonFormat2(WorkflowCost)
+
+  implicit val WorkflowCostBreakdownFormat: RootJsonFormat[WorkflowCostBreakdown] = jsonFormat5(WorkflowCostBreakdown)
 
   implicit val SubmissionValidationInputFormat: RootJsonFormat[SubmissionValidationInput] = jsonFormat2(
     SubmissionValidationInput

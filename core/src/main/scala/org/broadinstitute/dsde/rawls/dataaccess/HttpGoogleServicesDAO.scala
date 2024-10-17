@@ -40,7 +40,7 @@ import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
-import com.google.cloud.storage.Storage.BucketSourceOption
+import com.google.cloud.storage.Storage.{BucketSourceOption, BucketTargetOption}
 import com.google.cloud.storage.{BucketInfo, Cors, HttpMethod, StorageClass, StorageException}
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
@@ -307,16 +307,44 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  override def setBucketLifecycle(bucketName: String, lifecycle: List[BucketInfo.LifecycleRule]): Future[Unit] =
+  override def setBucketLifecycle(bucketName: String,
+                                  lifecycle: List[BucketInfo.LifecycleRule],
+                                  userProject: GoogleProjectId
+  ): Future[Unit] =
     googleStorageService
-      .setBucketLifecycle(GcsBucketName(bucketName), lifecycle)
+      .setBucketLifecycle(
+        GcsBucketName(bucketName),
+        lifecycle,
+        bucketTargetOptions = List(BucketTargetOption.userProject(userProject.value))
+      )
       .compile
       .drain
       .unsafeToFuture()
 
-  override def setSoftDeletePolicy(bucketName: String, softDeletePolicy: BucketInfo.SoftDeletePolicy): Future[Unit] =
+  override def setSoftDeletePolicy(bucketName: String,
+                                   softDeletePolicy: BucketInfo.SoftDeletePolicy,
+                                   userProject: GoogleProjectId
+  ): Future[Unit] =
     googleStorageService
-      .setSoftDeletePolicy(GcsBucketName(bucketName), softDeletePolicy)
+      .setSoftDeletePolicy(
+        GcsBucketName(bucketName),
+        softDeletePolicy,
+        bucketTargetOptions = List(BucketTargetOption.userProject(userProject.value))
+      )
+      .compile
+      .drain
+      .unsafeToFuture()
+
+  override def setRequesterPays(bucketName: String,
+                                requesterPaysEnabled: Boolean,
+                                userProject: GoogleProjectId
+  ): Future[Unit] =
+    googleStorageService
+      .setRequesterPays(
+        GcsBucketName(bucketName),
+        requesterPaysEnabled,
+        bucketTargetOptions = List(BucketTargetOption.userProject(userProject.value))
+      )
       .compile
       .drain
       .unsafeToFuture()
@@ -354,7 +382,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def getBucketUsage(googleProject: GoogleProjectId,
                               bucketName: String,
-                              maxResults: Option[Long]
+                              maxResults: Option[Long] = None
   ): Future[BucketUsageResponse] = {
     implicit val service = GoogleInstrumentedService.Storage
 

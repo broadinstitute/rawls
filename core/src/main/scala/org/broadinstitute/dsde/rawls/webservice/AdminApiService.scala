@@ -9,6 +9,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.billing.BillingAdminService
 import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -17,9 +18,10 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrat
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceAdminService
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait AdminApiService extends UserInfoDirectives {
@@ -28,24 +30,34 @@ trait AdminApiService extends UserInfoDirectives {
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  // val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService
   val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService
   val userServiceConstructor: RawlsRequestContext => UserService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
+  val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService
 
   def adminRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("admin" / "billing" / Segment) { projectId =>
-        delete {
-          entity(as[Map[String, String]]) { ownerInfo =>
-            complete {
-              userServiceConstructor(ctx)
-                .adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
-                .map(_ => StatusCodes.NoContent)
+        val billingProjectName = RawlsBillingProjectName(projectId)
+        get {
+          complete {
+            billingAdminServiceConstructor(ctx)
+              .getBillingProjectSupportSummary(billingProjectName)
+              .map(StatusCodes.OK -> _)
+          }
+        } ~
+          delete {
+            entity(as[Map[String, String]]) { ownerInfo =>
+              complete {
+                userServiceConstructor(ctx)
+                  .adminDeleteBillingProject(billingProjectName, ownerInfo)
+                  .map(_ => StatusCodes.NoContent)
+              }
             }
           }
-        }
       } ~
         path("admin" / "submissions") {
           get {
@@ -98,19 +110,21 @@ trait AdminApiService extends UserInfoDirectives {
             parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) {
               (nameOption, stringOption, numberOption, booleanOption) =>
                 val resultFuture = nameOption match {
-                  case None => workspaceServiceConstructor(ctx).listAllWorkspaces()
+                  case None => workspaceAdminServiceConstructor(ctx).listAllWorkspaces()
                   case Some(attributeName) =>
                     val name = AttributeName.fromDelimitedName(attributeName)
                     (stringOption, numberOption, booleanOption) match {
                       case (Some(string), None, None) =>
-                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(name, AttributeString(string))
+                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(name,
+                                                                                               AttributeString(string)
+                        )
                       case (None, Some(number), None) =>
-                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(
+                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(
                           name,
                           AttributeNumber(number.toDouble)
                         )
                       case (None, None, Some(boolean)) =>
-                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(
+                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(
                           name,
                           AttributeBoolean(boolean.toBoolean)
                         )
@@ -208,22 +222,34 @@ trait AdminApiService extends UserInfoDirectives {
                 }
             }
         } ~
-        path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
-                WorkspaceName(workspaceNamespace, workspaceName)
-              )
+        pathPrefix("admin" / "workspaces") {
+          pathPrefix(Segment / Segment) { (workspaceNamespace, workspaceName) =>
+            path("flags") {
+              get {
+                complete {
+                  workspaceAdminServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
+                    WorkspaceName(workspaceNamespace, workspaceName)
+                  )
+                }
+              } ~
+                put {
+                  entity(as[List[String]]) { flagNames =>
+                    complete {
+                      workspaceAdminServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(
+                        WorkspaceName(workspaceNamespace, workspaceName),
+                        flagNames
+                      )
+                    }
+                  }
+                }
             }
           } ~
-            put {
-              entity(as[List[String]]) { flagNames =>
+            path(Segment) { workspaceId =>
+              get {
                 complete {
-                  workspaceServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace,
-                                                                                                     workspaceName
-                                                                                       ),
-                                                                                       flagNames
-                  )
+                  workspaceAdminServiceConstructor(ctx)
+                    .getWorkspaceById(UUID.fromString(workspaceId))
+                    .map(StatusCodes.OK -> _)
                 }
               }
             }
