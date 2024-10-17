@@ -717,6 +717,8 @@ class WorkspaceServiceSpec
   }
 
   it should "invite a user to a workspace" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
     val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete2 =
       Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true),
