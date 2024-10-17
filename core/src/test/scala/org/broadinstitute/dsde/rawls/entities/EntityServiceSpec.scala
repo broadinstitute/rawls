@@ -56,9 +56,12 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeNotFoundException,
+  AttributeUpdateOperationException,
+  MockitoTestUtils
+}
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
-import org.broadinstitute.dsde.rawls.workspace.{AttributeNotFoundException, AttributeUpdateOperationException}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec

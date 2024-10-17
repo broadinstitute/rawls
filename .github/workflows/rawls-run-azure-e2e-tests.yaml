@@ -13,9 +13,6 @@ name: rawls-run-azure-e2e-tests
 # On schedule: student-subjects output will use '["harry.potter@quality.firecloud.org","lavender.brown@quality.firecloud.org"]'
 # Dispatch event: student-subjects output will use inputs.student-subjects
 on:
-  schedule:
-    # run twice a day at 10:00 and 22:00 UTC every day of the week
-    - cron: "0 10/12 * * *"
   workflow_dispatch:
     inputs:
       build-branch:
