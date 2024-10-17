@@ -8,7 +8,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
-import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
+import org.broadinstitute.dsde.rawls.billing.{BillingAdminService, BillingProjectOrchestrator}
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.RawlsApiServiceImpl
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceAdminService, WorkspaceService, WorkspaceSettingService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{reset, when}
@@ -95,6 +95,11 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
     _ => mockWorkspaceService
   }
+  val mockWorkspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService = {
+    lazy val mockWorkspaceAdminService: WorkspaceAdminService = mock[WorkspaceAdminService]
+    _ => mockWorkspaceAdminService
+  }
+
   val mockWorkspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = {
     lazy val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService]
     _ => mockWorkspaceSettingService
@@ -111,6 +116,10 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   val mockUserServiceConstructor: RawlsRequestContext => UserService = {
     lazy val mockUserService: UserService = mock[UserService]
     _ => mockUserService
+  }
+  val mockBillingAdminServiceConstructor: RawlsRequestContext => BillingAdminService = {
+    lazy val mockBillingAdminService: BillingAdminService = mock[BillingAdminService]
+    _ => mockBillingAdminService
   }
   val mockGenomicsServiceConstructor: RawlsRequestContext => GenomicsService = {
     lazy val mockGenomicsService: GenomicsService = mock[GenomicsService]
@@ -146,9 +155,11 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   val rawlsApiService = new RawlsApiServiceImpl(
     mockMultiCloudWorkspaceServiceConstructor,
     mockWorkspaceServiceConstructor,
+    mockWorkspaceAdminServiceConstructor,
     mockWorkspaceSettingServiceConstructor,
     mockEntityServiceConstructor,
     mockUserServiceConstructor,
+    mockBillingAdminServiceConstructor,
     mockGenomicsServiceConstructor,
     mockSnapshotServiceConstructor,
     mockSpendReportingConstructor,

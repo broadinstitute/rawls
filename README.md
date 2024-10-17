@@ -60,13 +60,15 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 
 * [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
 * Broad internal internet connection (or VPN, non-split recommended)
+* Make sure you have `kubectl` and `gcloud` installed.
+* You will then need to authenticate in gcloud; if you are not already then running the script will ask you to.
 * Render the local configuration files. From the root of the Rawls repo, run:
 ```sh
 ./local-dev/bin/render
 ```
 *  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
 ```sh
-127.0.0.1	local.broadinstitute.org
+127.0.0.1	local.dsde-dev.broadinstitute.org
 ```
 
 ### Running:
@@ -82,7 +84,7 @@ It will also set up a process that will watch the local files for changes, and r
 
 See docker-rsync-local-rawls.sh for more configuration options.
 
-If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.broadinstitute.org:20443/
+If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.dsde-dev.broadinstitute.org:20443/
 
 ### Useful Tricks:
 
@@ -130,10 +132,12 @@ Supported Scala versions: 2.13
 Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory.
 You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 
-- The [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml)
-publishes these libraries, but it makes "unofficial" `-SNAP` versions. This action runs on every dev build as part of the
-[`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml).
-
+Note: We have started just using the automatically generated `-SNAP` versions published by [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml) on every dev build. Here are detailed instructions for finding the name of the jar file:
+* Navigate to the [`rawls-build-tag-publish-and-run-tests` workflow](https://github.com/broadinstitute/rawls/blob/develop/.github/workflows/rawls-build-tag-publish-and-run-tests.yaml) github action for your commit
+* Navigate to the rawls-build-publish-job job of that workflow
+* Open the "dispatch build" step, and click over to the run in terra-github-workflows
+* Expand the "Publish model library" step
+* Note that version published, e.g. "rawls-model_2.13-v0.0.180-SNAP.jar"
 
 To publish a temporary or test version, use `publishSnapshot.sh` like so:
 

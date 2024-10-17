@@ -6,7 +6,7 @@
 set -e
 
 # make jar.  cache sbt dependencies. capture output and stop db before returning.
-docker run --rm -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/clean_install.sh /working
+docker run --rm -e DOCKER_TAG -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.2_2.13.15 /working/docker/clean_install.sh /working
 EXIT_CODE=$?
 
 if [ $EXIT_CODE != 0 ]; then

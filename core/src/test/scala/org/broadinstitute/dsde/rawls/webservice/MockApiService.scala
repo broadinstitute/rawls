@@ -25,7 +25,12 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceService,
+  WorkspaceAdminService,
+  WorkspaceService,
+  WorkspaceSettingService
+}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.scalatestplus.mockito.MockitoSugar.mock
@@ -62,13 +67,17 @@ class MockApiService(
     mock[SubmissionsService](RETURNS_SMART_NULLS),
   override val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = _ =>
     mock[WorkspaceService](RETURNS_SMART_NULLS),
+  override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService = _ =>
+    mock[WorkspaceAdminService](RETURNS_SMART_NULLS),
   override val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = _ =>
     mock[MultiCloudWorkspaceService](RETURNS_SMART_NULLS),
   override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
     mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
   override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService = _ =>
     mock[BucketMigrationService](RETURNS_SMART_NULLS),
-  override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS)
+  override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
+  override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService = _ =>
+    mock[BillingAdminService](RETURNS_SMART_NULLS)
 )(implicit val executionContext: ExecutionContext)
     extends RawlsApiService
     with AdminApiService

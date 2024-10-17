@@ -1,30 +1,28 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
-import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
-import com.typesafe.scalalogging.LazyLogging
 import cats.implicits._
+import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
+import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
-  GcpBucketLifecycleCondition,
-  GcpBucketLifecycleConfig,
-  GcpBucketSoftDeleteConfig
-}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GcpBucketLifecycleSetting,
+  GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   RawlsRequestContext,
   SamWorkspaceActions,
+  SeparateSubmissionFinalOutputsSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
   WorkspaceSettingResponse
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import java.time.Duration
 import scala.concurrent.duration.DurationInt
@@ -94,6 +92,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
+          case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
         }
       }
 
@@ -114,7 +114,21 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
     def applySetting(workspace: Workspace,
                      setting: WorkspaceSetting
     ): Future[Option[(WorkspaceSettingType, ErrorReport)]] =
-      (setting match {
+      (for {
+        _ <- applySettingToBucket(workspace, setting)
+        _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID, setting.settingType)
+      } yield None).recoverWith { case e =>
+        logger.error(
+          s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.settingType}]",
+          e
+        )
+        workspaceSettingRepository
+          .removePendingSetting(workspace.workspaceIdAsUUID, setting.settingType)
+          .map(_ => Some((setting.settingType, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
+      }
+
+    def applySettingToBucket(workspace: Workspace, workspaceSetting: WorkspaceSetting): Future[Unit] =
+      workspaceSetting match {
         case GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(rules)) =>
           val googleRules = rules.map { rule =>
             val conditionBuilder = LifecycleCondition.newBuilder()
@@ -133,34 +147,22 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
 
             new LifecycleRule(action, conditionBuilder.build())
           }
+          gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules, workspace.googleProjectId)
 
-          for {
-            _ <- gcsDAO.setBucketLifecycle(workspace.bucketName, googleRules)
-            _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
-                                                                        setting.settingType
-            )
-          } yield None
         case GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(retentionDuration)) =>
           val policyBuilder = SoftDeletePolicy.newBuilder()
           policyBuilder.setRetentionDuration(Duration.ofSeconds(retentionDuration))
           val softDeletePolicy = policyBuilder.build()
+          gcsDAO.setSoftDeletePolicy(workspace.bucketName, softDeletePolicy, workspace.googleProjectId)
 
-          for {
-            _ <- gcsDAO.setSoftDeletePolicy(workspace.bucketName, softDeletePolicy)
-            _ <- workspaceSettingRepository.markWorkspaceSettingApplied(workspace.workspaceIdAsUUID,
-                                                                        setting.settingType
-            )
-          } yield None
+        case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
+          gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
+
+        case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
+          // SeparateSubmissionFinalOutputsSetting is not a bucket setting, so we don't need to apply anything here
+          Future.successful(())
 
         case _ => throw new RawlsException("unsupported workspace setting")
-      }).recoverWith { case e =>
-        logger.error(
-          s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.settingType}]",
-          e
-        )
-        workspaceSettingRepository
-          .removePendingSetting(workspace.workspaceIdAsUUID, setting.settingType)
-          .map(_ => Some((setting.settingType, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
       }
 
     validateSettings(workspaceSettings)

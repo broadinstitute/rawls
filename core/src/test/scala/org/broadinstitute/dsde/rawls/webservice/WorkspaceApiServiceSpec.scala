@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.{StatusCodes, _}
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.model.{ErrorReport => _}
-import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -15,7 +14,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
@@ -181,7 +179,7 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    verify(workspaceService).getWorkspaceById(workspace.workspaceId, params, null)
+    verify(workspaceService).getWorkspaceById(workspace.workspaceId, params)
   }
 
   it should "get a workspace by name and namespace from the workspace service" in {
@@ -204,7 +202,7 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), null)
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None))
   }
 
   it should "pass the fields parameter when getting a workspace by name and namespace" in {
@@ -227,7 +225,7 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, params, null)
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, params)
   }
 
   it should "update the workspace by name and namespace" in {

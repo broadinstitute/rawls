@@ -38,7 +38,7 @@ object Settings {
   val commonSettings =
     commonBuildSettings ++ testSettings ++ List(
     organization  := "org.broadinstitute.dsde.firecloud",
-    scalaVersion  := "2.13.14",
+    scalaVersion  := "2.13.15",
     resolvers ++= commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )
