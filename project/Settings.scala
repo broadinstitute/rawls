@@ -82,13 +82,12 @@ object Settings {
   )
 
   // When updating this, also update Docker image (https://hub.docker.com/r/sbtscala/scala-sbt/tags)
-  val scala213 = "2.13.14"
+  val scala213 = "2.13.15"
 
   // common settings for all sbt subprojects, without enforcing that a database is present (for tests)
   val commonSettingsWithoutDb =
     commonBuildSettings ++ commonAssemblySettings ++ testSettingsWithoutDb ++ scalafmtSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := scala213,
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalaVersion  := scala213,
     dependencyOverrides ++= transitiveDependencyOverrides,
