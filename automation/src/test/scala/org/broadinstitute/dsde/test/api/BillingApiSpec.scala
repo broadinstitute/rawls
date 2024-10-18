@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.test.pipeline._
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -11,11 +12,13 @@ import org.scalatest.matchers.should.Matchers
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
 @BillingsTest
 class BillingApiSpec extends AnyFreeSpec with MethodFixtures with Matchers with TestReporterFixture with LazyLogging {
+  val bee = PipelineInjector(PipelineInjector.e2eEnv())
+
+  val owner: Credentials = UserPool.chooseProjectOwner
+  implicit val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
 
   "A user with a billing account" - {
     "can create a new billing project with v2 api" in {
-      val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val billingProjectName = "rawls-billingapispecV2-" + makeRandomId()
       Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
       val result = Rawls.billingV2.getBillingProject(billingProjectName).toList
