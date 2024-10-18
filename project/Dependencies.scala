@@ -61,7 +61,7 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.17.2"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.0"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.13.0"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
@@ -111,9 +111,8 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.13.2"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.2"
-
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.13.3"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.4"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
