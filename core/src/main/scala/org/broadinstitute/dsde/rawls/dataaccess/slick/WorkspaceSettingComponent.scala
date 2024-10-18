@@ -2,9 +2,16 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   GcpBucketLifecycleConfigFormat,
-  GcpBucketSoftDeleteConfigFormat
+  GcpBucketRequesterPaysConfigFormat,
+  GcpBucketSoftDeleteConfigFormat,
+  SeparateSubmissionFinalOutputsConfigFormat
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleConfig, GcpBucketSoftDeleteConfig}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleConfig,
+  GcpBucketRequesterPaysConfig,
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 
@@ -58,6 +65,12 @@ object WorkspaceSettingRecord {
         GcpBucketLifecycleSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketLifecycleConfig])
       case WorkspaceSettingTypes.GcpBucketSoftDelete =>
         GcpBucketSoftDeleteSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig])
+      case WorkspaceSettingTypes.GcpBucketRequesterPays =>
+        GcpBucketRequesterPaysSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketRequesterPaysConfig])
+      case WorkspaceSettingTypes.SeparateSubmissionFinalOutputs =>
+        SeparateSubmissionFinalOutputsSetting(
+          workspaceSettingRecord.config.parseJson.convertTo[SeparateSubmissionFinalOutputsConfig]
+        )
     }
   }
 }

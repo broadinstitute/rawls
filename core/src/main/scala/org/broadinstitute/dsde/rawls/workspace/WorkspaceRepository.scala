@@ -3,14 +3,19 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  PendingCloneWorkspaceFileTransfer,
+  RawlsBillingProjectName,
   RawlsRequestContext,
   Workspace,
   WorkspaceAttributeSpecs,
   WorkspaceName,
-  WorkspaceState
+  WorkspaceState,
+  WorkspaceSubmissionStats,
+  WorkspaceTag
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
@@ -43,6 +48,21 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs)
     }
 
+  def getWorkspaceId(workspaceName: WorkspaceName): Future[Option[UUID]] = dataSource.inTransaction {
+    _.workspaceQuery.getV2WorkspaceId(workspaceName)
+  }
+
+  def listWorkspacesByIds(workspaceIds: Seq[UUID],
+                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Seq[Workspace]] = dataSource.inTransaction {
+    _.workspaceQuery.listV2WorkspacesByIds(workspaceIds, attributeSpecs)
+  }
+
+  def listWorkspacesByBillingProject(billingProjectName: RawlsBillingProjectName): Future[Seq[Workspace]] =
+    dataSource.inTransaction {
+      _.workspaceQuery.listWithBillingProject(billingProjectName)
+    }
+
   def createWorkspace(workspace: Workspace): Future[Workspace] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.createOrUpdate(workspace)
@@ -65,8 +85,21 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.delete(workspaceName)
     }
 
-  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
-    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+  def deleteRawlsWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Delete components of the workspace
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspace)
+
+        // Schedule bucket for deletion
+        _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspace.bucketName))
+
+        // Delete the workspace
+        _ <- dataAccess.workspaceQuery.delete(workspace.toWorkspaceName)
+      } yield ()
+    }
 
   def createMCWorkspace(workspaceId: UUID,
                         workspaceName: WorkspaceName,
@@ -98,4 +131,61 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
         )
       } yield newWorkspace
     }
+
+  def lockWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Boolean] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.list(workspace).flatMap { submissions =>
+        if (!submissions.forall(_.status.isTerminated)) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Conflict,
+              s"There are running submissions in workspace ${workspace.toWorkspaceName}, so it cannot be locked."
+            )
+          )
+        } else {
+          import dataAccess.WorkspaceExtensions
+          dataAccess.workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID).lock
+        }
+      }
+    }
+
+  def unlockWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Boolean] =
+    dataSource.inTransaction { dataAccess =>
+      import dataAccess.WorkspaceExtensions
+      dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspace).flatMap {
+        case true =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")
+          )
+        case false => dataAccess.workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID).unlock
+      }
+    }
+
+  def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =
+    dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+
+  /*** Methods Accessing Auxiliary Data ***/
+
+  def updatePendingCloneWorkspaceFileTransferRecord(record: PendingCloneWorkspaceFileTransfer): Future[Int] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.update(record))
+
+  def listPendingCloneWorkspaceFileTransferRecords(
+    workspaceId: Option[UUID]
+  ): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.listPendingTransfers(workspaceId))
+
+  def savePendingCloneWorkspaceFileTransfer(destWorkspace: UUID, sourceWorkspace: UUID, prefix: String): Future[Int] =
+    dataSource.inTransaction(_.cloneWorkspaceFileTransferQuery.save(destWorkspace, sourceWorkspace, prefix))
+
+  def getSubmissionSummaryStats(workspaceId: UUID)(implicit
+    ex: ExecutionContext
+  ): Future[Option[WorkspaceSubmissionStats]] =
+    dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(Seq(workspaceId))).map(_.values.headOption)
+
+  def listSubmissionSummaryStats(workspaceIds: Seq[UUID]): Future[Map[UUID, WorkspaceSubmissionStats]] =
+    dataSource.inTransaction(_.workspaceQuery.listSubmissionSummaryStats(workspaceIds))
+
+  def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
+    dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
+
 }

@@ -109,7 +109,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(googleWorkspaceInfo)
   }
 
-  override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
   override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(
     UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000"))
   )
@@ -124,19 +123,25 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
-  override def setBucketLifecycle(bucketName: String, lifecycle: List[BucketInfo.LifecycleRule]): Future[Unit] = ???
+  override def setBucketLifecycle(bucketName: String,
+                                  lifecycle: List[BucketInfo.LifecycleRule],
+                                  userProject: GoogleProjectId
+  ): Future[Unit] = ???
 
-  override def setSoftDeletePolicy(bucketName: String, softDeletePolicy: BucketInfo.SoftDeletePolicy): Future[Unit] =
+  override def setSoftDeletePolicy(bucketName: String,
+                                   softDeletePolicy: BucketInfo.SoftDeletePolicy,
+                                   userProject: GoogleProjectId
+  ): Future[Unit] =
     ???
+
+  override def setRequesterPays(bucketName: String,
+                                requesterPaysEnabled: Boolean,
+                                userProject: GoogleProjectId
+  ): Future[Unit] = ???
 
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
   ): Future[Either[String, Bucket]] = Future.successful(Right(new Bucket))
-
-  override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] =
-    Future.successful(Some(List.fill(5)(new BucketAccessControl)))
-
-  override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
   override def listObjectsWithPrefix(bucketName: String,
                                      objectNamePrefix: String,
@@ -240,8 +245,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def grantReadAccess(bucketName: String, readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
-
   override def pollOperation(operationId: OperationId): Future[OperationStatus] =
     Future.successful(OperationStatus(true, None))
 
@@ -298,18 +301,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
         case _               => List("us-central1-b", "us-central1-c", "us-central1-f")
       }
     }
-
-  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[String]] = {
-    val billingAccount = googleProject.value match {
-      case "project_without_table"           => Some("billing_account_for_google_project_without_table")
-      case "project_without_billing_account" => None
-      case _                                 => Some("some-billing-account")
-    }
-
-    Future.successful(billingAccount)
-  }
 
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext

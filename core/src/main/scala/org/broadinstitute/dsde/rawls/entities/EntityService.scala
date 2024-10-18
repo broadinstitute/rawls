@@ -17,19 +17,15 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
-  Entity,
-  EntityCopyDefinition,
-  EntityQuery,
-  ErrorReport,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  WorkspaceName,
-  _
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  EntitySupport,
+  JsonFilterUtils,
+  WorkspaceSupport
 }
-import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AttributeUpdateOperationException, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
@@ -76,7 +72,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
         result <- entityManager.createEntity(entity)
       } yield result
-    }
+    }.recover(sqlLoggingRecover(s"createEntity: $workspaceName"))
 
   def getEntity(workspaceName: WorkspaceName,
                 entityType: String,
@@ -102,6 +98,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
           )
         }
+        .recover(sqlLoggingRecover(s"getEntity: $workspaceName $entityType/$entityName"))
         .recover(bigQueryRecover)
     }
 
@@ -138,7 +135,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
         }
       }
-    }
+    }.recover(sqlLoggingRecover(s"updateEntity: $workspaceName $entityType/$entityName ${operations.size} operations"))
 
   def deleteEntities(workspaceName: WorkspaceName,
                      entRefs: Seq[AttributeEntityReference],
@@ -203,9 +200,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                              entityType: String,
                              attributeNames: Set[AttributeName]
   ): Future[Unit] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+    (getV2WorkspaceContextAndPermissions(workspaceName,
+                                         SamWorkspaceActions.write,
+                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess
@@ -218,12 +215,14 @@ class EntityService(protected val ctx: RawlsRequestContext,
           case _ => DBIO.successful(())
         }
       }
-    }
+    }).recover(
+      sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
+    )
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+    (getV2WorkspaceContextAndPermissions(workspaceName,
+                                         SamWorkspaceActions.write,
+                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
@@ -237,7 +236,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
         }
       }
-    }
+    }).recover(
+      sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
+    )
 
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
@@ -275,9 +276,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           )
       }
 
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+    (getV2WorkspaceContextAndPermissions(workspaceName,
+                                         SamWorkspaceActions.write,
+                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         for {
@@ -286,7 +287,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
         } yield renameResult
       }
-    }
+    }).recover(
+      sqlLoggingRecover(s"renameEntityType: $workspaceName $oldName")
+    )
   }
 
   def evaluateExpression(workspaceName: WorkspaceName,
@@ -294,9 +297,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                          entityName: String,
                          expression: String
   ): Future[Seq[AttributeValue]] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.read,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+    (getV2WorkspaceContextAndPermissions(workspaceName,
+                                         SamWorkspaceActions.read,
+                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction(
         dataAccess =>
@@ -333,16 +336,18 @@ class EntityService(protected val ctx: RawlsRequestContext,
           },
         TransactionIsolation.ReadCommitted
       )
-    }
+    }).recover(
+      sqlLoggingRecover(s"evaluateExpression: $workspaceName $entityType $entityName $expression")
+    )
 
   def entityTypeMetadata(workspaceName: WorkspaceName,
                          dataReference: Option[DataReferenceName],
                          billingProject: Option[GoogleProjectId],
                          useCache: Boolean
   ): Future[Map[String, EntityTypeMetadata]] =
-    getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.read,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+    (getV2WorkspaceContextAndPermissions(workspaceName,
+                                         SamWorkspaceActions.read,
+                                         Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
@@ -352,7 +357,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       } yield metadata
 
       metadataFuture.recover(bigQueryRecover)
-    }
+    }).recover(
+      sqlLoggingRecover(s"entityTypeMetadata: $workspaceName")
+    )
 
   /*
    * Queries the db for a stream of entity attributes.
@@ -375,13 +382,15 @@ class EntityService(protected val ctx: RawlsRequestContext,
   }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String) =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    (getWorkspaceContextAndPermissions(workspaceName,
+                                       SamWorkspaceActions.read,
+                                       Some(WorkspaceAttributeSpecs(all = false))
     ) map { workspaceContext =>
       val dbSource = listEntitiesDbSource(workspaceContext, entityType)
       EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-    }
+    }).recover(
+      sqlLoggingRecover(s"listEntities: $workspaceName $entityType")
+    )
 
   def queryEntitiesSource(workspaceName: WorkspaceName,
                           dataReference: Option[DataReferenceName],
@@ -411,7 +420,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, linkExistingEntities: Boolean): Future[EntityCopyResponse] =
-    for {
+    (for {
       destWsCtx <- getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
                                                        SamWorkspaceActions.write,
                                                        Some(WorkspaceAttributeSpecs(all = false))
@@ -434,7 +443,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
                       ctx
         )
         .recover(bigQueryRecover)
-    } yield entityCopyResponse
+    } yield entityCopyResponse)
+      .recover(
+        sqlLoggingRecover(s"copyEntities: $entityCopyDef $linkExistingEntities")
+      )
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
                                   entityUpdates: Seq[EntityUpdateDefinition],
@@ -464,6 +476,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject)
+      .recover(
+        sqlLoggingRecover(s"batchUpdateEntities: $workspaceName ${entityUpdates.size} updates")
+      )
 
   def batchUpsertEntities(workspaceName: WorkspaceName,
                           entityUpdates: Seq[EntityUpdateDefinition],
@@ -471,6 +486,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject)
+      .recover(
+        sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
+      )
 
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
@@ -530,7 +548,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           } yield rowsUpdated
         }
       }
-    }
+    }.recover(
+      sqlLoggingRecover(s"renameAttribute: $workspaceName $oldAttributeName $attributeRenameRequest")
+    )
 
   private def sqlLoggingRecover[U](logHint: String): PartialFunction[Throwable, U] = {
     case sqlException: SQLException =>
