@@ -112,7 +112,7 @@ class WorkspaceApiSpec
         try source.mkString
         finally source.close()
       val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests",
-                                                      GoogleCredentialModes.Json(jsonCreds),
+                                                      GoogleCredentialModes.Token(() => ownerAuthToken),
                                                       "workbenchMetricBaseName"
       )
 
