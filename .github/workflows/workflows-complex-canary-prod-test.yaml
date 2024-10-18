@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    timeout-minutes: 240
     steps:
       - name: Dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
