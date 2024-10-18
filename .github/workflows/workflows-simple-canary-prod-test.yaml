@@ -1,0 +1,28 @@
+name: workflows-simple-canary-prod-test
+'on':
+  schedule:
+    - cron: "0 * * * *"  # run hourly
+  workflow_dispatch:
+
+jobs:
+  run-simple-canary-prod-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: Dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v3
+        with:
+          workflow: workflows-canary-prod-test
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
+
+  report-workflow:
+    uses: broadinstitute/sherlock/.github/workflows/client-report-workflow.yaml@main
+    with:
+      notify-slack-channels-upon-workflow-failure: "#batch-servers"
+      notify-slack-custom-icon: ":sad-terra:"
+    permissions:
+      id-token: write

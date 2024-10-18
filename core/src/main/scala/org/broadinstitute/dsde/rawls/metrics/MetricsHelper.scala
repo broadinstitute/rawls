@@ -40,11 +40,12 @@ object MetricsHelper {
   def incrementFastPassRevokedCounter(memberType: IamMemberType): IO[Unit] =
     incrementFastPassUpdatedCounter(memberType, "revoke")
 
-  def incrementCounter(name: String,
-                       count: Int = 1,
-                       labels: Map[String, String] = Map.empty,
-                       description: Option[String] = None
-  ): IO[Unit] = {
+  def incrementCounter(
+    name: String,
+    count: Int = 1,
+    labels: Map[String, String] = Map.empty,
+    description: Option[String] = None
+  ): Unit = {
     val metrics = meter
       .counterBuilder(s"$PREFIX/$name")
       .setDescription(description.getOrElse("none"))
@@ -53,7 +54,7 @@ object MetricsHelper {
     labels.foreach { case (k, v) =>
       labelBuilder.put(k, v)
     }
-    IO(metrics.add(count, labelBuilder.build()))
+    metrics.add(count, labelBuilder.build())
   }
 
   private def incrementFastPassUpdatedCounter(memberType: IamMemberType, action: String) =

@@ -65,9 +65,14 @@ trait GoogleServicesDAO extends ErrorReportable {
    */
   def deleteBucket(bucketName: String): Future[Boolean]
 
-  def setBucketLifecycle(bucketName: String, lifecycle: List[LifecycleRule]): Future[Unit]
+  def setBucketLifecycle(bucketName: String, lifecycle: List[LifecycleRule], userProject: GoogleProjectId): Future[Unit]
 
-  def setSoftDeletePolicy(bucketName: String, softDeletePolicy: SoftDeletePolicy): Future[Unit]
+  def setSoftDeletePolicy(bucketName: String,
+                          softDeletePolicy: SoftDeletePolicy,
+                          userProject: GoogleProjectId
+  ): Future[Unit]
+
+  def setRequesterPays(bucketName: String, requesterPaysEnabled: Boolean, userProject: GoogleProjectId): Future[Unit]
 
   def isAdmin(userEmail: String): Future[Boolean]
 

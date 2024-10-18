@@ -9,7 +9,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule,
-  GcpBucketSoftDeleteConfig
+  GcpBucketRequesterPaysConfig,
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
@@ -888,7 +890,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       }
     }
 
-    "GoogleBucketSoftDeleteSettings" - {
+    "GoogleBucketSoftDeleteSetting" - {
       "parses soft delete setting with retentionDurationInSeconds" in {
         val softDeleteSetting =
           """{
@@ -951,6 +953,112 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         intercept[DeserializationException] {
           WorkspaceSettingFormat.read(lifecycleSettingSoftDeleteConfig)
         }
+      }
+    }
+
+    "GoogleBucketRequesterPaysSettings" - {
+      "parses requester pays setting with enabled" in {
+        val requesterPaysSetting =
+          """{
+            |    "settingType": "GcpBucketRequesterPays",
+            |    "config": {
+            |      "enabled": true
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          GcpBucketRequesterPaysSetting(
+            GcpBucketRequesterPaysConfig(true)
+          )
+        } {
+          WorkspaceSettingFormat.read(requesterPaysSetting)
+        }
+      }
+
+      "throws an exception for missing enabled" in {
+        val requesterPaysSettingNoEnabled =
+          """{
+            |    "settingType": "GcpBucketRequesterPays",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(requesterPaysSettingNoEnabled)
+        }
+      }
+
+      "throws an exception for missing config" in {
+        val requesterPaysSettingNoConfig =
+          """{
+            |    "settingType": "GcpBucketRequesterPays"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(requesterPaysSettingNoConfig)
+        }
+      }
+
+      "throws an exception for incorrect format" in {
+        val requesterPaysSettingBadConfig =
+          """{
+            |    "settingType": "GcpBucketRequesterPays",
+            |    "config": {
+            |      "enabled": 0
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(requesterPaysSettingBadConfig)
+        }
+      }
+    }
+  }
+
+  "SeparateSubmissionFinalOutputsSetting" - {
+    "parses setting with enabled" in {
+      val setting =
+        """{
+          |    "settingType": "SeparateSubmissionFinalOutputs",
+          |    "config": {
+          |      "enabled": true
+          |    }
+          |  }""".stripMargin.parseJson
+      assertResult {
+        SeparateSubmissionFinalOutputsSetting(
+          SeparateSubmissionFinalOutputsConfig(true)
+        )
+      } {
+        WorkspaceSettingFormat.read(setting)
+      }
+    }
+
+    "throws an exception for missing enabled" in {
+      val settingNoEnabled =
+        """{
+          |    "settingType": "SeparateSubmissionFinalOutputs",
+          |    "config": {}
+          |  }""".stripMargin.parseJson
+      intercept[DeserializationException] {
+        WorkspaceSettingFormat.read(settingNoEnabled)
+      }
+    }
+
+    "throws an exception for missing config" in {
+      val settingNoConfig =
+        """{
+          |    "settingType": "SeparateSubmissionFinalOutputs"
+          |  }""".stripMargin.parseJson
+      intercept[NoSuchElementException] {
+        WorkspaceSettingFormat.read(settingNoConfig)
+      }
+    }
+
+    "throws an exception for incorrect format" in {
+      val settingBadConfig =
+        """{
+          |    "settingType": "SeparateSubmissionFinalOutputs",
+          |    "config": {
+          |      "enabled": 0
+          |    }
+          |  }""".stripMargin.parseJson
+      intercept[DeserializationException] {
+        WorkspaceSettingFormat.read(settingBadConfig)
       }
     }
   }

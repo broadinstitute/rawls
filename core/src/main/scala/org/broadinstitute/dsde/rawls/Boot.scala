@@ -60,6 +60,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
+  WorkspaceAdminService,
   WorkspaceRepository,
   WorkspaceService,
   WorkspaceSettingRepository,
@@ -421,6 +422,14 @@ object Boot extends IOApp with LazyLogging {
         fastPassServiceConstructor
       )
 
+      val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
+        WorkspaceAdminService.constructor(
+          slickDataSource,
+          gcsDAO,
+          samDAO,
+          workbenchMetricBaseName = metricsPrefix
+        )
+
       val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
         MethodConfigurationService.constructor(
           slickDataSource,
@@ -509,6 +518,9 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
+      val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
+        new BillingAdminService(samDAO, billingRepository, workspaceRepository, _)
+
       val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
         BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
 
@@ -519,9 +531,11 @@ object Boot extends IOApp with LazyLogging {
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
+        workspaceAdminServiceConstructor,
         workspaceSettingServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,
+        billingAdminServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
