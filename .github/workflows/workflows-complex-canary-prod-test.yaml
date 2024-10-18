@@ -1,15 +1,18 @@
-name: workflows-simple-canary-prod-test
+name: workflows-complex-canary-prod-test
 'on':
   schedule:
-    - cron: "0 * * * *"  # run hourly
+    - cron: "0 */3 * * *"  # run every 3 hours
   workflow_dispatch:
+  pull_request: # TODO: remove this before merging
+    branches: [ develop ]
 
 jobs:
-  run-simple-canary-prod-test:
+  run-complex-canary-prod-test:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
       id-token: 'write'
+    timeout-minutes: 240
     steps:
       - name: Dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
@@ -20,11 +23,11 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
           inputs: '{
             "workspace-namespace": "broad-firecloud-dsde",
-            "workspace-name": "CanaryTest",
-            "method-namespace": "wdl-testing",
-            "method-name": "hello-world",
-            "entity-type": "participant",
-            "entity-id": "subject_HCC1143"
+            "workspace-name": "complex-featured-workflow",
+            "method-namespace": "gatk",
+            "method-name": "five-dollar-genome-analysis-pipeline",
+            "entity-type": "sample",
+            "entity-id": "na12878_real_small"
           }'
 
   report-workflow:
