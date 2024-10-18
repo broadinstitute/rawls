@@ -11,6 +11,7 @@ import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -19,7 +20,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -29,6 +30,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
@@ -52,9 +54,6 @@ import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, W
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
-import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 
 import java.io.IOException
 import java.util.UUID
@@ -976,7 +975,11 @@ class WorkspaceService(
 
           // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
           aclChanges = normalize(aclUpdates) -- existingAcls
-          _ = validateAclChanges(aclChanges, existingAcls, workspace)
+          callingUserRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace,
+                                                              workspace.workspaceId,
+                                                              ctx
+          )
+          _ = validateAclChanges(aclChanges, existingAcls, callingUserRoles, workspace)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
@@ -1077,9 +1080,35 @@ class WorkspaceService(
 
   private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
                                  existingAcls: Set[WorkspaceACLUpdate],
+                                 callingUserRoles: Set[SamResourceRole],
                                  workspace: Workspace
   ): Unit = {
     val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
+    if (callingUserRoles.isEmpty) {
+      throw new InvalidWorkspaceAclUpdateException(
+        ErrorReport(StatusCodes.BadRequest, "you do not have access to change permissions for this workspace")
+      )
+    }
+    val callingUserMaxRole = callingUserRoles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).max
+    // Add the existingAcl entries that are being modified so we can check what we will
+    // be removing as well as what we are adding.
+    val allRolePermissionChanges =
+      aclChanges ++ existingAcls.filter(existingAcl => emailsBeingChanged.contains(existingAcl.email.toLowerCase))
+    if (callingUserMaxRole < WorkspaceAccessLevels.Owner) {
+      val invalidAclUpdates = allRolePermissionChanges.collect {
+        case aclChange if aclChange.accessLevel > callingUserMaxRole =>
+          "cannot change access levels higher than your own"
+        case WorkspaceACLUpdate(_, _, Some(true), _) =>
+          "cannot change canShare permission"
+        case WorkspaceACLUpdate(_, _, _, Some(true)) =>
+          "cannot change canCompute permission"
+      }.toSeq
+      if (invalidAclUpdates.nonEmpty) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you do not have sufficient permissions to make these changes")
+        )
+      }
+    }
     if (
       aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
         existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
