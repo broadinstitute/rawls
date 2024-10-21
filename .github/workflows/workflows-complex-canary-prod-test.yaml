@@ -17,7 +17,7 @@ jobs:
         uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
           workflow: workflows-canary-prod-test
-          run-name: "complex-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}"
+          run-name: "workflows-complex-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}"
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/sps_complex_canary_test # TODO: change to 'main' before merging
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
@@ -31,11 +31,11 @@ jobs:
             "entity-id": "na12878_real_small"
           }'
 
-  report-workflow:
-    uses: broadinstitute/sherlock/.github/workflows/client-report-workflow.yaml@main
-    with:
-      notify-slack-channels-upon-workflow-completion: "#dsp-analysis-prod-alerts" # TODO: use failure instead
-#      notify-slack-channels-upon-workflow-failure: "#dsp-analysis-prod-alerts"
-      notify-slack-custom-icon: ":sad-terra:"
-    permissions:
-      id-token: write
+#  report-workflow:
+#    uses: broadinstitute/sherlock/.github/workflows/client-report-workflow.yaml@main
+#    with:
+#      notify-slack-channels-upon-workflow-completion: "#dsp-analysis-prod-alerts" # TODO: use failure instead
+##      notify-slack-channels-upon-workflow-failure: "#dsp-analysis-prod-alerts"
+#      notify-slack-custom-icon: ":sad-terra:"
+#    permissions:
+#      id-token: write
