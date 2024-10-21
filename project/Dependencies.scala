@@ -3,7 +3,7 @@ import sbt._
 object Dependencies {
   val akkaV = "2.6.20"
   val akkaHttpV = "10.2.10"
-  val slickV = "3.5.1"
+  val slickV = "3.5.2"
 
   val googleV = "2.0.0"
 
@@ -80,7 +80,7 @@ object Dependencies {
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.0.0" exclude("com.google.protobuf", "protobuf-java")
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.29.1"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.29.2"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.8"
 
