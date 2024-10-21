@@ -367,23 +367,23 @@ multiCloudWorkspaces {
   enabled = true
   azureConfig {
     alphaFeatureGroup = "alpha-azure-feature-group"
-    landingZoneDefinition = "CromwellBaseResourcesFactory"
+    landingZoneDefinition = "ReferencedResourcesFactory"
     protectedDataLandingZoneDefinition = "ProtectedDataResourcesFactory"
     landingZoneVersion = "v1"
 
     landingZoneParameters = {
       # Total Network IP Space Size - 16,384 unique ips
       # 10.1.0.0 - 10.1.63.255
-      "VNET_ADDRESS_SPACE": "10.1.0.0/18"
+      "VNET_ADDRESS_SPACE": "10.240.0.0/18"
       # 10.1.0.0 - 10.1.3.255 -- 1024 ips
-      "AKS_SUBNET": "10.1.0.0/22"
+      "AKS_SUBNET": "10.240.4.0/22"
       # 10.1.4.0 - 10.1.7.255 -- 1024 ips
-      "COMPUTE_SUBNET": "10.1.4.0/22"
+      "COMPUTE_SUBNET": "10.240.20.0/22"
       # 10.1.8.0 - 10.1.11.255 -- 1024 ips
-      "POSTGRESQL_SUBNET": "10.1.8.0/22"
+      "POSTGRESQL_SUBNET": "10.240.12.0/22"
       # gap from 10.1.12.0 - 10.1.31.255 -- available for future use
       # 10.1.32.0 - 10.1.63.254 -- 8192 ips
-      "BATCH_SUBNET": "10.1.32.0/19"
+      "BATCH_SUBNET": "10.240.8.0/22"
       "POSTGRES_DB_ADMIN": "{{ $landingZonePostgres.username }}"
       "POSTGRES_DB_PASSWORD": "{{ $landingZonePostgres.password }}"
       "AKS_AUTOSCALING_ENABLED": "true"
