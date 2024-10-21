@@ -14,9 +14,10 @@ jobs:
       id-token: 'write'
     steps:
       - name: Dispatch to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
+        uses: broadinstitute/workflow-dispatch@v4.0.0
         with:
           workflow: workflows-canary-prod-test
+          run-name: "complex-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}"
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/sps_complex_canary_test # TODO: change to 'main' before merging
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
