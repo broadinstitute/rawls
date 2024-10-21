@@ -22,6 +22,7 @@ jobs:
           ref: refs/heads/sps_complex_canary_test # TODO: change to 'main' before merging
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
           inputs: '{
+            "run-name": "workflows-simple-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}",
             "workspace-namespace": "broad-firecloud-dsde",
             "workspace-name": "CanaryTest",
             "method-namespace": "wdl-testing",
