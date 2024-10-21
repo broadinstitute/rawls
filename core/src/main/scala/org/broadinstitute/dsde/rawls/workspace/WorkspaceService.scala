@@ -955,6 +955,71 @@ class WorkspaceService(
         )
       }
 
+    def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
+                           existingAcls: Set[WorkspaceACLUpdate],
+                           callingUserActions: Set[SamResourceAction],
+                           workspace: Workspace
+    ): Unit = {
+      val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
+      if (callingUserActions.isEmpty) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you do not have access to change permissions for this workspace")
+        )
+      }
+      // Add the existingAcl entries that are being modified so we can check what we will
+      // be removing as well as what we are adding.
+      val changingPolicies =
+        (aclChanges ++ existingAcls.filter(existingAcl => emailsBeingChanged.contains(existingAcl.email.toLowerCase)))
+          .flatMap(aclUpdateToPolicies)
+
+      if (changingPolicies.exists(policy => !callingUserActions.contains(SamWorkspaceActions.sharePolicy(policy.value)))) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you do not have sufficient permissions to make these changes")
+        )
+      }
+
+      if (
+        aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
+          existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
+        )
+      ) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed")
+        )
+      }
+      if (aclChanges.exists(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you may not change your own permissions")
+        )
+      }
+      if (
+        aclChanges.exists {
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, _, Some(true)) => true
+          case _                                                                => false
+        }
+      ) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
+        )
+      }
+      if (workspace.workspaceType.equals(WorkspaceType.McWorkspace)) {
+        val invalidMcWorkspaceACLUpdates = aclChanges.collect {
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
+            ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
+            ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
+            ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
+        }.toSeq
+
+        if (invalidMcWorkspaceACLUpdates.nonEmpty) {
+          throw new InvalidWorkspaceAclUpdateException(
+            ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
+          )
+        }
+      }
+    }
+
     collectMissingUsers(aclUpdates.map(_.email), ctx).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
@@ -975,11 +1040,11 @@ class WorkspaceService(
 
           // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
           aclChanges = normalize(aclUpdates) -- existingAcls
-          callingUserRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace,
-                                                              workspace.workspaceId,
-                                                              ctx
+          callingUserActions <- samDAO.listUserActionsForResource(SamResourceTypeNames.workspace,
+                                                                  workspace.workspaceId,
+                                                                  ctx
           )
-          _ = validateAclChanges(aclChanges, existingAcls, callingUserRoles, workspace)
+          _ = validateAclChanges(aclChanges, existingAcls, callingUserActions, workspace)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
@@ -1076,79 +1141,6 @@ class WorkspaceService(
         requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspace)
       }
       .void
-  }
-
-  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
-                                 existingAcls: Set[WorkspaceACLUpdate],
-                                 callingUserRoles: Set[SamResourceRole],
-                                 workspace: Workspace
-  ): Unit = {
-    val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
-    if (callingUserRoles.isEmpty) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "you do not have access to change permissions for this workspace")
-      )
-    }
-    val callingUserMaxRole = callingUserRoles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).max
-    // Add the existingAcl entries that are being modified so we can check what we will
-    // be removing as well as what we are adding.
-    val allRolePermissionChanges =
-      aclChanges ++ existingAcls.filter(existingAcl => emailsBeingChanged.contains(existingAcl.email.toLowerCase))
-    if (callingUserMaxRole < WorkspaceAccessLevels.Owner) {
-      val invalidAclUpdates = allRolePermissionChanges.collect {
-        case aclChange if aclChange.accessLevel > callingUserMaxRole =>
-          "cannot change access levels higher than your own"
-        case WorkspaceACLUpdate(_, _, Some(true), _) =>
-          "cannot change canShare permission"
-        case WorkspaceACLUpdate(_, _, _, Some(true)) =>
-          "cannot change canCompute permission"
-      }.toSeq
-      if (invalidAclUpdates.nonEmpty) {
-        throw new InvalidWorkspaceAclUpdateException(
-          ErrorReport(StatusCodes.BadRequest, "you do not have sufficient permissions to make these changes")
-        )
-      }
-    }
-    if (
-      aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
-        existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
-      )
-    ) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed")
-      )
-    }
-    if (aclChanges.exists(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "you may not change your own permissions")
-      )
-    }
-    if (
-      aclChanges.exists {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, _, Some(true)) => true
-        case _                                                                => false
-      }
-    ) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
-      )
-    }
-    if (workspace.workspaceType.equals(WorkspaceType.McWorkspace)) {
-      val invalidMcWorkspaceACLUpdates = aclChanges.collect {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
-          ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
-          ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
-          ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
-      }.toSeq
-
-      if (invalidMcWorkspaceACLUpdates.nonEmpty) {
-        throw new InvalidWorkspaceAclUpdateException(
-          ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
-        )
-      }
-    }
   }
 
   // called from test harness
