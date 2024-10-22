@@ -112,6 +112,8 @@ object SamWorkspacePolicyNames {
   val shareReader = SamResourcePolicyName("share-reader")
   val canCompute = SamResourcePolicyName("can-compute")
   val canCatalog = SamResourcePolicyName("can-catalog")
+
+  def all: Set[SamResourcePolicyName] = Set(projectOwner, owner, writer, reader, shareWriter, shareReader, canCompute, canCatalog)
 }
 
 object SamGoogleProjectPolicyNames {
