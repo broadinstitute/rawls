@@ -54,6 +54,10 @@ import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, W
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 
 import java.io.IOException
 import java.util.UUID
@@ -118,7 +122,8 @@ object WorkspaceService {
       (context: RawlsRequestContext) => fastPassServiceConstructor(context, dataSource),
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource),
-      new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName)
+      new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
+      new WorkspaceSettingRepository(dataSource)
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -166,7 +171,8 @@ class WorkspaceService(
   val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository,
-  val submissionsRepository: SubmissionsRepository
+  val submissionsRepository: SubmissionsRepository,
+  val workspaceSettingsRepository: WorkspaceSettingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with LibraryPermissionsSupport
@@ -229,33 +235,42 @@ class WorkspaceService(
     } yield workspace
   }
 
-  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[JsObject] = {
+  def getWorkspace(workspaceName: WorkspaceName,
+                   params: WorkspaceFieldSpecs,
+                   userProject: Option[GoogleProjectId] = None
+  ): Future[JsObject] = {
     val options = processOptions(params)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
         workspace <-
           getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(options.attrSpecs))
-        workspaceResponse <- getWorkspaceDetails(workspace, options)
+        workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
       // post-process JSON to remove calculated-but-undesired keys
       deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
-  def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs): Future[JsObject] = {
+  def getWorkspaceById(workspaceId: String,
+                       params: WorkspaceFieldSpecs,
+                       userProject: Option[GoogleProjectId] = None
+  ): Future[JsObject] = {
     val options = processOptions(params)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
         workspace <-
           getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.read, Option(options.attrSpecs))
-        workspaceResponse <- getWorkspaceDetails(workspace, options)
+        workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
       // post-process JSON to remove calculated-but-undesired keys
       deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
-  def getWorkspaceDetails(workspace: Workspace, options: QueryOptions): Future[WorkspaceResponse] = {
+  def getWorkspaceDetails(workspace: Workspace,
+                          options: QueryOptions,
+                          userProject: Option[GoogleProjectId] = None
+  ): Future[WorkspaceResponse] = {
     val workspaceId = workspace.workspaceId
     /*
     If we're looking to improve performance, we could potentially use this, instead trying to run futures in parallel:
@@ -311,9 +326,13 @@ class WorkspaceService(
           case _ => samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
         }
       }
+
       bucketDetails: Option[WorkspaceBucketOptions] <- wsmContext.googleProjectId match {
-        case None     => Future.successful(None)
-        case Some(id) => options.anyPresentFuture("bucketOptions")(gcsDAO.getBucketDetails(workspace.bucketName, id))
+        case None => Future.successful(None)
+        case Some(_) =>
+          options.anyPresentFuture("bucketOptions")(
+            getBucketOptions(WorkspaceName(workspace.namespace, workspace.name), userProject)
+          )
       }
     } yield WorkspaceResponse(
       options.anyPresent("accessLevel")(accessLevel),
@@ -972,7 +991,9 @@ class WorkspaceService(
         (aclChanges ++ existingAcls.filter(existingAcl => emailsBeingChanged.contains(existingAcl.email.toLowerCase)))
           .flatMap(aclUpdateToPolicies)
 
-      if (changingPolicies.exists(policy => !callingUserActions.contains(SamWorkspaceActions.sharePolicy(policy.value)))) {
+      if (
+        changingPolicies.exists(policy => !callingUserActions.contains(SamWorkspaceActions.sharePolicy(policy.value)))
+      ) {
         throw new InvalidWorkspaceAclUpdateException(
           ErrorReport(StatusCodes.BadRequest, "you do not have sufficient permissions to make these changes")
         )
@@ -1428,9 +1449,29 @@ class WorkspaceService(
       case Some(workspace) => op(workspace)
     }
 
-  def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] = for {
+  def getBucketOptions(workspaceName: WorkspaceName,
+                       userProject: Option[GoogleProjectId] = None
+  ): Future[WorkspaceBucketOptions] = for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
-    options <- gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
+    isWriter <- samDAO.userHasAction(SamResourceTypeNames.workspace,
+                                     workspaceContext.workspaceId,
+                                     SamWorkspaceActions.write,
+                                     ctx
+    )
+    requesterPays <- workspaceSettingsRepository
+      .getWorkspaceSettings(workspaceContext.workspaceIdAsUUID)
+      .map(_.exists {
+        case GcpBucketRequesterPaysSetting(config) => config.enabled
+        case _                                     => false
+      })
+    _ = if (requesterPays && !isWriter && userProject.isEmpty) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Reader should provide a user project to bill on requester pays workspace")
+      )
+    }
+    options <- gcsDAO.getBucketDetails(workspaceContext.bucketName,
+                                       userProject.getOrElse(workspaceContext.googleProjectId)
+    )
   } yield options
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = (for {
