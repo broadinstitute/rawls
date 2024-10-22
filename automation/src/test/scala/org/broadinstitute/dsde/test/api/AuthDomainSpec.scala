@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.test.api
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
+import org.broadinstitute.dsde.test.pipeline._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.{billingScopes, serviceAccountScopes}
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
