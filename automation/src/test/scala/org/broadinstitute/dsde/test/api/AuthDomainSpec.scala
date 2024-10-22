@@ -42,14 +42,14 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
 
   "AuthDomains" should "create and access a workspace with an auth domain" in {
 
-    withGroup("ad", List(projectUserToken.userData.email, projectOwnerToken.userData.email)) { realmGroup =>
-      withGroup("ad2", List(projectUserToken.userData.email, projectOwnerToken.userData.email)) { realmGroup2 =>
-        withGroup("ad3", List(projectUserToken.userData.email, projectOwnerToken.userData.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUserToken.email, projectOwnerToken.email)) { realmGroup =>
+      withGroup("ad2", List(projectUserToken.email, projectOwnerToken.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUserToken.email, projectOwnerToken.email)) { realmGroup3 =>
           withTemporaryBillingProject(billingAccountId) { projectName =>
             withWorkspace(projectName,
                           "AuthDomains",
                           Set(realmGroup, realmGroup2, realmGroup3),
-                          List(AclEntry(projectUserToken.userData.email, WorkspaceAccessLevel.Writer))
+                          List(AclEntry(projectUserToken.email, WorkspaceAccessLevel.Writer))
             ) { workspace =>
               Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(
                 projectUserToken
@@ -64,8 +64,8 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
   it should "not create a workspace with a multi-group auth domain if you're not in all groups" in {
 
     intercept[RestException] {
-      withGroup("ad", List(projectOwnerToken.userData.email)) { realmGroup =>
-        withGroup("ad2", List(projectOwnerToken.userData.email)) { realmGroup2 =>
+      withGroup("ad", List(projectOwnerToken.email)) { realmGroup =>
+        withGroup("ad2", List(projectOwnerToken.email)) { realmGroup2 =>
           withGroup("ad3") { realmGroup3 =>
             withTemporaryBillingProject(billingAccountId) { projectName =>
               withWorkspace(projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3)) { _ =>
@@ -80,8 +80,8 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
 
   it should "do the right security when access group membership changes and there is an access" in {
 
-    withGroup("ad", List(projectUserToken.userData.email, projectOwnerToken.userData.email)) { realmGroup =>
-      withGroup("ng", List(projectUserToken.userData.email)) { nestedGroup =>
+    withGroup("ad", List(projectUserToken.email, projectOwnerToken.email)) { realmGroup =>
+      withGroup("ng", List(projectUserToken.email)) { nestedGroup =>
         val nestedGroupFull = Orchestration.groups.getGroup(nestedGroup)(groupOwnerToken)
         withGroup("ag", List(nestedGroupFull.groupEmail)) { accessGroup =>
           val accessGroupFull = Orchestration.groups.getGroup(accessGroup)(groupOwnerToken)
@@ -137,28 +137,28 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
   it should "clone a workspace if the source has a multi-group auth domain and user is in all groups" in {
     val authToken = projectOwnerToken
 
-    withGroup("ad", List(projectUserToken.userData.email)) { realmGroup =>
-      withGroup("ad2", List(projectUserToken.userData.email)) { realmGroup2 =>
-        withGroup("ad3", List(projectUserToken.userData.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUserToken.email)) { realmGroup =>
+      withGroup("ad2", List(projectUserToken.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUserToken.email)) { realmGroup3 =>
           val authDomain = Set(realmGroup, realmGroup2, realmGroup3)
-          withTemporaryBillingProject(billingAccountId, users = List(projectUserToken.userData.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(projectUserToken.email).some) { projectName =>
             withWorkspace(projectName,
                           "AuthDomains",
                           authDomain,
-                          List(AclEntry(projectUserToken.userData.email, WorkspaceAccessLevel.Writer))
+                          List(AclEntry(projectUserToken.email, WorkspaceAccessLevel.Writer))
             ) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain)(projectUserToken)
               try {
                 Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUserToken)
-                Orchestration.groups.removeUserFromGroup(realmGroup2, projectUserToken.userData.email, GroupRole.Member)(authToken)
+                Orchestration.groups.removeUserFromGroup(realmGroup2, projectUserToken.email, GroupRole.Member)(authToken)
                 eventually {
                   intercept[RestException] {
                     Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUserToken)
                   }
                 }
                 // add users back so the cleanup part of withGroup doesn't have a fit
-                Orchestration.groups.addUserToGroup(realmGroup2, projectUserToken.userData.email, GroupRole.Member)(authToken)
+                Orchestration.groups.addUserToGroup(realmGroup2, projectUserToken.email, GroupRole.Member)(authToken)
               } finally
                 Orchestration.workspaces.delete(projectName, clone)(projectUserToken)
             }(authToken)
@@ -171,15 +171,15 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
   it should "clone a workspace if the user added a group to the source authorization domain" in {
     val authToken = projectOwnerToken
 
-    withGroup("ad", List(projectUserToken.userData.email)) { realmGroup =>
-      withGroup("ad2", List(projectUserToken.userData.email)) { realmGroup2 =>
-        withGroup("ad3", List(projectUserToken.userData.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUserToken.email)) { realmGroup =>
+      withGroup("ad2", List(projectUserToken.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUserToken.email)) { realmGroup3 =>
           val authDomain = Set(realmGroup, realmGroup2)
-          withTemporaryBillingProject(billingAccountId, users = List(projectUserToken.userData.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(projectUserToken.email).some) { projectName =>
             withWorkspace(projectName,
                           "AuthDomains",
                           authDomain,
-                          List(AclEntry(projectUserToken.userData.email, WorkspaceAccessLevel.Writer))
+                          List(AclEntry(projectUserToken.email, WorkspaceAccessLevel.Writer))
             ) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain + realmGroup3)(projectUserToken)
@@ -198,13 +198,13 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
   it should "not allow changing a workspace's Realm if it exists" in {
     val authToken = projectOwnerToken
 
-    withGroup("ad", List(projectUserToken.userData.email)) { realmGroup =>
-      withGroup("ad2", List(projectUserToken.userData.email)) { realmGroup2 =>
+    withGroup("ad", List(projectUserToken.email)) { realmGroup =>
+      withGroup("ad2", List(projectUserToken.email)) { realmGroup2 =>
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName,
                         "AuthDomains",
                         Set(realmGroup),
-                        List(AclEntry(projectUserToken.userData.email, WorkspaceAccessLevel.Writer))
+                        List(AclEntry(projectUserToken.email, WorkspaceAccessLevel.Writer))
           ) { workspace =>
             intercept[RestException] {
               val clone = "AuthDomainsClone_" + makeRandomId()
