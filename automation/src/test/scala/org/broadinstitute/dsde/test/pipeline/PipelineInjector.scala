@@ -56,6 +56,14 @@ trait PipelineInjector {
     val students = usersMetadata.filter(_.`type` == Student)
     if (students.isEmpty) None else Some(students(Random.nextInt(students.length)))
   }
+
+  def chooseStudents(num_students: Int): Option[UserMetadata] = {
+    val students = usersMetadata.filter(_.`type` == Student)
+    if (students.isEmpty)
+      None
+    else
+      Some(Random.shuffle(students).take(num_students))
+  }
 }
 
 object PipelineInjector extends LazyLogging {
