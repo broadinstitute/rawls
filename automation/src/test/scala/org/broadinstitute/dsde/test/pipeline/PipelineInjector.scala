@@ -57,7 +57,7 @@ trait PipelineInjector {
     if (students.isEmpty) None else Some(students(Random.nextInt(students.length)))
   }
 
-  def chooseStudents(num_students: Int): Option[UserMetadata] = {
+  def chooseStudents(num_students: Int): List[Option[UserMetadata]] = {
     val students = usersMetadata.filter(_.`type` == Student)
     if (students.isEmpty)
       None
