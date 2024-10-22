@@ -138,8 +138,8 @@ class WorkspaceApiSpec
       labels should contain allElementsOf bufferLabels
       labels should contain allElementsOf rawlsLabels
 
-      Rawls.workspaces.delete(billingProjectName, workspaceName)(token: ownerAuthToken)
-      Rawls.billingV2.deleteBillingProject(billingProjectName)(token: ownerAuthToken)
+      Rawls.workspaces.delete(billingProjectName, workspaceName)(ownerAuthToken)
+      Rawls.billingV2.deleteBillingProject(billingProjectName)(ownerAuthToken)
     }
 
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
