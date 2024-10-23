@@ -1,48 +1,15 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.IamRole
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  ExecutionServiceCluster,
-  GoogleServicesDAO,
-  RequesterPaysSetupService,
-  SamDAO,
-  SlickDataSource
-}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.model.{
-  CreationStatuses,
-  GoogleProjectId,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  SamBillingProjectPolicyNames,
-  SamPolicy,
-  SamPolicyWithNameAndEmail,
-  SamResourcePolicyName,
-  SamResourceTypeName,
-  SamResourceTypeNames,
-  SamUserStatusResponse,
-  SamWorkspaceActions,
-  SamWorkspacePolicyNames,
-  SamWorkspaceRoles,
-  UserIdInfo,
-  UserInfo,
-  Workspace,
-  WorkspaceACLUpdate,
-  WorkspaceACLUpdateResponseList,
-  WorkspaceAccessLevels,
-  WorkspaceName,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceActions, SamWorkspacePolicyNames, UserIdInfo, UserInfo, Workspace, WorkspaceACLUpdate, WorkspaceACLUpdateResponseList, WorkspaceAccessLevels, WorkspaceName, WorkspaceType}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
@@ -50,19 +17,18 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{never, verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, never, verify, verifyNoInteractions, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 // Workspace ACL change tests, separated from the main WorkspaceServiceSpec and WorkspaceServiceUnitTest to keep the file size manageable
@@ -87,49 +53,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
              OAuth2BearerToken("Bearer 123"),
              123,
              RawlsUserSubjectId("fake_user_id")
-    )
-  )
-
-  def workspacePolicies(projectOwners: Set[WorkbenchEmail] = Set.empty,
-                        owners: Set[WorkbenchEmail] = Set.empty,
-                        writers: Set[WorkbenchEmail] = Set.empty,
-                        readers: Set[WorkbenchEmail] = Set.empty,
-                        shareWriters: Set[WorkbenchEmail] = Set.empty,
-                        shareReaders: Set[WorkbenchEmail] = Set.empty,
-                        canComputers: Set[WorkbenchEmail] = Set.empty,
-                        canCatalogers: Set[WorkbenchEmail] = Set.empty
-  ): Set[SamPolicyWithNameAndEmail] = Set(
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner,
-                              SamPolicy(projectOwners, Set.empty, Set.empty),
-                              WorkbenchEmail("projectOwner@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner,
-                              SamPolicy(owners, Set.empty, Set.empty),
-                              WorkbenchEmail("owner@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer,
-                              SamPolicy(writers, Set.empty, Set.empty),
-                              WorkbenchEmail("writer@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader,
-                              SamPolicy(readers, Set.empty, Set.empty),
-                              WorkbenchEmail("reader@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareWriter,
-                              SamPolicy(shareWriters, Set.empty, Set.empty),
-                              WorkbenchEmail("shareWriter@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareReader,
-                              SamPolicy(shareReaders, Set.empty, Set.empty),
-                              WorkbenchEmail("shareReader@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.canCompute,
-                              SamPolicy(canComputers, Set.empty, Set.empty),
-                              WorkbenchEmail("canCompute@example.com")
-    ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.canCatalog,
-                              SamPolicy(canCatalogers, Set.empty, Set.empty),
-                              WorkbenchEmail("canCatalog@example.com")
     )
   )
 
@@ -201,10 +124,19 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("subjectId", "email", true))))
 
-    // Mock successful Unit Sam calls
+    // Mock successful Unit Sam call(s)
     when(samDAO.inviteUser(any(), any())).thenReturn(Future.successful(()))
     samDAO
   }
+
+  val allWorkspacePolicies: Set[SamResourcePolicyName] = Set(
+    SamWorkspacePolicyNames.owner,
+    SamWorkspacePolicyNames.writer,
+    SamWorkspacePolicyNames.reader,
+    SamWorkspacePolicyNames.canCompute,
+    SamWorkspacePolicyNames.shareReader,
+    SamWorkspacePolicyNames.shareWriter
+  )
 
   def allWorkspaceAclUpdatePermutations(emailString: String): Seq[WorkspaceACLUpdate] = for {
     accessLevel <- WorkspaceAccessLevels.all
@@ -259,7 +191,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     )
 
     val samDAO = getSamDaoWithBasicMocking
-    when(samDAO.listPoliciesForResource(any(), any(), any())).thenReturn(Future.successful(workspacePolicies()))
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(SamWorkspaceActions.sharePolicy("owner"),
@@ -688,7 +619,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     val samDAO = getSamDaoWithBasicMocking
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
-        SamWorkspacePolicyNames.all.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
       )
     )
     when(samDAO.getUserIdInfo(ArgumentMatchers.eq(groupEmail), any()))
@@ -719,13 +650,232 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     verify(aclManager, never).removeUserFromPolicy(any(), any(), any(), any())
   }
 
+  it should "use the RawlsWorkspaceAclManager for Rawls workspaces" in {
+    val samDAO = getSamDaoWithBasicMocking
+    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+      Future.successful(
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+      )
+    )
+    val rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(rawlsWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+    when(rawlsWorkspaceAclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
+    when(rawlsWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
+    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
+    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
+    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
+    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
+    val workspaceService = workspaceServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      fastPassServiceConstructor = _ => fastPassService,
+      requesterPaysSetupService = requesterPaysSetupService,
+      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager,
+      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
+    )(ctx)
+    val aclUpdate = WorkspaceACLUpdate("email@example.com", WorkspaceAccessLevels.Owner)
+    Await.result(workspaceService.updateACL(workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
+                 Duration.Inf
+    )
+
+    verify(rawlsWorkspaceAclManager).addUserToPolicy(workspace, SamWorkspacePolicyNames.owner, WorkbenchEmail("email@example.com"), ctx)
+    verifyNoInteractions(multiCloudWorkspaceAclManager)
+  }
+
+  it should "use the MultiCloudWorkspaceAclManager for multi cloud workspaces" in {
+    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val samDAO = getSamDaoWithBasicMocking
+    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+      Future.successful(
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+      )
+    )
+    val rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
+    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+    when(multiCloudWorkspaceAclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
+    when(multiCloudWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
+    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
+    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
+    val workspaceService = workspaceServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      fastPassServiceConstructor = _ => fastPassService,
+      requesterPaysSetupService = requesterPaysSetupService,
+      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager,
+      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
+    )(ctx)
+    val aclUpdate = WorkspaceACLUpdate("email@example.com", WorkspaceAccessLevels.Owner)
+    Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
+      Duration.Inf
+    )
+
+    verify(multiCloudWorkspaceAclManager).addUserToPolicy(mcWorkspace, SamWorkspacePolicyNames.owner, WorkbenchEmail("email@example.com"), ctx)
+    verifyNoInteractions(rawlsWorkspaceAclManager)
+  }
+
+  it should "not allow share writers for McWorkspaces" in {
+    val writerEmail = "writer@example.com"
+    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val aclUpdate = WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, canShare = Some(true))
+    val samDAO = getSamDaoWithBasicMocking
+    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+      Future.successful(
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+      )
+    )
+    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+    val workspaceService = workspaceServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
+    )(ctx)
+
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
+      Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "not allow share readers for McWorkspaces" in {
+    val readerEmail = "reader@example.com"
+    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val aclUpdate = WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, canShare = Some(true))
+    val samDAO = getSamDaoWithBasicMocking
+    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+      Future.successful(
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+      )
+    )
+    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+    val workspaceService = workspaceServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
+    )(ctx)
+
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
+      Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "not allow compute writers for McWorkspaces" in {
+    val writerEmail = "writer@example.com"
+    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val aclUpdate = WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, canShare = Some(false), canCompute = Some(true))
+    val samDAO = getSamDaoWithBasicMocking
+    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+      Future.successful(
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+      )
+    )
+    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+    val workspaceService = workspaceServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
+    )(ctx)
+
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
+      Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "not allow users to change their own ACL" in {
+    val requesterEmail = ctx.userInfo.userEmail.value
+    val aclUpdate = WorkspaceACLUpdate(requesterEmail, WorkspaceAccessLevels.Read)
+    val samDAO = getSamDaoWithBasicMocking
+    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+      Future.successful(
+        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+      )
+    )
+    val rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(rawlsWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set(WorkbenchEmail(requesterEmail) -> SamWorkspacePolicyNames.owner)))
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
+    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
+    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
+    val workspaceService = workspaceServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      fastPassServiceConstructor = _ => fastPassService,
+      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager
+    )(ctx)
+
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
+      Await.result(workspaceService.updateACL(workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
   val aclTestUserEmail = "permutations@example.com"
+
+  for ((aclUpdate, policies) <- Set(WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Owner) -> Set(SamWorkspacePolicyNames.owner),
+                                    WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Write) -> Set(SamWorkspacePolicyNames.writer),
+                                    WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Write, canShare = Some(true), canCompute = Some(false)) -> Set(SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.canCompute),
+                                    WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Write, canShare = Some(false), canCompute = Some(true)) -> Set(SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.canCompute),
+                                    WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Write, canShare = Some(true), canCompute = Some(true)) -> Set(SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.canCompute),
+                                    WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Read) -> Set(SamWorkspacePolicyNames.reader),
+                                    WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Read, canShare = Some(true)) -> Set(SamWorkspacePolicyNames.reader)))
+    it should s"require ${policies.map(p => SamWorkspaceActions.sharePolicy(p.value).value).mkString(",")} permissions to perform $aclUpdate" in {
+      val samDAO = getSamDaoWithBasicMocking
+      when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
+        Future.successful(
+          (allWorkspacePolicies -- policies).map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+        )
+      )
+
+      val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
+      when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+      when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
+      when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
+
+      val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+      when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
+
+      val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
+      when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
+
+      val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
+                                                         workspaceRepository = workspaceRepository,
+                                                         fastPassServiceConstructor = _ => fastPassService,
+                                                         rawlsWorkspaceAclManager = aclManager
+      )(ctx)
+
+      val exception = intercept[InvalidWorkspaceAclUpdateException] {
+        Await.result(workspaceService.updateACL(workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+      }
+      exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+
   for (aclUpdate <- allWorkspaceAclUpdatePermutations(aclTestUserEmail))
     it should s"add correctPolicies for $aclUpdate" in {
       val samDAO = getSamDaoWithBasicMocking
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
-          SamWorkspacePolicyNames.all.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+          allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
 
@@ -769,15 +919,15 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     }
 
   for (
-    testPolicyName1 <- SamWorkspacePolicyNames.all - SamWorkspacePolicyNames.canCatalog;
-    testPolicyName2 <- SamWorkspacePolicyNames.all - SamWorkspacePolicyNames.canCatalog
+    testPolicyName1 <- allWorkspacePolicies;
+    testPolicyName2 <- allWorkspacePolicies
     if testPolicyName1 != testPolicyName2 && !(testPolicyName1 == SamWorkspacePolicyNames.shareReader && testPolicyName2 == SamWorkspacePolicyNames.shareWriter) && !(testPolicyName1 == SamWorkspacePolicyNames.shareWriter && testPolicyName2 == SamWorkspacePolicyNames.shareReader)
   )
     it should s"remove $testPolicyName1 and $testPolicyName2" in {
       val samDAO = getSamDaoWithBasicMocking
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
-          SamWorkspacePolicyNames.all.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+          allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
 
@@ -847,7 +997,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       val samDAO = getSamDaoWithBasicMocking
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
-          SamWorkspacePolicyNames.all.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
+          allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
       val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
