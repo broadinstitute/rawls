@@ -64,7 +64,7 @@ class RawlsApiSpec
   val bee = PipelineInjector(PipelineInjector.e2eEnv())
 
   lazy val ownerToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
-  lazy val (StudentAToken, StudentBToken) = {
+  lazy val (studentAToken, studentBToken) = {
     val users = bee.chooseStudents(2)
     (users(0).makeAuthToken, users(1).makeAuthToken)
   }
