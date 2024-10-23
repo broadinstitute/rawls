@@ -35,7 +35,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
   lazy val projectOwnerToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
   lazy val (projectUserToken, groupOwnerToken) = {
     val users = bee.chooseStudents(2)
-    users.map(_.makeAuthToken).get
+    users.map(_.makeAuthToken)
   }
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
