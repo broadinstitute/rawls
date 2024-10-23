@@ -48,9 +48,11 @@ class WorkspaceApiSpec
     with WorkspaceFixtures
     with MethodFixtures {
 
-  val Seq(studentA, studentB) = UserPool.chooseStudents(2)
-  val studentAToken: AuthToken = studentA.makeAuthToken()
-  val studentBToken: AuthToken = studentB.makeAuthToken()
+
+  val (studentAToken, studentBToken) = {
+    val users = bee.chooseStudents(2)
+    (users(0).makeAuthToken, users(1).makeAuthToken)
+  }
 
   val bee = PipelineInjector(PipelineInjector.e2eEnv())
 
@@ -269,7 +271,6 @@ class WorkspaceApiSpec
       "to clone a requester-pays workspace from a different project into their own project" in {
         implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
-        val user: Credentials = UserPool.chooseAdmin
         val userToken: AuthToken = nonOwnerAuthToken
 
         val workspaceName = prependUUID("requester-pays")
@@ -281,7 +282,7 @@ class WorkspaceApiSpec
             // The original workspace is in the source project. The user is a Reader on this workspace
             withWorkspace(sourceProjectName,
                           workspaceName,
-                          aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
+                          aclEntries = List(AclEntry(userToken.userData.email, WorkspaceAccessLevel.Reader))
             ) { workspaceName =>
               // Enable requester pays on the original workspace and wait for the change to propagate
               val bucketName = workspaceResponse(
@@ -303,7 +304,7 @@ class WorkspaceApiSpec
               finally
                 Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
             }(ownerAuthToken)
-          }(user.makeAuthToken(billingScopes))
+          }(userToken)
         }(ownerAuthToken)
       }
     }
@@ -319,11 +320,11 @@ class WorkspaceApiSpec
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName,
                         prependUUID("reader-import-config-dest-workspace"),
-                        aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
+                        aclEntries = List(AclEntry(studentAToken.userData.email, WorkspaceAccessLevel.Reader))
           ) { destWorkspaceName =>
             withWorkspace(projectName,
                           prependUUID("method-config-source-workspace"),
-                          aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
+                          aclEntries = List(AclEntry(studentAToken.userData.email, WorkspaceAccessLevel.Reader))
             ) { sourceWorkspaceName =>
               withMethod("reader-import-from-workspace", MethodData.SimpleMethod) { methodName =>
                 val method = MethodData.SimpleMethod.copy(methodName = methodName)
@@ -360,7 +361,7 @@ class WorkspaceApiSpec
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName,
                         prependUUID("reader-import-config-dest-workspace"),
-                        aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
+                        aclEntries = List(AclEntry(studentAToken.userData.email, WorkspaceAccessLevel.Reader))
           ) { destWorkspaceName =>
             withMethod("reader-import-from-method-repo", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
@@ -377,7 +378,7 @@ class WorkspaceApiSpec
                 SimpleMethodConfig.configNamespace,
                 SimpleMethodConfig.configName,
                 SimpleMethodConfig.snapshotId,
-                studentA.email,
+                studentAToken.userData.email,
                 "OWNER"
               )(ownerAuthToken)
 
