@@ -634,7 +634,7 @@ class RawlsApiSpec
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
 
-      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentAToken.userData.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           Orchestration.methodConfigurations.createMethodConfigInWorkspace(
             projectName,
@@ -737,7 +737,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
-      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentAToken.userData.email).some) { projectName =>
         withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
           val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
           val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
@@ -753,7 +753,7 @@ class RawlsApiSpec
 
       withGroup("ad") { realmGroup =>
         withGroup("ad2") { realmGroup2 =>
-          withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(studentAToken.userData.email).some) { projectName =>
             withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
               val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
               val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
@@ -835,7 +835,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
-      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentAToken.userData.email).some) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
           withCleanUp {
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
