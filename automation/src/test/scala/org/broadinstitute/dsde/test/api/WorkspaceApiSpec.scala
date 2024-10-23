@@ -271,7 +271,7 @@ class WorkspaceApiSpec
       "to clone a requester-pays workspace from a different project into their own project" in {
         implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
-        val userToken: AuthToken = nonOwnerAuthToken
+        val userToken = nonOwnerAuthToken
 
         val workspaceName = prependUUID("requester-pays")
         val workspaceCloneName = s"$workspaceName-copy"
