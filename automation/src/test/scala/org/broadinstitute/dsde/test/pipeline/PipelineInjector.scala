@@ -60,9 +60,9 @@ trait PipelineInjector {
   def chooseStudents(num_students: Int): List[UserMetadata] = {
     val students = usersMetadata.filter(_.`type` == Student)
     if (students.isEmpty)
-      None
+      ()
     else
-      Some(Random.shuffle(students).take(num_students))
+      Random.shuffle(students).take(num_students)
   }
 }
 

@@ -103,14 +103,14 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
               Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
               // remove user from nestedGroup and they should lose access
-              Orchestration.groups.removeUserFromGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+              Orchestration.groups.removeUserFromGroup(nestedGroup, userToken.userData.email, GroupRole.Member)(groupOwnerToken)
               eventually {
                 intercept[RestException] {
                   Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
                 }
               }
               // add user back to nestedGroup and they should have access
-              Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+              Orchestration.groups.addUserToGroup(nestedGroup, userToken.userData.email, GroupRole.Member)(groupOwnerToken)
               Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
               // remove accessGroup from acl and user should lose access
