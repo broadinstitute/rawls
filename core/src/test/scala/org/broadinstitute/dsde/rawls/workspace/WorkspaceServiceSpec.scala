@@ -1,20 +1,12 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.PoisonPill
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  GcpContext,
-  WorkspaceDescription,
-  WorkspaceStageModel,
-  WsmPolicyInput,
-  WsmPolicyInputs,
-  WsmPolicyPair
-}
+import bio.terra.workspace.model.{ErrorReport, _}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -77,12 +69,11 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
-import scala.util.Try
 
 class WorkspaceServiceSpec
     extends AnyFlatSpec
@@ -1235,53 +1226,6 @@ class WorkspaceServiceSpec
         } else {
           services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
         }
-    }
-
-  val aclTestUser: UserInfo =
-    UserInfo(RawlsUserEmail("acl-test-user"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("acl-test-user-subject-id"))
-
-  def allWorkspaceAclUpdatePermutations(emailString: String): Seq[WorkspaceACLUpdate] = for {
-    accessLevel <- WorkspaceAccessLevels.all
-    canShare <- Set(Some(true), Some(false), None)
-    canCompute <- Set(Some(true), Some(false), None)
-  } yield WorkspaceACLUpdate(emailString, accessLevel, canShare, canCompute)
-
-  def expectedPolicies(
-    aclUpdate: WorkspaceACLUpdate
-  ): Either[StatusCode, Set[(SamResourceTypeName, SamResourcePolicyName)]] =
-    aclUpdate match {
-      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.ProjectOwner, _, _) => Left(StatusCodes.BadRequest)
-      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Owner, _, _) =>
-        Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.owner))
-
-      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, canShare, canCompute) =>
-        val canSharePolicy = canShare match {
-          case None | Some(false) => Set.empty
-          case Some(true)         => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.shareWriter)
-        }
-        val canComputePolicy = canCompute match {
-          case None | Some(true) =>
-            Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.canCompute,
-                SamResourceTypeNames.billingProject -> SamBillingProjectPolicyNames.canComputeUser
-            )
-          case Some(false) => Set.empty
-        }
-        Right(
-          Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.writer) ++ canSharePolicy ++ canComputePolicy
-        )
-
-      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, canShare, canCompute) =>
-        if (canCompute.contains(true)) {
-          Left(StatusCodes.BadRequest)
-        } else {
-          val canSharePolicy = canShare match {
-            case None | Some(false) => Set.empty
-            case Some(true)         => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.shareReader)
-          }
-          Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.reader) ++ canSharePolicy)
-        }
-
-      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.NoAccess, _, _) => Right(Set.empty)
     }
 
   behavior of "RequesterPays"
