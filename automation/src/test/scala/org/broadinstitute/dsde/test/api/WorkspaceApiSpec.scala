@@ -49,12 +49,12 @@ class WorkspaceApiSpec
     with MethodFixtures {
 
 
+  val bee = PipelineInjector(PipelineInjector.e2eEnv())
+  
   val (studentAToken, studentBToken) = {
     val users = bee.chooseStudents(2)
     (users(0).makeAuthToken, users(1).makeAuthToken)
   }
-
-  val bee = PipelineInjector(PipelineInjector.e2eEnv())
 
   val owner: Credentials = UserPool.chooseProjectOwner
   implicit val ownerAuthToken: AuthToken = bee.Owners.getUserCredential("hermione").map(_.makeAuthToken).get
