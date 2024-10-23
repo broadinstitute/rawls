@@ -245,7 +245,7 @@ class RawlsApiSpec
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
 
-      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentBToken.userData.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -362,7 +362,7 @@ class RawlsApiSpec
 
       val europeWest1ZonesPrefix = "europe-west1-"
 
-      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentBToken.userData.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) {
           workspaceName =>
             withCleanUp {
@@ -496,7 +496,7 @@ class RawlsApiSpec
 
       val europeWest1ZonesPrefix = "europe-west1-"
 
-      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentBToken.userData.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
         withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) {
           workspaceName =>
