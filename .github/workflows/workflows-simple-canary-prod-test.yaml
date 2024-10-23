@@ -3,8 +3,6 @@ name: workflows-simple-canary-prod-test
   schedule:
     - cron: "0 * * * *"  # run hourly
   workflow_dispatch:
-  pull_request: # TODO: remove this before merging
-    branches: [ develop ]
 
 jobs:
   run-simple-canary-prod-test:
@@ -19,7 +17,7 @@ jobs:
           workflow: workflows-canary-prod-test
           run-name: "workflows-simple-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}"
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/sps_complex_canary_test # TODO: change to 'main' before merging
+          ref: refs/heads/main
           token: ${{ secrets.BROADBOT_TOKEN }} # GitHub token for access to kick off a job in the private repo
           inputs: '{
             "run-name": "workflows-simple-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}",
