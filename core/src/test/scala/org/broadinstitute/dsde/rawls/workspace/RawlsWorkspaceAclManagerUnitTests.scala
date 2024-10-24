@@ -7,6 +7,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserEmail,
   RawlsUserSubjectId,
   SamBillingProjectPolicyNames,
+  SamPolicy,
+  SamPolicyWithNameAndEmail,
   SamResourcePolicyName,
   SamResourceTypeNames,
   SamWorkspacePolicyNames,
@@ -14,11 +16,13 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 
+import java.util.UUID
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -92,5 +96,62 @@ class RawlsWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTestUtil
     )
 
     verifyCorrectSamInteractions(policyAdditions, samDAO)
+  }
+
+  "getWorkspacePolicies" should "return the members of all workspace policies except the can-catalog policy" in {
+    val workspaceId = UUID.randomUUID
+    val user = WorkbenchEmail("user@example.com")
+    val catalogUser = WorkbenchEmail("catalogUser@example.com")
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val policies = Set(
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareReader,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareWriter,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.canCompute,
+                                SamPolicy(Set(user), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.canCatalog,
+                                SamPolicy(Set(catalogUser), Set.empty, Set.empty),
+                                WorkbenchEmail("")
+      )
+    )
+    when(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId.toString, defaultRequestContext))
+      .thenReturn(Future.successful(policies))
+
+    val aclManager = rawlsWorkspaceAclManagerConstructor(samDAO)
+    val result = Await.result(aclManager.getWorkspacePolicies(workspaceId, defaultRequestContext), 5 seconds)
+
+    val expected = Set(
+      user -> SamWorkspacePolicyNames.projectOwner,
+      user -> SamWorkspacePolicyNames.owner,
+      user -> SamWorkspacePolicyNames.writer,
+      user -> SamWorkspacePolicyNames.reader,
+      user -> SamWorkspacePolicyNames.shareReader,
+      user -> SamWorkspacePolicyNames.shareWriter,
+      user -> SamWorkspacePolicyNames.canCompute
+    )
+    assertResult(expected)(result)
   }
 }
