@@ -876,7 +876,7 @@ class RawlsApiSpec
               .map(_.value) should contain only fileToCopy.value
 
             logger.info(s"Copied bucket files visible after ${finish - start} milliseconds")
-          }(ownerToken)
+          }
         }(ownerToken)
       }(ownerToken)
     }
@@ -952,7 +952,7 @@ class RawlsApiSpec
                 Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
               ) should be("Succeeded")
             }
-          }(ownerToken)
+          }
         }(ownerToken)
       }(ownerToken)
     }
@@ -1128,7 +1128,7 @@ class RawlsApiSpec
             }
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
           }
-        }
+        }(ownerToken)
       }(ownerToken)
     }
 
@@ -1191,7 +1191,7 @@ class RawlsApiSpec
                 "Validation errors: Invalid outputs: " +
                   "test.hello.response -> Attribute name participant_id is reserved and cannot be overwritten"
               )
-            }(ownerToken)
+            }
           }(ownerToken)
         }(ownerToken)
       }(ownerToken)
