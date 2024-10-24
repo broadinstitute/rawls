@@ -109,10 +109,6 @@ class WorkspaceApiSpec
       val workspaceName = prependUUID("rbs-project-labels-test")
 
       implicit val ec: ExecutionContext = ExecutionContext.global
-      val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-      val jsonCreds =
-        try source.mkString
-        finally source.close()
       val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests",
                                                       //GoogleCredentialModes.Json(jsonCreds),
                                                       GoogleCredentialModes.Token(() => ownerAuthToken.value),
