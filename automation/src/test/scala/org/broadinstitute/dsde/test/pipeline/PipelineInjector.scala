@@ -48,6 +48,10 @@ trait PipelineInjector {
     val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Owner)
   }
 
+  object ServiceAccounts extends Users {
+    val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Serviceaccount)
+  }
+
   object Students extends Users {
     val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Student)
   }
@@ -55,6 +59,16 @@ trait PipelineInjector {
   def chooseStudent: Option[UserMetadata] = {
     val students = usersMetadata.filter(_.`type` == Student)
     if (students.isEmpty) None else Some(students(Random.nextInt(students.length)))
+  }
+
+  def chooseStudents(num_students: Int): Seq[UserMetadata] = {
+    val students = usersMetadata.filter(_.`type` == Student)
+    print("my debug here")
+    print(students)
+    if (students.isEmpty)
+      List[UserMetadata]()
+    else
+      students.take(num_students)
   }
 }
 

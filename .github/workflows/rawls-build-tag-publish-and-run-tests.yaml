@@ -132,6 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - rawls-build-publish-job
+    if: false
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -178,7 +179,7 @@ jobs:
     name: ${{ matrix.test-group.group_name }}-owned tests
     runs-on: ubuntu-latest
     needs:
-      - create-bee-workflow
+    # - create-bee-workflow
       - init-github-context
     permissions:
       contents: 'read'
@@ -193,16 +194,18 @@ jobs:
           run-name: "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}-${{ matrix.terra-env }}-${{ matrix.testing-env }}-${{ matrix.test-group.group_name }}"
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/DDO-3838-test-remove-confs
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+          #  "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
           inputs: '{
             "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":\"\"}",
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}-${{ matrix.terra-env }}-${{ matrix.testing-env }}-${{ matrix.test-group.group_name }}",
-            "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
+            "bee-name": "juyang-swatomation-vervet",
             "ENV": "${{ matrix.testing-env }}",
             "test-group-name": "${{ matrix.test-group.group_name }}",
             "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
+            "e2e-env": "rawls_bee.env",
             "test-context": "${{ env.test-context }}",
             "ref": "${{ needs.init-github-context.outputs.ref }}"
           }'
@@ -215,7 +218,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - rawls-swat-test-job
-    if: always() # always run to confirm bee is destroyed
+    if: false # always() # always run to confirm bee is destroyed
     permissions:
       contents: 'read'
       id-token: 'write'
