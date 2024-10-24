@@ -369,10 +369,17 @@ class FastPassServiceSpec
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-    // Mock the caller being a project owner.
-    when(services.samDAO.listUserRolesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any()))
+    // Mock caller permissions.
+    when(services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any()))
       .thenReturn(
-        Future(Set(SamWorkspaceRoles.projectOwner))
+        Future(
+          Set(
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.writer.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.reader.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.canCompute.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value)
+          )
+        )
       )
 
     val aclAdd = Set(
@@ -1039,10 +1046,17 @@ class FastPassServiceSpec
   }
 
   it should "not block workspace ACL modifications if FastPass fails" in withTestDataServices { services =>
-    // Mock the caller being a project owner.
-    when(services.samDAO.listUserRolesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any()))
+    // Mock caller permissions.
+    when(services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any()))
       .thenReturn(
-        Future(Set(SamWorkspaceRoles.projectOwner))
+        Future(
+          Set(
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.writer.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.reader.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.canCompute.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value)
+          )
+        )
       )
     doThrow(new RuntimeException("foo"))
       .when(services.googleStorageDAO)
