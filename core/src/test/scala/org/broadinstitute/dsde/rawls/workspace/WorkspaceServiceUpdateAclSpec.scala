@@ -132,8 +132,10 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       submissionsRepository
     )(scala.concurrent.ExecutionContext.global)
 
-  // Returns mock of SamDAO that handles basic usage.
-  def getSamDaoWithBasicMocking: SamDAO = {
+  // Return mocks with reasonable defaults for basic usage. Override mocked behavior as needed.
+  def getBasicMocks
+    : (SamDAO, RawlsWorkspaceAclManager, WorkspaceRepository, FastPassService, RequesterPaysSetupService) = {
+
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     // Mock check for missing users so emails in AclUpdate show as registered in Terra
     when(samDAO.getUserIdInfo(any(), any()))
@@ -141,10 +143,25 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     // Mock enabled check for calling user
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("subjectId", "email", true))))
-
     // Mock successful Unit Sam call(s)
     when(samDAO.inviteUser(any(), any())).thenReturn(Future.successful(()))
-    samDAO
+
+    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
+    when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
+    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
+    when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
+    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
+
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
+
+    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
+    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
+
+    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
+    when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
+
+    (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService)
   }
 
   val allWorkspacePolicies: Set[SamResourcePolicyName] = Set(
@@ -162,7 +179,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     canCompute <- Set(Some(true), Some(false), None)
   } yield WorkspaceACLUpdate(emailString, accessLevel, canShare, canCompute)
 
-  def expectedPolicies(
+  def expectedPoliciesForAclUpdatePermutationsTests(
     aclUpdate: WorkspaceACLUpdate
   ): Either[StatusCode, Set[(SamResourceTypeName, SamResourcePolicyName)]] =
     aclUpdate match {
@@ -208,7 +225,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       WorkspaceACLUpdate(user2Email.value, WorkspaceAccessLevels.Read, Option(true))
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(SamWorkspaceActions.sharePolicy("owner"),
@@ -217,17 +234,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                        workspaceRepository = workspaceRepository,
@@ -260,7 +266,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       WorkspaceACLUpdate(readerEmail.value, WorkspaceAccessLevels.Write, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(SamWorkspaceActions.sharePolicy("writer"),
@@ -269,19 +275,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(aclManager.getWorkspacePolicies(any(), any()))
       .thenReturn(Future.successful(Set(readerEmail -> SamWorkspacePolicyNames.reader)))
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                        workspaceRepository = workspaceRepository,
@@ -313,32 +308,17 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       WorkspaceACLUpdate(writerEmail.value, WorkspaceAccessLevels.NoAccess, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(SamWorkspaceActions.sharePolicy("writer"), SamWorkspaceActions.sharePolicy("can-compute"))
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(
       Future.successful(
         Set(writerEmail -> SamWorkspacePolicyNames.writer, writerEmail -> SamWorkspacePolicyNames.canCompute)
       )
     )
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
-    when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
-
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
@@ -372,7 +352,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
                         WorkspaceACLUpdate(ownerEmail.value, WorkspaceAccessLevels.NoAccess, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(SamWorkspaceActions.sharePolicy("writer"),
@@ -381,8 +361,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(
       Future.successful(
         Set(
@@ -393,18 +371,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
-    when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
 
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
@@ -428,7 +394,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
                         WorkspaceACLUpdate(ownerEmail.value, WorkspaceAccessLevels.Write, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(SamWorkspaceActions.sharePolicy("writer"),
@@ -437,8 +403,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(
       Future.successful(
         Set(
@@ -449,18 +413,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
-    when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
 
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
@@ -484,7 +436,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
                         WorkspaceACLUpdate(ownerEmail.value, WorkspaceAccessLevels.Read, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         Set(
@@ -495,7 +447,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(
       Future.successful(
         Set(
@@ -506,18 +457,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
-    when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
 
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
@@ -539,7 +478,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       WorkspaceACLUpdate(nonExistentUserEmail, WorkspaceAccessLevels.Owner, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
     when(samDAO.getUserIdInfo(ArgumentMatchers.eq(nonExistentUserEmail), any()))
       .thenReturn(Future.successful(SamDAO.NotFound))
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
@@ -550,17 +489,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                        workspaceRepository = workspaceRepository,
@@ -586,7 +514,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       WorkspaceACLUpdate(nonExistentUserEmail, WorkspaceAccessLevels.Owner, None)
     )
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
     when(samDAO.getUserIdInfo(ArgumentMatchers.eq(nonExistentUserEmail), any()))
       .thenReturn(Future.successful(SamDAO.NotFound))
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
@@ -597,17 +525,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       )
     )
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                        workspaceRepository = workspaceRepository,
@@ -634,7 +551,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     val groupEmail = "groupTest@example.com"
     val aclUpdate = WorkspaceACLUpdate(groupEmail, WorkspaceAccessLevels.Write)
 
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
@@ -642,17 +559,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     )
     when(samDAO.getUserIdInfo(ArgumentMatchers.eq(groupEmail), any()))
       .thenReturn(Future.successful(SamDAO.NotUser))
-
-    val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                        workspaceRepository = workspaceRepository,
@@ -669,23 +575,15 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
   }
 
   it should "use the RawlsWorkspaceAclManager for Rawls workspaces" in {
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, rawlsWorkspaceAclManager, workspaceRepository, fastPassService, requesterPaysSetupService) =
+      getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
       )
     )
-    val rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(rawlsWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(rawlsWorkspaceAclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(rawlsWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any()))
-      .thenReturn(Future.successful(()))
     val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
+    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
@@ -709,23 +607,20 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
 
   it should "use the MultiCloudWorkspaceAclManager for multi cloud workspaces" in {
     val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
-    val samDAO = getSamDaoWithBasicMocking
+    val (samDAO, rawlsWorkspaceAclManager, workspaceRepository, fastPassService, requesterPaysSetupService) =
+      getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
       )
     )
-    val rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
     val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
     when(multiCloudWorkspaceAclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
     when(multiCloudWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any()))
       .thenReturn(Future.successful(()))
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-    val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
+
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
@@ -751,7 +646,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     val writerEmail = "writer@example.com"
     val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
     val aclUpdate = WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, canShare = Some(true))
-    val samDAO = getSamDaoWithBasicMocking
+
+    val (samDAO, _, workspaceRepository, _, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
@@ -759,8 +655,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     )
     val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
@@ -780,7 +676,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     val readerEmail = "reader@example.com"
     val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
     val aclUpdate = WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, canShare = Some(true))
-    val samDAO = getSamDaoWithBasicMocking
+
+    val (samDAO, _, workspaceRepository, _, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
@@ -788,8 +685,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     )
     val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
@@ -810,7 +707,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
     val aclUpdate =
       WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, canShare = Some(false), canCompute = Some(true))
-    val samDAO = getSamDaoWithBasicMocking
+
+    val (samDAO, _, workspaceRepository, _, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
@@ -818,8 +716,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     )
     val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
+
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
@@ -838,24 +736,21 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
   it should "not allow users to change their own ACL" in {
     val requesterEmail = ctx.userInfo.userEmail.value
     val aclUpdate = WorkspaceACLUpdate(requesterEmail, WorkspaceAccessLevels.Read)
-    val samDAO = getSamDaoWithBasicMocking
+
+    val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
     when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
       Future.successful(
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
       )
     )
-    val rawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(rawlsWorkspaceAclManager.getWorkspacePolicies(any(), any()))
+    when(aclManager.getWorkspacePolicies(any(), any()))
       .thenReturn(Future.successful(Set(WorkbenchEmail(requesterEmail) -> SamWorkspacePolicyNames.owner)))
-    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-    val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-    when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
+
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
       fastPassServiceConstructor = _ => fastPassService,
-      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager
+      rawlsWorkspaceAclManager = aclManager
     )(ctx)
 
     val exception = intercept[InvalidWorkspaceAclUpdateException] {
@@ -869,6 +764,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
 
   val aclTestUserEmail = "permutations@example.com"
 
+  // These are valid share and compute updates for a user with no permissions that should be rejected
   for (
     (aclUpdate, policies) <- Set(
       WorkspaceACLUpdate(aclTestUserEmail, WorkspaceAccessLevels.Owner) -> Set(SamWorkspacePolicyNames.owner),
@@ -895,23 +791,12 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     )
   )
     it should s"require ${policies.map(p => SamWorkspaceActions.sharePolicy(p.value).value).mkString(",")} permissions to perform $aclUpdate" in {
-      val samDAO = getSamDaoWithBasicMocking
+      val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
           (allWorkspacePolicies -- policies).map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
-
-      val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-      when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-      when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-      when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-      val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-      val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-      when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
       val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                          workspaceRepository = workspaceRepository,
@@ -929,23 +814,12 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
 
   for (aclUpdate <- allWorkspaceAclUpdatePermutations(aclTestUserEmail))
     it should s"add correctPolicies for $aclUpdate" in {
-      val samDAO = getSamDaoWithBasicMocking
+      val (samDAO, aclManager, workspaceRepository, fastPassService, _) = getBasicMocks
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
           allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
-
-      val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
-      when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-      when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-      when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-      val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-      val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-      when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
 
       val workspaceService = workspaceServiceConstructor(samDAO = samDAO,
                                                          workspaceRepository = workspaceRepository,
@@ -958,7 +832,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         )
       }
 
-      (expectedPolicies(aclUpdate), result) match {
+      (expectedPoliciesForAclUpdatePermutationsTests(aclUpdate), result) match {
         case (Left(statusCode), util.Failure(exception: RawlsExceptionWithErrorReport)) =>
           assertResult(Some(statusCode), result.toString) {
             exception.errorReport.statusCode
@@ -981,31 +855,17 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     if testPolicyName1 != testPolicyName2 && !(testPolicyName1 == SamWorkspacePolicyNames.shareReader && testPolicyName2 == SamWorkspacePolicyNames.shareWriter) && !(testPolicyName1 == SamWorkspacePolicyNames.shareWriter && testPolicyName2 == SamWorkspacePolicyNames.shareReader)
   )
     it should s"remove $testPolicyName1 and $testPolicyName2" in {
-      val samDAO = getSamDaoWithBasicMocking
+      val (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService) = getBasicMocks
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
           allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
-
-      val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
       when(aclManager.getWorkspacePolicies(any(), any())).thenReturn(
         Future.successful(
           Set(WorkbenchEmail(aclTestUserEmail) -> testPolicyName1, WorkbenchEmail(aclTestUserEmail) -> testPolicyName2)
         )
       )
-      when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-      when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-      when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
-
-      val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-
-      val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-      when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-
-      val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
-      when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
 
       val workspaceService = workspaceServiceConstructor(
         samDAO = samDAO,
@@ -1051,25 +911,15 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       .map(l => WorkspaceACLUpdate(aclTestUserEmail, l, canCompute = Some(false)))
   )
     it should s"change $testPolicyName to $aclUpdate" in {
-      val samDAO = getSamDaoWithBasicMocking
+      val (samDAO, aclManager, workspaceRepository, fastPassService, requesterPaysSetupService) = getBasicMocks
       when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
         Future.successful(
           allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
         )
       )
-      val aclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS)
       when(aclManager.getWorkspacePolicies(any(), any()))
         .thenReturn(Future.successful(Set(WorkbenchEmail(aclTestUserEmail) -> testPolicyName)))
-      when(aclManager.removeUserFromPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-      when(aclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-      when(aclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any())).thenReturn(Future.successful(()))
 
-      val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(workspace)))
-      val fastPassService = mock[FastPassService](RETURNS_SMART_NULLS)
-      when(fastPassService.syncFastPassesForUserInWorkspace(any(), any())).thenReturn(Future.successful(()))
-      val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
-      when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
       val workspaceService = workspaceServiceConstructor(
         samDAO = samDAO,
         workspaceRepository = workspaceRepository,

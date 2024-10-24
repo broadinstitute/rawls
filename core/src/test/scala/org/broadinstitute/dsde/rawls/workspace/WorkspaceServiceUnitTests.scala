@@ -1464,8 +1464,6 @@ class WorkspaceServiceUnitTests
     when(samDAO.getUserIdInfo(any(), any()))
       .thenReturn(Future(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id")))))
     when(samDAO.getUserStatus(any())).thenReturn(Future(Option(enabledUser)))
-    when(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
-      .thenReturn(Future(Set(SamWorkspaceRoles.projectOwner)))
     samDAO
   }
 

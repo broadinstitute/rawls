@@ -6,7 +6,15 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model._
+import bio.terra.workspace.model.{
+  AzureContext,
+  GcpContext,
+  WorkspaceDescription,
+  WorkspaceStageModel,
+  WsmPolicyInput,
+  WsmPolicyInputs,
+  WsmPolicyPair
+}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
