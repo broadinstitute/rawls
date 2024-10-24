@@ -51,6 +51,8 @@ class WorkspaceApiSpec
 
   val bee = PipelineInjector(PipelineInjector.e2eEnv())
   
+  lazy val saToken = bee.ServiceAccounts.getUserCredential("firecloud-qa").map(_.makeAuthToken).get
+
   val (studentAToken, studentBToken) = {
     val users = bee.chooseStudents(2)
     (users(0).makeAuthToken, users(1).makeAuthToken)
@@ -292,7 +294,7 @@ class WorkspaceApiSpec
                 Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
             }(ownerAuthToken)
           }(userToken)
-        }(ownerAuthToken)
+        }(saToken)
       }
     }
 
@@ -341,7 +343,7 @@ class WorkspaceApiSpec
               }(ownerAuthToken)
             }(ownerAuthToken)
           }(ownerAuthToken)
-        }(ownerAuthToken)
+        }(saToken)
       }
 
       "to import method configs from the method repo" in {
@@ -377,7 +379,7 @@ class WorkspaceApiSpec
               }
             }(ownerAuthToken)
           }(ownerAuthToken)
-        }(ownerAuthToken)
+        }(saToken)
       }
     }
   }

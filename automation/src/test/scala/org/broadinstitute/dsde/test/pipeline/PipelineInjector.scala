@@ -48,6 +48,10 @@ trait PipelineInjector {
     val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Owner)
   }
 
+  object ServiceAccounts extends Users {
+    val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Serviceaccount)
+  }
+
   object Students extends Users {
     val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Student)
   }
