@@ -59,6 +59,7 @@ trait PipelineInjector {
 
   def chooseStudents(num_students: Int): Seq[UserMetadata] = {
     val students = usersMetadata.filter(_.`type` == Student)
+    print("my debug here")
     print(students)
     if (students.isEmpty)
       List[UserMetadata]()
