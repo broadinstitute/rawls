@@ -110,7 +110,6 @@ class WorkspaceApiSpec
 
       implicit val ec: ExecutionContext = ExecutionContext.global
       val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests",
-                                                      //GoogleCredentialModes.Json(jsonCreds),
                                                       GoogleCredentialModes.Token(() => ownerAuthToken.value),
                                                       "workbenchMetricBaseName"
       )
@@ -147,12 +146,8 @@ class WorkspaceApiSpec
 
           implicit val ec: ExecutionContext = ExecutionContext.global
 
-          val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-          val jsonCreds =
-            try source.mkString
-            finally source.close()
           val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests",
-                                                                      GoogleCredentialModes.Json(jsonCreds),
+                                                                      GoogleCredentialModes.Token(() => ownerAuthToken.value),
                                                                       "workbenchMetricBaseName"
           )
 
@@ -199,12 +194,8 @@ class WorkspaceApiSpec
           val workspaceName = prependUUID("rbs-delete-workspace")
 
           implicit val ec: ExecutionContext = ExecutionContext.global
-          val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-          val jsonCreds =
-            try source.mkString
-            finally source.close()
           val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests",
-                                                          GoogleCredentialModes.Json(jsonCreds),
+                                                          GoogleCredentialModes.Token(() => ownerAuthToken.value),
                                                           "workbenchMetricBaseName"
           )
 
