@@ -63,7 +63,7 @@ trait PipelineInjector {
     if (students.isEmpty)
       List[UserMetadata]()
     else
-      Random.shuffle(students).take(num_students)
+      students.take(num_students)
   }
 }
 
