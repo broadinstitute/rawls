@@ -79,7 +79,7 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.17.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
-  val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.0.0" exclude("com.google.protobuf", "protobuf-java")
+  val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.1.0" exclude("com.google.protobuf", "protobuf-java")
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.29.2"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.8"
