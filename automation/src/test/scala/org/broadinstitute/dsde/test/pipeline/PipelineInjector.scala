@@ -57,13 +57,13 @@ trait PipelineInjector {
     if (students.isEmpty) None else Some(students(Random.nextInt(students.length)))
   }
 
-  def chooseStudents(num_students: Int): List[UserMetadata] = {
+  def chooseStudents(num_students: Int): Seq[UserMetadata] = {
     val students = usersMetadata.filter(_.`type` == Student)
     print(students)
     if (students.isEmpty)
       List[UserMetadata]()
     else
-      Random.shuffle(students).take(num_students).toList
+      Random.shuffle(students).take(num_students)
   }
 }
 
