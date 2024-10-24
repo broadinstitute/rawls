@@ -59,6 +59,7 @@ trait PipelineInjector {
 
   def chooseStudents(num_students: Int): List[UserMetadata] = {
     val students = usersMetadata.filter(_.`type` == Student)
+    print(students)
     if (students.isEmpty)
       List[UserMetadata]()
     else
