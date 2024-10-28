@@ -12,6 +12,7 @@ import bio.terra.workspace.model.{
   WorkspaceDescription,
   WorkspaceStageModel
 }
+import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
@@ -21,6 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -485,6 +487,96 @@ class WorkspaceServiceUnitTests
 
     result.bucketOptions shouldBe Some(bucketDetails)
     verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
+  }
+
+  it should "get the bucket options for a reader on a non requester pays workspace" in {
+    val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val gcs = mock[GoogleServicesDAO]
+    val bucketDetails = WorkspaceBucketOptions(false, "")
+    when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(false))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(Future(List.empty))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
+                                              workspaceRepository = repository,
+                                              workspaceSettingRepository = settings,
+                                              samDAO = sam,
+                                              gcsDAO = gcs
+    )(ctx)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+
+    result.bucketOptions shouldBe Some(bucketDetails)
+    verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
+  }
+
+  it should "fail to get the bucket options for a reader on a requester pays workspace" in {
+    val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val gcs = mock[GoogleServicesDAO]
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(false))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID))
+      .thenReturn(Future(List(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
+                                              workspaceRepository = repository,
+                                              workspaceSettingRepository = settings,
+                                              samDAO = sam,
+                                              gcsDAO = gcs
+    )(ctx)
+
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
+    }
+  }
+
+  it should "get the bucket options for a reader on a requester pays workspace if a user project is provided" in {
+    val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
+    val wsm = mock[WorkspaceManagerDAO]
+    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
+    val gcs = mock[GoogleServicesDAO]
+    val userProject = GoogleProjectId("123")
+    val bucketDetails = WorkspaceBucketOptions(true, "")
+    when(gcs.getBucketDetails(workspace.bucketName, userProject)).thenReturn(Future(bucketDetails))
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(false))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID))
+      .thenReturn(Future(List(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)))))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
+                                              workspaceRepository = repository,
+                                              workspaceSettingRepository = settings,
+                                              samDAO = sam,
+                                              gcsDAO = gcs
+    )(ctx)
+
+    val result = Await.result(service.getWorkspaceDetails(workspace, options, userProject.some), Duration.Inf)
+
+    result.bucketOptions shouldBe Some(bucketDetails)
+    verify(gcs).getBucketDetails(workspace.bucketName, userProject)
   }
 
   it should "get the owner emails using the policy from sam when requested" in {
