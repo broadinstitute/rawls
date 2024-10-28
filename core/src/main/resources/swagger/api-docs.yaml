@@ -3194,13 +3194,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: userProject
-          in: query
-          description: |
-            When specified, bill google storage requests to this project
-          required: false
-          schema:
-            type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -3393,13 +3387,7 @@ paths:
             type: array
             items:
               type: string
-        - name: userProject
-          in: query
-          description: |
-            When specified, bill google storage requests to this project
-          required: false
-          schema:
-            type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -3442,13 +3430,7 @@ paths:
             type: array
             items:
               type: string
-        - name: userProject
-          in: query
-          description: |
-            When specified, bill google storage requests to this project
-          required: false
-          schema:
-            type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -7236,6 +7218,14 @@ components:
       in: path
       description: Submission Id
       required: true
+      schema:
+        type: string
+    userProjectQueryParam:
+      name: userProject
+      in: query
+      description: |
+        When specified, bill google storage requests to this project
+      required: false
       schema:
         type: string
     workbenchRolePathParam:
