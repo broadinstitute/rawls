@@ -10,7 +10,6 @@ import com.google.api.services.storage.model.{Bucket, BucketAccessControl, Stora
 import com.google.cloud.storage.BucketInfo
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
