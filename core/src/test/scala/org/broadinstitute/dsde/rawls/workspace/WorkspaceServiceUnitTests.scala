@@ -115,7 +115,8 @@ class WorkspaceServiceUnitTests
       mock[FastPassService](RETURNS_SMART_NULLS),
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
-    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS)
+    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -143,7 +144,8 @@ class WorkspaceServiceUnitTests
       fastPassServiceConstructor,
       workspaceRepository,
       billingRepository,
-      submissionsRepository
+      submissionsRepository,
+      workspaceSettingRepository
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"
@@ -460,9 +462,24 @@ class WorkspaceServiceUnitTests
     val wsm = mock[WorkspaceManagerDAO]
     when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val gcs = mock[GoogleServicesDAO]
-    val bucketDetails = WorkspaceBucketOptions(true)
+    val bucketDetails = WorkspaceBucketOptions(true, "")
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, gcsDAO = gcs)(ctx)
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(true))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(Future(List.empty))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
+                                              workspaceRepository = repository,
+                                              workspaceSettingRepository = settings,
+                                              samDAO = sam,
+                                              gcsDAO = gcs
+    )(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -1651,10 +1668,18 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
       .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(true))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(Future(List.empty))
     val bucketDetails = mock[WorkspaceBucketOptions]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
-    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repository, gcsDAO = gcs)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam,
+                                              workspaceRepository = repository,
+                                              gcsDAO = gcs,
+                                              workspaceSettingRepository = settings
+    )(ctx)
 
     Await.result(service.getBucketOptions(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketDetails
     verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)

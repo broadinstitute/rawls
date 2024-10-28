@@ -10,6 +10,7 @@ import com.google.api.services.storage.model.{Bucket, BucketAccessControl, Stora
 import com.google.cloud.storage.BucketInfo
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -42,6 +43,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/badbad-badbad-badbad")
 
   val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
+
+  val bucketLocation = "us-central1"
 
   override def listBillingAccounts(userInfo: UserInfo,
                                    firecloudHasAccess: Option[Boolean] = None
@@ -230,7 +233,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(true)
 
   override def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] =
-    Future.successful(WorkspaceBucketOptions(false))
+    Future.successful(WorkspaceBucketOptions(false, bucketLocation))
 
   protected def updatePolicyBindings(
     googleProject: GoogleProjectId
