@@ -369,12 +369,24 @@ class FastPassServiceSpec
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    // Mock caller permissions.
+    when(services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any()))
+      .thenReturn(
+        Future(
+          Set(
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.writer.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.reader.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.canCompute.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value)
+          )
+        )
+      )
 
     val aclAdd = Set(
       WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
       WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
     )
-    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+    Await.result(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
 
     verify(services.mockFastPassService)
       .syncFastPassesForUserInWorkspace(
@@ -1034,6 +1046,18 @@ class FastPassServiceSpec
   }
 
   it should "not block workspace ACL modifications if FastPass fails" in withTestDataServices { services =>
+    // Mock caller permissions.
+    when(services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any()))
+      .thenReturn(
+        Future(
+          Set(
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.writer.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.reader.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.canCompute.value),
+            SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value)
+          )
+        )
+      )
     doThrow(new RuntimeException("foo"))
       .when(services.googleStorageDAO)
       .addIamRoles(
@@ -1053,7 +1077,7 @@ class FastPassServiceSpec
       WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
       WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
     )
-    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+    Await.result(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
   }
 
   it should "collect errors while removing FastPass grants" in withTestDataServices { services =>
