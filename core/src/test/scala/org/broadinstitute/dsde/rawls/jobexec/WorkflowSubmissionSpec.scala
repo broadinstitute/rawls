@@ -73,7 +73,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   val mockDrsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
   private val requesterPaysRole = "requesterPays"
   val mockBardService = new MockBardService()
-  val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository]
+  val mockWorkspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
   object DrsTestVals {
     val jdrDevUrl = "drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4"
