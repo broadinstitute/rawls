@@ -32,7 +32,12 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceAdminService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceService,
+  WorkspaceAdminService,
+  WorkspaceService,
+  WorkspaceSettingService
+}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 
 import java.sql.{SQLException, SQLTransactionRollbackException}

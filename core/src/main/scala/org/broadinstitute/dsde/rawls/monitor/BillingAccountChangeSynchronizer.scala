@@ -254,9 +254,14 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       billingAccount <- R.reader(_.newBillingAccount)
       _ <- inTransaction {
         workspacesToUpdate.setErrorMessage(errorMessage) *>
-          Applicative[WriteAction].whenA(errorMessage.isEmpty) {
-            workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount)
-          }
+          (errorMessage match {
+            case Some(_) => workspacesToUpdate.setState(WorkspaceState.UpdateFailed)
+            case None =>
+              DBIO.seq(
+                workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount),
+                workspacesToUpdate.setState(WorkspaceState.Ready)
+              )
+          })
       }
     } yield ()
 

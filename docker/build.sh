@@ -99,7 +99,7 @@ function make_jar()
     # TODO: DOCKER_TAG hack until JAR build migrates to Dockerfile. Tell SBT to name the JAR
     # `rawls-assembly-local-SNAP.jar` instead of including the commit hash. Otherwise we get
     # an explosion of JARs that all get copied to the image; and which one runs is undefined.
-    DOCKER_RUN="$DOCKER_RUN -e DOCKER_TAG=local -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /working/docker/clean_install.sh /working"
+    DOCKER_RUN="$DOCKER_RUN -e DOCKER_TAG=local -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.2_2.13.15 /working/docker/clean_install.sh /working"
 
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
@@ -116,7 +116,7 @@ function artifactory_push()
     ARTIFACTORY_USERNAME=dsdejenkins
     ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
     echo "Publishing to artifactory..."
-    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.0_2.13.14 /$PROJECT/core/src/bin/publishSnapshot.sh
+    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD sbtscala/scala-sbt:eclipse-temurin-jammy-17.0.10_7_1.10.2_2.13.15 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
 
 function docker_cmd()

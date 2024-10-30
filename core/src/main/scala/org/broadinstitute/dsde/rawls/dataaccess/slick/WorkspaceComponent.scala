@@ -659,6 +659,9 @@ trait WorkspaceComponent {
 
     def setIsLocked(isLocked: Boolean): WriteAction[Boolean] =
       query.map(_.isLocked).filter(_ =!= isLocked).update(isLocked).map(_ > 0)
+
+    def setState(state: WorkspaceState): WriteAction[Int] =
+      query.map(_.state).update(state.toString)
   }
 
   private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] =
