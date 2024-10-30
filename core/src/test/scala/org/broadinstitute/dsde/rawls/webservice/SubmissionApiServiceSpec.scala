@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.Mockito.{verify, when}
@@ -115,7 +116,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         CromwellBackend("PAPIv2"),
         CromwellBackend("PAPIv2-CloudNAT"),
         methodConfigResolver,
-        new MockBardService()
+        new MockBardService(),
+        new WorkspaceSettingRepository(slickDataSource)
       )
     )
 

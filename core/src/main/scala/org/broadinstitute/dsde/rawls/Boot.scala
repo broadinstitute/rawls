@@ -599,7 +599,8 @@ object Boot extends IOApp with LazyLogging {
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
           methodConfigResolver,
-          bardService
+          bardService,
+          workspaceSettingRepository
         )
       } else
         logger.info(

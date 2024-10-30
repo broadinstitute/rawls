@@ -5,7 +5,16 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceDAO, ExecutionServiceId, GoogleServicesDAO, MethodRepoDAO, SamDAO, SlickDataSource, SubmissionCostService}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  ExecutionServiceCluster,
+  ExecutionServiceDAO,
+  ExecutionServiceId,
+  GoogleServicesDAO,
+  MethodRepoDAO,
+  SamDAO,
+  SlickDataSource,
+  SubmissionCostService
+}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
@@ -17,8 +26,53 @@ import org.broadinstitute.dsde.rawls.methods.MethodConfigurationUtils
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{ActiveSubmission, AttributeEntityReference, AttributeString, AttributeValue, ErrorReport, ErrorReportSource, ExecutionServiceLogs, ExecutionServiceOutputs, ExternalEntityInfo, MetadataParams, MethodConfiguration, PreparedSubmission, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RetriedSubmissionReport, SamWorkspaceActions, Submission, SubmissionListResponse, SubmissionReport, SubmissionRequest, SubmissionRetry, SubmissionStatuses, SubmissionValidationEntityInputs, SubmissionValidationHeader, SubmissionValidationInput, SubmissionValidationReport, TaskOutput, UserCommentUpdateOperation, Workflow, WorkflowCost, WorkflowFailureModes, WorkflowOutputs, WorkflowQueueStatusByUserResponse, WorkflowQueueStatusResponse, WorkflowStatuses, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{extractOperationIdsFromCromwellMetadata, getTerminalStatusDate, submissionRootPath}
+import org.broadinstitute.dsde.rawls.model.{
+  ActiveSubmission,
+  AttributeEntityReference,
+  AttributeString,
+  AttributeValue,
+  ErrorReport,
+  ErrorReportSource,
+  ExecutionServiceLogs,
+  ExecutionServiceOutputs,
+  ExternalEntityInfo,
+  MetadataParams,
+  MethodConfiguration,
+  PreparedSubmission,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  RetriedSubmissionReport,
+  SamWorkspaceActions,
+  SeparateSubmissionFinalOutputsSetting,
+  Submission,
+  SubmissionListResponse,
+  SubmissionReport,
+  SubmissionRequest,
+  SubmissionRetry,
+  SubmissionStatuses,
+  SubmissionValidationEntityInputs,
+  SubmissionValidationHeader,
+  SubmissionValidationInput,
+  SubmissionValidationReport,
+  TaskOutput,
+  UserCommentUpdateOperation,
+  Workflow,
+  WorkflowCost,
+  WorkflowFailureModes,
+  WorkflowOutputs,
+  WorkflowQueueStatusByUserResponse,
+  WorkflowQueueStatusResponse,
+  WorkflowStatuses,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName,
+  WorkspaceSettingTypes
+}
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
+  extractOperationIdsFromCromwellMetadata,
+  getTerminalStatusDate
+}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
@@ -107,13 +161,6 @@ object SubmissionsService {
       Option(workflows.map(_.statusLastChangedDate).maxBy(_.getMillis))
     }
   }
-
-  def submissionRootPath(workspace: Workspace, id: UUID): String =
-    // Intermediate/final output separation: location 1/2 (SU-166, WX-1702)
-    // All intermediate files including logs live here.
-    // UI links to execution directory point here.
-    // Temporarily paused as of 2024-09-05
-    s"gs://${workspace.bucketName}/submissions/$id"
 }
 
 class SubmissionsService(
@@ -439,7 +486,7 @@ class SubmissionsService(
           val newSubmission = submission.copy(
             submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
-            submissionRoot = submissionRootPath(workspaceContext, newSubmissionId),
+            submissionRoot = submission.submissionRoot,
             workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted,
             userComment =
@@ -534,13 +581,14 @@ class SubmissionsService(
         gatherInputsResult,
         workspaceExpressionResults
       )
+      submissionPath <- submissionRootPath(workspaceContext, submissionId)
     } yield PreparedSubmission(
       workspaceContext,
       submissionId,
       submissionParameters,
       submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName),
       header,
-      submissionRootPath(workspaceContext, submissionId)
+      submissionPath
     )
   }
 
@@ -572,7 +620,8 @@ class SubmissionsService(
   ): ReadWriteAction[Int] =
     withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
       // implicitly passed to SubmissionComponent.updateStatus
-      implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
+      implicit val subStatusCounter =
+        submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
       dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting)
     }
 
@@ -813,7 +862,7 @@ class SubmissionsService(
     }
 
   /**
-    * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
+      * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
   private def mergeWorkflowOutputs(execOuts: ExecutionServiceOutputs,
                                    execLogs: ExecutionServiceLogs,
                                    workflowId: String
@@ -832,7 +881,7 @@ class SubmissionsService(
   }
 
   /**
-    * Get the list of outputs for a given workflow in this submission */
+      * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
@@ -900,4 +949,26 @@ class SubmissionsService(
         )
     }
 
+  private def submissionRootPath(workspace: Workspace, id: UUID): Future[String] =
+    // Intermediate/final output separation: location 1/2 (SU-166, WX-1702)
+    // All intermediate files including logs live here if SeparateSubmissionFinalOutputsSetting is enabled (AN-134).
+    // UI links to execution directory point here.
+    for {
+      currentSettings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+      separateSubmissionSetting = currentSettings.collectFirst { case setting: SeparateSubmissionFinalOutputsSetting =>
+        setting
+      }
+
+      separateSubmissionEnabled = separateSubmissionSetting match {
+        case Some(setting) => setting.config.enabled
+        case None          => false
+      }
+
+      intermediates =
+        if (separateSubmissionEnabled) {
+          "intermediates/"
+        } else {
+          ""
+        }
+    } yield s"gs://${workspace.bucketName}/submissions/$intermediates$id"
 }
