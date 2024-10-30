@@ -289,9 +289,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       separateSubmissionSetting = currentSettings.collectFirst { case setting: SeparateSubmissionFinalOutputsSetting =>
         setting
       }
-      (final_workflow_outputs_dir, final_workflow_outputs_mode) = separateSubmissionSetting match {
+      (final_workflow_outputs_dir, final_workflow_outputs_dir_metadata) = separateSubmissionSetting match {
         case Some(setting) if setting.config.enabled =>
-          (Option(s"gs://${workspace.bucketName}/submissions/final-outputs/${submission.id}"), Option("copy"))
+          (Option(s"gs://${workspace.bucketName}/submissions/final-outputs/${submission.id}"), Option("destination"))
         case _ => (None, None)
       }
       // Intermediate/final output separation: location 2/2 (SU-166, WX-1702)
@@ -304,7 +304,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         submission.submissionRoot,
         final_workflow_outputs_dir,
-        final_workflow_outputs_mode,
+        final_workflow_outputs_dir_metadata,
         workspace.googleProjectId,
         userEmail.value,
         petSAEmail,

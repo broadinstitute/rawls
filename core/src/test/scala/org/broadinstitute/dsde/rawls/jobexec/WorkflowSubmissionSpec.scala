@@ -1167,7 +1167,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
 
       workflowOptions.get.final_workflow_outputs_dir.get should include("final-outputs")
-      workflowOptions.get.final_workflow_outputs_mode.get should be("copy")
+      workflowOptions.get.final_workflow_outputs_dir_metadata.get should be("destination")
     }
   }
 
@@ -1198,7 +1198,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
 
       workflowOptions.get.final_workflow_outputs_dir should be(None)
-      workflowOptions.get.final_workflow_outputs_mode should be(None)
+      workflowOptions.get.final_workflow_outputs_dir_metadata should be(None)
     }
   }
 
