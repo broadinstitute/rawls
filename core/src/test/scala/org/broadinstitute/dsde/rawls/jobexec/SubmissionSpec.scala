@@ -1102,7 +1102,6 @@ class SubmissionSpec(_system: ActorSystem)
 
   it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is true" in {
     workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = true) { submissionsService =>
-
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
         methodConfigurationName = "GoodMethodConfig",
@@ -1124,7 +1123,6 @@ class SubmissionSpec(_system: ActorSystem)
 
   it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is false" in {
     workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = false) { submissionsService =>
-
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
         methodConfigurationName = "GoodMethodConfig",
@@ -1140,7 +1138,7 @@ class SubmissionSpec(_system: ActorSystem)
 
       val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
 
-      submissionData.submissionRoot should not include("intermediates")
+      submissionData.submissionRoot should not include "intermediates"
     }
   }
 

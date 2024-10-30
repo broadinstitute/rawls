@@ -8,7 +8,12 @@ import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectDeletion, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
-import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
+import org.broadinstitute.dsde.rawls.coordination.{
+  CoordinatedDataSourceAccess,
+  CoordinatedDataSourceActor,
+  DataSourceAccess,
+  UncoordinatedDataSourceAccess
+}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
@@ -17,16 +22,30 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
+import org.broadinstitute.dsde.rawls.jobexec.{
+  MethodConfigResolver,
+  SubmissionMonitorConfig,
+  SubmissionSupervisor,
+  WorkflowSubmissionActor
+}
 import org.broadinstitute.dsde.rawls.metrics.BardService
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses, WorkspaceCloudPlatform}
+import org.broadinstitute.dsde.rawls.model.{
+  CromwellBackend,
+  RawlsRequestContext,
+  WorkflowStatuses,
+  WorkspaceCloudPlatform
+}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{BPMBillingProjectDeleteRunner, CloneWorkspaceContainerRunner, LandingZoneCreationStatusRunner}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  BPMBillingProjectDeleteRunner,
+  CloneWorkspaceContainerRunner,
+  LandingZoneCreationStatusRunner
+}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
