@@ -1463,9 +1463,23 @@ class WorkspaceService(
         case GcpBucketRequesterPaysSetting(config) => config.enabled
         case _                                     => false
       })
-    _ = if (requesterPays && !isWriter && userProject.isEmpty) {
+    userProjectWorkspace <- userProject.flatTraverse(workspaceRepository.getWorkspaceByGoogleProject)
+    isUserProjectWriter <- userProjectWorkspace.traverse(ws =>
+      samDAO.userHasAction(
+        SamResourceTypeNames.workspace,
+        ws.workspaceId,
+        SamWorkspaceActions.write,
+        ctx
+      )
+    )
+    _ = if (!isUserProjectWriter.getOrElse(true)) {
       throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "Reader should provide a user project to bill on requester pays workspace")
+        ErrorReport(StatusCodes.BadRequest, "User must have write access to user project")
+      )
+    }
+    _ = if (requesterPays && !isWriter && userProjectWorkspace.isEmpty) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Readers must provide a user project to bill on requester pays workspaces")
       )
     }
     options <- gcsDAO.getBucketDetails(workspaceContext.bucketName,
