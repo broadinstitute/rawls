@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
@@ -20,7 +21,7 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmAzureSpendReportApiException
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -40,8 +41,13 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.scalatestplus.mockito.MockitoSugar.mock
+import spray.json.DefaultJsonProtocol._
+import spray.json._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 
-class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils {
+class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
 
   implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
@@ -59,6 +65,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                                                                 Option(billingAccountName),
                                                                 None
   )
+
+  val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = {
+    lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
+    _ => mockWorkspaceService
+  }
 
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
@@ -558,7 +569,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -600,7 +612,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -631,7 +644,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -646,6 +660,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
+
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
     when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any()))
@@ -657,7 +672,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val projectName = RawlsBillingProjectName("fakeProject")
 
@@ -673,6 +689,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
+
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
     val badRow = Map(
@@ -691,7 +708,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -754,7 +772,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(
@@ -796,6 +815,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+
     val bigQueryService = mockBigQuery(TestData.Workspace.table)
     val service = spy(
       new SpendReportingService(
@@ -805,7 +825,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -843,6 +864,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+
     val bigQueryService = mockBigQuery(TestData.Workspace.table)
     val service = spy(
       new SpendReportingService(
@@ -852,7 +874,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -914,7 +937,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -936,7 +960,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange)
     val endDate = DateTime.now()
@@ -951,7 +976,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now()
     val endDate = DateTime.now().minusDays(1)
@@ -967,7 +993,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange + 1)
     val endDate = DateTime.now()
@@ -996,7 +1023,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val result = service.getQuery(
       Set(
@@ -1029,7 +1057,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val result = service.getQuery(
       Set(
@@ -1058,12 +1087,72 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(service.getWorkspaceGoogleProjects(RawlsBillingProjectName("")), Duration.Inf)
 
     result shouldBe Map(GoogleProjectId("v2ProjectId") -> v2Workspace.toWorkspaceName)
+  }
+
+  "getOwnerWorkspaces" should "return any and all workspaces user has owner access to" in {
+    val v1Workspace = TestData.workspace("v1name", GoogleProjectId("v1ProjectId"), WorkspaceVersions.V1)
+    val v2Workspace = TestData.workspace("v2name", GoogleProjectId("v2ProjectId"), WorkspaceVersions.V2)
+    val workspace3 = TestData.workspace("name3", GoogleProjectId("3ProjectId"), WorkspaceVersions.V2)
+
+    val dataSource = mock[SlickDataSource]
+    val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+
+    val workspace1Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Owner,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(v1Workspace, Option(Set.empty), true, Some(WorkspaceCloudPlatform.Gcp)),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+
+    val workspace2Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Owner,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(v2Workspace, Option(Set.empty), true, Some(WorkspaceCloudPlatform.Gcp)),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+
+    val workspace3Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Read,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace3, Option(Set.empty), true, Some(WorkspaceCloudPlatform.Gcp)),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+
+    when(mockWorkspaceService.listWorkspaces(any(), any()))
+      .thenReturn(Future.successful(Seq(workspace1Response, workspace2Response, workspace3Response).toJson))
+    val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
+      mockWorkspaceService
+    }
+    val service = new SpendReportingService(
+      testContext,
+      dataSource,
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
+    )
+
+    val result = service.getOwnerWorkspaces()
+
+    result shouldBe Seq(workspace1Response, workspace2Response)
   }
 
 }
