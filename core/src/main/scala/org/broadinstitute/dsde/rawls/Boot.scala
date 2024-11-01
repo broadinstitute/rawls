@@ -516,7 +516,8 @@ object Boot extends IOApp with LazyLogging {
           billingProfileManagerDAO,
           samDAO,
           spendReportingServiceConfig,
-          workspaceServiceConstructor
+          workspaceServiceConstructor,
+          userServiceConstructor
         )
 
       val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =

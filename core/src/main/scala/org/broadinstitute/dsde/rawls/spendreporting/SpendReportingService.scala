@@ -33,6 +33,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Owner, WorkspaceAccessLevel}
+import org.broadinstitute.dsde.rawls.user.UserService
 
 object SpendReportingService {
   def constructor(
@@ -42,16 +43,19 @@ object SpendReportingService {
     bpmDao: BillingProfileManagerDAO,
     samDAO: SamDAO,
     spendReportingServiceConfig: SpendReportingServiceConfig,
-    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+    userServiceConstructor: RawlsRequestContext => UserService
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
-    new SpendReportingService(ctx,
-                              dataSource,
-                              bigQueryService,
-                              billingRepository: BillingRepository,
-                              bpmDao,
-                              samDAO,
-                              spendReportingServiceConfig,
-                              workspaceServiceConstructor
+    new SpendReportingService(
+      ctx,
+      dataSource,
+      bigQueryService,
+      billingRepository: BillingRepository,
+      bpmDao,
+      samDAO,
+      spendReportingServiceConfig,
+      workspaceServiceConstructor,
+      userServiceConstructor
     )
 
   val SpendReportingMetrics = "spendReporting"
@@ -152,7 +156,8 @@ class SpendReportingService(
   bpmDao: BillingProfileManagerDAO,
   samDAO: SamDAO,
   spendReportingServiceConfig: SpendReportingServiceConfig,
-  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+  userServiceConstructor: RawlsRequestContext => UserService
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented {
@@ -466,17 +471,19 @@ class SpendReportingService(
           Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
       }
 
-  def getOwnerWorkspaces(): Seq[WorkspaceListResponse] = {
-    val ws = Await.result(workspaceServiceConstructor(ctx).listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-    val result = ws match {
+  def getOwnerWorkspaces(): Future[Seq[WorkspaceListResponse]] =
+    workspaceServiceConstructor(ctx).listWorkspaces(WorkspaceFieldSpecs(), -1) map {
       case JsArray(jsArray) =>
         val workspaces = jsArray.map(_.convertTo[WorkspaceListResponse])
-        println(s"workspaces: $workspaces")
-        val filtered = workspaces.filter(_.accessLevel == Owner)
-        println(s"filtered: $filtered")
-        filtered
+        workspaces.filter(_.accessLevel == Owner)
       case _ => throw new IllegalArgumentException("Expected a JsArray")
     }
-    result
-  }
+
+//  def getBillingForWorkspaces(workspaces: Future[Seq[WorkspaceListResponse]]): Unit = {
+//    val billingAccounts = workspaces.map(wsList => wsList.map(ws => ws.workspace.namespace
+//    val result = billingAccounts.foreach(ba =>
+//      userServiceConstructor(ctx).getBillingProjectSpendConfiguration(RawlsBillingProjectName(ba))
+//    ))
+//    )
+//  }
 }

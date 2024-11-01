@@ -415,7 +415,8 @@ trait ApiServiceSpec
       mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig,
-      workspaceServiceConstructor
+      workspaceServiceConstructor,
+      userServiceConstructor
     )
 
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
