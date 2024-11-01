@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
@@ -1455,11 +1456,11 @@ class WorkspaceService(
                                      ctx
     )
     requesterPays <- workspaceSettingsRepository
-      .getWorkspaceSettings(workspaceContext.workspaceIdAsUUID)
-      .map(_.exists {
-        case GcpBucketRequesterPaysSetting(config) => config.enabled
-        case _                                     => false
-      })
+      .getWorkspaceSettingOfType(workspaceContext.workspaceIdAsUUID, GcpBucketRequesterPays)
+      .map {
+        case Some(GcpBucketRequesterPaysSetting(config)) => config.enabled
+        case _                                           => false
+      }
     userProjectWorkspace <- userProject.flatTraverse(workspaceRepository.getWorkspaceByGoogleProject)
     isUserProjectWriter <- userProjectWorkspace.traverse(ws =>
       samDAO.userHasAction(

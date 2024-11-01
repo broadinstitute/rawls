@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -474,7 +475,8 @@ class WorkspaceServiceUnitTests
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
       .thenReturn(Future(true))
     val settings = mock[WorkspaceSettingRepository]
-    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(Future(List.empty))
+    when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+      .thenReturn(Future(None))
     val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
                                               workspaceRepository = repository,
                                               workspaceSettingRepository = settings,
@@ -1673,7 +1675,8 @@ class WorkspaceServiceUnitTests
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
       .thenReturn(Future(true))
     val settings = mock[WorkspaceSettingRepository]
-    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(Future(List.empty))
+    when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+      .thenReturn(Future(None))
     val bucketDetails = mock[WorkspaceBucketOptions]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
@@ -1700,11 +1703,8 @@ class WorkspaceServiceUnitTests
         when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
           .thenReturn(Future(hasWriteAccess))
         val settings = mock[WorkspaceSettingRepository]
-        when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(
-          Future(
-            List(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true))).filter(_ => isRequesterPays)
-          )
-        )
+        when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+          .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(isRequesterPays)))))
         val bucketDetails = mock[WorkspaceBucketOptions]
         val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
         when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
@@ -1746,11 +1746,8 @@ class WorkspaceServiceUnitTests
       when(sam.userHasAction(SamResourceTypeNames.workspace, userProjectWs.workspaceId, SamWorkspaceActions.write, ctx))
         .thenReturn(Future(true))
       val settings = mock[WorkspaceSettingRepository]
-      when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(
-        Future(
-          List(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true))).filter(_ => isRequesterPays)
-        )
-      )
+      when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+        .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(isRequesterPays)))))
       val bucketDetails = mock[WorkspaceBucketOptions]
       val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(gcs.getBucketDetails(workspace.bucketName, userProjectId)).thenReturn(Future(bucketDetails))
@@ -1794,11 +1791,8 @@ class WorkspaceServiceUnitTests
       when(sam.userHasAction(SamResourceTypeNames.workspace, userProjectWs.workspaceId, SamWorkspaceActions.write, ctx))
         .thenReturn(Future(false))
       val settings = mock[WorkspaceSettingRepository]
-      when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(
-        Future(
-          List(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true))).filter(_ => isRequesterPays)
-        )
-      )
+      when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+        .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(isRequesterPays)))))
       val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       val service = workspaceServiceConstructor(samDAO = sam,
                                                 workspaceRepository = repository,
@@ -1823,11 +1817,8 @@ class WorkspaceServiceUnitTests
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
       .thenReturn(Future(false))
     val settings = mock[WorkspaceSettingRepository]
-    when(settings.getWorkspaceSettings(workspace.workspaceIdAsUUID)).thenReturn(
-      Future(
-        List(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)))
-      )
-    )
+    when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+      .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)))))
     val bucketDetails = mock[WorkspaceBucketOptions]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     val service = workspaceServiceConstructor(samDAO = sam,
