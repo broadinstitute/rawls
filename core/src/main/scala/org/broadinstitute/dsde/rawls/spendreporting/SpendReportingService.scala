@@ -479,11 +479,13 @@ class SpendReportingService(
       case _ => throw new IllegalArgumentException("Expected a JsArray")
     }
 
-//  def getBillingForWorkspaces(workspaces: Future[Seq[WorkspaceListResponse]]): Unit = {
-//    val billingAccounts = workspaces.map(wsList => wsList.map(ws => ws.workspace.namespace
-//    val result = billingAccounts.foreach(ba =>
-//      userServiceConstructor(ctx).getBillingProjectSpendConfiguration(RawlsBillingProjectName(ba))
-//    ))
-//    )
-//  }
+  def getBillingForWorkspaces(
+    workspaces: Future[Seq[WorkspaceListResponse]]
+  ): Future[Seq[BillingProjectSpendConfiguration]] =
+    workspaces.flatMap { wsList =>
+      val billingFutures = wsList.map(ws =>
+        userServiceConstructor(ctx).getBillingProjectSpendConfiguration(RawlsBillingProjectName(ws.workspace.namespace))
+      )
+      Future.sequence(billingFutures).map(_.flatten.distinct)
+    }
 }

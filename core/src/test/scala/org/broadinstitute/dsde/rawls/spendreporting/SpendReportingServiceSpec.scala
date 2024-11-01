@@ -21,13 +21,14 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmAzureSpendReportApiException
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, GoogleProject}
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -48,15 +49,20 @@ import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 import org.broadinstitute.dsde.rawls.user.UserService
 
-class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
+class SpendReportingServiceSpec
+    extends AnyFlatSpecLike
+    with Matchers
+    with MockitoTestUtils
+    with SprayJsonSupport
+    with TestDriverComponent {
 
-  implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
+//  implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
-  val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
-                                    OAuth2BearerToken("token"),
-                                    123,
-                                    RawlsUserSubjectId("123456789876543212345")
-  )
+//  val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
+//                                    OAuth2BearerToken("token"),
+//                                    123,
+//                                    RawlsUserSubjectId("123456789876543212345")
+//  )
   val wsName: WorkspaceName = WorkspaceName("myNamespace", "myWorkspace")
 
   val billingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("fakeBillingAcct")
@@ -76,7 +82,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     lazy val mockUserService: UserService = mock[UserService]
     _ => mockUserService
   }
-  val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
+  override val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
     val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
     val workspace2: Workspace = workspace("workspace2", GoogleProjectId("project2"))
@@ -1186,6 +1192,137 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val result = Await.result(service.getOwnerWorkspaces(), Duration.Inf)
 
     result shouldBe Seq(workspace1Response, workspace2Response)
+  }
+
+  "getBillingForWorkspaces" should "return spendConfigurations for workspaces" in {
+
+    val dataSource = mock[SlickDataSource]
+
+    val billingProject1 = billingProjectFromName("billingProject1")
+    val spendReportDatasetName1 = BigQueryDatasetName("test_dataset")
+    val spendReportGoogleProject1 = GoogleProject("some_other_google_project")
+    val spendReportConfiguration1 =
+      BillingProjectSpendConfiguration(spendReportGoogleProject1, spendReportDatasetName1)
+
+    val billingProject2 = billingProjectFromName("billingProject2")
+    val spendReportDatasetName2 = BigQueryDatasetName("test_dataset2")
+    val spendReportGoogleProject2 = GoogleProject("some_other_google_project2")
+    val spendReportConfiguration2 =
+      BillingProjectSpendConfiguration(spendReportGoogleProject2, spendReportDatasetName2)
+
+    val billingProject3 = billingProjectFromName("billingProject3")
+
+    val mockUserService = mock[UserService](RETURNS_SMART_NULLS)
+    when(mockUserService.getBillingProjectSpendConfiguration(billingProject1.projectName))
+      .thenReturn(Future.successful(Some(spendReportConfiguration1)))
+
+    when(mockUserService.getBillingProjectSpendConfiguration(billingProject2.projectName))
+      .thenReturn(Future.successful(Some(spendReportConfiguration2)))
+
+    when(mockUserService.getBillingProjectSpendConfiguration(billingProject3.projectName))
+      .thenReturn(Future.successful(None))
+
+    val mockUserServiceConstructor: RawlsRequestContext => UserService = { _ =>
+      mockUserService
+    }
+
+    val service = new SpendReportingService(
+      testContext,
+      dataSource,
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor,
+      mockUserServiceConstructor
+    )
+
+    val workspace1Billing1 =
+      TestData.workspace("workspace1Billing1",
+                         GoogleProjectId("owner1ProjectId"),
+                         WorkspaceVersions.V1,
+                         billingProject1.projectName.value
+      )
+    val workspace2Billing1 =
+      TestData.workspace("workspace2Billing1",
+                         GoogleProjectId("owner1ProjectId"),
+                         WorkspaceVersions.V2,
+                         billingProject1.projectName.value
+      )
+    val workspace1Billing2 =
+      TestData.workspace("workspace1Billing2",
+                         GoogleProjectId("owner1ProjectId"),
+                         WorkspaceVersions.V2,
+                         billingProject2.projectName.value
+      )
+    val workspace1Billing3 =
+      TestData.workspace("workspace1Billing3",
+                         GoogleProjectId("owner1ProjectId"),
+                         WorkspaceVersions.V2,
+                         billingProject3.projectName.value
+      )
+
+    val workspace1Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Read,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace1Billing1,
+                                               Option(Set.empty),
+                                               true,
+                                               Some(WorkspaceCloudPlatform.Gcp)
+      ),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+    val workspace2Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Read,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace2Billing1,
+                                               Option(Set.empty),
+                                               true,
+                                               Some(WorkspaceCloudPlatform.Gcp)
+      ),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+    val workspace3Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Read,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace1Billing2,
+                                               Option(Set.empty),
+                                               true,
+                                               Some(WorkspaceCloudPlatform.Gcp)
+      ),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+    val workspace4Response = WorkspaceListResponse(
+      WorkspaceAccessLevels.Read,
+      Some(true),
+      Some(true),
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace1Billing3,
+                                               Option(Set.empty),
+                                               true,
+                                               Some(WorkspaceCloudPlatform.Gcp)
+      ),
+      Option.empty,
+      false,
+      Some(List.empty)
+    )
+
+    val result = Await.result(
+      service.getBillingForWorkspaces(
+        Future.successful(Seq(workspace2Response, workspace3Response, workspace1Response, workspace4Response))
+      ),
+      Duration.Inf
+    )
+    result shouldBe Seq(spendReportConfiguration1, spendReportConfiguration2)
   }
 
 }
