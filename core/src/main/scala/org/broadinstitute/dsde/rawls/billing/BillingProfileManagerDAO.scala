@@ -208,7 +208,7 @@ class BillingProfileManagerDAOImpl(
     }
 
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
-    Try(apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)) match {
+    Try(apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId, null)) match {
       case Failure(exception: ApiException) if exception.getCode == HttpStatus.SC_NOT_FOUND =>
         logger.info(s"No billing profile record found for $billingProfileId when deleting BPM-backed billing project")
       case Failure(t) => throw t
@@ -252,7 +252,7 @@ class BillingProfileManagerDAOImpl(
       Future {
         apiClientProvider
           .getProfileApi(ctx)
-          .removeBillingAccount(billingProfileId)
+          .removeBillingAccount(billingProfileId, null)
       }
     }
 
