@@ -289,6 +289,7 @@ class WorkspaceServiceSpec
     ) _
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -348,7 +349,8 @@ class WorkspaceServiceSpec
         submissionCostService,
         genomicsServiceConstructor,
         workspaceServiceConfig,
-        workspaceRepository
+        workspaceRepository,
+        workspaceSettingRepository
       ) _
 
     def cleanupSupervisor =

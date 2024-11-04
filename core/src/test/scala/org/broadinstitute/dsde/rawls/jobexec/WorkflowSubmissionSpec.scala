@@ -23,8 +23,11 @@ import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{
 import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock.{MockBardService, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.SeparateSubmissionFinalOutputsConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.SeparateSubmissionFinalOutputs
+import org.broadinstitute.dsde.rawls.model.{WorkspaceSetting, _}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
@@ -70,6 +73,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   val mockDrsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
   private val requesterPaysRole = "requesterPays"
   val mockBardService = new MockBardService()
+  val mockWorkspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
   object DrsTestVals {
     val jdrDevUrl = "drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4"
@@ -117,7 +121,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2"),
     val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
     val methodConfigResolver: MethodConfigResolver = methodConfigResolver,
-    val bardService: BardService = mockBardService
+    val bardService: BardService = mockBardService,
+    val workspaceSettingRepository: WorkspaceSettingRepository = mockWorkspaceSettingRepository
   ) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
@@ -933,7 +938,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           CromwellBackend("PAPIv2"),
           CromwellBackend("PAPIv2-CloudNAT"),
           methodConfigResolver,
-          mockBardService
+          mockBardService,
+          mockWorkspaceSettingRepository
         )
       )
 
@@ -1000,7 +1006,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           CromwellBackend("PAPIv2"),
           CromwellBackend("PAPIv2-CloudNAT"),
           methodConfigResolver,
-          mockBardService
+          mockBardService,
+          mockWorkspaceSettingRepository
         )
       )
 
@@ -1130,6 +1137,68 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     // The queued workflows should not be launchable
     assertResult(ScheduleNextWorkflow) {
       Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), 1 minute)
+    }
+  }
+
+  it should "set the workflow output options correctly when SeparateSubmissionFinalOutputsSetting is true " in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))).thenReturn(
+      Future.successful(List(SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true))))
+    )
+
+    val workflowSubmission =
+      new TestWorkflowSubmission(slickDataSource, workspaceSettingRepository = workspaceSettingRepository) {
+        override val executionServiceCluster = mockExecCluster
+      }
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) =
+        getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.workspace)
+
+      Await.result(
+        workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
+        Duration.Inf
+      )
+
+      val workflowOptions = mockExecCluster.getDefaultSubmitMember
+        .asInstanceOf[MockExecutionServiceDAO]
+        .submitOptions
+        .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+      workflowOptions.get.final_workflow_outputs_dir.get should include("final-outputs")
+      workflowOptions.get.final_workflow_outputs_dir_metadata.get should be("destination")
+    }
+  }
+
+  it should "set the workflow output options correctly when SeparateSubmissionFinalOutputsSetting is false " in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))).thenReturn(
+      Future.successful(List(SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(false))))
+    )
+
+    val workflowSubmission =
+      new TestWorkflowSubmission(slickDataSource, workspaceSettingRepository = workspaceSettingRepository) {
+        override val executionServiceCluster = mockExecCluster
+      }
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) =
+        getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.workspace)
+
+      Await.result(
+        workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
+        Duration.Inf
+      )
+
+      val workflowOptions = mockExecCluster.getDefaultSubmitMember
+        .asInstanceOf[MockExecutionServiceDAO]
+        .submitOptions
+        .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+      workflowOptions.get.final_workflow_outputs_dir should be(None)
+      workflowOptions.get.final_workflow_outputs_dir_metadata should be(None)
     }
   }
 
