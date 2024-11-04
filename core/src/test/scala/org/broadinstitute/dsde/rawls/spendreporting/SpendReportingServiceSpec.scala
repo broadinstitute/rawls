@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.spendreporting
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
 import bio.terra.profile.model.{
@@ -22,13 +21,13 @@ import org.broadinstitute.dsde.rawls.billing.{
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -43,11 +42,9 @@ import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.scalatestplus.mockito.MockitoSugar.mock
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
-import org.broadinstitute.dsde.rawls.user.UserService
 
 class SpendReportingServiceSpec
     extends AnyFlatSpecLike
@@ -78,10 +75,6 @@ class SpendReportingServiceSpec
     _ => mockWorkspaceService
   }
 
-  val mockUserServiceConstructor: RawlsRequestContext => UserService = {
-    lazy val mockUserService: UserService = mock[UserService]
-    _ => mockUserService
-  }
   override val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
     val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
@@ -581,8 +574,7 @@ class SpendReportingServiceSpec
         bpmDAO,
         samDAO,
         spendReportingServiceConfig,
-        mockWorkspaceServiceConstructor,
-        mockUserServiceConstructor
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -625,8 +617,7 @@ class SpendReportingServiceSpec
       bpmDAO,
       samDAO,
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -658,8 +649,7 @@ class SpendReportingServiceSpec
       bpmDAO,
       samDAO,
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -687,8 +677,7 @@ class SpendReportingServiceSpec
       bpmDAO,
       samDAO,
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
     val projectName = RawlsBillingProjectName("fakeProject")
 
@@ -724,8 +713,7 @@ class SpendReportingServiceSpec
         bpmDAO,
         samDAO,
         spendReportingServiceConfig,
-        mockWorkspaceServiceConstructor,
-        mockUserServiceConstructor
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -789,8 +777,7 @@ class SpendReportingServiceSpec
       bpmDAO,
       samDAO,
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(
@@ -843,8 +830,7 @@ class SpendReportingServiceSpec
         bpmDAO,
         samDAO,
         spendReportingServiceConfig,
-        mockWorkspaceServiceConstructor,
-        mockUserServiceConstructor
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -893,8 +879,7 @@ class SpendReportingServiceSpec
         bpmDAO,
         samDAO,
         spendReportingServiceConfig,
-        mockWorkspaceServiceConstructor,
-        mockUserServiceConstructor
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -957,8 +942,7 @@ class SpendReportingServiceSpec
       bpmDAO,
       samDAO,
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -981,8 +965,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange)
     val endDate = DateTime.now()
@@ -998,8 +981,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now()
     val endDate = DateTime.now().minusDays(1)
@@ -1016,8 +998,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange + 1)
     val endDate = DateTime.now()
@@ -1047,8 +1028,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
     val result = service.getQuery(
       Set(
@@ -1082,8 +1062,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
     val result = service.getQuery(
       Set(
@@ -1113,8 +1092,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(service.getWorkspaceGoogleProjects(RawlsBillingProjectName("")), Duration.Inf)
@@ -1185,8 +1163,7 @@ class SpendReportingServiceSpec
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(service.getOwnerWorkspaces(), Duration.Inf)
@@ -1198,67 +1175,71 @@ class SpendReportingServiceSpec
 
     val dataSource = mock[SlickDataSource]
 
-    val billingProject1 = billingProjectFromName("billingProject1")
-    val spendReportDatasetName1 = BigQueryDatasetName("test_dataset")
-    val spendReportGoogleProject1 = GoogleProject("some_other_google_project")
-    val spendReportConfiguration1 =
-      BillingProjectSpendConfiguration(spendReportGoogleProject1, spendReportDatasetName1)
+    val billingProject1 =
+      RawlsBillingProject(
+        RawlsBillingProjectName("billingProject1"),
+        CreationStatuses.Ready,
+        None,
+        None,
+        spendReportDataset = Some(BigQueryDatasetName("billing1_dataset")),
+        spendReportTable = Some(BigQueryTableName("billing1_table")),
+        spendReportDatasetGoogleProject = Some(GoogleProject("billing1_bq_project"))
+      )
 
-    val billingProject2 = billingProjectFromName("billingProject2")
-    val spendReportDatasetName2 = BigQueryDatasetName("test_dataset2")
-    val spendReportGoogleProject2 = GoogleProject("some_other_google_project2")
-    val spendReportConfiguration2 =
-      BillingProjectSpendConfiguration(spendReportGoogleProject2, spendReportDatasetName2)
+    val billingProject2 =
+      RawlsBillingProject(
+        RawlsBillingProjectName("billingProject2"),
+        CreationStatuses.Ready,
+        None,
+        None,
+        spendReportDataset = Some(BigQueryDatasetName("billing2_dataset")),
+        spendReportTable = Some(BigQueryTableName("billing2_table")),
+        spendReportDatasetGoogleProject = Some(GoogleProject("billing2_bq_project"))
+      )
 
-    val billingProject3 = billingProjectFromName("billingProject3")
+    val billingProject3 =
+      RawlsBillingProject(RawlsBillingProjectName("billingProject3"), CreationStatuses.Ready, None, None)
 
-    val mockUserService = mock[UserService](RETURNS_SMART_NULLS)
-    when(mockUserService.getBillingProjectSpendConfiguration(billingProject1.projectName))
-      .thenReturn(Future.successful(Some(spendReportConfiguration1)))
-
-    when(mockUserService.getBillingProjectSpendConfiguration(billingProject2.projectName))
-      .thenReturn(Future.successful(Some(spendReportConfiguration2)))
-
-    when(mockUserService.getBillingProjectSpendConfiguration(billingProject3.projectName))
-      .thenReturn(Future.successful(None))
-
-    val mockUserServiceConstructor: RawlsRequestContext => UserService = { _ =>
-      mockUserService
-    }
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getBillingProject(RawlsBillingProjectName("billingProject1")))
+      .thenReturn(Future.successful(Option.apply(billingProject1)))
+    when(billingRepository.getBillingProject(RawlsBillingProjectName("billingProject2")))
+      .thenReturn(Future.successful(Option.apply(billingProject2)))
+    when(billingRepository.getBillingProject(RawlsBillingProjectName("billingProject3")))
+      .thenReturn(Future.successful(Option.apply(billingProject3)))
 
     val service = new SpendReportingService(
       testContext,
       dataSource,
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[BillingRepository],
+      billingRepository,
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor,
-      mockUserServiceConstructor
+      mockWorkspaceServiceConstructor
     )
 
     val workspace1Billing1 =
       TestData.workspace("workspace1Billing1",
-                         GoogleProjectId("owner1ProjectId"),
+                         GoogleProjectId("workspace1ProjectId"),
                          WorkspaceVersions.V1,
                          billingProject1.projectName.value
       )
     val workspace2Billing1 =
       TestData.workspace("workspace2Billing1",
-                         GoogleProjectId("owner1ProjectId"),
+                         GoogleProjectId("workspace2ProjectId"),
                          WorkspaceVersions.V2,
                          billingProject1.projectName.value
       )
     val workspace1Billing2 =
       TestData.workspace("workspace1Billing2",
-                         GoogleProjectId("owner1ProjectId"),
+                         GoogleProjectId("workspace3ProjectId"),
                          WorkspaceVersions.V2,
                          billingProject2.projectName.value
       )
     val workspace1Billing3 =
       TestData.workspace("workspace1Billing3",
-                         GoogleProjectId("owner1ProjectId"),
+                         GoogleProjectId("workspace4ProjectId"),
                          WorkspaceVersions.V2,
                          billingProject3.projectName.value
       )
@@ -1318,11 +1299,17 @@ class SpendReportingServiceSpec
 
     val result = Await.result(
       service.getBillingForWorkspaces(
-        Future.successful(Seq(workspace2Response, workspace3Response, workspace1Response, workspace4Response))
+        Seq(workspace2Response, workspace3Response, workspace1Response, workspace4Response)
       ),
       Duration.Inf
     )
-    result shouldBe Seq(spendReportConfiguration1, spendReportConfiguration2)
+
+    result shouldBe Map(
+      "billing1_bq_project.billing1_dataset.billing1_table" -> Seq(GoogleProjectId("workspace2ProjectId"),
+                                                                   GoogleProjectId("workspace1ProjectId")
+      ),
+      "billing2_bq_project.billing2_dataset.billing2_table" -> Seq(GoogleProjectId("workspace3ProjectId"))
+    )
   }
 
 }
