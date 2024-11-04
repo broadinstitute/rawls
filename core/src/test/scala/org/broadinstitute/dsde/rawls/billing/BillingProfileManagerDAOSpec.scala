@@ -236,7 +236,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 
     billingProfileManagerDAO.deleteBillingProfile(profileId, testContext)
-    verify(profileApi).deleteProfile(profileId)
+    verify(profileApi).deleteProfile(profileId, null)
   }
 
   it should "not fail if BPM returns a 404" in {
@@ -248,11 +248,12 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
       provider,
       multiCloudWorkspaceConfig
     )
-    when(profileApi.deleteProfile(profileId)).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "not found"))
+    when(profileApi.deleteProfile(profileId, null))
+      .thenThrow(new ApiException(StatusCodes.NotFound.intValue, "not found"))
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 
     billingProfileManagerDAO.deleteBillingProfile(profileId, testContext)
-    verify(profileApi).deleteProfile(profileId)
+    verify(profileApi).deleteProfile(profileId, null)
   }
 
   behavior of "listManagedApps"
@@ -352,7 +353,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     doThrow(new ApiException(StatusCodes.InternalServerError.intValue, "internal server error"))
       .doNothing()
       .when(profileApi)
-      .removeBillingAccount(any())
+      .removeBillingAccount(any(), any())
 
     val apiProvider = mock[BillingProfileManagerClientProvider]
     when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
@@ -361,7 +362,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
     Await.result(bpmDAO.removeBillingAccountFromBillingProfile(UUID.randomUUID(), testContext), Duration.Inf)
 
-    verify(profileApi, times(2)).removeBillingAccount(any())
+    verify(profileApi, times(2)).removeBillingAccount(any(), any())
   }
 
   it should "throw 4xx errors" in {
@@ -369,7 +370,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     doThrow(new ApiException(StatusCodes.Forbidden.intValue, "internal server error"))
       .doNothing()
       .when(profileApi)
-      .removeBillingAccount(any())
+      .removeBillingAccount(any(), any())
 
     val apiProvider = mock[BillingProfileManagerClientProvider]
     when(apiProvider.getProfileApi(any())).thenReturn(profileApi)
@@ -380,7 +381,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
       Await.result(bpmDAO.removeBillingAccountFromBillingProfile(UUID.randomUUID(), testContext), Duration.Inf)
     }
 
-    verify(profileApi, times(1)).removeBillingAccount(any())
+    verify(profileApi, times(1)).removeBillingAccount(any(), any())
   }
 
   behavior of "addProfilePolicyMember"
