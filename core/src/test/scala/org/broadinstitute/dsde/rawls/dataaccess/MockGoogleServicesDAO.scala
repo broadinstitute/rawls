@@ -43,6 +43,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
 
+  val bucketLocation = "us-central1"
+
   override def listBillingAccounts(userInfo: UserInfo,
                                    firecloudHasAccess: Option[Boolean] = None
   ): Future[Seq[RawlsBillingAccount]] = {
@@ -230,7 +232,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(true)
 
   override def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] =
-    Future.successful(WorkspaceBucketOptions(false))
+    Future.successful(WorkspaceBucketOptions(false, bucketLocation))
 
   protected def updatePolicyBindings(
     googleProject: GoogleProjectId

@@ -3194,6 +3194,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -3386,6 +3387,7 @@ paths:
             type: array
             items:
               type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -3428,6 +3430,7 @@ paths:
             type: array
             items:
               type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -6325,11 +6328,15 @@ components:
     WorkspaceBucketOptions:
       required:
         - requesterPays
+        - location
       type: object
       properties:
         requesterPays:
           type: boolean
           description: Whether the bucket is requester pays
+        location:
+          type: string
+          description: The region the bucket is in
       description: Extra information about a GCS bucket attached to a workspace
     WorkspaceAccessLevel:
       type: string
@@ -7211,6 +7218,14 @@ components:
       in: path
       description: Submission Id
       required: true
+      schema:
+        type: string
+    userProjectQueryParam:
+      name: userProject
+      in: query
+      description: |
+        When specified, bill google storage requests to this project
+      required: false
       schema:
         type: string
     workbenchRolePathParam:

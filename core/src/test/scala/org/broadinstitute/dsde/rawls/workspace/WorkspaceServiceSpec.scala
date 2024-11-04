@@ -2428,7 +2428,7 @@ class WorkspaceServiceSpec
 
     response.workspace.name shouldBe workspaceName
     response.workspace.namespace shouldBe testData.testProject1Name.value
-    response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
+    response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false, services.gcsDAO.bucketLocation))
     response.azureContext shouldEqual None
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     response.workspace.state shouldBe WorkspaceState.Ready
