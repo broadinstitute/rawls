@@ -230,11 +230,8 @@ class SpendReportingService(
     // all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
     val queryKeys = aggregations.flatMap(a => Set(Option(a.key), a.subAggregationKey).flatten)
     val tableName = config.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-    val timePartitionColumn: String = {
-      val isBroadTable = tableName == spendReportingServiceConfig.defaultTableName
-      // The Broad table uses a view with a different column name.
-      if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
-    }
+    val timePartitionColumn: String = getTimePartitionColumn(tableName)
+
     s"""
        | SELECT
        |  SUM(cost) as cost,
@@ -245,102 +242,80 @@ class SpendReportingService(
        | AND $timePartitionColumn BETWEEN @startDate AND @endDate
        | AND project.id in UNNEST(@projects)
        | GROUP BY currency ${queryKeys.map(_.bigQueryGroupByClause()).mkString}
-       |""".stripMargin
-      .replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
+       |""".stripMargin.replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
   }
 
-//  def getAllUserWorkspaceQuery(billingProjects: Seq[BillingProjectSpendConfiguration]
-//  ): String = {
-////    val tableName = config.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-////    val timePartitionColumn: String = {
-////      val isBroadTable = tableName == spendReportingServiceConfig.defaultTableName
-////      // The Broad table uses a view with a different column name.
-////      if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
-////    }
-////    s"""
-////       | SELECT
-////       |  SUM(cost) as cost,
-////       |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-////       |  currency ${queryKeys.map(_.bigQueryAliasClause()).mkString}
-////       | FROM `$tableName`
-////       | WHERE billing_account_id = @billingAccountId
-////       | AND $timePartitionColumn BETWEEN @startDate AND @endDate
-////       | AND project.id in UNNEST(@projects)
-////       | GROUP BY currency ${queryKeys.map(_.bigQueryGroupByClause()).mkString}
-////       |""".stripMargin
-////      .replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
-//    val first_billing_account_user_has_access_to = billingProjects.head.datasetGoogleProject
-//
-//    s"""
-//       |WITH spend_categories AS (
-//       |  SELECT
-//       |    project.id AS project_id,
-//       |    project.name AS project_name,
-//       |    CASE
-//       |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
-//       |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
-//       |      ELSE 'Other'
-//       |    END AS spend_category,
-//       |    SUM(CAST(cost AS FLOAT64)) AS category_cost
-//       |  FROM
-//       |    `$first_billing_account_user_has_access_to`
-//       |  where
-//       |    project_id in @listOfWorkspaceProjects AND
-//       |    _PARTITIONTIME BETWEEN @startDate AND @endDate
-//       |  GROUP BY
-//       |    project_id,
-//       |    project_name,
-//       |    spend_category
-//       |  UNION ALL
-//       |    SELECT
-//       |      project.id AS project_id,
-//       |      project.name AS project_name,
-//       |      CASE
-//       |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
-//       |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
-//       |        ELSE 'Other'
-//       |      END AS spend_category,
-//       |      SUM(CAST(cost AS FLOAT64)) AS category_cost
-//       |    FROM
-//       |      $`second_billing_account_user_has_access_to`
-//       |    where
-//       |      project_id in @moreProjectWorkspaces AND
-//       |      _PARTITIONTIME BETWEEN @startDate AND @endDate
-//       |    GROUP BY
-//       |      project_id,
-//       |      project_name,
-//       |      spend_category
-//       |  UNION ALL
-//       |    select
-//       |      project_id,
-//       |      project_name,
-//       |      spend_category,
-//       |      category_cost
-//       |    from
-//       |      `broad_materialized_view`
-//       |    where
-//       |      project_id in ('broad', 'list') AND
-//       |      _PARTITIONTIME BETWEEN @startDate AND @endDate
-//       |)
-//       |
-//       |SELECT
-//       |  project_id,
-//       |  project_name,
-//       |  SUM(category_cost) AS total_cost,
-//       |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
-//       |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
-//       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost
-//       |FROM
-//       |  spend_categories
-//       |GROUP BY
-//       |  project_id,
-//       |  project_name
-//       |ORDER BY
-//       |  total_cost DESC
-//       |limit 5
-//       |""".stripMargin
-//      .replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
-//  }
+  private def getTimePartitionColumn(tableName: String): String = {
+    val isBroadTable = tableName == spendReportingServiceConfig.defaultTableName
+    // The Broad table uses a view with a different column name.
+    if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
+  }
+
+  def getAllUserWorkspaceQuery(billingProjects: Map[BillingProjectSpendExport, Seq[GoogleProjectId]]): String = {
+    val baseQuery = s"""
+                       |  SELECT
+                       |    project.id AS project_id,
+                       |    project.name AS project_name,
+                       |    CASE
+                       |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+                       |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+                       |      ELSE 'Other'
+                       |    END AS spend_category,
+                       |    SUM(CAST(cost AS FLOAT64)) AS category_cost
+                       |  FROM
+                       |    _BILLING_ACCOUNT_TABLE
+                       |  where
+                       |    project_id in _PROJECT_ID_LIST AND
+                       |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+                       |  GROUP BY
+                       |    project_id,
+                       |    project_name,
+                       |    spend_category""".stripMargin.trim
+
+    val bpSubQuery = billingProjects
+      .map { bp =>
+        val tableName = bp._1.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+        val timePartitionColumn: String = getTimePartitionColumn(tableName)
+        baseQuery
+          .replace("_PARTITIONTIME", timePartitionColumn)
+          .replace("_BILLING_ACCOUNT_TABLE", tableName)
+          .replace("_PROJECT_ID_LIST", "(" + bp._2.mkString(", ") + ")") + "\nUNION ALL"
+      }
+      .mkString("\n")
+
+    val allBPQuery = s"""WITH spend_categories AS (
+           |$bpSubQuery
+           |    select
+           |      project_id,
+           |      project_name,
+           |      spend_category,
+           |      category_cost
+           |    from
+           |      `broad_materialized_view`
+           |    where
+           |      project_id in ('broad', 'list') AND
+           |      _PARTITIONTIME BETWEEN @startDate AND @endDate
+           |)"""
+
+    s"""
+       |$allBPQuery
+       |SELECT
+       |  project_id,
+       |  project_name,
+       |  SUM(category_cost) AS total_cost,
+       |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
+       |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
+       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost
+       |FROM
+       |  spend_categories
+       |GROUP BY
+       |  project_id,
+       |  project_name
+       |ORDER BY
+       |  total_cost DESC
+       |limit 5
+       |""".stripMargin.trim
+  }
 
   def setUpQuery(
     query: String,
@@ -511,36 +486,17 @@ class SpendReportingService(
 
   def getBillingForWorkspaces(
     workspaces: Seq[WorkspaceListResponse]
-  ): Future[Map[String, Seq[GoogleProjectId]]] = {
+  ): Future[Map[BillingProjectSpendExport, Seq[GoogleProjectId]]] = {
     val groupedWorkspaces = workspaces.groupBy(_.workspace.namespace)
-    val billingFutures: Iterable[Future[Option[(String, Seq[GoogleProjectId])]]] = groupedWorkspaces.map {
-      case (namespace, wsList) =>
-        billingRepository.getBillingProject(RawlsBillingProjectName(namespace)).map {
-          case Some(
-                RawlsBillingProject(_,
-                                    _,
-                                    _,
-                                    _,
-                                    _,
-                                    _,
-                                    _,
-                                    _,
-                                    Some(spendReportDataset),
-                                    Some(spendReportTable),
-                                    Some(spendReportDatasetGoogleProject),
-                                    _,
-                                    _,
-                                    _
-                )
-              ) =>
-            Some(
-              spendReportDatasetGoogleProject + "." + spendReportDataset + "." + spendReportTable -> wsList
-                .map(_.workspace.googleProject)
-            )
-          case _ =>
-            None
+    val billingFutures: Iterable[Future[Option[(BillingProjectSpendExport, Seq[GoogleProjectId])]]] =
+      groupedWorkspaces.map { case (namespace, wsList) =>
+        getSpendExportConfiguration(RawlsBillingProjectName(namespace)).map { exportConfig =>
+          Some(
+            exportConfig -> wsList
+              .map(_.workspace.googleProject)
+          )
         }
-    }
+      }
     Future.sequence(billingFutures).map(_.flatten.toMap)
   }
 

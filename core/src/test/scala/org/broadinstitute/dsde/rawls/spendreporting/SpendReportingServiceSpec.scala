@@ -1175,73 +1175,70 @@ class SpendReportingServiceSpec
 
     val dataSource = mock[SlickDataSource]
 
-    val billingProject1 =
-      RawlsBillingProject(
-        RawlsBillingProjectName("billingProject1"),
-        CreationStatuses.Ready,
-        None,
-        None,
-        spendReportDataset = Some(BigQueryDatasetName("billing1_dataset")),
-        spendReportTable = Some(BigQueryTableName("billing1_table")),
-        spendReportDatasetGoogleProject = Some(GoogleProject("billing1_bq_project"))
+    val billingProject1SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
+                                RawlsBillingAccountName("billingAccount1"),
+                                Some("billing1_bq_project.billing1_dataset.billing1_table")
       )
 
-    val billingProject2 =
-      RawlsBillingProject(
-        RawlsBillingProjectName("billingProject2"),
-        CreationStatuses.Ready,
-        None,
-        None,
-        spendReportDataset = Some(BigQueryDatasetName("billing2_dataset")),
-        spendReportTable = Some(BigQueryTableName("billing2_table")),
-        spendReportDatasetGoogleProject = Some(GoogleProject("billing2_bq_project"))
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                Some("billing2_bq_project.billing2_dataset.billing2_table")
       )
 
-    val billingProject3 =
-      RawlsBillingProject(RawlsBillingProjectName("billingProject3"), CreationStatuses.Ready, None, None)
+    val billingProject3SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject3"),
+                                RawlsBillingAccountName("billingAccount3"),
+                                None
+      )
 
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.getBillingProject(RawlsBillingProjectName("billingProject1")))
-      .thenReturn(Future.successful(Option.apply(billingProject1)))
-    when(billingRepository.getBillingProject(RawlsBillingProjectName("billingProject2")))
-      .thenReturn(Future.successful(Option.apply(billingProject2)))
-    when(billingRepository.getBillingProject(RawlsBillingProjectName("billingProject3")))
-      .thenReturn(Future.successful(Option.apply(billingProject3)))
-
-    val service = new SpendReportingService(
-      testContext,
-      dataSource,
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      billingRepository,
-      mock[BillingProfileManagerDAO],
-      mock[SamDAO],
-      spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        dataSource,
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        mock[SamDAO],
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
     )
+
+    doReturn(Future.successful(billingProject1SpendExport))
+      .when(service)
+      .getSpendExportConfiguration(RawlsBillingProjectName("billingProject1"))
+    doReturn(Future.successful(billingProject2SpendExport))
+      .when(service)
+      .getSpendExportConfiguration(RawlsBillingProjectName("billingProject2"))
+    doReturn(Future.successful(billingProject3SpendExport))
+      .when(service)
+      .getSpendExportConfiguration(RawlsBillingProjectName("billingProject3"))
 
     val workspace1Billing1 =
       TestData.workspace("workspace1Billing1",
                          GoogleProjectId("workspace1ProjectId"),
                          WorkspaceVersions.V1,
-                         billingProject1.projectName.value
+                         "billingProject1"
       )
     val workspace2Billing1 =
       TestData.workspace("workspace2Billing1",
                          GoogleProjectId("workspace2ProjectId"),
                          WorkspaceVersions.V2,
-                         billingProject1.projectName.value
+                         "billingProject1"
       )
     val workspace1Billing2 =
       TestData.workspace("workspace1Billing2",
                          GoogleProjectId("workspace3ProjectId"),
                          WorkspaceVersions.V2,
-                         billingProject2.projectName.value
+                         "billingProject2"
       )
     val workspace1Billing3 =
       TestData.workspace("workspace1Billing3",
                          GoogleProjectId("workspace4ProjectId"),
                          WorkspaceVersions.V2,
-                         billingProject3.projectName.value
+                         "billingProject3"
       )
 
     val workspace1Response = WorkspaceListResponse(
@@ -1305,11 +1302,143 @@ class SpendReportingServiceSpec
     )
 
     result shouldBe Map(
-      "billing1_bq_project.billing1_dataset.billing1_table" -> Seq(GoogleProjectId("workspace2ProjectId"),
-                                                                   GoogleProjectId("workspace1ProjectId")
-      ),
-      "billing2_bq_project.billing2_dataset.billing2_table" -> Seq(GoogleProjectId("workspace3ProjectId"))
+      billingProject1SpendExport -> Seq(GoogleProjectId("workspace2ProjectId"), GoogleProjectId("workspace1ProjectId")),
+      billingProject2SpendExport -> Seq(GoogleProjectId("workspace3ProjectId")),
+      billingProject3SpendExport -> Seq(GoogleProjectId("workspace4ProjectId"))
     )
+  }
+
+  "getAllUserWorkspaceQuery" should "union all billingProjects with their workspace projects" in {
+
+    val billingProject1SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
+                                RawlsBillingAccountName("billingAccount1"),
+                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+      )
+
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                Some("billing2_bq_project.billing2_dataset.billing2_table")
+      )
+
+    val billingProject3SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject3"),
+                                RawlsBillingAccountName("billingAccount3"),
+                                None
+      )
+
+    val inputMap = Map(
+      billingProject1SpendExport -> Seq(GoogleProjectId("workspace2ProjectId"), GoogleProjectId("workspace1ProjectId")),
+      billingProject2SpendExport -> Seq(GoogleProjectId("workspace3ProjectId")),
+      billingProject3SpendExport -> Seq(GoogleProjectId("workspace4ProjectId"))
+    )
+
+    val expectedQuery =
+      s"""|WITH spend_categories AS (
+          |  SELECT
+          |    project.id AS project_id,
+          |    project.name AS project_name,
+          |    CASE
+          |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+          |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+          |      ELSE 'Other'
+          |    END AS spend_category,
+          |    SUM(CAST(cost AS FLOAT64)) AS category_cost
+          |  FROM
+          |    billing1_bq_project.billing1_dataset.billing1_table
+          |  where
+          |    project_id in (workspace2ProjectId, workspace1ProjectId) AND
+          |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |  GROUP BY
+          |    project_id,
+          |    project_name,
+          |    spend_category
+          | UNION ALL
+          |    SELECT
+          |      project.id AS project_id,
+          |      project.name AS project_name,
+          |      CASE
+          |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+          |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+          |        ELSE 'Other'
+          |      END AS spend_category,
+          |      SUM(CAST(cost AS FLOAT64)) AS category_cost
+          |    FROM
+          |      billing2_bq_project.billing2_dataset.billing2_table
+          |    where
+          |      project_id in (workspace3ProjectId) AND
+          |      _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |    GROUP BY
+          |      project_id,
+          |      project_name,
+          |      spend_category
+          | UNION ALL
+          |    SELECT
+          |      project.id AS project_id,
+          |      project.name AS project_name,
+          |      CASE
+          |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+          |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+          |        ELSE 'Other'
+          |      END AS spend_category,
+          |      SUM(CAST(cost AS FLOAT64)) AS category_cost
+          |    FROM
+          |      fakeTable
+          |    where
+          |      project_id in (workspace4ProjectId) AND
+          |      fakeTimePartitionColumn BETWEEN @startDate AND @endDate
+          |    GROUP BY
+          |      project_id,
+          |      project_name,
+          |      spend_category
+          |  UNION ALL
+          |    select
+          |      project_id,
+          |      project_name,
+          |      spend_category,
+          |      category_cost
+          |    from
+          |      `broad_materialized_view`
+          |    where
+          |      project_id in ('broad', 'list') AND
+          |      _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |)
+          |SELECT
+          |  project_id,
+          |  project_name,
+          |  SUM(category_cost) AS total_cost,
+          |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
+          |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
+          |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost
+          |FROM
+          |  spend_categories
+          |GROUP BY
+          |  project_id,
+          |  project_name
+          |ORDER BY
+          |  total_cost DESC
+          |limit 5
+          |""".stripMargin
+
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
+    )
+    val result = service.getAllUserWorkspaceQuery(
+      inputMap
+    )
+
+    // It's easier and more reliable to do this than tweak line changes in the query or expected query
+    def normalizeWhitespace(str: String): String = str.replaceAll("\\s+", " ").trim
+    normalizeWhitespace(result) shouldEqual normalizeWhitespace(expectedQuery)
+
   }
 
 }
