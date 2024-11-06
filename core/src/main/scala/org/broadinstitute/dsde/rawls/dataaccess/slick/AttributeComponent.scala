@@ -310,7 +310,7 @@ trait AttributeComponent {
                    Option[Timestamp]
     ) => TEMP_RECORD
   ) extends TableQuery[T](cons) {
-    def insertScratchAttributes(attributeRecs: Seq[RECORD]): WriteAction[Int] =
+    def insertScratchAttributes(attributeRecs: Seq[RECORD])(): WriteAction[Int] =
       batchInsertAttributes(attributeRecs)
 
     def batchInsertAttributes(attributes: Seq[RECORD]) =
@@ -587,7 +587,7 @@ trait AttributeComponent {
     def patchAttributesAction(inserts: Traversable[RECORD],
                               updates: Traversable[RECORD],
                               deleteIds: Traversable[Long],
-                              insertFunction: Seq[RECORD] => String => WriteAction[Int],
+                              insertFunction: Seq[RECORD] => () => WriteAction[Int],
                               tracingContext: RawlsTracingContext
     ) =
       traceDBIOWithParent("patchAttributesAction", tracingContext) { span =>
@@ -695,7 +695,7 @@ trait AttributeComponent {
      */
     def rewriteAttrsAction(attributesToSave: Traversable[RECORD],
                            existingAttributes: Traversable[RECORD],
-                           insertFunction: Seq[RECORD] => String => WriteAction[Int]
+                           insertFunction: Seq[RECORD] => () => WriteAction[Int]
     ): ReadWriteAction[Set[OWNER_ID]] =
       traceDBIOWithParent("AttributeComponent.rewriteAttrsAction", RawlsTracingContext(Option.empty)) {
         tracingContext =>
