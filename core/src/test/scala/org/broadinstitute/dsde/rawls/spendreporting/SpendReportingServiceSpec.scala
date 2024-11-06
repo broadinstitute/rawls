@@ -20,14 +20,13 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmAzureSpendReportApiException
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -35,6 +34,7 @@ import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 
 import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
@@ -46,20 +46,15 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 
-class SpendReportingServiceSpec
-    extends AnyFlatSpecLike
-    with Matchers
-    with MockitoTestUtils
-    with SprayJsonSupport
-    with TestDriverComponent {
+class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
 
-//  implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
+  implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
-//  val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
-//                                    OAuth2BearerToken("token"),
-//                                    123,
-//                                    RawlsUserSubjectId("123456789876543212345")
-//  )
+  val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
+                                    OAuth2BearerToken("token"),
+                                    123,
+                                    RawlsUserSubjectId("123456789876543212345")
+  )
   val wsName: WorkspaceName = WorkspaceName("myNamespace", "myWorkspace")
 
   val billingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("fakeBillingAcct")
@@ -75,7 +70,7 @@ class SpendReportingServiceSpec
     _ => mockWorkspaceService
   }
 
-  override val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
+  val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
     val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
     val workspace2: Workspace = workspace("workspace2", GoogleProjectId("project2"))
