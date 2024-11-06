@@ -22,9 +22,7 @@
                 list_length int(11) DEFAULT NULL,
                 owner_id bigint(20) unsigned NOT NULL,
                 deleted bit(1) DEFAULT false,
-                deleted_date timestamp NULL DEFAULT NULL,
-                INDEX entity_tmp_owner_id_idx (owner_id),
-                INDEX UNQ_ENTITY_ATTRIBUTE(owner_id, namespace, name, list_index)
+                deleted_date timestamp NULL DEFAULT NULL
             );
             END
         </createProcedure>
