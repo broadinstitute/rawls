@@ -802,19 +802,10 @@ trait AttributeComponent {
              """.as[Int]
       }
 
-      def clearAttributeScratchTableAction(transactionId: String = "") = {
-        val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
-
-        if (joinTableName.endsWith("SCRATCH"))
-          sqlu"""delete from #${joinTableName} where transaction_id = $transactionId"""
-        else DBIO.successful(0)
-      }
-
       def updateAction(insertIntoScratchFunction: () => WriteAction[Int], tracingContext: RawlsTracingContext) =
         traceDBIOWithParent("updateAction", tracingContext) { span =>
           traceDBIOWithParent("insertIntoScratchFunction", span)(_ => insertIntoScratchFunction()) andThen
-            traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction()) andThen
-            traceDBIOWithParent("clearAttributeScratchTableAction", span)(_ => clearAttributeScratchTableAction())
+            traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction())
         }
     }
 
