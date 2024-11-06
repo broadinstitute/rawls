@@ -106,7 +106,7 @@ object MockFastPassService {
       val petUserSubjectId = RawlsUserSubjectId(s"${testUser.userSubjectId.value}-pet")
 
       def projectPetInfo(googleProject: String): (WorkbenchEmail, String) = {
-        val petEmail = WorkbenchEmail(s"${testUser.userEmail.value}-pet@$googleProject.iam.gserviceaccount.com")
+        val petEmail = buildPetEmail(testUser, googleProject)
         val petKey =
           s"""{"private_key_id": "${testUser.userEmail.value}-$googleProject-pet-key", "client_id": "${petUserSubjectId.value}", "client_email": "${petEmail.value}" }"""
         (petEmail, petKey)
@@ -118,6 +118,14 @@ object MockFastPassService {
           ArgumentMatchers.argThat((ctx: RawlsRequestContext) =>
             ctx.userInfo.userEmail.value.startsWith(s"${testUser.userEmail.value}-pet")
           )
+        )
+
+      doAnswer { _ =>
+        Future.successful(projectPetInfo(defaultPetGoogleProject)._2)
+      }
+        .when(samDAO)
+        .getUserArbitraryPetServiceAccountKey(
+          ArgumentMatchers.eq(testUser.userEmail.value)
         )
 
       doAnswer { invocation =>
@@ -164,4 +172,8 @@ object MockFastPassService {
           ArgumentMatchers.argThat((arg: RawlsRequestContext) => arg.userInfo.userSubjectId.equals(petUserSubjectId))
         )
     }
+
+  val defaultPetGoogleProject = "default"
+  def buildPetEmail(testUser: RawlsUser, googleProject: String) =
+    WorkbenchEmail(s"${testUser.userEmail.value}-pet@$googleProject.iam.gserviceaccount.com")
 }

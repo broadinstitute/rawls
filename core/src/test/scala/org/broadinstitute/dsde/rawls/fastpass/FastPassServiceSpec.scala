@@ -749,7 +749,15 @@ class FastPassServiceSpec
     val readerRoles = Vector(services.terraBucketReaderRole)
 
     userWriterGrants.map(_.organizationRole) should contain only (writerCanComputeRoles: _*)
+    userWriterGrants.map(_.accountEmail.value).toSet should contain only (
+      testData.userWriter.userEmail.value,
+      MockFastPassService.buildPetEmail(testData.userWriter, testData.workspace.googleProjectId.value).value
+    )
     userReaderGrants.map(_.organizationRole) should contain only (readerRoles: _*)
+    userReaderGrants.map(_.accountEmail.value).toSet should contain only (
+      testData.userReader.userEmail.value,
+      MockFastPassService.buildPetEmail(testData.userReader, MockFastPassService.defaultPetGoogleProject).value
+    )
 
     // share-reader added as bucket reader
     verify(services.googleStorageDAO).addIamRoles(

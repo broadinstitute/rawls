@@ -315,22 +315,32 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
 
           _ <- removeFastPassesForUserInWorkspace(workspace, samUserInfo)
 
-          petSAJson <- DBIO.from(
-            samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId,
-                                                  RawlsUserEmail(samUserInfo.userEmail.value)
-            )
+          defaultPetSAJson <- DBIO.from(
+            samDAO.getUserArbitraryPetServiceAccountKey(samUserInfo.userEmail.value)
           )
-          petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
-          petCtx = ctx.copy(userInfo = petUserInfo)
-          samPetUserInfo <- DBIO.from(samDAO.getUserStatus(petCtx))
-          _ = if (!samPetUserInfo.exists(_.enabled)) throw new FastPassUserNotEnabledException(email)
+          defaultPetUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(defaultPetSAJson))
+          defaultPetCtx = ctx.copy(userInfo = defaultPetUserInfo)
+          userInfo <- DBIO.from(samDAO.getUserStatus(defaultPetCtx))
+          _ = if (!userInfo.exists(_.enabled)) throw new FastPassUserNotEnabledException(email)
           userType = getUserType(samUserInfo.userEmail)
-          petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petSAJson)
+          workspaceRoles <- DBIO
+            .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultPetCtx))
+          useDefaultPet = workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).isEmpty
+          petEmail <-
+            if (useDefaultPet) {
+              DBIO.successful(FastPassServiceImpl.getEmailFromPetSaKey(defaultPetSAJson))
+            } else {
+              DBIO.from(
+                samDAO
+                  .getPetServiceAccountKeyForUser(workspace.googleProjectId,
+                                                  RawlsUserEmail(samUserInfo.userEmail.value)
+                  )
+                  .map(FastPassServiceImpl.getEmailFromPetSaKey)
+              )
+            }
           userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
-          roles <- DBIO
-            .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
 
-          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, roles, petCtx)
+          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, workspaceRoles, defaultPetCtx)
         } yield ()
       }
       .transform {
