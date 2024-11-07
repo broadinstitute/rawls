@@ -1201,15 +1201,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     )
 
-    doReturn(Future.successful(billingProject1SpendExport))
+    doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport, billingProject3SpendExport)))
       .when(service)
-      .getSpendExportConfiguration(RawlsBillingProjectName("billingProject1"))
-    doReturn(Future.successful(billingProject2SpendExport))
-      .when(service)
-      .getSpendExportConfiguration(RawlsBillingProjectName("billingProject2"))
-    doReturn(Future.successful(billingProject3SpendExport))
-      .when(service)
-      .getSpendExportConfiguration(RawlsBillingProjectName("billingProject3"))
+      .getSpendExportConfigurations(
+        any()
+      )
 
     val workspace1Billing1 =
       TestData.workspace("workspace1Billing1",

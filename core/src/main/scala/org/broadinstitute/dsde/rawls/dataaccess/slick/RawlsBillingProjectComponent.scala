@@ -350,6 +350,16 @@ trait RawlsBillingProjectComponent {
         .result
         .map(_.headOption.map(RawlsBillingProjectRecord.toBillingProjectSpendExport))
 
+    def getBillingProjectsSpendConfiguration(
+      billingProjectNames: Seq[RawlsBillingProjectName]
+    ): ReadAction[Seq[Option[BillingProjectSpendExport]]] =
+      rawlsBillingProjectQuery
+        .withProjectNames(billingProjectNames)
+        .result
+        .map(projectRecords =>
+          projectRecords.map(record => Some(RawlsBillingProjectRecord.toBillingProjectSpendExport(record)))
+        )
+
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] =
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
 

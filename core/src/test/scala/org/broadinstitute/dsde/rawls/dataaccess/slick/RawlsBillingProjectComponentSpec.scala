@@ -176,6 +176,18 @@ class RawlsBillingProjectComponentSpec
       }
     }
 
+  it should "return the appropriate list of Option[BillingProjectSpendExport]s for given RawlsBillingProjectNames" in withDefaultTestDatabase {
+    val billingProjectNames = Seq(testData.testProject1.projectName, testData.testProject2.projectName)
+
+    val expectedSpendExports = billingProjectNames.map { projectName =>
+      runAndWait(rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(projectName))
+    }
+
+    val actualSpendExports = runAndWait(rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(billingProjectNames))
+
+    actualSpendExports shouldBe expectedSpendExports
+  }
+
   "BillingAccountChange" should "be able to load records that need to be sync'd" in withDefaultTestDatabase {
     runAndWait {
       import driver.api._
