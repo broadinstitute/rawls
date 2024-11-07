@@ -467,33 +467,34 @@ class SpendReportingService(
           Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
       }
 
-//  def getSpendForAllWorkspaces(
-//    project: RawlsBillingProjectName,
-//    start: DateTime,
-//    end: DateTime,
-//    aggregations: Set[SpendReportingAggregationKeyWithSub]
-//  ): Future[SpendReportingResults] = {
-//    validateReportParameters(start, end)
-//    requireProjectAction(project, SamBillingProjectActions.readSpendReport) {
-//      for {
-//        workspaces <- getOwnerWorkspaces()
-//        billing <- getBillingForWorkspaces(workspaces)
-//        query = getAllUserWorkspaceQuery(billing)
-//        queryJob = setUpAllUserWorkspaceQuery(query, start, end)
-//
-//        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-//        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-//        result = job.getQueryResults()
-//      } yield result.getValues.asScala.toList match {
-//        case Nil =>
-//          throw RawlsExceptionWithErrorReport(
-//            StatusCodes.NotFound,
-//            s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-//          )
-//        case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
-//      }
-//    }
-//  }
+  def getSpendForAllWorkspaces(
+    start: DateTime,
+    end: DateTime
+  ): Future[SpendReportingResults] = {
+    validateReportParameters(start, end)
+    for {
+      workspaces <- getOwnerWorkspaces()
+      projectNames = workspaces
+        .map(wsResp =>
+          wsResp.workspace.googleProject -> WorkspaceName(wsResp.workspace.namespace, wsResp.workspace.name)
+        )
+        .toMap // Map[GoogleProjectId, WorkspaceName]
+      billing <- getBillingSpendExportsForWorkspaces(workspaces)
+      query = getAllUserWorkspaceQuery(billing)
+      queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+
+      job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+      _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+      result = job.getQueryResults()
+    } yield result.getValues.asScala.toList match {
+      case Nil =>
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.NotFound,
+          s"no spend data found between dates ${toISODateString(start)} and ${toISODateString(end)}"
+        ) // TODO update this
+      case rows => extractSpendReportingResults(rows, start, end, projectNames, Set.empty)
+    }
+  }
 
   def getOwnerWorkspaces(): Future[Seq[WorkspaceListResponse]] =
     workspaceServiceConstructor(ctx).listWorkspaces(WorkspaceFieldSpecs(), -1) map {
@@ -503,11 +504,15 @@ class SpendReportingService(
       case _ => throw new IllegalArgumentException("Expected a JsArray")
     }
 
-  def getBillingForWorkspaces(
+  def getBillingSpendExportsForWorkspaces(
     workspaces: Seq[WorkspaceListResponse]
   ): Future[Map[BillingProjectSpendExport, Seq[GoogleProjectId]]] = {
     val groupedWorkspaces = workspaces.groupBy(_.workspace.namespace)
     val billingProjects = groupedWorkspaces.keys.map(RawlsBillingProjectName).toList
+//    billingProjects.map(project =>
+//      requireProjectAction(project, SamBillingProjectActions.readSpendReport)
+//    ) // TODO a better way to handle this?
+
     getSpendExportConfigurations(billingProjects).map { exportConfigs =>
       exportConfigs.map { config =>
         config -> groupedWorkspaces(config.billingProjectName.value).map(ws => ws.workspace.googleProject)
