@@ -140,6 +140,65 @@ object SpendReportingService {
     SpendReportingResults(aggregations.map(aggregateRows(allRows, _)).toList, summary)
   }
 
+  def extractCrossBillingProjectSpendReportingResults(
+    allRows: List[FieldValueList],
+    start: DateTime,
+    end: DateTime,
+    names: Map[GoogleProjectId, WorkspaceName]
+  ): List[SpendReportingResults] = {
+
+    val spendDetails = allRows.flatMap { row =>
+      val projectId = GoogleProjectId(row.get("project_id").getStringValue)
+      val workspaceName = names.getOrElse(
+        projectId,
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.InternalServerError,
+          s"unexpected project $projectId returned by BigQuery"
+        )
+      )
+      val totalCost = row.get("total_cost").getDoubleValue.toString
+      val computeCost = row.get("compute_cost").getDoubleValue.toString
+      val storageCost = row.get("storage_cost").getDoubleValue.toString
+      val currency = row.get("currency").getStringValue
+
+      // Each row gets a summary of compute, storage, and total
+      List(
+        SpendReportingForDateRange(
+          totalCost,
+          "0", // Ignoring credits for now; do we want to include them?
+          currency,
+          Option(start),
+          Option(end),
+          workspace = Some(workspaceName),
+          googleProjectId = Some(GoogleProject(projectId.value))
+        ),
+        SpendReportingForDateRange(
+          computeCost,
+          "0",
+          currency,
+          Option(start),
+          Option(end),
+          workspace = Some(workspaceName),
+          googleProjectId = Some(GoogleProject(projectId.value)),
+          category = Some(TerraSpendCategories.Compute)
+        ),
+        SpendReportingForDateRange(
+          storageCost,
+          "0",
+          currency,
+          Option(start),
+          Option(end),
+          workspace = Some(workspaceName),
+          googleProjectId = Some(GoogleProject(projectId.value)),
+          category = Some(TerraSpendCategories.Storage)
+        )
+      )
+    }
+
+    // TODO what format should the result be?  Do we need a new model?
+    spendDetails.map(details => SpendReportingResults(List.empty, details))
+  }
+
 }
 
 class SpendReportingService(
@@ -270,6 +329,7 @@ class SpendReportingService(
                        |  SELECT
                        |    project.id AS project_id,
                        |    project.name AS project_name,
+                       |    currency,
                        |    CASE
                        |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
                        |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
@@ -279,11 +339,12 @@ class SpendReportingService(
                        |  FROM
                        |    _BILLING_ACCOUNT_TABLE
                        |  where
-                       |    project_id in _PROJECT_ID_LIST AND
+                       |    project.id in _PROJECT_ID_LIST AND
                        |    _PARTITIONTIME BETWEEN @startDate AND @endDate
                        |  GROUP BY
                        |    project_id,
                        |    project_name,
+                       |    currency,
                        |    spend_category""".stripMargin.trim
 
     val bpSubQuery = billingProjects
@@ -293,38 +354,27 @@ class SpendReportingService(
         baseQuery
           .replace("_PARTITIONTIME", timePartitionColumn)
           .replace("_BILLING_ACCOUNT_TABLE", tableName)
-          .replace("_PROJECT_ID_LIST", "(" + bp._2.mkString(", ") + ")") + "\nUNION ALL"
+          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(id => s""""${id.value}"""").mkString(", ") + ")")
       }
-      .mkString("\n")
+      .mkString("\nUNION ALL\n")
 
-    val allBPQuery = s"""WITH spend_categories AS (
-           |$bpSubQuery
-           |    select
-           |      project_id,
-           |      project_name,
-           |      spend_category,
-           |      category_cost
-           |    from
-           |      `broad_materialized_view`
-           |    where
-           |      project_id in ('broad', 'list') AND
-           |      _PARTITIONTIME BETWEEN @startDate AND @endDate
-           |)"""
-
-    s"""
-       |$allBPQuery
+    s"""WITH spend_categories AS (
+       |$bpSubQuery
+       |)
        |SELECT
        |  project_id,
        |  project_name,
        |  SUM(category_cost) AS total_cost,
        |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
        |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
-       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost
+       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
+       |  currency
        |FROM
        |  spend_categories
        |GROUP BY
        |  project_id,
-       |  project_name
+       |  project_name,
+       |  currency
        |ORDER BY
        |  total_cost DESC
        |limit 5
@@ -470,7 +520,7 @@ class SpendReportingService(
   def getSpendForAllWorkspaces(
     start: DateTime,
     end: DateTime
-  ): Future[SpendReportingResults] = {
+  ): Future[List[SpendReportingResults]] = {
     validateReportParameters(start, end)
     for {
       workspaces <- getOwnerWorkspaces()
@@ -492,7 +542,7 @@ class SpendReportingService(
           StatusCodes.NotFound,
           s"no spend data found between dates ${toISODateString(start)} and ${toISODateString(end)}"
         ) // TODO update this
-      case rows => extractSpendReportingResults(rows, start, end, projectNames, Set.empty)
+      case rows => extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
     }
   }
 

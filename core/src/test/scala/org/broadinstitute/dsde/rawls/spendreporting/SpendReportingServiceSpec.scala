@@ -1383,17 +1383,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |      project_id,
           |      project_name,
           |      spend_category
-          |  UNION ALL
-          |    select
-          |      project_id,
-          |      project_name,
-          |      spend_category,
-          |      category_cost
-          |    from
-          |      `broad_materialized_view`
-          |    where
-          |      project_id in ('broad', 'list') AND
-          |      _PARTITIONTIME BETWEEN @startDate AND @endDate
           |)
           |SELECT
           |  project_id,
@@ -1430,6 +1419,59 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     def normalizeWhitespace(str: String): String = str.replaceAll("\\s+", " ").trim
     normalizeWhitespace(result) shouldEqual normalizeWhitespace(expectedQuery)
 
+  }
+
+  "extractSpendReportingResultsAcrossBillingProjects" should "should return correct summary data" in {
+    val storageCostWs1 = 100.582
+    val otherCostWs1 = 0.10111
+    val storageCostRoundedWs1: BigDecimal = BigDecimal(storageCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs1: BigDecimal = BigDecimal(otherCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs1: BigDecimal = BigDecimal(storageCostWs1 + otherCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+
+    val storageCostWs2 = 20.145
+    val computeCostWs2 = 150.4033
+    val storageCostRoundedWs2: BigDecimal = BigDecimal(storageCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs2: BigDecimal = BigDecimal(computeCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs2: BigDecimal =
+      BigDecimal(storageCostWs2 + computeCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+
+    val computeCostWs3 = 1111.222
+    val otherCostWs3 = 0.02
+    val storageCostRoundedWs3: BigDecimal = BigDecimal(computeCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs3: BigDecimal = BigDecimal(otherCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs3: BigDecimal = BigDecimal(computeCostWs3 + otherCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+
+    val table: List[Map[String, String]] = List(
+      Map(
+        "storage_cost" -> s"$storageCostWs1",
+        "compute_cost" -> "0.0",
+        "other_cost" -> s"$otherCostWs1",
+        "googleProjectId" -> "workspace1ProjectId"
+      ),
+      Map(
+        "storage_cost" -> s"$storageCostWs2",
+        "compute_cost" -> s"$computeCostWs2",
+        "other_cost" -> "0.0",
+        "googleProjectId" -> "workspace2ProjectId"
+      ),
+      Map(
+        "storage_cost" -> "0.0",
+        "compute_cost" -> s"$computeCostWs3",
+        "other_cost" -> s"$otherCostWs3",
+        "googleProjectId" -> "workspace3ProjectId"
+      )
+    )
+
+    val tableResult: TableResult = createTableResult(table)
+
+    val reportingResults = SpendReportingService.extractCrossBillingProjectSpendReportingResults(
+      tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      Map()
+    )
+    reportingResults.spendSummary.cost shouldBe TestData.Workspace.totalCostRounded.toString
+    reportingResults.spendDetails shouldBe empty
   }
 
   "getSpendForAllWorkspaces" should "get the spend report from multiple billing projects" in {
