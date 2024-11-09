@@ -57,7 +57,7 @@ object Dependencies {
   // rawlsCoreDependencies, does not need these. As of this writing, metrics4-scala and metrics3-statsd are only
   // needed by the metrics subproject of Rawls.
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.3.2"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.3.3"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
