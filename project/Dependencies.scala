@@ -156,7 +156,7 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     //Override for reactor-netty to address CVE-2023-34054 and CVE-2023-34062
-    "io.projectreactor.netty"       % "reactor-netty-http"    % "1.0.39",
+    "io.projectreactor.netty"       % "reactor-netty-http"    % "1.0.48",
     // override commons-codec to address a non-CVE warning from DefectDojo
     "commons-codec"                 % "commons-codec"         % "1.16.1"
   )
