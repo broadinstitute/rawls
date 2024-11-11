@@ -158,7 +158,7 @@ object Dependencies {
     //Override for reactor-netty to address CVE-2023-34054 and CVE-2023-34062
     "io.projectreactor.netty"       % "reactor-netty-http"    % "1.0.39",
     // override commons-codec to address a non-CVE warning from DefectDojo
-    "commons-codec"                 % "commons-codec"         % "1.16.1"
+    "commons-codec"                 % "commons-codec"         % "1.17.1"
   )
 
   val extraOpenTelemetryDependencies = Seq(
