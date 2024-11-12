@@ -61,15 +61,15 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.0"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.1"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.13.0"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.4"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.15.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.16.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.12.0"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.10"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.12"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
@@ -148,7 +148,7 @@ object Dependencies {
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.3").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
-  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.22"
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.23"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
