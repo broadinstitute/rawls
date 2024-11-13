@@ -63,7 +63,6 @@ object Dependencies {
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.1"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.13.0"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.4"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.16.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
@@ -111,7 +110,7 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.13.3"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.14.1"
   val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.15.5"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
@@ -218,7 +217,6 @@ object Dependencies {
     akkaHttp,
     akkaStream,
     jodaTime,
-    jodaConvert,
     scalaLogging,
     googleApiClient,
     scalaUri,
