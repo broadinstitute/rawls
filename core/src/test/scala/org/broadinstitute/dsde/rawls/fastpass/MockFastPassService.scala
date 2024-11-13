@@ -138,6 +138,14 @@ object MockFastPassService {
           ArgumentMatchers.eq(testUser.userEmail)
         )
 
+      doAnswer { _ =>
+        Future.successful(projectPetInfo(defaultPetGoogleProject)._2)
+      }
+        .when(samDAO)
+        .getDefaultPetServiceAccountKeyForUser(
+          ArgumentMatchers.any[RawlsRequestContext]
+        )
+
       doAnswer { invocation =>
         val googleProjectId = invocation.getArgument[GoogleProjectId](1)
         Future.successful(projectPetInfo(googleProjectId.value)._1)

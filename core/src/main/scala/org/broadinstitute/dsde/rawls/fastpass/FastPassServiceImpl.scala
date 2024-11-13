@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import cats.implicits.toTraverseOps
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
@@ -215,8 +216,14 @@ object FastPassServiceImpl extends LazyLogging {
   def getEmailFromPetSaKey(petSaKey: String): WorkbenchEmail =
     WorkbenchEmail(petSaKey.parseJson.asJsObject.fields("client_email").asInstanceOf[JsString].value)
 
-  private case class UserAndPetEmails(userEmail: WorkbenchEmail, userType: IamMemberType, petEmail: WorkbenchEmail) {
-    override def toString: String = s"${userType.value}:${userEmail.value} and Pet:${petEmail.value}"
+  private case class UserAndPetEmails(userEmail: WorkbenchEmail,
+                                      userType: IamMemberType,
+                                      petEmails: Set[WorkbenchEmail]
+  ) {
+    override def toString: String =
+      s"${userType.value}:${userEmail.value} and Pets:[${petEmails.map(_.value).mkString(",")}]"
+    def toSeq: Seq[(WorkbenchEmail, IamMemberType)] =
+      Seq((userEmail, userType)) ++ petEmails.map((_, IamMemberTypes.ServiceAccount))
   }
 }
 
@@ -266,11 +273,13 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
           if maybeUserStatus.isDefined
           samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
 
-          petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+          projectPetEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+          defaultPetKey <- DBIO.from(samDAO.getDefaultPetServiceAccountKeyForUser(ctx))
+          defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
           userType = getUserType(samUserInfo.userEmail)
-          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
+          userAndPets = UserAndPetEmails(samUserInfo.userEmail, userType, Set(projectPetEmail, defaultPetEmail))
           _ <- removeParentBucketReaderGrant(parentWorkspace, samUserInfo)
-          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader), ctx)
+          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPets, parentWorkspace, Set(SamWorkspaceRoles.reader), ctx)
         } yield ()
       }
       .transform {
@@ -325,10 +334,11 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
           userType = getUserType(samUserInfo.userEmail)
           workspaceRoles <- DBIO
             .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, defaultPetCtx))
-          useDefaultPet = workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).isEmpty
-          petEmail <-
-            if (useDefaultPet) {
-              DBIO.successful(FastPassServiceImpl.getEmailFromPetSaKey(defaultPetSAJson))
+          onlyUseDefaultPet = workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).isEmpty
+          defaultPetEmail <- DBIO.successful(FastPassServiceImpl.getEmailFromPetSaKey(defaultPetSAJson))
+          projectPetEmail <-
+            if (onlyUseDefaultPet) {
+              DBIO.successful(Set.empty[WorkbenchEmail])
             } else {
               DBIO.from(
                 samDAO
@@ -336,11 +346,12 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
                                                   RawlsUserEmail(samUserInfo.userEmail.value)
                   )
                   .map(FastPassServiceImpl.getEmailFromPetSaKey)
+                  .map(Set(_))
               )
             }
-          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
+          userAndPets = UserAndPetEmails(samUserInfo.userEmail, userType, projectPetEmail + defaultPetEmail)
 
-          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, workspaceRoles, defaultPetCtx)
+          _ <- addFastPassGrantsForRoles(samUserInfo, userAndPets, workspace, workspaceRoles, defaultPetCtx)
         } yield ()
       }
       .transform {
@@ -357,7 +368,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
   }
 
   def addFastPassGrantsForRoles(samUserInfo: SamUserInfo,
-                                userAndPet: UserAndPetEmails,
+                                userAndPets: UserAndPetEmails,
                                 workspace: Workspace,
                                 roles: Set[SamResourceRole],
                                 rawlsRequestContext: RawlsRequestContext
@@ -371,20 +382,20 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
             )
           val expirationDate = OffsetDateTime.now(ZoneOffset.UTC).plus(config.grantPeriod)
           (for {
-            _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
-            _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
+            _ <- setupProjectRoles(workspace, roles, userAndPets, samUserInfo, expirationDate)
+            _ <- setupBucketRoles(workspace, roles, userAndPets, samUserInfo, expirationDate)
           } yield ()).cleanUp {
             case Some(throwable) =>
               for {
                 _ <- DBIO.from(
-                  removeFastPassProjectGrants(userAndPet,
+                  removeFastPassProjectGrants(userAndPets,
                                               roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles),
                                               workspace.googleProjectId
                   )
                 )
                 _ <- DBIO.from(
                   removeFastPassBucketGrants(workspace.bucketName,
-                                             userAndPet,
+                                             userAndPets,
                                              roles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles),
                                              workspace.googleProjectId
                   )
@@ -447,7 +458,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
-                                userAndPet: UserAndPetEmails,
+                                userAndPets: UserAndPetEmails,
                                 samUserInfo: SamUserInfo,
                                 expirationDate: OffsetDateTime
   )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
@@ -458,7 +469,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
       for {
         _ <- writeGrantsToDb(
           workspace.workspaceId,
-          userAndPet,
+          userAndPets,
           samUserInfo.userSubjectId,
           gcpResourceType = IamResourceTypes.Project,
           workspace.googleProjectId.value,
@@ -466,7 +477,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
           expirationDate
         )
         _ <- DBIO.from(
-          addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition)
+          addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPets, condition)
         )
       } yield ()
     } else {
@@ -509,7 +520,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
   }
 
   protected def writeGrantsToDb(workspaceId: String,
-                                userAndPet: UserAndPetEmails,
+                                userAndPets: UserAndPetEmails,
                                 samUserSubjectId: WorkbenchUserId,
                                 gcpResourceType: IamResourceType,
                                 resourceName: String,
@@ -517,18 +528,20 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
                                 expiration: OffsetDateTime
   )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
     val rolesToWrite =
-      Seq((userAndPet.userEmail, userAndPet.userType), (userAndPet.petEmail, IamMemberTypes.ServiceAccount)).flatMap(
-        tuple => organizationRoles.map(r => (tuple._1, tuple._2, r))
-      )
-    DBIO.seq(rolesToWrite.map { tuple =>
+      (userAndPets.petEmails.map((_, IamMemberTypes.ServiceAccount)).toSeq :+ (userAndPets.userEmail,
+                                                                               userAndPets.userType
+      )).flatMap { case (email, memberType) =>
+        organizationRoles.map(r => (email, memberType, r))
+      }
+    DBIO.seq(rolesToWrite.map { case (email, memberType, role) =>
       val fastPassGrant = FastPassGrant.newFastPassGrant(
         workspaceId,
         samUserSubjectId,
-        WorkbenchEmail(tuple._1.value),
-        tuple._2,
+        WorkbenchEmail(email.value),
+        memberType,
         gcpResourceType,
         resourceName,
-        tuple._3,
+        role,
         expiration
       )
 
@@ -539,128 +552,116 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
 
   private def addUserAndPetToProjectIamRoles(googleProjectId: GoogleProjectId,
                                              organizationRoles: Set[String],
-                                             userAndPet: UserAndPetEmails,
+                                             userAndPets: UserAndPetEmails,
                                              condition: Expr
   ): Future[Unit] = {
     logger.info(
-      s"Adding project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
+      s"Adding project-level FastPass access for $userAndPets in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
-    for {
-      _ <- googleIamDAO.addRoles(
-        GoogleProject(googleProjectId.value),
-        userAndPet.userEmail,
-        userAndPet.userType,
-        organizationRoles,
-        condition = Some(condition)
-      )
-      _ <- MetricsHelper.incrementFastPassGrantedCounter(userAndPet.userType).unsafeToFuture()
-      _ <- googleIamDAO.addRoles(
-        GoogleProject(googleProjectId.value),
-        userAndPet.petEmail,
-        IamMemberTypes.ServiceAccount,
-        organizationRoles,
-        condition = Some(condition)
-      )
-      _ <- MetricsHelper.incrementFastPassGrantedCounter(IamMemberTypes.ServiceAccount).unsafeToFuture()
-    } yield ()
+    // note that IO traverse is serial which is good because parallel IAM updates will fight with each other
+    userAndPets.toSeq
+      .traverse { case (email, memberType) =>
+        for {
+          _ <- IO.fromFuture(
+            IO(
+              googleIamDAO.addRoles(
+                GoogleProject(googleProjectId.value),
+                email,
+                memberType,
+                organizationRoles,
+                condition = Some(condition)
+              )
+            )
+          )
+          _ <- MetricsHelper.incrementFastPassGrantedCounter(memberType)
+        } yield ()
+      }
+      .void
+      .unsafeToFuture()
   }
 
   private def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName,
                                            organizationRoles: Set[String],
-                                           userAndPet: UserAndPetEmails,
+                                           userAndPets: UserAndPetEmails,
                                            condition: Expr,
                                            googleProjectId: GoogleProjectId
   ): Future[Unit] = {
     logger.info(
-      s"Adding bucket-level FastPass access for $userAndPet in ${gcsBucketName.value} [${organizationRoles.mkString(" ")}]"
+      s"Adding bucket-level FastPass access for $userAndPets in ${gcsBucketName.value} [${organizationRoles.mkString(" ")}]"
     )
-    for {
-      _ <- googleStorageDAO.addIamRoles(
-        gcsBucketName,
-        userAndPet.userEmail,
-        userAndPet.userType,
-        organizationRoles,
-        condition = Some(condition),
-        userProject = Some(GoogleProject(googleProjectId.value))
-      )
-      _ <- MetricsHelper.incrementFastPassGrantedCounter(userAndPet.userType).unsafeToFuture()
-      _ <- googleStorageDAO.addIamRoles(
-        gcsBucketName,
-        userAndPet.petEmail,
-        IamMemberTypes.ServiceAccount,
-        organizationRoles,
-        condition = Some(condition),
-        userProject = Some(GoogleProject(googleProjectId.value))
-      )
-      _ <- MetricsHelper.incrementFastPassGrantedCounter(IamMemberTypes.ServiceAccount).unsafeToFuture()
-    } yield ()
+    // note that IO traverse is serial which is good because parallel IAM updates will fight with each other
+    userAndPets.toSeq
+      .traverse { case (email, memberType) =>
+        for {
+          _ <- IO.fromFuture(
+            IO(
+              googleStorageDAO.addIamRoles(
+                gcsBucketName,
+                email,
+                memberType,
+                organizationRoles,
+                condition = Some(condition),
+                userProject = Some(GoogleProject(googleProjectId.value))
+              )
+            )
+          )
+          _ <- MetricsHelper.incrementFastPassGrantedCounter(memberType)
+        } yield ()
+      }
+      .void
+      .unsafeToFuture()
   }
 
-  private def removeFastPassProjectGrants(userAndPet: UserAndPetEmails,
+  private def removeFastPassProjectGrants(userAndPets: UserAndPetEmails,
                                           organizationRoles: Set[String],
                                           googleProjectId: GoogleProjectId
-  ): Future[Unit] = {
-
-    val userRemoval = () =>
-      removeFastPassGrants(
-        IamResourceTypes.Project,
-        googleProjectId.value,
-        userAndPet.userEmail,
-        userAndPet.userType,
-        organizationRoles,
-        GoogleProject(googleProjectId.value),
-        googleIamDAO,
-        googleStorageDAO
-      )
-    val petRemoval = () =>
-      removeFastPassGrants(
-        IamResourceTypes.Project,
-        googleProjectId.value,
-        userAndPet.petEmail,
-        IamMemberTypes.ServiceAccount,
-        organizationRoles,
-        GoogleProject(googleProjectId.value),
-        googleIamDAO,
-        googleStorageDAO
-      )
-
-    executeSerially(userRemoval, petRemoval)
-  }
+  ): Future[Unit] =
+    // note that IO traverse is serial which is good because parallel IAM updates will fight with each other
+    userAndPets.toSeq
+      .traverse { case (email, memberType) =>
+        IO.fromFuture(
+          IO(
+            removeFastPassGrants(
+              IamResourceTypes.Project,
+              googleProjectId.value,
+              email,
+              memberType,
+              organizationRoles,
+              GoogleProject(googleProjectId.value),
+              googleIamDAO,
+              googleStorageDAO
+            )
+          )
+        )
+      }
+      .void
+      .unsafeToFuture()
 
   private def removeFastPassBucketGrants(bucketName: String,
-                                         userAndPet: UserAndPetEmails,
+                                         userAndPets: UserAndPetEmails,
                                          organizationRoles: Set[String],
                                          googleProjectId: GoogleProjectId
-  ): Future[Unit] = {
-
-    val userRemoval = () =>
-      removeFastPassGrants(
-        IamResourceTypes.Bucket,
-        bucketName,
-        userAndPet.userEmail,
-        userAndPet.userType,
-        organizationRoles,
-        GoogleProject(googleProjectId.value),
-        googleIamDAO,
-        googleStorageDAO
-      )
-    val petRemoval = () =>
-      removeFastPassGrants(
-        IamResourceTypes.Bucket,
-        bucketName,
-        userAndPet.petEmail,
-        IamMemberTypes.ServiceAccount,
-        organizationRoles,
-        GoogleProject(googleProjectId.value),
-        googleIamDAO,
-        googleStorageDAO
-      )
-
-    executeSerially(userRemoval, petRemoval)
-  }
-
-  private def executeSerially(futures: () => Future[Unit]*)(implicit executionContext: ExecutionContext): Future[Unit] =
-    futures.foldLeft(Future.successful[Unit](()))((a, b) => a.flatMap(_ => b()))
+  ): Future[Unit] =
+    // note that IO traverse is serial which is good because parallel IAM updates will fight with each other
+    userAndPets.toSeq
+      .traverse { case (email, memberType) =>
+        IO.fromFuture(
+          IO(
+            removeFastPassGrants(
+              IamResourceTypes.Bucket,
+              bucketName,
+              email,
+              memberType,
+              organizationRoles,
+              GoogleProject(googleProjectId.value),
+              googleIamDAO,
+              googleStorageDAO
+            )
+          )
+        )
+      }
+      .void
+      .unsafeToFuture()
 
   private def removeParentBucketReaderGrant(parentWorkspace: Workspace, samUserInfo: SamUserInfo)(implicit
     dataAccess: DataAccess
