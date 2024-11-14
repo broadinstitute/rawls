@@ -527,12 +527,9 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
                                 organizationRoles: Set[String],
                                 expiration: OffsetDateTime
   )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] = {
-    val rolesToWrite =
-      (userAndPets.petEmails.map((_, IamMemberTypes.ServiceAccount)).toSeq :+ (userAndPets.userEmail,
-                                                                               userAndPets.userType
-      )).flatMap { case (email, memberType) =>
-        organizationRoles.map(r => (email, memberType, r))
-      }
+    val rolesToWrite = userAndPets.toSeq.flatMap { case (email, memberType) =>
+      organizationRoles.map(r => (email, memberType, r))
+    }
     DBIO.seq(rolesToWrite.map { case (email, memberType, role) =>
       val fastPassGrant = FastPassGrant.newFastPassGrant(
         workspaceId,

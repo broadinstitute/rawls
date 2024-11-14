@@ -693,8 +693,7 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value))
-      )
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
   }
 
