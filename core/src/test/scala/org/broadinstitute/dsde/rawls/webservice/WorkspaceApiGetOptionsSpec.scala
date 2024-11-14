@@ -256,7 +256,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
                                              Some(WorkspaceCloudPlatform.Gcp)
     ),
     Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
-    Option(WorkspaceBucketOptions(false)),
+    Option(WorkspaceBucketOptions(false, "us-central1")),
     Option(Set.empty),
     None,
     Some(List.empty)

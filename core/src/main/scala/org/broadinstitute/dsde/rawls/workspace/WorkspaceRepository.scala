@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecor
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  GoogleProjectId,
   PendingCloneWorkspaceFileTransfer,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -51,6 +52,11 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def getWorkspaceId(workspaceName: WorkspaceName): Future[Option[UUID]] = dataSource.inTransaction {
     _.workspaceQuery.getV2WorkspaceId(workspaceName)
   }
+
+  def getWorkspaceByGoogleProject(googleProjectId: GoogleProjectId): Future[Option[Workspace]] =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.findByGoogleProjectId(googleProjectId)
+    }
 
   def listWorkspacesByIds(workspaceIds: Seq[UUID],
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None

@@ -98,7 +98,7 @@ If you are developing a ticket that deals with any sort of monitoring or asynchr
 BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 ```
 
-**Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls. See note below on database work.
+**Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls by cloning the [dev Rawls DB](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev). See note below on database work.
 
 #### Developing Database Schema Changes
 

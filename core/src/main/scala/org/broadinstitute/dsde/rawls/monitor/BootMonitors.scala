@@ -47,7 +47,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   LandingZoneCreationStatusRunner
 }
 import org.broadinstitute.dsde.rawls.util
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
@@ -95,7 +95,8 @@ object BootMonitors extends LazyLogging {
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver,
-                   bardService: BardService
+                   bardService: BardService,
+                   workspaceSettingRepository: WorkspaceSettingRepository
   ): Unit = {
 
     if (appConfigManager.cloudProvider == WorkspaceCloudPlatform.Gcp) {
@@ -147,7 +148,8 @@ object BootMonitors extends LazyLogging {
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
         methodConfigResolver,
-        bardService
+        bardService,
+        workspaceSettingRepository
       )
 
       // Boot bucket deletion monitor
@@ -337,7 +339,8 @@ object BootMonitors extends LazyLogging {
                                             defaultNetworkCromwellBackend: CromwellBackend,
                                             highSecurityNetworkCromwellBackend: CromwellBackend,
                                             methodConfigResolver: MethodConfigResolver,
-                                            bardService: BardService
+                                            bardService: BardService,
+                                            workspaceSettingRepository: WorkspaceSettingRepository
   ) =
     for (i <- 0 until conf.getInt("executionservice.parallelSubmitters"))
       system.actorOf(
@@ -364,7 +367,8 @@ object BootMonitors extends LazyLogging {
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
           methodConfigResolver,
-          bardService
+          bardService,
+          workspaceSettingRepository
         )
       )
 

@@ -21,6 +21,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -115,7 +117,8 @@ class WorkspaceServiceUnitTests
       mock[FastPassService](RETURNS_SMART_NULLS),
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
-    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS)
+    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -143,7 +146,8 @@ class WorkspaceServiceUnitTests
       fastPassServiceConstructor,
       workspaceRepository,
       billingRepository,
-      submissionsRepository
+      submissionsRepository,
+      workspaceSettingRepository
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"
@@ -460,9 +464,25 @@ class WorkspaceServiceUnitTests
     val wsm = mock[WorkspaceManagerDAO]
     when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val gcs = mock[GoogleServicesDAO]
-    val bucketDetails = WorkspaceBucketOptions(true)
+    val bucketDetails = WorkspaceBucketOptions(true, "")
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, gcsDAO = gcs)(ctx)
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(true))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+      .thenReturn(Future(None))
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
+                                              workspaceRepository = repository,
+                                              workspaceSettingRepository = settings,
+                                              samDAO = sam,
+                                              gcsDAO = gcs
+    )(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -1644,6 +1664,7 @@ class WorkspaceServiceUnitTests
   }
 
   behavior of "getBucketOptions"
+
   it should "get the bucket options for a gcp workspace" in {
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
@@ -1651,12 +1672,164 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
       .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(true))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+      .thenReturn(Future(None))
     val bucketDetails = mock[WorkspaceBucketOptions]
     val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
-    val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repository, gcsDAO = gcs)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam,
+                                              workspaceRepository = repository,
+                                              gcsDAO = gcs,
+                                              workspaceSettingRepository = settings
+    )(ctx)
 
     Await.result(service.getBucketOptions(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketDetails
     verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
+  }
+
+  List((false, false), (false, true), (true, true)) foreach { case (isRequesterPays, hasWriteAccess) =>
+    it should s"get bucket options and bill the workspace project if a user has " +
+      s"${if (hasWriteAccess) "write" else "read"} access and the workspace" +
+      s"${if (isRequesterPays) "is" else "is non"} requester pays" in {
+        val repository = mock[WorkspaceRepository]
+        when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+        val sam = mock[SamDAO]
+        when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+        when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+          .thenReturn(Future(true))
+        when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+          .thenReturn(Future(hasWriteAccess))
+        val settings = mock[WorkspaceSettingRepository]
+        when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+          .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(isRequesterPays)))))
+        val bucketDetails = mock[WorkspaceBucketOptions]
+        val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+        when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
+        val service = workspaceServiceConstructor(samDAO = sam,
+                                                  workspaceRepository = repository,
+                                                  gcsDAO = gcs,
+                                                  workspaceSettingRepository = settings
+        )(ctx)
+
+        Await.result(service.getBucketOptions(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketDetails
+        verify(gcs).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
+      }
+  }
+
+  it should "get bucket options and bill a user project if a user provides one to which they have write access" in {
+    List((false, false), (false, true), (true, false), (true, true)) foreach { case (isRequesterPays, hasWriteAccess) =>
+      val userProjectWs: Workspace = Workspace(
+        "test-namespace",
+        "user-project-ws",
+        UUID.randomUUID().toString,
+        "userBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "test",
+        Map.empty
+      )
+      val userProjectId: GoogleProjectId = GoogleProjectId("123")
+
+      val repository = mock[WorkspaceRepository]
+      when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+      when(repository.getWorkspaceByGoogleProject(userProjectId)).thenReturn(Future(Some(userProjectWs)))
+      val sam = mock[SamDAO]
+      when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+      when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+        .thenReturn(Future(true))
+      when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+        .thenReturn(Future(hasWriteAccess))
+      when(sam.userHasAction(SamResourceTypeNames.workspace, userProjectWs.workspaceId, SamWorkspaceActions.write, ctx))
+        .thenReturn(Future(true))
+      val settings = mock[WorkspaceSettingRepository]
+      when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+        .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(isRequesterPays)))))
+      val bucketDetails = mock[WorkspaceBucketOptions]
+      val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(gcs.getBucketDetails(workspace.bucketName, userProjectId)).thenReturn(Future(bucketDetails))
+      val service = workspaceServiceConstructor(samDAO = sam,
+                                                workspaceRepository = repository,
+                                                gcsDAO = gcs,
+                                                workspaceSettingRepository = settings
+      )(ctx)
+
+      Await.result(service.getBucketOptions(workspace.toWorkspaceName, Some(userProjectId)),
+                   Duration.Inf
+      ) shouldBe bucketDetails
+      verify(gcs).getBucketDetails(workspace.bucketName, userProjectId)
+    }
+  }
+
+  it should "fail if a user provides a user project to which they do not have write access" in {
+    List((false, false), (false, true), (true, false), (true, true)) foreach { case (isRequesterPays, hasWriteAccess) =>
+      val userProjectWs: Workspace = Workspace(
+        "test-namespace",
+        "user-project-ws",
+        UUID.randomUUID().toString,
+        "userBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "test",
+        Map.empty
+      )
+      val userProjectId: GoogleProjectId = GoogleProjectId("123")
+
+      val repository = mock[WorkspaceRepository]
+      when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+      when(repository.getWorkspaceByGoogleProject(userProjectId)).thenReturn(Future(Some(userProjectWs)))
+      val sam = mock[SamDAO]
+      when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+      when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+        .thenReturn(Future(true))
+      when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+        .thenReturn(Future(hasWriteAccess))
+      when(sam.userHasAction(SamResourceTypeNames.workspace, userProjectWs.workspaceId, SamWorkspaceActions.write, ctx))
+        .thenReturn(Future(false))
+      val settings = mock[WorkspaceSettingRepository]
+      when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+        .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(isRequesterPays)))))
+      val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val service = workspaceServiceConstructor(samDAO = sam,
+                                                workspaceRepository = repository,
+                                                gcsDAO = gcs,
+                                                workspaceSettingRepository = settings
+      )(ctx)
+
+      intercept[RawlsExceptionWithErrorReport] {
+        Await.result(service.getBucketOptions(workspace.toWorkspaceName, Some(userProjectId)), Duration.Inf)
+      }
+      verify(gcs, never).getBucketDetails(workspace.bucketName, userProjectId)
+    }
+  }
+
+  it should "fail on a requester pays workspace for a user who does not provide a user project" in {
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    val sam = mock[SamDAO]
+    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
+      .thenReturn(Future(true))
+    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx))
+      .thenReturn(Future(false))
+    val settings = mock[WorkspaceSettingRepository]
+    when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
+      .thenReturn(Future(Some(GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)))))
+    val bucketDetails = mock[WorkspaceBucketOptions]
+    val gcs = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    val service = workspaceServiceConstructor(samDAO = sam,
+                                              workspaceRepository = repository,
+                                              gcsDAO = gcs,
+                                              workspaceSettingRepository = settings
+    )(ctx)
+
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getBucketOptions(workspace.toWorkspaceName), Duration.Inf) shouldBe bucketDetails
+    }
+    verify(gcs, never).getBucketDetails(workspace.bucketName, workspace.googleProjectId)
   }
 }

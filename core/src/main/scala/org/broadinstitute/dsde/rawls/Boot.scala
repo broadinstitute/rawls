@@ -456,7 +456,8 @@ object Boot extends IOApp with LazyLogging {
         submissionCostService,
         genomicsServiceConstructor,
         workspaceServiceConfig,
-        new WorkspaceRepository(slickDataSource)
+        new WorkspaceRepository(slickDataSource),
+        new WorkspaceSettingRepository(slickDataSource)
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -599,7 +600,8 @@ object Boot extends IOApp with LazyLogging {
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
           methodConfigResolver,
-          bardService
+          bardService,
+          workspaceSettingRepository
         )
       } else
         logger.info(

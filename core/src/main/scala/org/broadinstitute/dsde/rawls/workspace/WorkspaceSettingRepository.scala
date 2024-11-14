@@ -27,6 +27,14 @@ class WorkspaceSettingRepository(dataSource: SlickDataSource) {
       )
     }
 
+  // Return applied setting for a workspace of a certain setting type. Deleted and pending settings are not returned.
+  def getWorkspaceSettingOfType(workspaceId: UUID,
+                                settingType: WorkspaceSettingType
+  ): Future[Option[WorkspaceSetting]] =
+    dataSource.inTransaction { access =>
+      access.workspaceSettingQuery.getAppliedSettingForWorkspaceByType(workspaceId, settingType)
+    }
+
   // Create new settings for a workspace as pending. If there are any existing pending settings, throw an exception.
   def createWorkspaceSettingsRecords(workspaceId: UUID,
                                      workspaceSettings: List[WorkspaceSetting],

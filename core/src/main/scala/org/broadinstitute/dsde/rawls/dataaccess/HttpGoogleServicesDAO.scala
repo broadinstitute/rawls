@@ -1100,9 +1100,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         billing <- Option(bucketDetails.getBilling)
         rp <- Option(billing.getRequesterPays)
       } yield rp.booleanValue()
+      val location = Option(bucketDetails.getLocation)
 
       WorkspaceBucketOptions(
-        requesterPays = requesterPays.getOrElse(false)
+        requesterPays = requesterPays.getOrElse(false),
+        location = location.getOrElse("")
       )
     }
   }

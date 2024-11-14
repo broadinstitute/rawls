@@ -515,7 +515,8 @@ class FastPassServiceSpec
 
     val userAccountFastPassGrants = userFastPassGrants.filter(_.accountType.equals(IamMemberTypes.User))
     val petAccountFastPassGrants = userFastPassGrants.filter(_.accountType.equals(IamMemberTypes.ServiceAccount))
-    userAccountFastPassGrants.length should be(petAccountFastPassGrants.length)
+    // there should be 2 pets for each user
+    userAccountFastPassGrants.length * 2 should be(petAccountFastPassGrants.length)
 
     val userResourceRoles =
       userAccountFastPassGrants.map(g => (g.resourceType, g.resourceName, g.organizationRole)).toSet
@@ -533,7 +534,12 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
+    val defaultPetKey = Await.result(
+      services.fastPassMockSamDAO.getDefaultPetServiceAccountKeyForUser(services.ctx1),
+      Duration.Inf
+    )
     val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
+    val defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
@@ -555,6 +561,16 @@ class FastPassServiceSpec
       ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value)))
     )
 
+    // The user's default pet is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).addRoles(
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(defaultPetEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value)))
+    )
+
     // The user is added to the bucket IAM policies with a condition
     verify(services.googleStorageDAO).addIamRoles(
       ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
@@ -570,6 +586,17 @@ class FastPassServiceSpec
     verify(services.googleStorageDAO).addIamRoles(
       ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value))),
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
+    )
+
+    // The user's default pet is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).addIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
+      ArgumentMatchers.eq(defaultPetEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
@@ -605,7 +632,12 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
+    val defaultPetKey = Await.result(
+      services.fastPassMockSamDAO.getDefaultPetServiceAccountKeyForUser(services.ctx1),
+      Duration.Inf
+    )
     val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
+    val defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
 
     // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
@@ -625,6 +657,15 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(false)
     )
 
+    // The user's default pet is removed from the project IAM policies
+    verify(services.googleIamDAO).removeRoles(
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(defaultPetEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false)
+    )
+
     // The user is removed from the bucket IAM policies
     verify(services.googleStorageDAO).removeIamRoles(
       ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
@@ -639,6 +680,16 @@ class FastPassServiceSpec
     verify(services.googleStorageDAO).removeIamRoles(
       ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
+    )
+
+    // The user's default pet is removed from the bucket IAM policies
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
+      ArgumentMatchers.eq(defaultPetEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
@@ -686,12 +737,17 @@ class FastPassServiceSpec
           ),
           Duration.Inf
         )
+      val defaultPetKey = Await.result(
+        services.fastPassMockSamDAO.getDefaultPetServiceAccountKeyForUser(services.ctx1),
+        Duration.Inf
+      )
       val childWorkspacePetEmail = FastPassServiceImpl.getEmailFromPetSaKey(childWorkspacePetKey)
+      val defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
 
       parentWorkspacePetEmail should not be childWorkspacePetEmail
 
       parentWorkspaceFastPassGrantsAfter.map(_.accountEmail).toSet should be(
-        Set(childWorkspacePetEmail, WorkbenchEmail(samUserStatus.userEmail))
+        Set(childWorkspacePetEmail, defaultPetEmail, WorkbenchEmail(samUserStatus.userEmail))
       )
 
   }
@@ -749,7 +805,16 @@ class FastPassServiceSpec
     val readerRoles = Vector(services.terraBucketReaderRole)
 
     userWriterGrants.map(_.organizationRole) should contain only (writerCanComputeRoles: _*)
+    userWriterGrants.map(_.accountEmail.value).toSet should contain only (
+      testData.userWriter.userEmail.value,
+      MockFastPassService.buildPetEmail(testData.userWriter, testData.workspace.googleProjectId.value).value,
+      MockFastPassService.buildPetEmail(testData.userWriter, MockFastPassService.defaultPetGoogleProject).value
+    )
     userReaderGrants.map(_.organizationRole) should contain only (readerRoles: _*)
+    userReaderGrants.map(_.accountEmail.value).toSet should contain only (
+      testData.userReader.userEmail.value,
+      MockFastPassService.buildPetEmail(testData.userReader, MockFastPassService.defaultPetGoogleProject).value
+    )
 
     // share-reader added as bucket reader
     verify(services.googleStorageDAO).addIamRoles(
@@ -952,11 +1017,16 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
+    val defaultPetKey = Await.result(
+      services.fastPassMockSamDAO.getDefaultPetServiceAccountKeyForUser(services.ctx1),
+      Duration.Inf
+    )
+    val defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
     val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
 
     workspaceFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.accountType) should contain only (IamMemberTypes.ServiceAccount)
-    workspaceFastPassGrants.map(_.accountEmail) should contain only (userEmail, petEmail)
+    workspaceFastPassGrants.map(_.accountEmail) should contain only (userEmail, petEmail, defaultPetEmail)
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
