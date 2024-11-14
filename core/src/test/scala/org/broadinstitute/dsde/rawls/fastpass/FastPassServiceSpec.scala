@@ -534,7 +534,12 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
+    val defaultPetKey = Await.result(
+      services.fastPassMockSamDAO.getDefaultPetServiceAccountKeyForUser(services.ctx1),
+      Duration.Inf
+    )
     val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
+    val defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
@@ -556,6 +561,16 @@ class FastPassServiceSpec
       ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value)))
     )
 
+    // The user's default pet is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).addRoles(
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(defaultPetEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value)))
+    )
+
     // The user is added to the bucket IAM policies with a condition
     verify(services.googleStorageDAO).addIamRoles(
       ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
@@ -571,6 +586,17 @@ class FastPassServiceSpec
     verify(services.googleStorageDAO).addIamRoles(
       ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value))),
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
+    )
+
+    // The user's default pet is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).addIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
+      ArgumentMatchers.eq(defaultPetEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
@@ -606,7 +632,12 @@ class FastPassServiceSpec
         ),
         Duration.Inf
       )
+    val defaultPetKey = Await.result(
+      services.fastPassMockSamDAO.getDefaultPetServiceAccountKeyForUser(services.ctx1),
+      Duration.Inf
+    )
     val petEmail = FastPassServiceImpl.getEmailFromPetSaKey(petKey)
+    val defaultPetEmail = FastPassServiceImpl.getEmailFromPetSaKey(defaultPetKey)
 
     // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
@@ -621,6 +652,15 @@ class FastPassServiceSpec
     verify(services.googleIamDAO).removeRoles(
       ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false)
+    )
+
+    // The user's default pet is removed from the project IAM policies
+    verify(services.googleIamDAO).removeRoles(
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(defaultPetEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
       ArgumentMatchers.eq(false)
@@ -644,6 +684,17 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
       ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
+    )
+
+    // The user's default pet is removed from the bucket IAM policies
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
+      ArgumentMatchers.eq(defaultPetEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value))
+      )
     )
   }
 
