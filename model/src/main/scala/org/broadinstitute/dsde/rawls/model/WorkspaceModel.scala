@@ -18,13 +18,15 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGCPBatchBackendConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
   GcpBucketLifecycle,
   GcpBucketRequesterPays,
   GcpBucketSoftDelete,
   SeparateSubmissionFinalOutputs,
+  UseCromwellGCPBatchBackend,
   WorkspaceSettingType
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
@@ -591,6 +593,9 @@ case class GcpBucketRequesterPaysSetting(override val config: GcpBucketRequester
 case class SeparateSubmissionFinalOutputsSetting(override val config: SeparateSubmissionFinalOutputsConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.SeparateSubmissionFinalOutputs, config)
 
+case class UseCromwellGCPBatchBackendSetting(override val config: UseCromwellGCPBatchBackendConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.UseCromwellGCPBatchBackend, config)
+
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -602,6 +607,7 @@ object WorkspaceSettingTypes {
     case "gcpbucketsoftdelete"            => GcpBucketSoftDelete
     case "gcpbucketrequesterpays"         => GcpBucketRequesterPays
     case "separatesubmissionfinaloutputs" => SeparateSubmissionFinalOutputs
+    case "usecromwellgcpbatchbackend"     => UseCromwellGCPBatchBackend
     case _                                => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
@@ -612,6 +618,8 @@ object WorkspaceSettingTypes {
   case object GcpBucketRequesterPays extends WorkspaceSettingType
 
   case object SeparateSubmissionFinalOutputs extends WorkspaceSettingType
+
+  case object UseCromwellGCPBatchBackend extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig
@@ -629,6 +637,8 @@ object WorkspaceSettingConfig {
   case class GcpBucketRequesterPaysConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
   case class SeparateSubmissionFinalOutputsConfig(enabled: Boolean) extends WorkspaceSettingConfig
+
+  case class UseCromwellGCPBatchBackendConfig(enabled: Boolean) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1261,6 +1271,9 @@ class WorkspaceJsonSupport extends JsonSupport {
     jsonFormat1(
       SeparateSubmissionFinalOutputsConfig.apply
     )
+  implicit val UseCromwellGCPBatchBackendConfigFormat: RootJsonFormat[UseCromwellGCPBatchBackendConfig] = jsonFormat1(
+    UseCromwellGCPBatchBackendConfig.apply
+  )
 
   implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
     override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
@@ -1277,6 +1290,7 @@ class WorkspaceJsonSupport extends JsonSupport {
       case config: GcpBucketSoftDeleteConfig            => config.toJson
       case config: GcpBucketRequesterPaysConfig         => config.toJson
       case config: SeparateSubmissionFinalOutputsConfig => config.toJson
+      case config: UseCromwellGCPBatchBackendConfig     => config.toJson
     }
 
     // We prevent reading WorkspaceSettingConfig directly because we need
@@ -1302,6 +1316,8 @@ class WorkspaceJsonSupport extends JsonSupport {
           GcpBucketRequesterPaysSetting(fields("config").convertTo[GcpBucketRequesterPaysConfig])
         case SeparateSubmissionFinalOutputs =>
           SeparateSubmissionFinalOutputsSetting(fields("config").convertTo[SeparateSubmissionFinalOutputsConfig])
+        case UseCromwellGCPBatchBackend =>
+          UseCromwellGCPBatchBackendSetting(fields("config").convertTo[UseCromwellGCPBatchBackendConfig])
         case _ => throw DeserializationException(s"unexpected setting type $settingType")
       }
     }

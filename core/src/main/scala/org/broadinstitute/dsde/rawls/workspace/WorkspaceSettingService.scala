@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   SeparateSubmissionFinalOutputsSetting,
+  UseCromwellGCPBatchBackendSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
@@ -94,6 +95,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             }
           case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
+          case UseCromwellGCPBatchBackendSetting(UseCromwellGCPBatchBackendConfig(_))         => None
         }
       }
 
@@ -158,8 +160,13 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
           gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
 
+        // SeparateSubmissionFinalOutputsSetting and UseCromwellGCPBatchBackendSetting are not bucket settings,
+        // so we do not need to apply anything here
+
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
-          // SeparateSubmissionFinalOutputsSetting is not a bucket setting, so we don't need to apply anything here
+          Future.successful(())
+
+        case UseCromwellGCPBatchBackendSetting(UseCromwellGCPBatchBackendConfig(_)) =>
           Future.successful(())
 
         case _ => throw new RawlsException("unsupported workspace setting")

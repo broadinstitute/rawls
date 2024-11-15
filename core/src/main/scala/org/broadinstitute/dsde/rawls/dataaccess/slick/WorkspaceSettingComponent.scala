@@ -4,13 +4,15 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   GcpBucketLifecycleConfigFormat,
   GcpBucketRequesterPaysConfigFormat,
   GcpBucketSoftDeleteConfigFormat,
-  SeparateSubmissionFinalOutputsConfigFormat
+  SeparateSubmissionFinalOutputsConfigFormat,
+  UseCromwellGCPBatchBackendConfigFormat
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGCPBatchBackendConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
@@ -70,6 +72,10 @@ object WorkspaceSettingRecord {
       case WorkspaceSettingTypes.SeparateSubmissionFinalOutputs =>
         SeparateSubmissionFinalOutputsSetting(
           workspaceSettingRecord.config.parseJson.convertTo[SeparateSubmissionFinalOutputsConfig]
+        )
+      case WorkspaceSettingTypes.UseCromwellGCPBatchBackend =>
+        UseCromwellGCPBatchBackendSetting(
+          workspaceSettingRecord.config.parseJson.convertTo[UseCromwellGCPBatchBackendConfig]
         )
     }
   }
