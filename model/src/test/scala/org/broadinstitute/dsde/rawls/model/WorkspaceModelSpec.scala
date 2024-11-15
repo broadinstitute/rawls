@@ -1008,57 +1008,57 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         }
       }
     }
-  }
 
-  "SeparateSubmissionFinalOutputsSetting" - {
-    "parses setting with enabled" in {
-      val setting =
-        """{
-          |    "settingType": "SeparateSubmissionFinalOutputs",
-          |    "config": {
-          |      "enabled": true
-          |    }
-          |  }""".stripMargin.parseJson
-      assertResult {
-        SeparateSubmissionFinalOutputsSetting(
-          SeparateSubmissionFinalOutputsConfig(true)
-        )
-      } {
-        WorkspaceSettingFormat.read(setting)
+    "SeparateSubmissionFinalOutputsSetting" - {
+      "parses setting with enabled" in {
+        val setting =
+          """{
+            |    "settingType": "SeparateSubmissionFinalOutputs",
+            |    "config": {
+            |      "enabled": true
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          SeparateSubmissionFinalOutputsSetting(
+            SeparateSubmissionFinalOutputsConfig(true)
+          )
+        } {
+          WorkspaceSettingFormat.read(setting)
+        }
       }
-    }
 
-    "throws an exception for missing enabled" in {
-      val settingNoEnabled =
-        """{
-          |    "settingType": "SeparateSubmissionFinalOutputs",
-          |    "config": {}
-          |  }""".stripMargin.parseJson
-      intercept[DeserializationException] {
-        WorkspaceSettingFormat.read(settingNoEnabled)
+      "throws an exception for missing enabled" in {
+        val settingNoEnabled =
+          """{
+            |    "settingType": "SeparateSubmissionFinalOutputs",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(settingNoEnabled)
+        }
       }
-    }
 
-    "throws an exception for missing config" in {
-      val settingNoConfig =
-        """{
-          |    "settingType": "SeparateSubmissionFinalOutputs"
-          |  }""".stripMargin.parseJson
-      intercept[NoSuchElementException] {
-        WorkspaceSettingFormat.read(settingNoConfig)
+      "throws an exception for missing config" in {
+        val settingNoConfig =
+          """{
+            |    "settingType": "SeparateSubmissionFinalOutputs"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(settingNoConfig)
+        }
       }
-    }
 
-    "throws an exception for incorrect format" in {
-      val settingBadConfig =
-        """{
-          |    "settingType": "SeparateSubmissionFinalOutputs",
-          |    "config": {
-          |      "enabled": 0
-          |    }
-          |  }""".stripMargin.parseJson
-      intercept[DeserializationException] {
-        WorkspaceSettingFormat.read(settingBadConfig)
+      "throws an exception for incorrect format" in {
+        val settingBadConfig =
+          """{
+            |    "settingType": "SeparateSubmissionFinalOutputs",
+            |    "config": {
+            |      "enabled": 0
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(settingBadConfig)
+        }
       }
     }
   }
