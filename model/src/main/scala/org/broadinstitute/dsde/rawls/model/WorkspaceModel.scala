@@ -1318,7 +1318,6 @@ class WorkspaceJsonSupport extends JsonSupport {
           SeparateSubmissionFinalOutputsSetting(fields("config").convertTo[SeparateSubmissionFinalOutputsConfig])
         case UseCromwellGCPBatchBackend =>
           UseCromwellGCPBatchBackendSetting(fields("config").convertTo[UseCromwellGCPBatchBackendConfig])
-        case _ => throw DeserializationException(s"unexpected setting type $settingType")
       }
     }
   }

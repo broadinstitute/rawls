@@ -168,8 +168,6 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
 
         case UseCromwellGCPBatchBackendSetting(UseCromwellGCPBatchBackendConfig(_)) =>
           Future.successful(())
-
-        case _ => throw new RawlsException("unsupported workspace setting")
       }
 
     validateSettings(workspaceSettings)
