@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGCPBatchBackendSetting,
+  UseCromwellGcpBatchBackendSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
@@ -95,7 +95,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             }
           case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
-          case UseCromwellGCPBatchBackendSetting(UseCromwellGCPBatchBackendConfig(_))         => None
+          case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
         }
       }
 
@@ -160,13 +160,13 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
           gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
 
-        // SeparateSubmissionFinalOutputsSetting and UseCromwellGCPBatchBackendSetting are not bucket settings,
+        // SeparateSubmissionFinalOutputsSetting and UseCromwellGcpBatchBackendSetting are not bucket settings,
         // so we do not need to apply anything here
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
           Future.successful(())
 
-        case UseCromwellGCPBatchBackendSetting(UseCromwellGCPBatchBackendConfig(_)) =>
+        case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_)) =>
           Future.successful(())
       }
 
