@@ -5,6 +5,8 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
+import com.google.cloud.bigquery.{Field, FieldList, FieldValue, FieldValueList}
+
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -17,19 +19,21 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{AggregatedWorkspace, AggregatedWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
-import spray.json.JsArray
+import spray.json.{JsArray, JsValue}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.Owner
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Owner, WorkspaceAccessLevel}
+
+import scala.util.Try
 
 object SpendReportingService {
   def constructor(
@@ -140,63 +144,126 @@ object SpendReportingService {
     SpendReportingResults(aggregations.map(aggregateRows(allRows, _)).toList, summary)
   }
 
+//  def extractCrossBillingProjectSpendReportingResults(
+//    allRows: List[FieldValueList],
+//    start: DateTime,
+//    end: DateTime,
+//    names: Map[GoogleProjectId, WorkspaceName]
+//  ): List[SpendReportingResults] =
+//    allRows
+//      .map(row =>
+//        extractSpendReportingResults(row, start, end, names, Set.of(SpendReportingAggregationKeyWithSub(Category)))
+//      )
+//      .collect()
+
   def extractCrossBillingProjectSpendReportingResults(
     allRows: List[FieldValueList],
     start: DateTime,
     end: DateTime,
     names: Map[GoogleProjectId, WorkspaceName]
-  ): List[SpendReportingResults] = {
+  ): Map[String, SpendReportingResults] = {
 
-    val spendDetails = allRows.flatMap { row =>
-      val projectId = GoogleProjectId(row.get("project_id").getStringValue)
-      val workspaceName = names.getOrElse(
-        projectId,
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"unexpected project $projectId returned by BigQuery"
-        )
-      )
-      val totalCost = row.get("total_cost").getDoubleValue.toString
-      val computeCost = row.get("compute_cost").getDoubleValue.toString
-      val storageCost = row.get("storage_cost").getDoubleValue.toString
-      val currency = row.get("currency").getStringValue
+    val schema = FieldList.of(
+      Field.of("cost", StandardSQLTypeName.FLOAT64),
+      Field.of("credits", StandardSQLTypeName.STRING),
+      Field.of("currency", StandardSQLTypeName.STRING),
+      Field.of("service", StandardSQLTypeName.STRING)
+    )
+    val groupedRows = allRows.groupBy(row => row.get("project_id").getStringValue)
 
-      // Each row gets a summary of compute, storage, and total
-      List(
-        SpendReportingForDateRange(
-          totalCost,
-          "0", // Ignoring credits for now; do we want to include them?
-          currency,
-          Option(start),
-          Option(end),
-          workspace = Some(workspaceName),
-          googleProjectId = Some(GoogleProject(projectId.value))
-        ),
-        SpendReportingForDateRange(
-          computeCost,
-          "0",
-          currency,
-          Option(start),
-          Option(end),
-          workspace = Some(workspaceName),
-          googleProjectId = Some(GoogleProject(projectId.value)),
-          category = Some(TerraSpendCategories.Compute)
-        ),
-        SpendReportingForDateRange(
-          storageCost,
-          "0",
-          currency,
-          Option(start),
-          Option(end),
-          workspace = Some(workspaceName),
-          googleProjectId = Some(GoogleProject(projectId.value)),
-          category = Some(TerraSpendCategories.Storage)
+    groupedRows.map { case (projectId, rows) =>
+      val transformedRows = rows.flatMap { row =>
+        val currency = row.get("currency").getStringValue
+
+        List(
+          FieldValueList.of(
+            java.util.List.of(
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, row.get("compute_cost").getDoubleValue.toString),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0"),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, currency),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "compute")
+            ),
+            schema
+          ),
+          FieldValueList.of(
+            java.util.List.of(
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, row.get("storage_cost").getDoubleValue.toString),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0"),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, currency),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "storage")
+            ),
+            schema
+          ),
+          FieldValueList.of(
+            java.util.List.of(
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, row.get("other_cost").getDoubleValue.toString),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0"),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, currency),
+              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "other")
+            ),
+            schema
+          )
         )
+      }
+
+      projectId -> extractSpendReportingResults(
+        transformedRows,
+        start,
+        end,
+        names,
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))
       )
     }
-
-    // TODO what format should the result be?  Do we need a new model?
-    spendDetails.map(details => SpendReportingResults(List.empty, details))
+//    val spendDetails = allRows.flatMap { row =>
+//      val projectId = GoogleProjectId(row.get("project_id").getStringValue)
+//      val workspaceName = names.getOrElse(
+//        projectId,
+//        throw RawlsExceptionWithErrorReport(
+//          StatusCodes.InternalServerError,
+//          s"unexpected project $projectId returned by BigQuery"
+//        )
+//      )
+////      val totalCost = row.get("total_cost").getDoubleValue.toString
+////      val computeCost = row.get("compute_cost").getDoubleValue.toString
+////      val storageCost = row.get("storage_cost").getDoubleValue.toString
+//      val currency = row.get("currency").getStringValue
+//
+//      // Each row gets a summary of compute, storage, and total
+//      List(
+//        SpendReportingForDateRange(
+//          totalCost,
+//          "0", // Ignoring credits for now; do we want to include them?
+//          currency,
+//          Option(start),
+//          Option(end),
+//          workspace = Some(workspaceName),
+//          googleProjectId = Some(GoogleProject(projectId.value))
+//        ),
+//        SpendReportingForDateRange(
+//          computeCost,
+//          "0",
+//          currency,
+//          Option(start),
+//          Option(end),
+//          workspace = Some(workspaceName),
+//          googleProjectId = Some(GoogleProject(projectId.value)),
+//          category = Some(TerraSpendCategories.Compute)
+//        ),
+//        SpendReportingForDateRange(
+//          storageCost,
+//          "0",
+//          currency,
+//          Option(start),
+//          Option(end),
+//          workspace = Some(workspaceName),
+//          googleProjectId = Some(GoogleProject(projectId.value)),
+//          category = Some(TerraSpendCategories.Storage)
+//        )
+//      )
+//    }
+//
+//    // TODO what format should the result be?  Do we need a new model?
+//    spendDetails.map(details => SpendReportingResults(List.empty, details))
   }
 
 }
@@ -520,9 +587,10 @@ class SpendReportingService(
   def getSpendForAllWorkspaces(
     start: DateTime,
     end: DateTime
-  ): Future[List[SpendReportingResults]] = {
+  ): Future[Map[String, SpendReportingResults]] = {
     validateReportParameters(start, end)
     for {
+      // TODO get projectNames from billingMap
       workspaces <- getOwnerWorkspaces()
       projectNames = workspaces
         .map(wsResp =>
@@ -530,6 +598,8 @@ class SpendReportingService(
         )
         .toMap // Map[GoogleProjectId, WorkspaceName]
       billing <- getBillingSpendExportsForWorkspaces(workspaces)
+//      billingMap <- getBillingWithSpendPermission()
+
       query = getAllUserWorkspaceQuery(billing)
       queryJob = setUpAllUserWorkspaceQuery(query, start, end)
 
@@ -570,4 +640,17 @@ class SpendReportingService(
     }
   }
 
+//  def getBillingWithSpendPermission(
+//  ): Future[Map[BillingProjectSpendExport, Seq[GoogleProjectId]]] =
+//    for {
+//      billingProjectResources <- samDAO.listResourcesWithActions(SamResourceTypeNames.billingProject,
+//                                                                 SamBillingProjectActions.readSpendReport,
+//                                                                 ctx
+//      )
+//      billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
+//      groupedWorkspaces <- workspaceServiceConstructor(ctx).getWorkspacesByBillingProjects(billingProjectIds)
+//      spendConfigs <- getSpendExportConfigurations(billingProjectIds)
+//    } yield spendConfigs.map { config =>
+//      config -> groupedWorkspaces(config.billingProjectName).map(ws => ws.googleProjectId)
+//    }.toMap
 }
