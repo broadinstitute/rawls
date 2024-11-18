@@ -275,10 +275,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           workspaceRec <- getWorkspace(dataAccess, submissionRec.workspaceId)
         } yield (wfRecs, submitter, workspaceRec)
       } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
-        for {
-          petUserInfo <- getPetServiceAccountUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
-          workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
-        } yield workflowOutputs
+        // if no running workflows, just return
+        if (externalWorkflowIds.isEmpty) {
+          Future.successful(Seq())
+        } else {
+          // else, check Cromwell's status for each running workflow and get outputs for workflows completed in Cromwell
+          for {
+            petUserInfo <- getPetServiceAccountUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
+            workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
+          } yield workflowOutputs
+        }
 
       } map ExecutionServiceStatusResponse
 
