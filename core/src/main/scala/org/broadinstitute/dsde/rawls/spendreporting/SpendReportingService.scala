@@ -6,7 +6,6 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
 import com.google.cloud.bigquery.{Field, FieldList, FieldValue, FieldValueList}
-
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -32,6 +31,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Owner, WorkspaceAccessLevel}
+import shapeless.syntax.std.tuple.productTupleOps
 
 import scala.util.Try
 
@@ -344,7 +344,9 @@ class SpendReportingService(
     if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
   }
 
-  def getAllUserWorkspaceQuery(billingProjects: Map[BillingProjectSpendExport, Seq[GoogleProjectId]]): String = {
+  def getAllUserWorkspaceQuery(
+    billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]
+  ): String = {
     val baseQuery = s"""
                        |  SELECT
                        |    project.id AS project_id,
@@ -374,7 +376,7 @@ class SpendReportingService(
         baseQuery
           .replace("_PARTITIONTIME", timePartitionColumn)
           .replace("_BILLING_ACCOUNT_TABLE", tableName)
-          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(id => s""""${id.value}"""").mkString(", ") + ")")
+          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
       }
       .mkString("\nUNION ALL\n")
 
@@ -543,17 +545,10 @@ class SpendReportingService(
   ): Future[SpendReportingResults] = {
     validateReportParameters(start, end)
     for {
-      // TODO get projectNames from billingMap
-      workspaces <- getOwnerWorkspaces()
-      projectNames = workspaces
-        .map(wsResp =>
-          wsResp.workspace.googleProject -> WorkspaceName(wsResp.workspace.namespace, wsResp.workspace.name)
-        )
-        .toMap // Map[GoogleProjectId, WorkspaceName]
-      billing <- getBillingSpendExportsForWorkspaces(workspaces)
-//      billingMap <- getBillingWithSpendPermission()
+      billingMap <- getBillingWithSpendPermission()
+      projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
 
-      query = getAllUserWorkspaceQuery(billing)
+      query = getAllUserWorkspaceQuery(billingMap)
       queryJob = setUpAllUserWorkspaceQuery(query, start, end)
 
       job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
@@ -593,17 +588,23 @@ class SpendReportingService(
     }
   }
 
-//  def getBillingWithSpendPermission(
-//  ): Future[Map[BillingProjectSpendExport, Seq[GoogleProjectId]]] =
-//    for {
-//      billingProjectResources <- samDAO.listResourcesWithActions(SamResourceTypeNames.billingProject,
-//                                                                 SamBillingProjectActions.readSpendReport,
-//                                                                 ctx
-//      )
-//      billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
-//      groupedWorkspaces <- workspaceServiceConstructor(ctx).getWorkspacesByBillingProjects(billingProjectIds)
-//      spendConfigs <- getSpendExportConfigurations(billingProjectIds)
-//    } yield spendConfigs.map { config =>
-//      config -> groupedWorkspaces(config.billingProjectName).map(ws => ws.googleProjectId)
-//    }.toMap
+  def getBillingWithSpendPermission(
+  ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
+    for {
+      billingProjectResources <- samDAO.listResourcesWithActions(SamResourceTypeNames.billingProject,
+                                                                 SamBillingProjectActions.readSpendReport,
+                                                                 ctx
+      )
+      billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
+      groupedWorkspaces <- workspaceServiceConstructor(ctx).getWorkspacesByBillingProjects(billingProjectIds)
+      gcpOnlyGroupedWorkspaces = groupedWorkspaces
+        .map { case (key, workspaces) =>
+          key -> workspaces.filter(_.workspaceType == WorkspaceType.RawlsWorkspace)
+        }
+        .filter { case (_, workspaces) => workspaces.nonEmpty }
+      // Only use the BPs we know exist in the DB and are GCP
+      spendConfigs <- getSpendExportConfigurations(gcpOnlyGroupedWorkspaces.keys.toList)
+    } yield spendConfigs.map { config =>
+      config -> gcpOnlyGroupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+    }.toMap
 }

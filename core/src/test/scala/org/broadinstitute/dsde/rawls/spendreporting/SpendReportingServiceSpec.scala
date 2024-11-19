@@ -1375,9 +1375,16 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
 
     val inputMap = Map(
-      billingProject1SpendExport -> Seq(GoogleProjectId("workspace2ProjectId"), GoogleProjectId("workspace1ProjectId")),
-      billingProject2SpendExport -> Seq(GoogleProjectId("workspace3ProjectId")),
-      billingProject3SpendExport -> Seq(GoogleProjectId("workspace4ProjectId"))
+      billingProject1SpendExport -> Seq(
+        (GoogleProjectId("workspace2ProjectId"), WorkspaceName("billingProject1", "workspace2")),
+        (GoogleProjectId("workspace1ProjectId"), WorkspaceName("billingProject1", "workspace1"))
+      ),
+      billingProject2SpendExport -> Seq(
+        (GoogleProjectId("workspace3ProjectId"), WorkspaceName("billingProject2", "workspace3"))
+      ),
+      billingProject3SpendExport -> Seq(
+        (GoogleProjectId("workspace4ProjectId"), WorkspaceName("billingProject3", "workspace4"))
+      )
     )
 
     val expectedQuery =

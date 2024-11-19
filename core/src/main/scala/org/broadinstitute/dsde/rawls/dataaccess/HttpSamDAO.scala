@@ -14,12 +14,17 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
 import org.broadinstitute.dsde.workbench.client.sam.api._
+import org.broadinstitute.dsde.workbench.client.sam.model.{
+  FilteredHierarchicalResourcePolicy,
+  ListResourcesV2200Response
+}
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.List
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
@@ -513,11 +518,54 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       }
     }
 
+  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
+                                        action: SamResourceAction,
+                                        ctx: RawlsRequestContext
+  ): Future[Seq[SamUserResource]] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[ListResourcesV2200Response]("listResourcesV2")
+
+      resourcesApi(ctx).listResourcesV2Async(
+        /* format = */ "hierarchical", // Todo what to pass in here
+        /* resourceTypes = */ util.List.of(resourceTypeName.value),
+        /* policies = */ util.List.of(),
+        /* roles = */ util.List.of,
+        /* actions = */ util.List.of(action.value),
+        /* includePublic = */ false,
+        callback
+      )
+
+      callback.future.map { resourcesResponse =>
+        println(resourcesResponse)
+        resourcesResponse.getFilteredResourcesHierarchicalResponse
+          .getResources()
+          .asScala
+          .map { resource =>
+            SamUserResource(
+              resource.getResourceId,
+              toSamRolesAndActions(resource.getPolicies()), // TODO what to use here?
+              toSamRolesAndActions(resource.getPolicies()), // What are all these three things?
+              toSamRolesAndActions(resource.getPolicies()),
+              resource.getAuthDomainGroups.asScala.map(WorkbenchGroupName).toSet,
+              resource.getMissingAuthDomainGroups.asScala.map(WorkbenchGroupName).toSet
+            )
+          }
+          .toSeq
+      }
+    }
+
   private def toSamRolesAndActions(rolesAndActions: sam.model.RolesAndActions) =
     SamRolesAndActions(
       rolesAndActions.getRoles.asScala.map(SamResourceRole).toSet,
       rolesAndActions.getActions.asScala.map(SamResourceAction).toSet
     )
+
+  private def toSamRolesAndActions(policies: util.List[FilteredHierarchicalResourcePolicy]) = {
+    val scalaPolicies = policies.asScala.toList
+    val roles = scalaPolicies.flatMap(_.getRoles.asScala)
+    val actions = scalaPolicies.flatMap(_.getActions.asScala)
+    SamRolesAndActions(roles.map(role => SamResourceRole(role.toString)).toSet, actions.map(SamResourceAction).toSet)
+  }
 
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId,
                                               userEmail: RawlsUserEmail

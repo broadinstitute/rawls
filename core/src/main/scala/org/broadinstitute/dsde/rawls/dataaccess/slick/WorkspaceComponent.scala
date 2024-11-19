@@ -260,6 +260,9 @@ trait WorkspaceComponent {
     def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
       workspaceQuery.withBillingProject(billingProject).read
 
+    def listWithBillingProjects(billingProjects: List[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] =
+      workspaceQuery.withBillingProjects(billingProjects).read
+
     def getTags(queryString: Option[String],
                 limit: Option[Int] = None,
                 ownerIds: Option[Seq[UUID]] = None
@@ -643,6 +646,9 @@ trait WorkspaceComponent {
 
     def withBillingProject(projectName: RawlsBillingProjectName): WorkspaceQueryType =
       query.filter(_.namespace === projectName.value)
+
+    def withBillingProjects(projectNames: List[RawlsBillingProjectName]): WorkspaceQueryType =
+      query.filter(_.namespace.inSetBind(projectNames.map(_.value)))
 
     def withGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       query.filter(_.googleProjectId === googleProjectId.value)

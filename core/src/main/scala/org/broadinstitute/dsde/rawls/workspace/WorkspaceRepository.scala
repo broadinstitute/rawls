@@ -69,6 +69,13 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       _.workspaceQuery.listWithBillingProject(billingProjectName)
     }
 
+  def listWorkspacesByMultipleBillingProjects(
+    billingProjectNames: List[RawlsBillingProjectName]
+  ): Future[Seq[Workspace]] =
+    dataSource.inTransaction {
+      _.workspaceQuery.listWithBillingProjects(billingProjectNames)
+    }
+
   def createWorkspace(workspace: Workspace): Future[Workspace] =
     dataSource.inTransaction { access =>
       access.workspaceQuery.createOrUpdate(workspace)
