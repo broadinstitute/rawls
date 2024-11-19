@@ -102,16 +102,18 @@ class WorkspaceSettingRepositorySpec
     assertResult(result)(List(appliedSetting))
   }
 
-  it should "support all workspace setting types" in {
-    for {
-      workspaceSetting <- List(
-        GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List())),
-        GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
-        GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
-        SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
-        UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
-      )
-    } {
+  // Helps ensure that WorkspaceSettingRecord.toWorkspaceSetting in WorkspaceSettingComponent.scala
+  // is able to successfully create every type of workspace setting from a corresponding record
+  for {
+    workspaceSetting <- List(
+      GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List())),
+      GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
+      GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
+      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
+      UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
+    )
+  }
+    it should s"be able to get a ${workspaceSetting.getClass.getSimpleName}" in {
       val repo = new WorkspaceSettingRepository(slickDataSource)
       val workspaceRepo = new WorkspaceRepository(slickDataSource)
       val ws: Workspace = makeWorkspace()
@@ -139,7 +141,6 @@ class WorkspaceSettingRepositorySpec
 
       assertResult(result)(List(workspaceSetting))
     }
-  }
 
   behavior of "getWorkspacesSettingsOfType"
 
