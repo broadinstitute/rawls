@@ -144,126 +144,79 @@ object SpendReportingService {
     SpendReportingResults(aggregations.map(aggregateRows(allRows, _)).toList, summary)
   }
 
-//  def extractCrossBillingProjectSpendReportingResults(
-//    allRows: List[FieldValueList],
-//    start: DateTime,
-//    end: DateTime,
-//    names: Map[GoogleProjectId, WorkspaceName]
-//  ): List[SpendReportingResults] =
-//    allRows
-//      .map(row =>
-//        extractSpendReportingResults(row, start, end, names, Set.of(SpendReportingAggregationKeyWithSub(Category)))
-//      )
-//      .collect()
-
   def extractCrossBillingProjectSpendReportingResults(
     allRows: List[FieldValueList],
     start: DateTime,
     end: DateTime,
     names: Map[GoogleProjectId, WorkspaceName]
-  ): Map[String, SpendReportingResults] = {
+  ): SpendReportingResults = {
 
-    val schema = FieldList.of(
-      Field.of("cost", StandardSQLTypeName.FLOAT64),
-      Field.of("credits", StandardSQLTypeName.STRING),
-      Field.of("currency", StandardSQLTypeName.STRING),
-      Field.of("service", StandardSQLTypeName.STRING)
-    )
-    val groupedRows = allRows.groupBy(row => row.get("project_id").getStringValue)
-
-    groupedRows.map { case (projectId, rows) =>
-      val transformedRows = rows.flatMap { row =>
-        val currency = row.get("currency").getStringValue
-
-        List(
-          FieldValueList.of(
-            java.util.List.of(
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, row.get("compute_cost").getDoubleValue.toString),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0"),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, currency),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "compute")
-            ),
-            schema
-          ),
-          FieldValueList.of(
-            java.util.List.of(
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, row.get("storage_cost").getDoubleValue.toString),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0"),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, currency),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "storage")
-            ),
-            schema
-          ),
-          FieldValueList.of(
-            java.util.List.of(
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, row.get("other_cost").getDoubleValue.toString),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0"),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, currency),
-              FieldValue.of(FieldValue.Attribute.PRIMITIVE, "other")
-            ),
-            schema
-          )
+    var total = BigDecimal(0.0)
+    val all = allRows.map { row =>
+      val currencyString = row.get("currency").getStringValue
+      val currencyCode = Currency.getInstance(currencyString)
+      val projectId = row.get("project_id").getStringValue
+      val workspaceName = names.getOrElse(
+        GoogleProjectId(projectId),
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.InternalServerError,
+          s"unexpected project $projectId returned by BigQuery"
         )
-      }
-
-      projectId -> extractSpendReportingResults(
-        transformedRows,
-        start,
-        end,
-        names,
-        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))
       )
+
+      def getRoundedNumericValue(field: String): BigDecimal =
+        BigDecimal(row.get(field).getDoubleValue)
+          .setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+
+      val subAggregation = List(
+        SpendReportingForDateRange(
+          getRoundedNumericValue("other_cost").toString,
+          "0.0",
+          currencyCode.toString,
+          Option(start),
+          Option(end),
+          category = Option(TerraSpendCategories.Other)
+        ),
+        SpendReportingForDateRange(
+          getRoundedNumericValue("storage_cost").toString,
+          "0.0",
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Storage)
+        ),
+        SpendReportingForDateRange(
+          getRoundedNumericValue("compute_cost").toString,
+          "0.0",
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Compute)
+        )
+      )
+
+      val total_cost = getRoundedNumericValue("total_cost")
+      total = total + total_cost
+
+      val workspaceTotal = SpendReportingForDateRange(
+        total_cost.toString,
+        "0.0",
+        currencyCode.toString,
+        Option(start),
+        Option(end),
+        workspace = Option(workspaceName),
+        googleProjectId = Option(GoogleProject(projectId)),
+        subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
+      )
+
+      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(workspaceTotal))
+
     }
-//    val spendDetails = allRows.flatMap { row =>
-//      val projectId = GoogleProjectId(row.get("project_id").getStringValue)
-//      val workspaceName = names.getOrElse(
-//        projectId,
-//        throw RawlsExceptionWithErrorReport(
-//          StatusCodes.InternalServerError,
-//          s"unexpected project $projectId returned by BigQuery"
-//        )
-//      )
-////      val totalCost = row.get("total_cost").getDoubleValue.toString
-////      val computeCost = row.get("compute_cost").getDoubleValue.toString
-////      val storageCost = row.get("storage_cost").getDoubleValue.toString
-//      val currency = row.get("currency").getStringValue
-//
-//      // Each row gets a summary of compute, storage, and total
-//      List(
-//        SpendReportingForDateRange(
-//          totalCost,
-//          "0", // Ignoring credits for now; do we want to include them?
-//          currency,
-//          Option(start),
-//          Option(end),
-//          workspace = Some(workspaceName),
-//          googleProjectId = Some(GoogleProject(projectId.value))
-//        ),
-//        SpendReportingForDateRange(
-//          computeCost,
-//          "0",
-//          currency,
-//          Option(start),
-//          Option(end),
-//          workspace = Some(workspaceName),
-//          googleProjectId = Some(GoogleProject(projectId.value)),
-//          category = Some(TerraSpendCategories.Compute)
-//        ),
-//        SpendReportingForDateRange(
-//          storageCost,
-//          "0",
-//          currency,
-//          Option(start),
-//          Option(end),
-//          workspace = Some(workspaceName),
-//          googleProjectId = Some(GoogleProject(projectId.value)),
-//          category = Some(TerraSpendCategories.Storage)
-//        )
-//      )
-//    }
-//
-//    // TODO what format should the result be?  Do we need a new model?
-//    spendDetails.map(details => SpendReportingResults(List.empty, details))
+
+    val summary = SpendReportingForDateRange(
+      total.toString,
+      "0.0", // TODO
+      "USD", // TODO
+      Option(start),
+      Option(end)
+    )
+    SpendReportingResults(all, summary)
   }
 
 }
@@ -587,7 +540,7 @@ class SpendReportingService(
   def getSpendForAllWorkspaces(
     start: DateTime,
     end: DateTime
-  ): Future[Map[String, SpendReportingResults]] = {
+  ): Future[SpendReportingResults] = {
     validateReportParameters(start, end)
     for {
       // TODO get projectNames from billingMap
