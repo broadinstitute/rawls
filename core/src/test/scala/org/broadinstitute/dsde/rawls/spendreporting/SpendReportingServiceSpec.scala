@@ -551,6 +551,61 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
+  "extractCrossBillingProjectSpendReportingResults" should "break down results by workspace and category" in {
+    val computeCost1 = 2.4
+    val computeCost2 = 0.10111
+    val storageCost1 = 0.33
+    val storageCost2 = 0.3561
+    val otherCost1 = 3.0
+    val otherCost2 = 0.0001
+    val computeCost1Rounded: BigDecimal = BigDecimal(computeCost1).setScale(2, RoundingMode.HALF_EVEN)
+    val computeCost2Rounded: BigDecimal = BigDecimal(computeCost2).setScale(2, RoundingMode.HALF_EVEN)
+    val storageCost1Rounded: BigDecimal = BigDecimal(storageCost1).setScale(2, RoundingMode.HALF_EVEN)
+    val storageCost2Rounded: BigDecimal = BigDecimal(storageCost2).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCost1Rounded: BigDecimal = BigDecimal(otherCost1).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCost2Rounded: BigDecimal = BigDecimal(otherCost2).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCost1 = computeCost1 + storageCost1 + otherCost1
+    val totalCost2 = computeCost2 + storageCost2 + otherCost2
+    val totalCostRounded: BigDecimal = BigDecimal(totalCost1 + totalCost2).setScale(2, RoundingMode.HALF_EVEN)
+
+    val table: List[Map[String, String]] = List(
+      Map(
+        "storage_cost" -> s"$storageCost1",
+        "compute_cost" -> s"$computeCost1",
+        "other_cost" -> s"$otherCost1",
+        "total_cost" -> s"$totalCost1",
+        "currency" -> "USD",
+        "project_id" -> "terra-workspace-project1",
+        "project_name" -> "terra-billing-project1"
+      ),
+      Map(
+        "storage_cost" -> s"$storageCost2",
+        "compute_cost" -> s"$computeCost2",
+        "other_cost" -> s"$otherCost2",
+        "total_cost" -> s"$totalCost2",
+        "currency" -> "USD",
+        "project_id" -> "terra-workspace-project2",
+        "project_name" -> "terra-billing-project2"
+      )
+    )
+
+    val tableResult: TableResult = createTableResult(table)
+
+    val reportingResults = SpendReportingService.extractCrossBillingProjectSpendReportingResults(
+      tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      Map(
+        GoogleProjectId("terra-workspace-project1") -> WorkspaceName("terra-billing-project1", "workspace1"),
+        GoogleProjectId("terra-workspace-project2") -> WorkspaceName("terra-billing-project2", "workspace2")
+      )
+    )
+    reportingResults.spendSummary.cost shouldBe totalCostRounded.toString
+    reportingResults.spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    reportingResults.spendDetails.length shouldBe 2
+
+  }
+
   "getSpendForGCPBillingProject" should "throw an exception when BQ returns zero rows" in {
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
