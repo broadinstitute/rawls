@@ -11,7 +11,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
 }
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
@@ -693,7 +694,73 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       }
     }
 
+    "Workspace Setting Type" - {
+      "should parse workspace setting type properly" in {
+        WorkspaceSettingTypes.withName("gcpbucketlifecycle") shouldBe WorkspaceSettingTypes.GcpBucketLifecycle
+        WorkspaceSettingTypes.withName("gcpbucketsoftdelete") shouldBe WorkspaceSettingTypes.GcpBucketSoftDelete
+        WorkspaceSettingTypes.withName("gcpbucketrequesterpays") shouldBe WorkspaceSettingTypes.GcpBucketRequesterPays
+        WorkspaceSettingTypes.withName(
+          "separatesubmissionfinaloutputs"
+        ) shouldBe WorkspaceSettingTypes.SeparateSubmissionFinalOutputs
+        WorkspaceSettingTypes.withName(
+          "usecromwellgcpbatchbackend"
+        ) shouldBe WorkspaceSettingTypes.UseCromwellGcpBatchBackend
+      }
+
+      "should fail trying to parse an invalid workspace setting type" in {
+        val thrown = intercept[RawlsException] {
+          WorkspaceSettingTypes.withName("incorrect")
+        }
+
+        thrown.getMessage.contains("invalid WorkspaceSetting [incorrect]")
+      }
+
+      "should output the string representation" in {
+        WorkspaceSettingTypes.GcpBucketLifecycle.toString shouldBe "GcpBucketLifecycle"
+        WorkspaceSettingTypes.GcpBucketSoftDelete.toString shouldBe "GcpBucketSoftDelete"
+        WorkspaceSettingTypes.GcpBucketRequesterPays.toString shouldBe "GcpBucketRequesterPays"
+        WorkspaceSettingTypes.SeparateSubmissionFinalOutputs.toString shouldBe "SeparateSubmissionFinalOutputs"
+        WorkspaceSettingTypes.UseCromwellGcpBatchBackend.toString shouldBe "UseCromwellGcpBatchBackend"
+      }
+    }
+
     "GoogleBucketLifecycleSettings" - {
+      "serializes properly" in {
+        val lifecycleSettingJson =
+          """{
+            |    "settingType": "GcpBucketLifecycle",
+            |    "config": {
+            |      "rules": [
+            |        {
+            |          "action": {
+            |            "actionType": "Delete"
+            |          },
+            |          "conditions": {
+            |            "age": 30,
+            |            "matchesPrefix": [
+            |              "prefix1",
+            |              "prefix2"
+            |            ]
+            |          }
+            |        }
+            |      ]
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(lifecycleSettingJson) {
+          WorkspaceSettingFormat.write(
+            GcpBucketLifecycleSetting(
+              GcpBucketLifecycleConfig(
+                List(
+                  GcpBucketLifecycleRule(GcpBucketLifecycleAction("Delete"),
+                                         GcpBucketLifecycleCondition(Some(Set("prefix1", "prefix2")), Some(30))
+                  )
+                )
+              )
+            )
+          )
+        }
+      }
+
       "parses lifecycle settings with matchesPrefix and age" in {
         val lifecycleSetting =
           """{
@@ -891,6 +958,23 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
 
     "GoogleBucketSoftDeleteSetting" - {
+      "serializes properly" in {
+        val softDeleteSettingJson =
+          """{
+            |    "settingType": "GcpBucketSoftDelete",
+            |    "config": {
+            |      "retentionDurationInSeconds": 500
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(softDeleteSettingJson) {
+          WorkspaceSettingFormat.write(
+            GcpBucketSoftDeleteSetting(
+              GcpBucketSoftDeleteConfig(500)
+            )
+          )
+        }
+      }
+
       "parses soft delete setting with retentionDurationInSeconds" in {
         val softDeleteSetting =
           """{
@@ -957,6 +1041,23 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
 
     "GoogleBucketRequesterPaysSettings" - {
+      "serializes properly" in {
+        val requesterPaysSettingJson =
+          """{
+            |    "settingType": "GcpBucketRequesterPays",
+            |    "config": {
+            |      "enabled": true
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(requesterPaysSettingJson) {
+          WorkspaceSettingFormat.write(
+            GcpBucketRequesterPaysSetting(
+              GcpBucketRequesterPaysConfig(true)
+            )
+          )
+        }
+      }
+
       "parses requester pays setting with enabled" in {
         val requesterPaysSetting =
           """{
@@ -1010,6 +1111,23 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
 
     "SeparateSubmissionFinalOutputsSetting" - {
+      "serializes properly" in {
+        val settingJson =
+          """{
+            |    "settingType": "SeparateSubmissionFinalOutputs",
+            |    "config": {
+            |      "enabled": true
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(settingJson) {
+          WorkspaceSettingFormat.write(
+            SeparateSubmissionFinalOutputsSetting(
+              SeparateSubmissionFinalOutputsConfig(true)
+            )
+          )
+        }
+      }
+
       "parses setting with enabled" in {
         val setting =
           """{
@@ -1052,6 +1170,76 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         val settingBadConfig =
           """{
             |    "settingType": "SeparateSubmissionFinalOutputs",
+            |    "config": {
+            |      "enabled": 0
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(settingBadConfig)
+        }
+      }
+    }
+
+    "UseCromwellGcpBatchBackendSetting" - {
+      "serializes properly" in {
+        val settingJson =
+          """{
+            |    "settingType": "UseCromwellGcpBatchBackend",
+            |    "config": {
+            |      "enabled": true
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(settingJson) {
+          WorkspaceSettingFormat.write(
+            UseCromwellGcpBatchBackendSetting(
+              UseCromwellGcpBatchBackendConfig(true)
+            )
+          )
+        }
+      }
+
+      "parses setting with enabled" in {
+        val setting =
+          """{
+            |    "settingType": "UseCromwellGcpBatchBackend",
+            |    "config": {
+            |      "enabled": true
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          UseCromwellGcpBatchBackendSetting(
+            UseCromwellGcpBatchBackendConfig(true)
+          )
+        } {
+          WorkspaceSettingFormat.read(setting)
+        }
+      }
+
+      "throws an exception for missing enabled" in {
+        val settingNoEnabled =
+          """{
+            |    "settingType": "UseCromwellGcpBatchBackend",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(settingNoEnabled)
+        }
+      }
+
+      "throws an exception for missing config" in {
+        val settingNoConfig =
+          """{
+            |    "settingType": "UseCromwellGcpBatchBackend"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(settingNoConfig)
+        }
+      }
+
+      "throws an exception for incorrect format" in {
+        val settingBadConfig =
+          """{
+            |    "settingType": "UseCromwellGcpBatchBackend",
             |    "config": {
             |      "enabled": 0
             |    }

@@ -9,15 +9,18 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketSoftDelete
 import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
+  SeparateSubmissionFinalOutputsSetting,
+  UseCromwellGcpBatchBackendSetting,
   Workspace,
-  WorkspaceSetting,
   WorkspaceSettingTypes
 }
 import org.joda.time.DateTime
@@ -97,6 +100,45 @@ class WorkspaceSettingRepositorySpec
     val result = Await.result(repo.getWorkspaceSettings(ws.workspaceIdAsUUID), Duration.Inf)
 
     assertResult(result)(List(appliedSetting))
+  }
+
+  it should "support all workspace setting types" in {
+    for {
+      workspaceSetting <- List(
+        GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List())),
+        GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
+        GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
+        SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
+        UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
+      )
+    } {
+      val repo = new WorkspaceSettingRepository(slickDataSource)
+      val workspaceRepo = new WorkspaceRepository(slickDataSource)
+      val ws: Workspace = makeWorkspace()
+      Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
+
+      Await.result(
+        slickDataSource.inTransaction { dataAccess =>
+          for {
+            _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                          List(workspaceSetting),
+                                                          userInfo.userSubjectId
+            )
+            _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+              ws.workspaceIdAsUUID,
+              workspaceSetting.settingType,
+              WorkspaceSettingRecord.SettingStatus.Pending,
+              WorkspaceSettingRecord.SettingStatus.Applied
+            )
+          } yield ()
+        },
+        Duration.Inf
+      )
+
+      val result = Await.result(repo.getWorkspaceSettings(ws.workspaceIdAsUUID), Duration.Inf)
+
+      assertResult(result)(List(workspaceSetting))
+    }
   }
 
   behavior of "getWorkspacesSettingsOfType"
