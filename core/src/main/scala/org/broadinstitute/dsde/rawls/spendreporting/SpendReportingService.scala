@@ -285,13 +285,14 @@ class SpendReportingService(
       )
     }
 
+  // TODO if there is a problem with just one BP, the whole thing fails.
   def getSpendExportConfigurations(projects: Seq[RawlsBillingProjectName]): Future[Seq[BillingProjectSpendExport]] =
     dataSource
       .inTransaction(_.rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(projects))
-      .recover { case _: RawlsException =>
+      .recover { case ex: RawlsException =>
         throw RawlsExceptionWithErrorReport(
           StatusCodes.BadRequest,
-          s"billing account not found on billing project" // TODO: identify problem
+          ex.getMessage
         )
       }
       .map { exportOptions =>
@@ -561,30 +562,6 @@ class SpendReportingService(
           s"no spend data found between dates ${toISODateString(start)} and ${toISODateString(end)}"
         ) // TODO update this
       case rows => extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
-    }
-  }
-
-  def getOwnerWorkspaces(): Future[Seq[WorkspaceListResponse]] =
-    workspaceServiceConstructor(ctx).listWorkspaces(WorkspaceFieldSpecs(), -1) map {
-      case JsArray(jsArray) =>
-        val workspaces = jsArray.map(_.convertTo[WorkspaceListResponse])
-        workspaces.filter(_.accessLevel == Owner)
-      case _ => throw new IllegalArgumentException("Expected a JsArray")
-    }
-
-  def getBillingSpendExportsForWorkspaces(
-    workspaces: Seq[WorkspaceListResponse]
-  ): Future[Map[BillingProjectSpendExport, Seq[GoogleProjectId]]] = {
-    val groupedWorkspaces = workspaces.groupBy(_.workspace.namespace)
-    val billingProjects = groupedWorkspaces.keys.map(RawlsBillingProjectName).toList
-//    billingProjects.map(project =>
-//      requireProjectAction(project, SamBillingProjectActions.readSpendReport)
-//    ) // TODO a better way to handle this?
-
-    getSpendExportConfigurations(billingProjects).map { exportConfigs =>
-      exportConfigs.map { config =>
-        config -> groupedWorkspaces(config.billingProjectName.value).map(ws => ws.workspace.googleProject)
-      }.toMap
     }
   }
 

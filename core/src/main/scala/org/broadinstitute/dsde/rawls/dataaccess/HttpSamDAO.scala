@@ -526,7 +526,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       val callback = new SamApiCallback[ListResourcesV2200Response]("listResourcesV2")
 
       resourcesApi(ctx).listResourcesV2Async(
-        /* format = */ "hierarchical", // Todo what to pass in here
+        /* format = */ "hierarchical",
         /* resourceTypes = */ util.List.of(resourceTypeName.value),
         /* policies = */ util.List.of(),
         /* roles = */ util.List.of,
@@ -536,7 +536,6 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       )
 
       callback.future.map { resourcesResponse =>
-        println(resourcesResponse)
         resourcesResponse.getFilteredResourcesHierarchicalResponse
           .getResources()
           .asScala

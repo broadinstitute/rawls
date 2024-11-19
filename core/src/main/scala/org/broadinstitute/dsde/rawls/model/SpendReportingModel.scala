@@ -164,8 +164,6 @@ object TerraSpendCategories {
     case "cloudstorage"     => Storage
     case "computeengine"    => Compute
     case "kubernetesengine" => Compute
-    case "storage"          => Storage
-    case "compute"          => Compute
     case _                  => Other
   }
 
