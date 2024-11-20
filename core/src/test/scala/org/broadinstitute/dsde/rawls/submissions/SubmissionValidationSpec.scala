@@ -45,7 +45,8 @@ class SubmissionValidationSpec extends AnyFlatSpec with Matchers with TableDrive
 
   it should "validate perWorkflowCostCap" in {
     forAll(perWorkflowCostCapValidations) { (_, value, expectedErrors) =>
-      val submission = SubmissionRequest("name", "namespace", None, None, None, false, false, perWorkflowCostCap = value)
+      val submission =
+        SubmissionRequest("name", "namespace", None, None, None, false, false, perWorkflowCostCap = value)
       if (expectedErrors.isEmpty) {
         SubmissionRequestValidation.staticValidation(submission, defaultValidMethodConfig) shouldBe ()
       } else {
