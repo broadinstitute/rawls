@@ -101,6 +101,7 @@ final case class BillingAccountChange(id: Long,
                                       newBillingAccount: Option[RawlsBillingAccountName],
                                       created: Instant,
                                       googleSyncTime: Option[Instant],
+                                      status: String,
                                       outcome: Option[Outcome]
 )
 
@@ -168,6 +169,8 @@ trait RawlsBillingProjectComponent {
 
     def googleSyncTime = column[Option[Timestamp]]("GOOGLE_SYNC_TIME")
 
+    def status = column[String]("STATUS")
+
     def outcome = column[Option[String]]("OUTCOME")
 
     def message = column[Option[String]]("MESSAGE")
@@ -181,6 +184,7 @@ trait RawlsBillingProjectComponent {
         newBillingAccount,
         created,
         googleSyncTime,
+        status,
         outcome,
         message
       ) <> (
@@ -469,6 +473,7 @@ trait RawlsBillingProjectComponent {
       Option[String], // New billing account
       Timestamp, // Created
       Option[Timestamp], // Google sync time
+      String, // status
       Option[String], // Outcome
       Option[String] // Message
     )
@@ -481,6 +486,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount,
             created,
             googleSyncTime,
+            status,
             outcome,
             message
           ) =>
@@ -493,6 +499,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount.map(RawlsBillingAccountName),
             created.toInstant,
             googleSyncTime.map(_.toInstant),
+            status,
             outcome
           )
         }
@@ -508,6 +515,7 @@ trait RawlsBillingProjectComponent {
         billingAccountChange.newBillingAccount.map(_.value),
         Timestamp.from(billingAccountChange.created),
         billingAccountChange.googleSyncTime.map(Timestamp.from),
+        billingAccountChange.status,
         outcome,
         message
       )
