@@ -224,6 +224,11 @@ class RawlsBillingProjectComponentSpec
       }
     }
 
+  it should "ignoreAllOutstanding correctly" is pending
+  it should "latestChangeForProject correctly" is pending
+  it should "setOutcome/setGoogleSyncTime should also set status" is pending
+  it should "replacement for readABillingProjectChange should be correct" is pending
+
   "BillingAccountChange" should "be able to load records that need to be sync'd" in withDefaultTestDatabase {
     runAndWait {
       import driver.api._

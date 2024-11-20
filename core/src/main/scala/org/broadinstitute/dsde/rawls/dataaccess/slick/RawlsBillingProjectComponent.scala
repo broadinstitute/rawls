@@ -452,6 +452,7 @@ trait RawlsBillingProjectComponent {
         // - to keep an audit log of billing account changes
         _ <- DBIO.sequence(billingProjects.map { project =>
           // ignore all currently-outstanding changes for this project
+          // TODO CORE-133: should this be built-in to this method, or called explicitly, e.g. from updateBillingAccount?
           BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen {
             // insert the most recent change for this project
             BillingAccountChanges.create(
