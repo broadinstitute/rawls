@@ -451,12 +451,16 @@ trait RawlsBillingProjectComponent {
         // - so the `WorkspaceBillingAccountActor` can synchronise the changes with google
         // - to keep an audit log of billing account changes
         _ <- DBIO.sequence(billingProjects.map { project =>
-          BillingAccountChanges.create(
-            project.projectName,
-            project.billingAccount,
-            billingAccount,
-            userSubjectId
-          )
+          // ignore all currently-outstanding changes for this project
+          BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen {
+            // insert the most recent change for this project
+            BillingAccountChanges.create(
+              project.projectName,
+              project.billingAccount,
+              billingAccount,
+              userSubjectId
+            )
+          }
         })
       } yield count
   }
@@ -585,5 +589,12 @@ trait RawlsBillingProjectComponent {
 
     def setGoogleSyncTime(syncTime: Option[Instant]): WriteAction[Int] =
       query.map(_.googleSyncTime).update(syncTime.map(Timestamp.from))
+
+    def ignoreAllOutstanding(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
+      query
+        .filter(c => c.billingProjectName === billingProjectName.value && c.status === "outstanding")
+        .map(_.status)
+        .update("ignored")
   }
+
 }
