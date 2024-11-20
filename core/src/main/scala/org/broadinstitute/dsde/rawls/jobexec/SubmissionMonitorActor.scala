@@ -313,9 +313,23 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     workflowRec.externalId match {
       // fetch cost information for the workflow if submission has a cost cap threshold defined
       case Some(externalId) if perWorkflowCostCap.isDefined =>
-        executionServiceCluster.getCost(workflowRec, petUser).map { costBreakdown =>
-          Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
-        }
+        for {
+          costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
+          updatedWorkflowRec <-
+            if (costBreakdown.cost > perWorkflowCostCap.get) {
+              executionServiceCluster.abort(workflowRec, petUser).map {
+                case Success(abortedWfRec) =>
+                  Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
+                case Failure(t) =>
+                  logger.error(
+                    s"Failed to abort workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap. Error: ${t.getMessage}"
+                  )
+                  Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+              }
+            } else {
+              Future.successful(Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some)))
+            }
+        } yield updatedWorkflowRec
       // fetch workflow status only if cost cap threshold is not defined
       case Some(externalId) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
@@ -582,24 +596,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
    */
   def updateSubmissionStatus(
     dataAccess: DataAccess
-  )(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] = {
-    val workflowRecsAction = if (perWorkflowCostCap.isDefined) {
-      dataAccess.workflowQuery.listWorkflowRecsForSubmission(submissionId)
-    } else {
-      dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
-        submissionId,
-        (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses): _*
-      )
-    }
-
-    workflowRecsAction.flatMap { workflowRecs =>
-      val nonTerminalWorkflows =
-        if (perWorkflowCostCap.isDefined)
-          workflowRecs
-            .filterNot(wf => WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(wf.status)))
-        else workflowRecs
-
-      if (nonTerminalWorkflows.isEmpty) {
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] =
+    dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(
+      submissionId,
+      (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses): _*
+    ) flatMap { workflowRecs =>
+      if (workflowRecs.isEmpty) {
         dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
           val finalStatus = SubmissionStatuses.withName(status) match {
             case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
@@ -612,16 +614,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           logger.debug(s"submission $submissionId terminating to status $newStatus")
           dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
         } map (_ => true)
-      } else if (perWorkflowCostCap.isDefined && perWorkflowCostCap.get <= workflowRecs.flatMap(_.cost).sum) {
-        logger.info(
-          s"Submission $submissionId exceeded its cost cap and will be aborted. [costCap=${perWorkflowCostCap.get},currentSubmissionCost=${workflowRecs.flatMap(_.cost).sum}]"
-        )
-        dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting).map(_ => false)
       } else {
         DBIO.successful(false)
       }
     }
-  }
 
   def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
                     dataAccess: DataAccess,
