@@ -84,6 +84,7 @@ class RawlsBillingProjectComponentSpec
     billingAccountChange.value.previousBillingAccount shouldBe previousBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe newBillingAccount
     billingAccountChange.value.userId shouldBe userId
+    billingAccountChange.value.status shouldBe "outstanding"
   }
 
   it should "create a BillingAccountChange record when the Billing Account is set to None" in withDefaultTestDatabase {
@@ -99,6 +100,53 @@ class RawlsBillingProjectComponentSpec
     billingAccountChange.value.previousBillingAccount shouldBe previousBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe empty
     billingAccountChange.value.userId shouldBe userId
+    billingAccountChange.value.status shouldBe "outstanding"
+  }
+
+  List(Option(RawlsBillingAccountName("avalue")), None) foreach { newBillingAccount =>
+    it should s"set previous BillingAccountChange records to status=ignored when creating a subsequent change of value $newBillingAccount" in withDefaultTestDatabase {
+      import driver.api._
+
+      val billingProject = testData.testProject3
+      val previousBillingAccount = billingProject.billingAccount
+      val userId = testData.userOwner.userSubjectId
+
+      // perform the first update; this inserts a billing account change
+      runAndWait(
+        rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName,
+                                                      Option(RawlsBillingAccountName("first")),
+                                                      userId
+        )
+      )
+      // validate the first update
+      val firstChange: Option[BillingAccountChange] =
+        runAndWait(
+          BillingAccountChanges
+            .filter(r => r.billingProjectName === billingProject.projectName.value && r.newBillingAccount === "first")
+            .result
+            .map(_.headOption)
+        )
+      firstChange shouldBe defined
+      firstChange.value.status shouldBe "outstanding"
+
+      // perform the second update; this should set the first update to ignored
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, newBillingAccount, userId))
+      val billingAccountChange = runAndWait(BillingAccountChanges.getLastChange(billingProject.projectName))
+
+      billingAccountChange shouldBe defined
+      billingAccountChange.value.status shouldBe "outstanding"
+
+      // re-check the first update; it should now be ignored
+      val firstChangeAgain: Option[BillingAccountChange] =
+        runAndWait(
+          BillingAccountChanges
+            .filter(r => r.billingProjectName === billingProject.projectName.value && r.newBillingAccount === "first")
+            .result
+            .map(_.headOption)
+        )
+      firstChangeAgain shouldBe defined
+      firstChangeAgain.value.status shouldBe "ignored"
+    }
   }
 
   it should "fail when the Billing Account is updated with the same value" in
