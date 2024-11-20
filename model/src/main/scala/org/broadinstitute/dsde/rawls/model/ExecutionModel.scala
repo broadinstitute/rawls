@@ -21,22 +21,22 @@ import scala.util.{Failure, Success, Try}
 
 // Request for a submission
 case class SubmissionRequest(
-  methodConfigurationNamespace: String,
-  methodConfigurationName: String,
-  entityType: Option[String],
-  entityName: Option[String],
-  expression: Option[String],
-  useCallCache: Boolean,
-  deleteIntermediateOutputFiles: Boolean,
-  useReferenceDisks: Boolean = false,
-  memoryRetryMultiplier: Double = 1.0,
-  workflowFailureMode: Option[String] = None,
-  userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false,
-  monitoringScript: Option[String] = None,
-  monitoringImage: Option[String] = None,
-  monitoringImageScript: Option[String] = None,
-  costCapThreshold: Option[BigDecimal] = None
+                              methodConfigurationNamespace: String,
+                              methodConfigurationName: String,
+                              entityType: Option[String],
+                              entityName: Option[String],
+                              expression: Option[String],
+                              useCallCache: Boolean,
+                              deleteIntermediateOutputFiles: Boolean,
+                              useReferenceDisks: Boolean = false,
+                              memoryRetryMultiplier: Double = 1.0,
+                              workflowFailureMode: Option[String] = None,
+                              userComment: Option[String] = None,
+                              ignoreEmptyOutputs: Boolean = false,
+                              monitoringScript: Option[String] = None,
+                              monitoringImage: Option[String] = None,
+                              monitoringImageScript: Option[String] = None,
+                              perWorkflowCostCap: Option[BigDecimal] = None
 )
 
 // This class contains values from the submission REST request
@@ -150,49 +150,49 @@ case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
 
 // Status of a submission
 case class Submission(
-  submissionId: String,
-  submissionDate: DateTime,
-  submitter: WorkbenchEmail,
-  methodConfigurationNamespace: String,
-  methodConfigurationName: String,
-  submissionEntity: Option[AttributeEntityReference],
-  submissionRoot: String,
-  workflows: Seq[Workflow],
-  status: SubmissionStatus,
-  useCallCache: Boolean,
-  deleteIntermediateOutputFiles: Boolean,
-  useReferenceDisks: Boolean = false,
-  memoryRetryMultiplier: Double = 1.0,
-  workflowFailureMode: Option[WorkflowFailureMode] = None,
-  cost: Option[Float] = None,
-  externalEntityInfo: Option[ExternalEntityInfo] = None,
-  userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false,
-  monitoringScript: Option[String] = None,
-  monitoringImage: Option[String] = None,
-  monitoringImageScript: Option[String] = None,
-  costCapThreshold: Option[BigDecimal] = None
+                       submissionId: String,
+                       submissionDate: DateTime,
+                       submitter: WorkbenchEmail,
+                       methodConfigurationNamespace: String,
+                       methodConfigurationName: String,
+                       submissionEntity: Option[AttributeEntityReference],
+                       submissionRoot: String,
+                       workflows: Seq[Workflow],
+                       status: SubmissionStatus,
+                       useCallCache: Boolean,
+                       deleteIntermediateOutputFiles: Boolean,
+                       useReferenceDisks: Boolean = false,
+                       memoryRetryMultiplier: Double = 1.0,
+                       workflowFailureMode: Option[WorkflowFailureMode] = None,
+                       cost: Option[Float] = None,
+                       externalEntityInfo: Option[ExternalEntityInfo] = None,
+                       userComment: Option[String] = None,
+                       ignoreEmptyOutputs: Boolean = false,
+                       monitoringScript: Option[String] = None,
+                       monitoringImage: Option[String] = None,
+                       monitoringImageScript: Option[String] = None,
+                       perWorkflowCostCap: Option[BigDecimal] = None
 )
 
 case class SubmissionListResponse(
-  submissionId: String,
-  submissionDate: DateTime,
-  submitter: String,
-  methodConfigurationNamespace: String,
-  methodConfigurationName: String,
-  methodConfigurationDeleted: Boolean,
-  submissionEntity: Option[AttributeEntityReference],
-  status: SubmissionStatus,
-  workflowStatuses: StatusCounts,
-  useCallCache: Boolean,
-  submissionRoot: String,
-  deleteIntermediateOutputFiles: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None,
-  workflowIds: Option[Seq[String]],
-  cost: Option[Float] = None,
-  externalEntityInfo: Option[ExternalEntityInfo] = None,
-  userComment: Option[String] = None,
-  costCapThreshold: Option[BigDecimal] = None
+                                   submissionId: String,
+                                   submissionDate: DateTime,
+                                   submitter: String,
+                                   methodConfigurationNamespace: String,
+                                   methodConfigurationName: String,
+                                   methodConfigurationDeleted: Boolean,
+                                   submissionEntity: Option[AttributeEntityReference],
+                                   status: SubmissionStatus,
+                                   workflowStatuses: StatusCounts,
+                                   useCallCache: Boolean,
+                                   submissionRoot: String,
+                                   deleteIntermediateOutputFiles: Boolean,
+                                   workflowFailureMode: Option[WorkflowFailureMode] = None,
+                                   workflowIds: Option[Seq[String]],
+                                   cost: Option[Float] = None,
+                                   externalEntityInfo: Option[ExternalEntityInfo] = None,
+                                   userComment: Option[String] = None,
+                                   perWorkflowCostCap: Option[BigDecimal] = None
 )
 
 object SubmissionListResponse {
@@ -407,7 +407,7 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("monitoringScript" -> obj.monitoringScript.toJson),
           Option("monitoringImage" -> obj.monitoringImage.toJson),
           Option("monitoringImageScript" -> obj.monitoringImageScript.toJson),
-          obj.costCapThreshold.map("costCapThreshold" -> _.toJson)
+          obj.perWorkflowCostCap.map("perWorkflowCostCap" -> _.toJson)
         ).flatten: _*
       )
 
@@ -435,7 +435,7 @@ trait ExecutionJsonSupport extends JsonSupport {
         monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
         monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
         monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]]),
-        costCapThreshold = fields.get("costCapThreshold").map(_.convertTo[BigDecimal])
+        perWorkflowCostCap = fields.get("perWorkflowCostCap").map(_.convertTo[BigDecimal])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }

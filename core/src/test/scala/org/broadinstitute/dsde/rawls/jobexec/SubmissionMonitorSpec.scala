@@ -164,7 +164,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   (WorkflowStatuses.runningStatuses.toSet ++ WorkflowStatuses.terminalStatuses -- Set(WorkflowStatuses.Succeeded,
                                                                                       WorkflowStatuses.Submitted
   )).foreach { status =>
-    it should s"queryExecutionServiceForCostAndStatus $status if costCapThreshold is defined" in withDefaultTestDatabase {
+    it should s"queryExecutionServiceForCostAndStatus $status if perWorkflowCostCap is defined" in withDefaultTestDatabase {
       dataSource: SlickDataSource =>
         val monitor = createSubmissionMonitor(
           dataSource,
@@ -173,7 +173,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           testData.submission1,
           testData.wsName,
           new SubmissionTestExecutionServiceDAO(status.toString, BigDecimal(5)),
-          costCapThreshold = Option(BigDecimal(10.00))
+          perWorkflowCostCap = Option(BigDecimal(10.00))
         )
 
         val workflowsRecs =
@@ -1320,7 +1320,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       testData.submissionUpdateEntity,
       testData.wsName,
       new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString, BigDecimal(5)),
-      costCapThreshold = Option(BigDecimal(10))
+      perWorkflowCostCap = Option(BigDecimal(10))
     )
     val workflowsRecs = runAndWait(
       workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
@@ -1353,7 +1353,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         testData.submissionUpdateEntity,
         testData.wsName,
         new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString, BigDecimal(5)),
-        costCapThreshold = Option(BigDecimal(2))
+        perWorkflowCostCap = Option(BigDecimal(2))
       )
       val workflowsRecs = runAndWait(
         workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
@@ -2021,7 +2021,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               wsName: WorkspaceName,
                               execSvcDAO: ExecutionServiceDAO,
                               attributesPerWorkflow: Int = 10,
-                              costCapThreshold: Option[BigDecimal] = None
+                              perWorkflowCostCap: Option[BigDecimal] = None
   ): SubmissionMonitor = {
     val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true)
     new TestSubmissionMonitor(
@@ -2036,7 +2036,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       config,
       ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
       "test",
-      costCapThreshold
+      perWorkflowCostCap
     )
   }
 
@@ -2119,5 +2119,5 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val config: SubmissionMonitorConfig,
                             val queryTimeout: Duration,
                             override val workbenchMetricBaseName: String,
-                            val costCapThreshold: Option[BigDecimal]
+                            val perWorkflowCostCap: Option[BigDecimal]
 ) extends SubmissionMonitor {}

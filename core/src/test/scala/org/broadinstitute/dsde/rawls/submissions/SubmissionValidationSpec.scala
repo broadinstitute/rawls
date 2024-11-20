@@ -20,32 +20,32 @@ class SubmissionValidationSpec extends AnyFlatSpec with Matchers with TableDrive
     SubmissionRequestValidation.staticValidation(submission, defaultValidMethodConfig) shouldBe ()
   }
 
-  val costCapThresholdValidations = Table(
-    ("validation case", "costCapThresholdValue", "expected error text"),
+  val perWorkflowCostCapValidations = Table(
+    ("validation case", "perWorkflowCostCapValue", "expected error text"),
     ("no value", None, List()),
     ("a valid value", Some(BigDecimal("98765432.01")), List()),
     ("a negative value", Some(BigDecimal("-98765432.01")), List("greater than zero")),
     ("a value that is too large",
      Some(BigDecimal("198765432.01")),
-     List(s"cannot be greater than ${SubmissionRequestValidation.COST_CAP_THRESHOLD_PRECISION}")
+     List(s"cannot be greater than ${SubmissionRequestValidation.PER_WORKFLOW_COST_CAP_PRECISION}")
     ),
     ("a value with an invalid scale",
      Some(BigDecimal("8765432.019")),
-     List(s"scale is limited to ${SubmissionRequestValidation.COST_CAP_THRESHOLD_SCALE}")
+     List(s"scale is limited to ${SubmissionRequestValidation.PER_WORKFLOW_COST_CAP_SCALE}")
     ),
     ("a value with multiple failed validations",
      Some(BigDecimal("-198765432.012")),
      List(
        "greater than zero",
-       s"cannot be greater than ${SubmissionRequestValidation.COST_CAP_THRESHOLD_PRECISION}",
-       s"${SubmissionRequestValidation.COST_CAP_THRESHOLD_SCALE}"
+       s"cannot be greater than ${SubmissionRequestValidation.PER_WORKFLOW_COST_CAP_PRECISION}",
+       s"${SubmissionRequestValidation.PER_WORKFLOW_COST_CAP_SCALE}"
      )
     )
   )
 
-  it should "validate costCapThreshold" in {
-    forAll(costCapThresholdValidations) { (_, value, expectedErrors) =>
-      val submission = SubmissionRequest("name", "namespace", None, None, None, false, false, costCapThreshold = value)
+  it should "validate perWorkflowCostCap" in {
+    forAll(perWorkflowCostCapValidations) { (_, value, expectedErrors) =>
+      val submission = SubmissionRequest("name", "namespace", None, None, None, false, false, perWorkflowCostCap = value)
       if (expectedErrors.isEmpty) {
         SubmissionRequestValidation.staticValidation(submission, defaultValidMethodConfig) shouldBe ()
       } else {
