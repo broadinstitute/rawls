@@ -469,7 +469,6 @@ trait RawlsBillingProjectComponent {
         // - to keep an audit log of billing account changes
         _ <- DBIO.sequence(billingProjects.map { project =>
           // ignore all currently-outstanding changes for this project
-          // TODO CORE-133: should this be built-in to this method, or called explicitly, e.g. from updateBillingAccount?
           BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen {
             // insert the most recent change for this project
             BillingAccountChanges.create(
@@ -607,6 +606,9 @@ trait RawlsBillingProjectComponent {
 
     def setGoogleSyncTime(syncTime: Option[Instant]): WriteAction[Int] =
       query.map(_.googleSyncTime).update(syncTime.map(Timestamp.from))
+
+    def setStatus(status: BillingAccountChangeStatus): WriteAction[Int] =
+      query.map(_.status).update(status.toString)
 
     def ignoreAllOutstanding(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
       query
