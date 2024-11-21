@@ -2,11 +2,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProjectName}
 import org.scalatest.OptionValues
 
 import java.sql.SQLException
-import java.time.Instant
 
 class RawlsBillingProjectComponentSpec
     extends TestDriverComponentWithFlatSpecAndMatchers
@@ -285,17 +284,58 @@ class RawlsBillingProjectComponentSpec
 
   }
 
-  private def getStatusCountsForProject(projectName: RawlsBillingProjectName): Seq[(String, Int)] = {
+  it should "ignore all previous outstanding changes when updating an account" in withDefaultTestDatabase {
     import driver.api._
-    val countSql =
-      sql"""
-           select STATUS, count(1)
-           from BILLING_ACCOUNT_CHANGES
-           where BILLING_PROJECT_NAME = ${projectName.value}
-           group by STATUS
-           order by STATUS
-           """.as[(String, Int)]
-    runAndWait(countSql)
+
+    // insert some records
+    val setupSql = sqlu"""
+      insert into BILLING_ACCOUNT_CHANGES
+        (BILLING_PROJECT_NAME, USER_ID, PREVIOUS_BILLING_ACCOUNT, NEW_BILLING_ACCOUNT, STATUS)
+        values
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'failed'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
+
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'ignored'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding')
+        ;
+        """
+    runAndWait(setupSql)
+
+    // validate initial setup
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
+                                                                      ("outstanding", 1),
+                                                                      ("synchronized", 1)
+    )
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+
+    // Update the account for testProject3Name. It should set the previous outstanding changes to ignored,
+    // and the new one should be the only one outstanding
+    runAndWait(
+      rawlsBillingProjectQuery.updateBillingAccount(testData.testProject3Name,
+                                                    RawlsBillingAccountName("bargle").some,
+                                                    testData.userOwner.userSubjectId
+      )
+    )
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
+                                                                      ("outstanding", 1),
+                                                                      ("synchronized", 1)
+    )
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 3), ("outstanding", 1))
+    // and, validate that the outstanding change for testProject3Name is the one we just inserted
+    val lastChange = runAndWait(BillingAccountChanges.getLastChange(testData.testProject3Name))
+
+    lastChange shouldBe defined
+    lastChange.value.status shouldBe BillingAccountChangeStatus.Outstanding
+    lastChange.value.newBillingAccount should contain(RawlsBillingAccountName("bargle"))
+
   }
 
   it should "latestChangeForProject correctly" is pending
@@ -331,4 +371,21 @@ class RawlsBillingProjectComponentSpec
       } yield changes shouldBe List(change1, change2).map(_.value)
     }
   }
+
+  // =========== test helpers
+
+  // for a given billing project, return the distinct statuses and their counts from the db
+  private def getStatusCountsForProject(projectName: RawlsBillingProjectName): Seq[(String, Int)] = {
+    import driver.api._
+    val countSql =
+      sql"""
+           select STATUS, count(1)
+           from BILLING_ACCOUNT_CHANGES
+           where BILLING_PROJECT_NAME = ${projectName.value}
+           group by STATUS
+           order by STATUS
+           """.as[(String, Int)]
+    runAndWait(countSql)
+  }
+
 }
