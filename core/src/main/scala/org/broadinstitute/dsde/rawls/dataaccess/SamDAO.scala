@@ -100,9 +100,10 @@ trait SamDAO {
 
   def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[SamUserResource]]
 
-  def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
-                               action: SamResourceAction,
-                               ctx: RawlsRequestContext
+  def listResourcesWithRolesOrActions(resourceTypeName: SamResourceTypeName,
+                                      actions: Seq[SamResourceAction],
+                                      roles: Seq[SamResourceRole],
+                                      ctx: RawlsRequestContext
   ): Future[Seq[SamUserResource]]
 
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName,

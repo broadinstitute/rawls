@@ -1344,7 +1344,48 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     )
       .when(samDAO)
-      .listResourcesWithActions(any(), any(), any())
+      .listResourcesWithRolesOrActions(mockitoEq(SamResourceTypeNames.billingProject), any(), any(), any())
+
+    doReturn(
+      Future.successful(
+        Seq(
+          SamUserResource(
+            "workspace1Billing1",
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            "workspace2Billing1",
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            "workspace1Billing2",
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            "workspace1Billing3",
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
+      .when(samDAO)
+      .listResourcesWithRolesOrActions(mockitoEq(SamResourceTypeNames.workspace), any(), any(), any())
 
     val workspace1Billing1 =
       TestData.workspace("workspace1Billing1",

@@ -568,15 +568,26 @@ class SpendReportingService(
   def getBillingWithSpendPermission(
   ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
     for {
-      billingProjectResources <- samDAO.listResourcesWithActions(SamResourceTypeNames.billingProject,
-                                                                 SamBillingProjectActions.readSpendReport,
-                                                                 ctx
+      billingProjectResources <- samDAO.listResourcesWithRolesOrActions(SamResourceTypeNames.billingProject,
+                                                                        List(SamBillingProjectActions.readSpendReport),
+                                                                        List(),
+                                                                        ctx
+      )
+      ownerWorkspaces <- samDAO.listResourcesWithRolesOrActions(
+        SamResourceTypeNames.workspace,
+        List(),
+        List(SamWorkspaceRoles.owner), // TODO: owner only or owner + project-owner?
+        ctx
       )
       billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
       groupedWorkspaces <- workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(billingProjectIds)
+      ownerWorkspaceSet = ownerWorkspaces.map(_.resourceId).toSet
+      filteredGroupedWorkspaces = groupedWorkspaces.map { case (key, workspaces) =>
+        key -> workspaces.filter(ws => ownerWorkspaceSet.contains(ws.name))
+      }
       // Only use the BPs we know exist in the DB and are GCP
-      spendConfigs <- getSpendExportConfigurations(groupedWorkspaces.keys.toList)
+      spendConfigs <- getSpendExportConfigurations(filteredGroupedWorkspaces.keys.toList)
     } yield spendConfigs.map { config =>
-      config -> groupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+      config -> filteredGroupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
     }.toMap
 }

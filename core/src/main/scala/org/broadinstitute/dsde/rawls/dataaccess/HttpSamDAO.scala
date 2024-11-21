@@ -519,9 +519,10 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       }
     }
 
-  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
-                                        action: SamResourceAction,
-                                        ctx: RawlsRequestContext
+  override def listResourcesWithRolesOrActions(resourceTypeName: SamResourceTypeName,
+                                               actions: Seq[SamResourceAction],
+                                               roles: Seq[SamResourceRole],
+                                               ctx: RawlsRequestContext
   ): Future[Seq[SamUserResource]] =
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[ListResourcesV2200Response]("listResourcesV2")
@@ -530,8 +531,8 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
         /* format = */ "hierarchical",
         /* resourceTypes = */ util.List.of(resourceTypeName.value),
         /* policies = */ util.List.of(),
-        /* roles = */ util.List.of,
-        /* actions = */ util.List.of(action.value),
+        /* roles = */ roles.map(_.toString).asJava,
+        /* actions = */ actions.map(_.toString).asJava,
         /* includePublic = */ false,
         callback
       )
