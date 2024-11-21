@@ -7,7 +7,7 @@
         <!-- add BILLING_ACCOUNT_CHANGES.STATUS column, defaulting to 'outstanding' -->
         <addColumn tableName="BILLING_ACCOUNT_CHANGES">
             <column name="STATUS"
-                    type="ENUM('ignored','outstanding','synchronized')"
+                    type="ENUM('failed', 'ignored','outstanding','synchronized')"
                     defaultValue="outstanding"
                     afterColumn="GOOGLE_SYNC_TIME">
                 <constraints nullable="false"/>
