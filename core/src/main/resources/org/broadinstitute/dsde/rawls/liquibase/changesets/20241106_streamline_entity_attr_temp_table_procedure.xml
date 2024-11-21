@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="streamline_entity_attr_temp_table">
+        <createProcedure replaceIfExists="true" procedureName="createEntityAttributeTempTable">
+            CREATE PROCEDURE createEntityAttributeTempTable ()
+            BEGIN
+            create temporary table ENTITY_ATTRIBUTE_TEMP (
+                id bigint unsigned NOT NULL AUTO_INCREMENT primary key,
+                namespace varchar(32) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+                name varchar(200) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+                value_string text,
+                value_json longtext,
+                value_number double DEFAULT NULL,
+                value_boolean bit(1) DEFAULT NULL,
+                value_entity_ref bigint unsigned DEFAULT NULL,
+                list_index int DEFAULT NULL,
+                list_length int DEFAULT NULL,
+                owner_id bigint unsigned NOT NULL,
+                deleted bit(1) DEFAULT false,
+                deleted_date timestamp NULL DEFAULT NULL
+            );
+            END
+        </createProcedure>
+    </changeSet>
+
+</databaseChangeLog>
