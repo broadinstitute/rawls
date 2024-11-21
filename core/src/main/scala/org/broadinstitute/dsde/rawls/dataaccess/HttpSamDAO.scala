@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
 import org.broadinstitute.dsde.workbench.client.sam.api._
 import org.broadinstitute.dsde.workbench.client.sam.model.{
+  FilteredFlatResourcePolicy,
   FilteredHierarchicalResourcePolicy,
   ListResourcesV2200Response
 }
@@ -540,11 +541,15 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
           .getResources()
           .asScala
           .map { resource =>
+            val resourcePolicies = resource.getPolicies.asScala.toList
+            val publicPolicies = resourcePolicies.filter(_.getIsPublic)
+            // might need to filter public policies out of this next statement:
+            val (inheritedPolicies, directPolicies) = resourcePolicies.partition(_.getInherited)
             SamUserResource(
               resource.getResourceId,
-              toSamRolesAndActions(resource.getPolicies()), // TODO what to use here?
-              toSamRolesAndActions(resource.getPolicies()), // What are all these three things?
-              toSamRolesAndActions(resource.getPolicies()),
+              toSamRolesAndActions(directPolicies),
+              toSamRolesAndActions(inheritedPolicies),
+              toSamRolesAndActions(publicPolicies),
               resource.getAuthDomainGroups.asScala.map(WorkbenchGroupName).toSet,
               resource.getMissingAuthDomainGroups.asScala.map(WorkbenchGroupName).toSet
             )
@@ -559,10 +564,9 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       rolesAndActions.getActions.asScala.map(SamResourceAction).toSet
     )
 
-  private def toSamRolesAndActions(policies: util.List[FilteredHierarchicalResourcePolicy]) = {
-    val scalaPolicies = policies.asScala.toList
-    val roles = scalaPolicies.flatMap(_.getRoles.asScala)
-    val actions = scalaPolicies.flatMap(_.getActions.asScala)
+  private def toSamRolesAndActions(policies: scala.collection.immutable.List[FilteredHierarchicalResourcePolicy]) = {
+    val roles = policies.flatMap(_.getRoles.asScala)
+    val actions = policies.flatMap(_.getActions.asScala)
     SamRolesAndActions(roles.map(role => SamResourceRole(role.toString)).toSet, actions.map(SamResourceAction).toSet)
   }
 
