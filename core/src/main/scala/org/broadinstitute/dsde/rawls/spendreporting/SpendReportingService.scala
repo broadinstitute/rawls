@@ -573,15 +573,10 @@ class SpendReportingService(
                                                                  ctx
       )
       billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
-      groupedWorkspaces <- workspaceServiceConstructor(ctx).getWorkspacesByBillingProjects(billingProjectIds)
-      gcpOnlyGroupedWorkspaces = groupedWorkspaces
-        .map { case (key, workspaces) =>
-          key -> workspaces.filter(_.workspaceType == WorkspaceType.RawlsWorkspace)
-        }
-        .filter { case (_, workspaces) => workspaces.nonEmpty }
+      groupedWorkspaces <- workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(billingProjectIds)
       // Only use the BPs we know exist in the DB and are GCP
-      spendConfigs <- getSpendExportConfigurations(gcpOnlyGroupedWorkspaces.keys.toList)
+      spendConfigs <- getSpendExportConfigurations(groupedWorkspaces.keys.toList)
     } yield spendConfigs.map { config =>
-      config -> gcpOnlyGroupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+      config -> groupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
     }.toMap
 }

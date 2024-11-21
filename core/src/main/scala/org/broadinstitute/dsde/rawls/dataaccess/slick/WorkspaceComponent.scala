@@ -7,6 +7,7 @@ import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -260,8 +261,20 @@ trait WorkspaceComponent {
     def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
       workspaceQuery.withBillingProject(billingProject).read
 
-    def listWithBillingProjects(billingProjects: List[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] =
-      workspaceQuery.withBillingProjects(billingProjects).read
+    def listWithBillingProjectsOfType(billingProjects: List[RawlsBillingProjectName],
+                                      workspaceType: WorkspaceType
+    ): ReadWriteAction[Map[RawlsBillingProjectName, Seq[Workspace]]] = {
+      val query = for {
+        workspace <- workspaceQuery if workspace.namespace inSet billingProjects.map(_.value)
+        if workspace.workspaceType === workspaceType.toString
+      } yield (workspace.namespace, workspace)
+
+      query.result.map { rows =>
+        rows.groupBy(_._1).map { case (billingProjectName, workspaces) =>
+          RawlsBillingProjectName(billingProjectName) -> workspaces.map(_._2).map(WorkspaceRecord.toWorkspace)
+        }
+      }
+    }
 
     def getTags(queryString: Option[String],
                 limit: Option[Int] = None,

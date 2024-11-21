@@ -5,20 +5,9 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  GoogleProjectId,
-  PendingCloneWorkspaceFileTransfer,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceState,
-  WorkspaceSubmissionStats,
-  WorkspaceTag
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, PendingCloneWorkspaceFileTransfer, RawlsBillingProjectName, RawlsRequestContext, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceState, WorkspaceSubmissionStats, WorkspaceTag, WorkspaceType}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
 
@@ -70,10 +59,11 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
     }
 
   def listWorkspacesByMultipleBillingProjects(
-    billingProjectNames: List[RawlsBillingProjectName]
-  ): Future[Seq[Workspace]] =
+    billingProjectNames: List[RawlsBillingProjectName],
+    workspaceType: WorkspaceType
+  ): Future[Map[RawlsBillingProjectName, Seq[Workspace]]] =
     dataSource.inTransaction {
-      _.workspaceQuery.listWithBillingProjects(billingProjectNames)
+      _.workspaceQuery.listWithBillingProjectsOfType(billingProjectNames, workspaceType)
     }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =

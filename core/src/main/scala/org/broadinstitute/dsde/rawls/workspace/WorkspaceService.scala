@@ -433,13 +433,10 @@ class WorkspaceService(
     } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
   }
 
-  // TODO have the DB query do the grouping
-  def getWorkspacesByBillingProjects(
+  def getGCPWorkspacesByBillingProjects(
     billingProjects: List[RawlsBillingProjectName]
   ): Future[Map[RawlsBillingProjectName, Seq[Workspace]]] =
-    for {
-      workspaces <- workspaceRepository.listWorkspacesByMultipleBillingProjects(billingProjects)
-    } yield workspaces.groupBy(ws => RawlsBillingProjectName(ws.namespace))
+    workspaceRepository.listWorkspacesByMultipleBillingProjects(billingProjects, WorkspaceType.RawlsWorkspace)
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
