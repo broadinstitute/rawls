@@ -2,15 +2,17 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserSubjectId}
 import org.scalatest.OptionValues
 
 import java.sql.SQLException
+import java.time.Instant
 
 class RawlsBillingProjectComponentSpec
     extends TestDriverComponentWithFlatSpecAndMatchers
     with RawlsTestUtils
-    with OptionValues {
+    with OptionValues
+    with RawSqlQuery {
 
   "RawlsBillingProjectComponent" should "save, load and delete" in withDefaultTestDatabase {
     // note that create is called in test data save
@@ -84,7 +86,7 @@ class RawlsBillingProjectComponentSpec
     billingAccountChange.value.previousBillingAccount shouldBe previousBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe newBillingAccount
     billingAccountChange.value.userId shouldBe userId
-    billingAccountChange.value.status shouldBe "outstanding"
+    billingAccountChange.value.status shouldBe BillingAccountChangeStatus.Outstanding
   }
 
   it should "create a BillingAccountChange record when the Billing Account is set to None" in withDefaultTestDatabase {
@@ -100,7 +102,7 @@ class RawlsBillingProjectComponentSpec
     billingAccountChange.value.previousBillingAccount shouldBe previousBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe empty
     billingAccountChange.value.userId shouldBe userId
-    billingAccountChange.value.status shouldBe "outstanding"
+    billingAccountChange.value.status shouldBe BillingAccountChangeStatus.Outstanding
   }
 
   List(Option(RawlsBillingAccountName("avalue")), None) foreach { newBillingAccount =>
@@ -108,7 +110,6 @@ class RawlsBillingProjectComponentSpec
       import driver.api._
 
       val billingProject = testData.testProject3
-      val previousBillingAccount = billingProject.billingAccount
       val userId = testData.userOwner.userSubjectId
 
       // perform the first update; this inserts a billing account change
@@ -127,14 +128,14 @@ class RawlsBillingProjectComponentSpec
             .map(_.headOption)
         )
       firstChange shouldBe defined
-      firstChange.value.status shouldBe "outstanding"
+      firstChange.value.status shouldBe BillingAccountChangeStatus.Outstanding
 
       // perform the second update; this should set the first update to ignored
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, newBillingAccount, userId))
       val billingAccountChange = runAndWait(BillingAccountChanges.getLastChange(billingProject.projectName))
 
       billingAccountChange shouldBe defined
-      billingAccountChange.value.status shouldBe "outstanding"
+      billingAccountChange.value.status shouldBe BillingAccountChangeStatus.Outstanding
 
       // re-check the first update; it should now be ignored
       val firstChangeAgain: Option[BillingAccountChange] =
@@ -145,7 +146,7 @@ class RawlsBillingProjectComponentSpec
             .map(_.headOption)
         )
       firstChangeAgain shouldBe defined
-      firstChangeAgain.value.status shouldBe "ignored"
+      firstChangeAgain.value.status shouldBe BillingAccountChangeStatus.Ignored
     }
   }
 
@@ -224,10 +225,83 @@ class RawlsBillingProjectComponentSpec
       }
     }
 
-  it should "ignoreAllOutstanding correctly" is pending
+  it should "set statuses properly in ignoreAllOutstanding" in withDefaultTestDatabase {
+    import driver.api._
+
+    // insert some records
+    val setupSql = sqlu"""
+      insert into BILLING_ACCOUNT_CHANGES
+        (BILLING_PROJECT_NAME, USER_ID, PREVIOUS_BILLING_ACCOUNT, NEW_BILLING_ACCOUNT, STATUS)
+        values
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'failed'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
+
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'ignored'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding')
+        ;
+        """
+    runAndWait(setupSql)
+
+    // validate initial setup
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
+                                                                      ("outstanding", 1),
+                                                                      ("synchronized", 1)
+    )
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+
+    // call ignoreAllOutstanding for testProject1Name and validate
+    runAndWait(BillingAccountChanges.ignoreAllOutstanding(testData.testProject1Name))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
+                                                                      ("ignored", 1),
+                                                                      ("synchronized", 1)
+    )
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+
+    // call ignoreAllOutstanding for testProject2Name and validate
+    runAndWait(BillingAccountChanges.ignoreAllOutstanding(testData.testProject2Name))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
+                                                                      ("ignored", 1),
+                                                                      ("synchronized", 1)
+    )
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+
+    // call ignoreAllOutstanding for testProject3Name and validate
+    runAndWait(BillingAccountChanges.ignoreAllOutstanding(testData.testProject3Name))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
+                                                                      ("ignored", 1),
+                                                                      ("synchronized", 1)
+    )
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 3))
+
+  }
+
+  private def getStatusCountsForProject(projectName: RawlsBillingProjectName): Seq[(String, Int)] = {
+    import driver.api._
+    val countSql =
+      sql"""
+           select STATUS, count(1)
+           from BILLING_ACCOUNT_CHANGES
+           where BILLING_PROJECT_NAME = ${projectName.value}
+           group by STATUS
+           order by STATUS
+           """.as[(String, Int)]
+    runAndWait(countSql)
+  }
+
   it should "latestChangeForProject correctly" is pending
-  it should "setOutcome/setGoogleSyncTime should also set status" is pending
   it should "replacement for readABillingProjectChange should be correct" is pending
+
+  it should "setOutcome/setGoogleSyncTime should also set status" is pending
 
   "BillingAccountChange" should "be able to load records that need to be sync'd" in withDefaultTestDatabase {
     runAndWait {

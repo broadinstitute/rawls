@@ -4,6 +4,7 @@ import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
+import org.broadinstitute.dsde.rawls.dataaccess.slick.BillingAccountChangeStatus.BillingAccountChangeStatus
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperationNames}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -101,9 +102,25 @@ final case class BillingAccountChange(id: Long,
                                       newBillingAccount: Option[RawlsBillingAccountName],
                                       created: Instant,
                                       googleSyncTime: Option[Instant],
-                                      status: String,
+                                      status: BillingAccountChangeStatus,
                                       outcome: Option[Outcome]
 )
+
+object BillingAccountChangeStatus extends Enumeration {
+  type BillingAccountChangeStatus = Value
+  val Failed: BillingAccountChangeStatus = Value("failed")
+  val Ignored: BillingAccountChangeStatus = Value("ignored")
+  val Outstanding: BillingAccountChangeStatus = Value("outstanding")
+  val Synchronized: BillingAccountChangeStatus = Value("synchronized")
+
+  def apply(value: String): BillingAccountChangeStatus = value match {
+    case "failed"       => Failed
+    case "ignored"      => Ignored
+    case "outstanding"  => Outstanding
+    case "synchronized" => Synchronized
+    case _              => throw new NoSuchElementException()
+  }
+}
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -504,7 +521,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount.map(RawlsBillingAccountName),
             created.toInstant,
             googleSyncTime.map(_.toInstant),
-            status,
+            BillingAccountChangeStatus.apply(status),
             outcome
           )
         }
@@ -520,7 +537,7 @@ trait RawlsBillingProjectComponent {
         billingAccountChange.newBillingAccount.map(_.value),
         Timestamp.from(billingAccountChange.created),
         billingAccountChange.googleSyncTime.map(Timestamp.from),
-        billingAccountChange.status,
+        billingAccountChange.status.toString,
         outcome,
         message
       )
@@ -593,9 +610,11 @@ trait RawlsBillingProjectComponent {
 
     def ignoreAllOutstanding(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
       query
-        .filter(c => c.billingProjectName === billingProjectName.value && c.status === "outstanding")
+        .filter(c =>
+          c.billingProjectName === billingProjectName.value && c.status === BillingAccountChangeStatus.Outstanding.toString
+        )
         .map(_.status)
-        .update("ignored")
+        .update(BillingAccountChangeStatus.Ignored.toString)
   }
 
 }
