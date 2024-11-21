@@ -279,20 +279,16 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     outcome: Outcome
   )(implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F]): F[Unit] =
     for {
-      changeId <- R.reader(_.id)
-      newStatus = outcome match {
-        case Success =>
-          info("Successfully synchronized Billing Account change")
-          BillingAccountChangeStatus.Synchronized
-        case Failure(message) =>
-          warn("Failed to synchronize Billing Account change", "details" -> message)
-          BillingAccountChangeStatus.Failed
+      _ <- outcome match {
+        case Success          => info("Successfully synchronized Billing Account change")
+        case Failure(message) => warn("Failed to synchronize Billing Account change", "details" -> message)
       }
+      changeId <- R.reader(_.id)
       record = BillingAccountChanges.withId(changeId)
       _ <- inTransaction {
         record.setGoogleSyncTime(Instant.now().some) *>
           record.setOutcome(outcome.some) *>
-          record.setStatus(newStatus)
+          record.setStatus(BillingAccountChangeStatus.Synchronized)
       }
     } yield ()
 

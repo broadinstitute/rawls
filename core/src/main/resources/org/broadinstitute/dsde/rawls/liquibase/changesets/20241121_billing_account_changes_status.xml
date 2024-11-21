@@ -7,19 +7,20 @@
         <!-- add BILLING_ACCOUNT_CHANGES.STATUS column, defaulting to 'outstanding' -->
         <addColumn tableName="BILLING_ACCOUNT_CHANGES">
             <column name="STATUS"
-                    type="ENUM('failed', 'ignored','outstanding','synchronized')"
-                    defaultValue="outstanding"
+                    type="ENUM('Ignored','Outstanding','Synchronized')"
+                    defaultValue="Outstanding"
                     afterColumn="GOOGLE_SYNC_TIME">
                 <constraints nullable="false"/>
             </column>
         </addColumn>
         <!-- add an index on the BILLING_ACCOUNT_CHANGES.STATUS column -->
         <createIndex tableName="BILLING_ACCOUNT_CHANGES" indexName="BILLING_ACCOUNT_CHANGES_STATUS" unique="false">
-            <column name="STATUS"/>
+            <column name="STATUS"
+            remarks="Has this change been synchronized with GCP?"/>
         </createIndex>
         <!-- set STATUS='synchronized' for all previously-synchronized rows -->
         <sql>update BILLING_ACCOUNT_CHANGES
-             set STATUS='synchronized'
+             set STATUS='Synchronized'
              where GOOGLE_SYNC_TIME is not null;</sql>
     </changeSet>
 </databaseChangeLog>

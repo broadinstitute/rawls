@@ -625,7 +625,7 @@ class BillingAccountChangeSynchronizerSpec
             case Failure(msg) =>
               msg should include(testData.billingProject.googleProjectId.value)
           }
-          lastChange.value.status shouldBe BillingAccountChangeStatus.Failed
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe defined
@@ -688,7 +688,7 @@ class BillingAccountChangeSynchronizerSpec
                 msg should include(workspace.googleProjectId.value)
               }
           }
-          lastChange.value.status shouldBe BillingAccountChangeStatus.Failed
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe empty

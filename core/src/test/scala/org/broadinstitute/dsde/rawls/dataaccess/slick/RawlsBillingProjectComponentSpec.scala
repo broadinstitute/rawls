@@ -232,55 +232,43 @@ class RawlsBillingProjectComponentSpec
       insert into BILLING_ACCOUNT_CHANGES
         (BILLING_PROJECT_NAME, USER_ID, PREVIOUS_BILLING_ACCOUNT, NEW_BILLING_ACCOUNT, STATUS)
         values
-          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'failed'),
-          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
-          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding'),
 
-          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
-          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
-          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
 
-          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'ignored'),
-          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
-          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding')
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Ignored'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding')
         ;
         """
     runAndWait(setupSql)
 
     // validate initial setup
-    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
-                                                                      ("outstanding", 1),
-                                                                      ("synchronized", 1)
-    )
-    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
-    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("Outstanding", 1), ("Synchronized", 2))
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("Synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("Ignored", 1), ("Outstanding", 2))
 
     // call ignoreAllOutstanding for testProject1Name and validate
     runAndWait(BillingAccountChanges.ignoreAllOutstanding(testData.testProject1Name))
-    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
-                                                                      ("ignored", 1),
-                                                                      ("synchronized", 1)
-    )
-    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
-    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("Ignored", 1), ("Synchronized", 2))
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("Synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("Ignored", 1), ("Outstanding", 2))
 
     // call ignoreAllOutstanding for testProject2Name and validate
     runAndWait(BillingAccountChanges.ignoreAllOutstanding(testData.testProject2Name))
-    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
-                                                                      ("ignored", 1),
-                                                                      ("synchronized", 1)
-    )
-    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
-    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("Ignored", 1), ("Synchronized", 2))
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("Synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("Ignored", 1), ("Outstanding", 2))
 
     // call ignoreAllOutstanding for testProject3Name and validate
     runAndWait(BillingAccountChanges.ignoreAllOutstanding(testData.testProject3Name))
-    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
-                                                                      ("ignored", 1),
-                                                                      ("synchronized", 1)
-    )
-    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
-    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 3))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("Ignored", 1), ("Synchronized", 2))
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("Synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("Ignored", 3))
 
   }
 
@@ -292,28 +280,25 @@ class RawlsBillingProjectComponentSpec
       insert into BILLING_ACCOUNT_CHANGES
         (BILLING_PROJECT_NAME, USER_ID, PREVIOUS_BILLING_ACCOUNT, NEW_BILLING_ACCOUNT, STATUS)
         values
-          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'failed'),
-          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
-          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding'),
 
-          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
-          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
-          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
 
-          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'ignored'),
-          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding'),
-          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'outstanding')
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Ignored'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding')
         ;
         """
     runAndWait(setupSql)
 
     // validate initial setup
-    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
-                                                                      ("outstanding", 1),
-                                                                      ("synchronized", 1)
-    )
-    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
-    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 1), ("outstanding", 2))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("Outstanding", 1), ("Synchronized", 2))
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("Synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("Ignored", 1), ("Outstanding", 2))
 
     // Update the account for testProject3Name. It should set the previous outstanding changes to ignored,
     // and the new one should be the only one outstanding
@@ -323,12 +308,9 @@ class RawlsBillingProjectComponentSpec
                                                     testData.userOwner.userSubjectId
       )
     )
-    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("failed", 1),
-                                                                      ("outstanding", 1),
-                                                                      ("synchronized", 1)
-    )
-    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("synchronized", 3))
-    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("ignored", 3), ("outstanding", 1))
+    getStatusCountsForProject(testData.testProject1Name) shouldBe Seq(("Outstanding", 1), ("Synchronized", 2))
+    getStatusCountsForProject(testData.testProject2Name) shouldBe Seq(("Synchronized", 3))
+    getStatusCountsForProject(testData.testProject3Name) shouldBe Seq(("Ignored", 3), ("Outstanding", 1))
     // and, validate that the outstanding change for testProject3Name is the one we just inserted
     val lastChange = runAndWait(BillingAccountChanges.getLastChange(testData.testProject3Name))
 

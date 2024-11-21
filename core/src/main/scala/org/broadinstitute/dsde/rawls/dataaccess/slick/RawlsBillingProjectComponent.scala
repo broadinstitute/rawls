@@ -108,16 +108,14 @@ final case class BillingAccountChange(id: Long,
 
 object BillingAccountChangeStatus extends Enumeration {
   type BillingAccountChangeStatus = Value
-  val Failed: BillingAccountChangeStatus = Value("failed")
-  val Ignored: BillingAccountChangeStatus = Value("ignored")
-  val Outstanding: BillingAccountChangeStatus = Value("outstanding")
-  val Synchronized: BillingAccountChangeStatus = Value("synchronized")
+  val Ignored: BillingAccountChangeStatus = Value("Ignored")
+  val Outstanding: BillingAccountChangeStatus = Value("Outstanding")
+  val Synchronized: BillingAccountChangeStatus = Value("Synchronized")
 
   def apply(value: String): BillingAccountChangeStatus = value match {
-    case "failed"       => Failed
-    case "ignored"      => Ignored
-    case "outstanding"  => Outstanding
-    case "synchronized" => Synchronized
+    case "Ignored"      => Ignored
+    case "Outstanding"  => Outstanding
+    case "Synchronized" => Synchronized
     case _              => throw new NoSuchElementException()
   }
 }
