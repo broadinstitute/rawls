@@ -1266,7 +1266,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  currency
           |ORDER BY
           |  total_cost DESC
-          |limit 5
+          |limit 5 offset 5
           |""".stripMargin
 
     val service = new SpendReportingService(
@@ -1280,7 +1280,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mockWorkspaceServiceConstructor
     )
     val result = service.getAllUserWorkspaceQuery(
-      inputMap
+      inputMap,
+      5,
+      5
     )
 
     // It's easier and more reliable to do this than tweak line changes in the query or expected query
@@ -1748,7 +1750,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val endDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
 
     val result = Await.result(
-      service.getSpendForAllWorkspaces(from, to),
+      service.getSpendForAllWorkspaces(from, to, 100, 0),
       Duration.Inf
     )
 

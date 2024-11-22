@@ -346,7 +346,9 @@ class SpendReportingService(
   }
 
   def getAllUserWorkspaceQuery(
-    billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]
+    billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]],
+    pageSize: Int,
+    offset: Int
   ): String = {
     val baseQuery = s"""
                        |  SELECT
@@ -400,7 +402,7 @@ class SpendReportingService(
        |  currency
        |ORDER BY
        |  total_cost DESC
-       |limit 5
+       |limit $pageSize offset $offset
        |""".stripMargin.trim
   }
 
@@ -542,14 +544,16 @@ class SpendReportingService(
 
   def getSpendForAllWorkspaces(
     start: DateTime,
-    end: DateTime
+    end: DateTime,
+    pageSize: Int,
+    offset: Int
   ): Future[SpendReportingResults] = {
     validateReportParameters(start, end)
     for {
       billingMap <- getBillingWithSpendPermission()
       projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-
-      query = getAllUserWorkspaceQuery(billingMap)
+      // TODO if there's no workspaces returned, don't run the query
+      query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
       queryJob = setUpAllUserWorkspaceQuery(query, start, end)
 
       job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())

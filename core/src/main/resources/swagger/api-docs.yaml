@@ -472,6 +472,16 @@ paths:
           schema:
             type: string
             format: date
+        - name: pageSize
+          in: query
+          description: how many workspaces to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
       responses:
         200:
           description: Success

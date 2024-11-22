@@ -64,12 +64,16 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             get {
               parameters(
                 "startDate".as[DateTime],
-                "endDate".as[DateTime]
-              ) { (startDate, endDate) =>
+                "endDate".as[DateTime],
+                "pageSize".as[Int],
+                "offset".as[Int]
+              ) { (startDate, endDate, pageSize, offset) =>
                 complete {
                   spendReportingConstructor(ctx).getSpendForAllWorkspaces(
                     startDate,
-                    endDate.plusDays(1).minusMillis(1)
+                    endDate.plusDays(1).minusMillis(1),
+                    pageSize,
+                    offset
                   )
                 }
               }
