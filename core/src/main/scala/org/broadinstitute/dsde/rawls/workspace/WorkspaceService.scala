@@ -11,6 +11,7 @@ import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls._
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -19,16 +20,18 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
@@ -52,9 +55,6 @@ import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, W
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import org.broadinstitute.dsde.rawls.metrics.MetricsHelper
-import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 
 import java.io.IOException
 import java.util.UUID
@@ -119,7 +119,8 @@ object WorkspaceService {
       (context: RawlsRequestContext) => fastPassServiceConstructor(context, dataSource),
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource),
-      new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName)
+      new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
+      new WorkspaceSettingRepository(dataSource)
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -167,7 +168,8 @@ class WorkspaceService(
   val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository,
-  val submissionsRepository: SubmissionsRepository
+  val submissionsRepository: SubmissionsRepository,
+  val workspaceSettingsRepository: WorkspaceSettingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with LibraryPermissionsSupport
@@ -230,33 +232,42 @@ class WorkspaceService(
     } yield workspace
   }
 
-  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[JsObject] = {
+  def getWorkspace(workspaceName: WorkspaceName,
+                   params: WorkspaceFieldSpecs,
+                   userProject: Option[GoogleProjectId] = None
+  ): Future[JsObject] = {
     val options = processOptions(params)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
         workspace <-
           getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(options.attrSpecs))
-        workspaceResponse <- getWorkspaceDetails(workspace, options)
+        workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
       // post-process JSON to remove calculated-but-undesired keys
       deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
-  def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs): Future[JsObject] = {
+  def getWorkspaceById(workspaceId: String,
+                       params: WorkspaceFieldSpecs,
+                       userProject: Option[GoogleProjectId] = None
+  ): Future[JsObject] = {
     val options = processOptions(params)
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
       for {
         workspace <-
           getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.read, Option(options.attrSpecs))
-        workspaceResponse <- getWorkspaceDetails(workspace, options)
+        workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
       // post-process JSON to remove calculated-but-undesired keys
       deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
-  def getWorkspaceDetails(workspace: Workspace, options: QueryOptions): Future[WorkspaceResponse] = {
+  def getWorkspaceDetails(workspace: Workspace,
+                          options: QueryOptions,
+                          userProject: Option[GoogleProjectId] = None
+  ): Future[WorkspaceResponse] = {
     val workspaceId = workspace.workspaceId
     /*
     If we're looking to improve performance, we could potentially use this, instead trying to run futures in parallel:
@@ -312,9 +323,13 @@ class WorkspaceService(
           case _ => samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
         }
       }
+
       bucketDetails: Option[WorkspaceBucketOptions] <- wsmContext.googleProjectId match {
-        case None     => Future.successful(None)
-        case Some(id) => options.anyPresentFuture("bucketOptions")(gcsDAO.getBucketDetails(workspace.bucketName, id))
+        case None => Future.successful(None)
+        case Some(_) =>
+          options.anyPresentFuture("bucketOptions")(
+            getBucketOptions(WorkspaceName(workspace.namespace, workspace.name), userProject)
+          )
       }
     } yield WorkspaceResponse(
       options.anyPresent("accessLevel")(accessLevel),
@@ -956,6 +971,73 @@ class WorkspaceService(
         )
       }
 
+    def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
+                           existingAcls: Set[WorkspaceACLUpdate],
+                           callingUserActions: Set[SamResourceAction],
+                           workspace: Workspace
+    ): Unit = {
+      val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
+      if (callingUserActions.isEmpty) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you do not have access to change permissions for this workspace")
+        )
+      }
+      // Add the existingAcl entries that are being modified so we can check what we will
+      // be removing as well as what we are adding.
+      val changingPolicies =
+        (aclChanges ++ existingAcls.filter(existingAcl => emailsBeingChanged.contains(existingAcl.email.toLowerCase)))
+          .flatMap(aclUpdateToPolicies)
+
+      if (
+        changingPolicies.exists(policy => !callingUserActions.contains(SamWorkspaceActions.sharePolicy(policy.value)))
+      ) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you do not have sufficient permissions to make these changes")
+        )
+      }
+
+      if (
+        aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
+          existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
+        )
+      ) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed")
+        )
+      }
+      if (aclChanges.exists(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "you may not change your own permissions")
+        )
+      }
+      if (
+        aclChanges.exists {
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, _, Some(true)) => true
+          case _                                                                => false
+        }
+      ) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
+        )
+      }
+      if (workspace.workspaceType.equals(WorkspaceType.McWorkspace)) {
+        val invalidMcWorkspaceACLUpdates = aclChanges.collect {
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
+            ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
+            ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
+          case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
+            ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
+        }.toSeq
+
+        if (invalidMcWorkspaceACLUpdates.nonEmpty) {
+          throw new InvalidWorkspaceAclUpdateException(
+            ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
+          )
+        }
+      }
+    }
+
     collectMissingUsers(aclUpdates.map(_.email), ctx).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
@@ -976,7 +1058,11 @@ class WorkspaceService(
 
           // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
           aclChanges = normalize(aclUpdates) -- existingAcls
-          _ = validateAclChanges(aclChanges, existingAcls, workspace)
+          callingUserActions <- samDAO.listUserActionsForResource(SamResourceTypeNames.workspace,
+                                                                  workspace.workspaceId,
+                                                                  ctx
+          )
+          _ = validateAclChanges(aclChanges, existingAcls, callingUserActions, workspace)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
@@ -1073,53 +1159,6 @@ class WorkspaceService(
         requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspace)
       }
       .void
-  }
-
-  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
-                                 existingAcls: Set[WorkspaceACLUpdate],
-                                 workspace: Workspace
-  ): Unit = {
-    val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
-    if (
-      aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
-        existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
-      )
-    ) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed")
-      )
-    }
-    if (aclChanges.exists(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "you may not change your own permissions")
-      )
-    }
-    if (
-      aclChanges.exists {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, _, Some(true)) => true
-        case _                                                                => false
-      }
-    ) {
-      throw new InvalidWorkspaceAclUpdateException(
-        ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
-      )
-    }
-    if (workspace.workspaceType.equals(WorkspaceType.McWorkspace)) {
-      val invalidMcWorkspaceACLUpdates = aclChanges.collect {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
-          ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
-          ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
-          ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
-      }.toSeq
-
-      if (invalidMcWorkspaceACLUpdates.nonEmpty) {
-        throw new InvalidWorkspaceAclUpdateException(
-          ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
-        )
-      }
-    }
   }
 
   // called from test harness
@@ -1407,9 +1446,43 @@ class WorkspaceService(
       case Some(workspace) => op(workspace)
     }
 
-  def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] = for {
+  def getBucketOptions(workspaceName: WorkspaceName,
+                       userProject: Option[GoogleProjectId] = None
+  ): Future[WorkspaceBucketOptions] = for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
-    options <- gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)
+    isWriter <- samDAO.userHasAction(SamResourceTypeNames.workspace,
+                                     workspaceContext.workspaceId,
+                                     SamWorkspaceActions.write,
+                                     ctx
+    )
+    requesterPays <- workspaceSettingsRepository
+      .getWorkspaceSettingOfType(workspaceContext.workspaceIdAsUUID, GcpBucketRequesterPays)
+      .map {
+        case Some(GcpBucketRequesterPaysSetting(config)) => config.enabled
+        case _                                           => false
+      }
+    userProjectWorkspace <- userProject.flatTraverse(workspaceRepository.getWorkspaceByGoogleProject)
+    isUserProjectWriter <- userProjectWorkspace.traverse(ws =>
+      samDAO.userHasAction(
+        SamResourceTypeNames.workspace,
+        ws.workspaceId,
+        SamWorkspaceActions.write,
+        ctx
+      )
+    )
+    _ = if (!isUserProjectWriter.getOrElse(true)) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "User must have write access to user project")
+      )
+    }
+    _ = if (requesterPays && !isWriter && userProjectWorkspace.isEmpty) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Readers must provide a user project to bill on requester pays workspaces")
+      )
+    }
+    options <- gcsDAO.getBucketDetails(workspaceContext.bucketName,
+                                       userProject.getOrElse(workspaceContext.googleProjectId)
+    )
   } yield options
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = (for {

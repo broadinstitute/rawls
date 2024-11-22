@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.{StatusCodes, _}
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.model.{ErrorReport => _}
+import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -167,7 +168,7 @@ class WorkspaceApiServiceSpec
     val response: JsObject = responseWorkspace.toJson.asJsObject
     val workspaceService = mock[WorkspaceService]
     val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
-    when(workspaceService.getWorkspaceById(workspace.workspaceId, params)).thenReturn(Future.successful(response))
+    when(workspaceService.getWorkspaceById(workspace.workspaceId, params, None)).thenReturn(Future.successful(response))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -179,7 +180,32 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    verify(workspaceService).getWorkspaceById(workspace.workspaceId, params)
+    verify(workspaceService).getWorkspaceById(workspace.workspaceId, params, None)
+  }
+
+  it should "get a workspace by id from the workspace service with user project" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+    val userProject = testData.workspace.googleProjectId
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
+    val response: JsObject = responseWorkspace.toJson.asJsObject
+    val workspaceService = mock[WorkspaceService]
+    val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
+    when(workspaceService.getWorkspaceById(workspace.workspaceId, params, userProject.some))
+      .thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/id/${workspace.workspaceId}?fields=a,b,c&userProject=${userProject.value}") ~>
+      service.testRoutes ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceResponse]
+        resp shouldBe responseWorkspace
+      }
+    verify(workspaceService).getWorkspaceById(workspace.workspaceId, params, userProject.some)
   }
 
   it should "get a workspace by name and namespace from the workspace service" in {
@@ -189,7 +215,7 @@ class WorkspaceApiServiceSpec
     val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
     val response: JsObject = responseWorkspace.toJson.asJsObject
     val workspaceService = mock[WorkspaceService]
-    when(workspaceService.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None)))
+    when(workspaceService.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), None))
       .thenReturn(Future.successful(response))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
@@ -202,7 +228,31 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None))
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), None)
+  }
+
+  it should "get a workspace by name and namespace from the workspace service with user project" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspace = testData.workspace
+    val userProject = testData.workspace.googleProjectId
+    val details = WorkspaceDetails(workspace, Set())
+    val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
+    val response: JsObject = responseWorkspace.toJson.asJsObject
+    val workspaceService = mock[WorkspaceService]
+    when(workspaceService.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), userProject.some))
+      .thenReturn(Future.successful(response))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}?userProject=${userProject.value}") ~>
+      service.testRoutes ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceResponse]
+        resp shouldBe responseWorkspace
+      }
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), userProject.some)
   }
 
   it should "pass the fields parameter when getting a workspace by name and namespace" in {
@@ -213,7 +263,7 @@ class WorkspaceApiServiceSpec
     val response: JsObject = responseWorkspace.toJson.asJsObject
     val workspaceService = mock[WorkspaceService]
     val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
-    when(workspaceService.getWorkspace(workspace.toWorkspaceName, params)).thenReturn(Future.successful(response))
+    when(workspaceService.getWorkspace(workspace.toWorkspaceName, params, None)).thenReturn(Future.successful(response))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -225,7 +275,7 @@ class WorkspaceApiServiceSpec
         val resp = responseAs[WorkspaceResponse]
         resp shouldBe responseWorkspace
       }
-    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, params)
+    verify(workspaceService).getWorkspace(workspace.toWorkspaceName, params, None)
   }
 
   it should "update the workspace by name and namespace" in {
@@ -303,8 +353,8 @@ class WorkspaceApiServiceSpec
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val workspaceService = mock[WorkspaceService]
-    val serviceResponse = WorkspaceBucketOptions(requesterPays = true)
-    when(workspaceService.getBucketOptions(workspaceName)).thenReturn(Future.successful(serviceResponse))
+    val serviceResponse = WorkspaceBucketOptions(requesterPays = true, "")
+    when(workspaceService.getBucketOptions(workspaceName, None)).thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -317,7 +367,32 @@ class WorkspaceApiServiceSpec
         resp shouldBe serviceResponse
       }
 
-    verify(workspaceService).getBucketOptions(workspaceName)
+    verify(workspaceService).getBucketOptions(workspaceName, None)
+  }
+
+  it should "get bucketOptions by name and namespace with user project" in {
+    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+    val workspaceName = WorkspaceName("ns", "n")
+    val userProject = GoogleProjectId("123")
+    val workspaceService = mock[WorkspaceService]
+    val serviceResponse = WorkspaceBucketOptions(requesterPays = true, "")
+    when(workspaceService.getBucketOptions(workspaceName, userProject.some))
+      .thenReturn(Future.successful(serviceResponse))
+    val service = new MockApiService(
+      workspaceServiceConstructor = _ => workspaceService,
+      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+    )
+    Get(
+      s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/bucketOptions?userProject=${userProject.value}"
+    ) ~>
+      service.testRoutes ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[WorkspaceBucketOptions]
+        resp shouldBe serviceResponse
+      }
+
+    verify(workspaceService).getBucketOptions(workspaceName, userProject.some)
   }
 
   it should "clone a workspace using the multicloud workspace service" in {

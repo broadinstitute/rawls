@@ -44,6 +44,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RetriedSubmissionReport,
   SamWorkspaceActions,
+  SeparateSubmissionFinalOutputsSetting,
   Submission,
   SubmissionListResponse,
   SubmissionReport,
@@ -65,16 +66,16 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkflowStatuses,
   Workspace,
   WorkspaceAttributeSpecs,
-  WorkspaceName
+  WorkspaceName,
+  WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
   extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate,
-  submissionRootPath
+  getTerminalStatusDate
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.util.FutureSupport.toFutureTry
 import org.joda.time.DateTime
@@ -103,7 +104,8 @@ object SubmissionsService {
     submissionCostService: SubmissionCostService,
     genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
     config: WorkspaceServiceConfig,
-    workspaceRepository: WorkspaceRepository
+    workspaceRepository: WorkspaceRepository,
+    workspaceSettingRepository: WorkspaceSettingRepository
   )(
     ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): SubmissionsService =
@@ -123,7 +125,8 @@ object SubmissionsService {
       submissionCostService,
       genomicsServiceConstructor,
       config,
-      workspaceRepository
+      workspaceRepository,
+      workspaceSettingRepository
     )
 
   def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
@@ -158,13 +161,6 @@ object SubmissionsService {
       Option(workflows.map(_.statusLastChangedDate).maxBy(_.getMillis))
     }
   }
-
-  def submissionRootPath(workspace: Workspace, id: UUID): String =
-    // Intermediate/final output separation: location 1/2 (SU-166, WX-1702)
-    // All intermediate files including logs live here.
-    // UI links to execution directory point here.
-    // Temporarily paused as of 2024-09-05
-    s"gs://${workspace.bucketName}/submissions/$id"
 }
 
 class SubmissionsService(
@@ -183,7 +179,8 @@ class SubmissionsService(
   submissionCostService: SubmissionCostService,
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
   config: WorkspaceServiceConfig,
-  val workspaceRepository: WorkspaceRepository
+  val workspaceRepository: WorkspaceRepository,
+  workspaceSettingRepository: WorkspaceSettingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -489,7 +486,7 @@ class SubmissionsService(
           val newSubmission = submission.copy(
             submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
-            submissionRoot = submissionRootPath(workspaceContext, newSubmissionId),
+            submissionRoot = submission.submissionRoot,
             workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted,
             userComment =
@@ -584,13 +581,14 @@ class SubmissionsService(
         gatherInputsResult,
         workspaceExpressionResults
       )
+      submissionPath <- submissionRootPath(workspaceContext, submissionId)
     } yield PreparedSubmission(
       workspaceContext,
       submissionId,
       submissionParameters,
       submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName),
       header,
-      submissionRootPath(workspaceContext, submissionId)
+      submissionPath
     )
   }
 
@@ -622,7 +620,8 @@ class SubmissionsService(
   ): ReadWriteAction[Int] =
     withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
       // implicitly passed to SubmissionComponent.updateStatus
-      implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
+      implicit val subStatusCounter =
+        submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
       dataAccess.submissionQuery.updateStatus(submissionId, SubmissionStatuses.Aborting)
     }
 
@@ -809,7 +808,7 @@ class SubmissionsService(
         monitoringScript = submissionRequest.monitoringScript,
         monitoringImage = submissionRequest.monitoringImage,
         monitoringImageScript = submissionRequest.monitoringImageScript,
-        costCapThreshold = submissionRequest.costCapThreshold
+        perWorkflowCostCap = submissionRequest.perWorkflowCostCap
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
@@ -863,7 +862,7 @@ class SubmissionsService(
     }
 
   /**
-    * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
+      * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
   private def mergeWorkflowOutputs(execOuts: ExecutionServiceOutputs,
                                    execLogs: ExecutionServiceLogs,
                                    workflowId: String
@@ -882,7 +881,7 @@ class SubmissionsService(
   }
 
   /**
-    * Get the list of outputs for a given workflow in this submission */
+      * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
@@ -950,4 +949,26 @@ class SubmissionsService(
         )
     }
 
+  private def submissionRootPath(workspace: Workspace, id: UUID): Future[String] =
+    // Intermediate/final output separation: location 1/2 (SU-166, WX-1702)
+    // All intermediate files including logs live here if SeparateSubmissionFinalOutputsSetting is enabled (AN-134).
+    // UI links to execution directory point here.
+    for {
+      currentSettings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+      separateSubmissionSetting = currentSettings.collectFirst { case setting: SeparateSubmissionFinalOutputsSetting =>
+        setting
+      }
+
+      separateSubmissionEnabled = separateSubmissionSetting match {
+        case Some(setting) => setting.config.enabled
+        case None          => false
+      }
+
+      intermediates =
+        if (separateSubmissionEnabled) {
+          "intermediates/"
+        } else {
+          ""
+        }
+    } yield s"gs://${workspace.bucketName}/submissions/$intermediates$id"
 }

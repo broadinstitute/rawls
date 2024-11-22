@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureM
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{addJitter, FutureSupport, MethodWiths}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -44,7 +45,8 @@ object WorkflowSubmissionActor {
             defaultNetworkCromwellBackend: CromwellBackend,
             highSecurityNetworkCromwellBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver,
-            bardService: BardService
+            bardService: BardService,
+            workspaceSettingRepository: WorkspaceSettingRepository
   ): Props =
     Props(
       new WorkflowSubmissionActor(
@@ -68,7 +70,8 @@ object WorkflowSubmissionActor {
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
         methodConfigResolver,
-        bardService
+        bardService,
+        workspaceSettingRepository
       )
     )
 
@@ -103,7 +106,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val defaultNetworkCromwellBackend: CromwellBackend,
                               val highSecurityNetworkCromwellBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver,
-                              val bardService: BardService
+                              val bardService: BardService,
+                              val workspaceSettingRepository: WorkspaceSettingRepository
 ) extends Actor
     with WorkflowSubmission
     with LazyLogging {
@@ -157,6 +161,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val highSecurityNetworkCromwellBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
   val bardService: BardService
+  val workspaceSettingRepository: WorkspaceSettingRepository
 
   import dataSource.dataAccess.driver.api._
 
@@ -272,39 +277,53 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         monitoringScript: Option[String],
                         monitoringImage: Option[String],
                         monitoringImageScript: Option[String]
-  ): ExecutionServiceWorkflowOptions = {
+  )(implicit executionContext: ExecutionContext): Future[ExecutionServiceWorkflowOptions] = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
       case Some(JsString(value)) => value
       case Some(x) => throw new RawlsException(s"unexpected json value for client_email [$x] in service account key")
       case None    => throw new RawlsException(s"client_email missing for service account key json")
     }
 
-    ExecutionServiceWorkflowOptions(
-      submission.submissionRoot,
+    for {
+      currentSettings <- workspaceSettingRepository.getWorkspaceSettings(workspace.id)
+      separateSubmissionSetting = currentSettings.collectFirst { case setting: SeparateSubmissionFinalOutputsSetting =>
+        setting
+      }
+      (final_workflow_outputs_dir, final_workflow_outputs_dir_metadata) = separateSubmissionSetting match {
+        case Some(setting) if setting.config.enabled =>
+          (Option(s"gs://${workspace.bucketName}/submissions/final-outputs/${submission.id}"), Option("destination"))
+        case _ => (None, None)
+      }
       // Intermediate/final output separation: location 2/2 (SU-166, WX-1702)
       // Final outputs are moved to the directory specified
       // Cromwell `/outputs` endpoint and Terra data table use this location
-      // Temporarily paused as of 2024-09-05
-      None,
-      None,
-      workspace.googleProjectId,
-      userEmail.value,
-      petSAEmail,
-      petSAJson,
-      s"${submission.submissionRoot}/workflow.logs",
-      runtimeOptions,
-      useCallCache,
-      deleteIntermediateOutputFiles,
-      useReferenceDisks,
-      memoryRetryMultiplier,
-      highSecurityNetworkCromwellBackend,
-      workflowFailureMode,
-      google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
-      ignoreEmptyOutputs,
-      monitoringScript,
-      monitoringImage,
-      monitoringImageScript
-    )
+      // if separateSubmissionFinalOutputs as true in workspace settings (AN-134);
+      // - final_workflow_outputs_dir = submissions/final-outputs
+      // - final_workflow_outputs_mode = "copy".
+
+      executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
+        submission.submissionRoot,
+        final_workflow_outputs_dir,
+        final_workflow_outputs_dir_metadata,
+        workspace.googleProjectId,
+        userEmail.value,
+        petSAEmail,
+        petSAJson,
+        s"${submission.submissionRoot}/workflow.logs",
+        runtimeOptions,
+        useCallCache,
+        deleteIntermediateOutputFiles,
+        useReferenceDisks,
+        memoryRetryMultiplier,
+        highSecurityNetworkCromwellBackend,
+        workflowFailureMode,
+        google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
+        ignoreEmptyOutputs,
+        monitoringScript,
+        monitoringImage,
+        monitoringImageScript
+      )
+    } yield executionServiceWorkflowOptions
   }
 
   def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit
@@ -430,9 +449,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
       wdl <- getWdl(methodConfig, petUserInfo)
       updatedRuntimeOptions <- getRuntimeOptions(workspaceRec.googleProjectId, workspaceRec.bucketName)
-    } yield {
-
-      val wfOpts = buildWorkflowOpts(
+      wfOpts <- buildWorkflowOpts(
         workspace = workspaceRec,
         submission = submissionRec,
         userEmail = RawlsUserEmail(submissionRec.submitterEmail),
@@ -449,6 +466,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         monitoringImage = submissionRec.monitoringImage,
         monitoringImageScript = submissionRec.monitoringImageScript
       )
+    } yield {
       val submissionAndWorkspaceLabels =
         Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString)
       val wfLabels = workspaceRec.workflowCollection match {

@@ -345,7 +345,7 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     runningSubmissionsCount: Int
 )
 
-case class WorkspaceBucketOptions(requesterPays: Boolean)
+case class WorkspaceBucketOptions(requesterPays: Boolean, location: String)
 
 case class EntityTypeRename(newName: String)
 
@@ -1438,7 +1438,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     WorkspaceSubmissionStats
   )
 
-  implicit val WorkspaceBucketOptionsFormat: RootJsonFormat[WorkspaceBucketOptions] = jsonFormat1(
+  implicit val WorkspaceBucketOptionsFormat: RootJsonFormat[WorkspaceBucketOptions] = jsonFormat2(
     WorkspaceBucketOptions
   )
 

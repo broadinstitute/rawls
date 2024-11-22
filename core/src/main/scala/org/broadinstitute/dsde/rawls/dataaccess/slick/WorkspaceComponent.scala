@@ -365,6 +365,9 @@ trait WorkspaceComponent {
       _.getOrElse(throw new RawlsException(s"""No workspace found matching id "$workspaceId"."""))
     }
 
+    def findByGoogleProjectId(googleProjectId: GoogleProjectId): ReadAction[Option[Workspace]] =
+      loadWorkspace(findByGoogleProjectIdQuery(googleProjectId))
+
     def listByIds(workspaceIds: Seq[UUID],
                   attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Seq[Workspace]] =
@@ -595,6 +598,9 @@ trait WorkspaceComponent {
 
     def findByGoogleProjectNumbersQuery(googleProjectNumbers: Seq[String]): WorkspaceQueryType =
       filter(w => w.googleProjectNumber.map(_.inSetBind(googleProjectNumbers)))
+
+    def findByGoogleProjectIdQuery(googleProjectId: GoogleProjectId): WorkspaceQueryType =
+      workspaceQuery.withGoogleProjectId(googleProjectId)
 
     private def loadWorkspace(lookup: WorkspaceQueryType,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None

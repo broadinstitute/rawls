@@ -128,5 +128,16 @@ trait WorkspaceSettingComponent {
     ): ReadAction[List[WorkspaceSetting]] =
       filter(rec => rec.workspaceId === workspaceId && rec.status === status.toString).result
         .map(_.map(WorkspaceSettingRecord.toWorkspaceSetting).toList)
+
+    def getAppliedSettingForWorkspaceByType(workspaceId: UUID,
+                                            settingType: WorkspaceSettingType
+    ): ReadAction[Option[WorkspaceSetting]] =
+      uniqueResult(
+        filter(rec =>
+          rec.workspaceId === workspaceId
+            && rec.status === WorkspaceSettingRecord.SettingStatus.Applied.toString
+            && rec.settingType === settingType.toString
+        ).take(1).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSetting).toList)
+      )
   }
 }
