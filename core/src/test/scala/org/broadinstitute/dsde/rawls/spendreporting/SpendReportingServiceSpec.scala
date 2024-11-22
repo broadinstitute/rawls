@@ -1317,39 +1317,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       Future.successful(
         Seq(
           SamUserResource(
-            "billingProject1",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          ),
-          SamUserResource(
-            "billingProject2",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          ),
-          SamUserResource(
-            "billingProject3",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          )
-        )
-      )
-    )
-      .when(samDAO)
-      .listResourcesWithActions(mockitoEq(SamResourceTypeNames.billingProject), any(), any())
-
-    doReturn(
-      Future.successful(
-        Seq(
-          SamUserResource(
             "workspace1Billing1",
             SamRolesAndActions(Set.empty, Set.empty),
             SamRolesAndActions(Set.empty, Set.empty),

@@ -560,7 +560,7 @@ class SpendReportingService(
         throw RawlsExceptionWithErrorReport(
           StatusCodes.NotFound,
           s"no spend data found between dates ${toISODateString(start)} and ${toISODateString(end)}"
-        ) // TODO update this
+        )
       case rows => extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
     }
   }
@@ -568,25 +568,17 @@ class SpendReportingService(
   def getBillingWithSpendPermission(
   ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
     for {
-      billingProjectResources <- samDAO.listResourcesWithActions(SamResourceTypeNames.billingProject,
-                                                                 SamBillingProjectActions.readSpendReport,
-                                                                 ctx
-      )
       ownerWorkspaces <- samDAO.listResourcesWithActions(
         SamResourceTypeNames.workspace,
-        SamWorkspaceActions.own,
+        SamWorkspaceActions.readSpendReport,
         ctx
       )
-
-      billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
-      groupedWorkspaces <- workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(billingProjectIds)
-      ownerWorkspaceSet = ownerWorkspaces.map(_.resourceId).toSet
-      filteredGroupedWorkspaces = groupedWorkspaces.map { case (key, workspaces) =>
-        key -> workspaces.filter(ws => ownerWorkspaceSet.contains(ws.name))
-      }
+      groupedWorkspaces <- workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(
+        ownerWorkspaces.map(_.resourceId).toList
+      )
       // Only use the BPs we know exist in the DB and are GCP
-      spendConfigs <- getSpendExportConfigurations(filteredGroupedWorkspaces.keys.toList)
+      spendConfigs <- getSpendExportConfigurations(groupedWorkspaces.keys.toList)
     } yield spendConfigs.map { config =>
-      config -> filteredGroupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+      config -> groupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
     }.toMap
 }

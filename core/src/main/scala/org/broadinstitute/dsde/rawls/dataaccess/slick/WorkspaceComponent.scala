@@ -261,11 +261,11 @@ trait WorkspaceComponent {
     def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
       workspaceQuery.withBillingProject(billingProject).read
 
-    def listWithBillingProjectsOfType(billingProjects: List[RawlsBillingProjectName],
-                                      workspaceType: WorkspaceType
+    def groupByBillingProjectOfType(workspaceIds: List[UUID],
+                                    workspaceType: WorkspaceType
     ): ReadWriteAction[Map[RawlsBillingProjectName, Seq[Workspace]]] = {
       val query = for {
-        workspace <- workspaceQuery if workspace.namespace inSet billingProjects.map(_.value)
+        workspace <- workspaceQuery if workspace.id inSet workspaceIds.toSet
         if workspace.workspaceType === workspaceType.toString
       } yield (workspace.namespace, workspace)
 

@@ -434,9 +434,11 @@ class WorkspaceService(
   }
 
   def getGCPWorkspacesByBillingProjects(
-    billingProjects: List[RawlsBillingProjectName]
+    workspaceIds: List[String]
   ): Future[Map[RawlsBillingProjectName, Seq[Workspace]]] =
-    workspaceRepository.listWorkspacesByMultipleBillingProjects(billingProjects, WorkspaceType.RawlsWorkspace)
+    workspaceRepository.groupByBillingProjectOfType(workspaceIds.map(id => UUID.fromString(id)),
+                                                    WorkspaceType.RawlsWorkspace
+    )
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
