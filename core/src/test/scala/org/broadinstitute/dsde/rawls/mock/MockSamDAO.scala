@@ -239,10 +239,9 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       case _ => Future.successful(Seq.empty)
     }
 
-  override def listResourcesWithRolesOrActions(resourceTypeName: SamResourceTypeName,
-                                               actions: Seq[SamResourceAction],
-                                               roles: Seq[SamResourceRole],
-                                               ctx: RawlsRequestContext
+  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
+                                        action: SamResourceAction,
+                                        ctx: RawlsRequestContext
   ): Future[Seq[SamUserResource]] =
     resourceTypeName match {
       case SamResourceTypeNames.workspace =>
@@ -252,7 +251,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
             _.map(workspace =>
               SamUserResource(
                 workspace.workspaceId,
-                SamRolesAndActions(roles.toSet, actions.toSet),
+                SamRolesAndActions(Set.empty, Set(action)),
                 SamRolesAndActions(Set.empty, Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 Set.empty,
@@ -268,7 +267,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
             _.map(project =>
               SamUserResource(
                 project.projectName.value,
-                SamRolesAndActions(roles.toSet, actions.toSet),
+                SamRolesAndActions(Set.empty, Set(action)),
                 SamRolesAndActions(Set.empty, Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 Set.empty,
@@ -427,17 +426,16 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     }
   }
 
-  override def listResourcesWithRolesOrActions(resourceTypeName: SamResourceTypeName,
-                                               actions: Seq[SamResourceAction],
-                                               roles: Seq[SamResourceRole],
-                                               ctx: RawlsRequestContext
+  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
+                                        action: SamResourceAction,
+                                        ctx: RawlsRequestContext
   ): Future[Seq[SamUserResource]] = {
     val userResources = for {
       ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
       userResource <- constructResourceFromPolicies(ctx, resourceId, resourcePolicies.values)
     } yield userResource
     if (userResources.isEmpty) {
-      super.listResourcesWithRolesOrActions(resourceTypeName, actions, roles, ctx)
+      super.listResourcesWithActions(resourceTypeName, action, ctx)
     } else {
       Future.successful(userResources.toSeq)
     }

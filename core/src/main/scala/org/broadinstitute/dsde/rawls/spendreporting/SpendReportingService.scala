@@ -568,16 +568,9 @@ class SpendReportingService(
   def getBillingWithSpendPermission(
   ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
     for {
-      billingProjectResources <- samDAO.listResourcesWithRolesOrActions(SamResourceTypeNames.billingProject,
-                                                                        List(SamBillingProjectActions.readSpendReport),
-                                                                        List(),
-                                                                        ctx
-      )
-      ownerWorkspaces <- samDAO.listResourcesWithRolesOrActions(
-        SamResourceTypeNames.workspace,
-        List(),
-        List(SamWorkspaceRoles.owner), // TODO: owner only or owner + project-owner?
-        ctx
+      billingProjectResources <- samDAO.listResourcesWithActions(SamResourceTypeNames.billingProject,
+                                                                 SamBillingProjectActions.readSpendReport,
+                                                                 ctx
       )
       ownerWorkspaces <- samDAO.listResourcesWithActions(
         SamResourceTypeNames.workspace,
