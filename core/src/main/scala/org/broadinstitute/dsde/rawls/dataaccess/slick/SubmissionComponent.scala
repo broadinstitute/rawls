@@ -80,7 +80,7 @@ trait SubmissionComponent {
     def monitoringScript = column[Option[String]]("MONITORING_SCRIPT")
     def monitoringImage = column[Option[String]]("MONITORING_IMAGE")
     def monitoringImageScript = column[Option[String]]("MONITORING_IMAGE_SCRIPT")
-    def perWorkflowCostCap = column[Option[BigDecimal]]("PER_WORKFLOW_COST_CAP")
+    def perWorkflowCostCap = column[Option[BigDecimal]]("COST_CAP_THRESHOLD")
 
     def * = (
       id,
