@@ -1344,7 +1344,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     )
       .when(samDAO)
-      .listResourcesWithRolesOrActions(mockitoEq(SamResourceTypeNames.billingProject), any(), any(), any())
+      .listResourcesWithActions(mockitoEq(SamResourceTypeNames.billingProject), any(), any())
 
     doReturn(
       Future.successful(
@@ -1385,7 +1385,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     )
       .when(samDAO)
-      .listResourcesWithRolesOrActions(mockitoEq(SamResourceTypeNames.workspace), any(), any(), any())
+      .listResourcesWithActions(mockitoEq(SamResourceTypeNames.workspace), any(), any())
 
     val workspace1Billing1 =
       TestData.workspace("workspace1Billing1",

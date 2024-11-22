@@ -579,6 +579,12 @@ class SpendReportingService(
         List(SamWorkspaceRoles.owner), // TODO: owner only or owner + project-owner?
         ctx
       )
+      ownerWorkspaces <- samDAO.listResourcesWithActions(
+        SamResourceTypeNames.workspace,
+        SamWorkspaceActions.own,
+        ctx
+      )
+
       billingProjectIds = billingProjectResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toList
       groupedWorkspaces <- workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(billingProjectIds)
       ownerWorkspaceSet = ownerWorkspaces.map(_.resourceId).toSet
