@@ -319,6 +319,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             if (costBreakdown.cost > perWorkflowCostCap.get) {
               executionServiceCluster.abort(workflowRec, petUser).map {
                 case Success(abortedWfRec) =>
+                  logger.info(
+                    s"Aborted workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap."
+                  )
                   Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
                 case Failure(t) =>
                   logger.error(
