@@ -301,6 +301,14 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
+      useCromwellGcpBatchBackend: Boolean = currentSettings
+        .collectFirst { case setting: UseCromwellGcpBatchBackendSetting =>
+          setting
+        }
+        .exists(_.config.enabled)
+      cromwellSubmissionBackend =
+        if (useCromwellGcpBatchBackend) CromwellBackend("GCPBatch") else highSecurityNetworkCromwellBackend
+
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         submission.submissionRoot,
         final_workflow_outputs_dir,
@@ -315,7 +323,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         deleteIntermediateOutputFiles,
         useReferenceDisks,
         memoryRetryMultiplier,
-        highSecurityNetworkCromwellBackend,
+        cromwellSubmissionBackend,
         workflowFailureMode,
         google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
         ignoreEmptyOutputs,
@@ -467,6 +475,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         monitoringImageScript = submissionRec.monitoringImageScript
       )
     } yield {
+      logger.error("Test workflow options: " + wfOpts.toString);
       val submissionAndWorkspaceLabels =
         Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString)
       val wfLabels = workspaceRec.workflowCollection match {
