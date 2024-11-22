@@ -36,7 +36,7 @@ case class SubmissionRequest(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  costCapThreshold: Option[BigDecimal] = None
+  perWorkflowCostCap: Option[BigDecimal] = None
 )
 
 // This class contains values from the submission REST request
@@ -171,7 +171,7 @@ case class Submission(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  costCapThreshold: Option[BigDecimal] = None
+  perWorkflowCostCap: Option[BigDecimal] = None
 )
 
 case class SubmissionListResponse(
@@ -192,7 +192,7 @@ case class SubmissionListResponse(
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
   userComment: Option[String] = None,
-  costCapThreshold: Option[BigDecimal] = None
+  perWorkflowCostCap: Option[BigDecimal] = None
 )
 
 object SubmissionListResponse {
@@ -407,7 +407,7 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("monitoringScript" -> obj.monitoringScript.toJson),
           Option("monitoringImage" -> obj.monitoringImage.toJson),
           Option("monitoringImageScript" -> obj.monitoringImageScript.toJson),
-          obj.costCapThreshold.map("costCapThreshold" -> _.toJson)
+          obj.perWorkflowCostCap.map("perWorkflowCostCap" -> _.toJson)
         ).flatten: _*
       )
 
@@ -435,7 +435,7 @@ trait ExecutionJsonSupport extends JsonSupport {
         monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
         monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
         monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]]),
-        costCapThreshold = fields.get("costCapThreshold").map(_.convertTo[BigDecimal])
+        perWorkflowCostCap = fields.get("perWorkflowCostCap").map(_.convertTo[BigDecimal])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
