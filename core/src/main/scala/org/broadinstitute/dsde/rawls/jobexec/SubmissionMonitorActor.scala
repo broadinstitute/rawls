@@ -310,13 +310,13 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def execServiceStatus(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit
     executionContext: ExecutionContext
   ): Future[Option[WorkflowRecord]] =
-    workflowRec.externalId match {
+    (workflowRec.externalId, perWorkflowCostCap) match {
       // fetch cost information for the workflow if submission has a cost cap threshold defined
-      case Some(externalId) if perWorkflowCostCap.isDefined =>
+      case (Some(externalId), Some(costCap)) =>
         for {
           costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
           updatedWorkflowRec <-
-            if (costBreakdown.cost > perWorkflowCostCap.get) {
+            if (costBreakdown.cost > costCap) {
               executionServiceCluster.abort(workflowRec, petUser).map {
                 case Success(abortedWfRec) =>
                   logger.info(
@@ -334,12 +334,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             }
         } yield updatedWorkflowRec
       // fetch workflow status only if cost cap threshold is not defined
-      case Some(externalId) =>
+      case (Some(externalId), None) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
           if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
           else None
         }
-      case None => Future.successful(None)
+      case _ => Future.successful(None)
     }
 
   private def execServiceOutputs(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit
