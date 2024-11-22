@@ -11,10 +11,7 @@ import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, Uncoordinat
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
-  ExecutionServiceStatusResponse,
-  StatusCheckComplete
-}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
@@ -22,12 +19,15 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import spray.json.JsObject
 
 import java.util.UUID
+import scala.Option
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -1344,37 +1344,48 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     ).foreach(rec => rec.cost shouldEqual (Option(BigDecimal(5))))
   }
 
-  it should "abort a submission that has exceeded its cost cap" in withDefaultTestDatabase {
+  it should "abort a workflow that has exceeded the per-workflow cost cap but not abort the entire submission" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
+      val cheapWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val cheapWorkflow = Workflow(Some(cheapWorkflowId), WorkflowStatuses.Submitted, new DateTime(), Some(testData.sample1.toReference), Seq.empty)
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId), WorkflowStatuses.Submitted, new DateTime(), Some(testData.sample2.toReference), Seq.empty)
+      val submission = testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(cheapWorkflow, expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] = {
+          if (id.equals(cheapWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(1), "USD", status, Seq.empty))
+          } else if (id.equals(expensiveWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(11), "USD", status, Seq.empty))
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+        }
+      }
+
       val monitor = createSubmissionMonitor(
         dataSource,
         mockSamDAO,
         mockGoogleServicesDAO,
-        testData.submissionUpdateEntity,
+        submission,
         testData.wsName,
-        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString, BigDecimal(5)),
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
         perWorkflowCostCap = Option(BigDecimal(2))
       )
-      val workflowsRecs = runAndWait(
-        workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
-      )
 
-      assertResult(StatusCheckComplete(false)) {
-        await(
-          monitor.handleStatusResponses(
-            ExecutionServiceStatusResponse(
-              workflowsRecs.map(r =>
-                scala.util.Success(
-                  Option((r.copy(status = WorkflowStatuses.Running.toString, cost = Option(BigDecimal(5))), None))
-                )
-              )
-            )
-          )
-        )
-      }
+      val workflowCosts = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1.externalId.get -> (recordWithOutputs._1.status, recordWithOutputs._1.cost)
+      }.toMap
+
+      workflowCosts(cheapWorkflowId) shouldEqual (WorkflowStatuses.Running.toString, Option(BigDecimal(1)))
+      workflowCosts(expensiveWorkflowId) shouldEqual (WorkflowStatuses.Aborting.toString, Option(BigDecimal(11)))
+
       runAndWait(
         submissionQuery.loadSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
-      ).getOrElse(fail()).status shouldBe SubmissionStatuses.Aborting
+      ).getOrElse(fail()).status shouldBe SubmissionStatuses.Submitted
   }
 
   it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase {
