@@ -320,6 +320,47 @@ class RawlsBillingProjectComponentSpec
 
   }
 
+  it should "find the next outstanding change via nextOutstanding" in withDefaultTestDatabase {
+    import driver.api._
+
+    // insert some records
+    val setupSql = sqlu"""
+      insert into BILLING_ACCOUNT_CHANGES
+        (BILLING_PROJECT_NAME, USER_ID, PREVIOUS_BILLING_ACCOUNT, NEW_BILLING_ACCOUNT, STATUS)
+        values
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Outstanding')
+        ;
+        """
+    runAndWait(setupSql)
+
+    val next = runAndWait(BillingAccountChanges.nextOutstanding().result)
+
+    next should have length 1
+    next.head.billingProjectName shouldBe testData.testProject1Name
+  }
+
+  it should "find no outstanding change via nextOutstanding if none exist" in withDefaultTestDatabase {
+    import driver.api._
+
+    // insert some records
+    val setupSql = sqlu"""
+      insert into BILLING_ACCOUNT_CHANGES
+        (BILLING_PROJECT_NAME, USER_ID, PREVIOUS_BILLING_ACCOUNT, NEW_BILLING_ACCOUNT, STATUS)
+        values
+          (${testData.testProject1Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized'),
+          (${testData.testProject2Name.value}, 'user', 'oldaccount', 'newaccount', 'Ignored'),
+          (${testData.testProject3Name.value}, 'user', 'oldaccount', 'newaccount', 'Synchronized')
+        ;
+        """
+    runAndWait(setupSql)
+
+    val next = runAndWait(BillingAccountChanges.nextOutstanding().result)
+
+    next shouldBe empty
+  }
+
   "BillingAccountChange" should "be able to load records that need to be sync'd" in withDefaultTestDatabase {
     runAndWait {
       import driver.api._

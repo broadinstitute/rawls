@@ -615,6 +615,9 @@ trait RawlsBillingProjectComponent {
         )
         .map(_.status)
         .update(BillingAccountChangeStatus.Ignored.toString)
+
+    def nextOutstanding(): BillingAccountChangeQuery =
+      query.filter(_.status === BillingAccountChangeStatus.Outstanding.toString).sortBy(_.id).take(1)
   }
 
 }
