@@ -19,8 +19,8 @@ object SubmissionRequestValidation extends StringValidationUtils {
 
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
-  val COST_CAP_THRESHOLD_SCALE = 2;
-  val COST_CAP_THRESHOLD_PRECISION = 10;
+  val PER_WORKFLOW_COST_CAP_SCALE = 2;
+  val PER_WORKFLOW_COST_CAP_PRECISION = 10;
 
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
@@ -32,7 +32,7 @@ object SubmissionRequestValidation extends StringValidationUtils {
   def staticValidation(submission: SubmissionRequest, methodConfig: MethodConfiguration): Unit = {
 
     val errors = List(
-      validateCostCapThreshold(submission),
+      validatePerWorkflowCostCap(submission),
       validateEntityNameAndType(submission),
       validateMethodConfigRootEntity(submission, methodConfig),
       validateEntityAndDataReference(submission, methodConfig),
@@ -45,19 +45,19 @@ object SubmissionRequestValidation extends StringValidationUtils {
       )
   }
 
-  def validateCostCapThreshold(submissionRequest: SubmissionRequest): List[ErrorReport] = List(
-    submissionRequest.costCapThreshold.flatMap { threshold =>
-      if (threshold.sign <= 0) Some(ErrorReport("costCapThreshold must be greater than zero")) else None
+  def validatePerWorkflowCostCap(submissionRequest: SubmissionRequest): List[ErrorReport] = List(
+    submissionRequest.perWorkflowCostCap.flatMap { threshold =>
+      if (threshold.sign <= 0) Some(ErrorReport("perWorkflowCostCap must be greater than zero")) else None
     },
-    submissionRequest.costCapThreshold.flatMap { threshold =>
-      if (threshold.scale > COST_CAP_THRESHOLD_SCALE) {
+    submissionRequest.perWorkflowCostCap.flatMap { threshold =>
+      if (threshold.scale > PER_WORKFLOW_COST_CAP_SCALE) {
         // TODO: improve messages
-        Some(ErrorReport(s"costCapThreshold scale is limited to $COST_CAP_THRESHOLD_SCALE decimal places"))
+        Some(ErrorReport(s"perWorkflowCostCap scale is limited to $PER_WORKFLOW_COST_CAP_SCALE decimal places"))
       } else None
     },
-    submissionRequest.costCapThreshold.flatMap { threshold =>
-      if (threshold.precision > COST_CAP_THRESHOLD_PRECISION)
-        Some(ErrorReport(s"costCapThreshold cannot be greater than $COST_CAP_THRESHOLD_PRECISION total digits"))
+    submissionRequest.perWorkflowCostCap.flatMap { threshold =>
+      if (threshold.precision > PER_WORKFLOW_COST_CAP_PRECISION)
+        Some(ErrorReport(s"perWorkflowCostCap cannot be greater than $PER_WORKFLOW_COST_CAP_PRECISION total digits"))
       else None
     }
   ).flatten

@@ -41,7 +41,7 @@ case class SubmissionRecord(id: UUID,
                             monitoringScript: Option[String],
                             monitoringImage: Option[String],
                             monitoringImageScript: Option[String],
-                            costCapThreshold: Option[BigDecimal]
+                            perWorkflowCostCap: Option[BigDecimal]
 )
 
 case class SubmissionValidationRecord(id: Long, workflowId: Long, errorText: Option[String], inputName: String)
@@ -80,7 +80,7 @@ trait SubmissionComponent {
     def monitoringScript = column[Option[String]]("MONITORING_SCRIPT")
     def monitoringImage = column[Option[String]]("MONITORING_IMAGE")
     def monitoringImageScript = column[Option[String]]("MONITORING_IMAGE_SCRIPT")
-    def costCapThreshold = column[Option[BigDecimal]]("COST_CAP_THRESHOLD")
+    def perWorkflowCostCap = column[Option[BigDecimal]]("PER_WORKFLOW_COST_CAP")
 
     def * = (
       id,
@@ -103,7 +103,7 @@ trait SubmissionComponent {
       monitoringScript,
       monitoringImage,
       monitoringImageScript,
-      costCapThreshold
+      perWorkflowCostCap
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -299,16 +299,16 @@ trait SubmissionComponent {
         })
       )
 
-    def listActiveSubmissionIdsWithWorkspaceAndCostCapThreshold(
+    def listActiveSubmissionIdsWithWorkspaceAndPerWorkflowCostCap(
       limit: FiniteDuration
     ): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal])]] = {
       // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
       val cutoffTime = new Timestamp(DateTime.now().minusDays(limit.toDays.toInt).getMillis)
       val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
-      val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name, sub.costCapThreshold) }.result
+      val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name, sub.perWorkflowCostCap) }.result
       result.map(rows =>
-        rows.map { case (subId, wsNs, wsName, costCapThreshold) =>
-          (subId, WorkspaceName(wsNs, wsName), costCapThreshold)
+        rows.map { case (subId, wsNs, wsName, perWorkflowCostCap) =>
+          (subId, WorkspaceName(wsNs, wsName), perWorkflowCostCap)
         }
       )
     }
@@ -513,7 +513,7 @@ trait SubmissionComponent {
         submission.monitoringScript,
         submission.monitoringImage,
         submission.monitoringImageScript,
-        submission.costCapThreshold
+        submission.perWorkflowCostCap
       )
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord,
