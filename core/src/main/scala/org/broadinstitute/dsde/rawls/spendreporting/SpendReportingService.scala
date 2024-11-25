@@ -152,6 +152,13 @@ object SpendReportingService {
   ): SpendReportingResults = {
 
     var total = BigDecimal(0.0)
+    var total_credits = BigDecimal(0.0)
+
+    val currency = allRows.map(_.get("currency").getStringValue).distinct match {
+      case head :: _ => Currency.getInstance(head)
+      case _         => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
+    }
+
     val all = allRows.map { row =>
       val currencyString = row.get("currency").getStringValue
       val currencyCode = Currency.getInstance(currencyString)
@@ -171,7 +178,7 @@ object SpendReportingService {
       val subAggregation = List(
         SpendReportingForDateRange(
           getRoundedNumericValue("other_cost").toString,
-          "0.0",
+          getRoundedNumericValue("credits").toString,
           currencyCode.toString,
           Option(start),
           Option(end),
@@ -179,24 +186,26 @@ object SpendReportingService {
         ),
         SpendReportingForDateRange(
           getRoundedNumericValue("storage_cost").toString,
-          "0.0",
+          getRoundedNumericValue("credits").toString,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Storage)
         ),
         SpendReportingForDateRange(
           getRoundedNumericValue("compute_cost").toString,
-          "0.0",
+          getRoundedNumericValue("credits").toString,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Compute)
         )
       )
 
       val total_cost = getRoundedNumericValue("total_cost")
+      val credits = getRoundedNumericValue("credits")
       total = total + total_cost
+      total_credits = total_credits + credits
 
       val workspaceTotal = SpendReportingForDateRange(
         total_cost.toString,
-        "0.0",
+        credits.toString,
         currencyCode.toString,
         Option(start),
         Option(end),
@@ -211,8 +220,8 @@ object SpendReportingService {
 
     val summary = SpendReportingForDateRange(
       total.toString,
-      "0.0", // TODO
-      "USD", // TODO
+      total_credits.toString,
+      currency.toString, // TODO: what to do about combined summary for currencies?
       Option(start),
       Option(end)
     )
@@ -285,7 +294,6 @@ class SpendReportingService(
       )
     }
 
-  // TODO if there is a problem with just one BP, the whole thing fails.
   def getSpendExportConfigurations(projects: Seq[RawlsBillingProjectName]): Future[Seq[BillingProjectSpendExport]] =
     dataSource
       .inTransaction(_.rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(projects))
@@ -355,6 +363,7 @@ class SpendReportingService(
                        |    project.id AS project_id,
                        |    project.name AS project_name,
                        |    currency,
+                       |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
                        |    CASE
                        |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
                        |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
@@ -369,8 +378,8 @@ class SpendReportingService(
                        |  GROUP BY
                        |    project_id,
                        |    project_name,
-                       |    currency,
-                       |    spend_category""".stripMargin.trim
+                       |    spend_category,
+                       |    currency""".stripMargin.trim
 
     val bpSubQuery = billingProjects
       .map { bp =>
@@ -393,7 +402,8 @@ class SpendReportingService(
        |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
        |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
        |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
-       |  currency
+       |  currency,
+       |  SUM(credits) as credits
        |FROM
        |  spend_categories
        |GROUP BY
@@ -547,12 +557,14 @@ class SpendReportingService(
     end: DateTime,
     pageSize: Int,
     offset: Int
-  ): Future[SpendReportingResults] = {
+  ): Future[Option[SpendReportingResults]] = {
     validateReportParameters(start, end)
     for {
       billingMap <- getBillingWithSpendPermission()
+      _ = if (billingMap.isEmpty) {
+        return Future.successful(None)
+      }
       projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-      // TODO if there's no workspaces returned, don't run the query
       query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
       queryJob = setUpAllUserWorkspaceQuery(query, start, end)
 
@@ -561,11 +573,8 @@ class SpendReportingService(
       result = job.getQueryResults()
     } yield result.getValues.asScala.toList match {
       case Nil =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.NotFound,
-          s"no spend data found between dates ${toISODateString(start)} and ${toISODateString(end)}"
-        )
-      case rows => extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
+        None
+      case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
     }
   }
 
@@ -577,12 +586,23 @@ class SpendReportingService(
         SamWorkspaceActions.readSpendReport,
         ctx
       )
-      groupedWorkspaces <- workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(
-        ownerWorkspaces.map(_.resourceId).toList
-      )
+      groupedWorkspaces <-
+        if (ownerWorkspaces.isEmpty) {
+          Future.successful(Map.empty[RawlsBillingProjectName, Seq[Workspace]])
+        } else {
+          // Ignore non-UUID workspaceIds; these shouldn't happen but if they do, we don't want them
+          workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(
+            ownerWorkspaces.map(_.resourceId).filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess).toList
+          )
+        }
       // Only use the BPs we know exist in the DB and are GCP
-      spendConfigs <- getSpendExportConfigurations(groupedWorkspaces.keys.toList)
+      spendConfigs <-
+        if (groupedWorkspaces.isEmpty) {
+          Future.successful(Seq.empty[BillingProjectSpendExport])
+        } else { getSpendExportConfigurations(groupedWorkspaces.keys.toList) }
     } yield spendConfigs.map { config =>
-      config -> groupedWorkspaces(config.billingProjectName).map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+      config -> groupedWorkspaces
+        .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
+        .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
     }.toMap
 }

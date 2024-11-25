@@ -47,6 +47,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
+import org.scalatest.RecoverMethods.recoverToExceptionIf
 
 class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
 
@@ -554,40 +555,60 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   }
 
   "extractCrossBillingProjectSpendReportingResults" should "break down results by workspace and category" in {
-    val computeCost1 = 2.4
-    val computeCost2 = 0.10111
-    val storageCost1 = 0.33
-    val storageCost2 = 0.3561
-    val otherCost1 = 3.0
-    val otherCost2 = 0.0001
-    val computeCost1Rounded: BigDecimal = BigDecimal(computeCost1).setScale(2, RoundingMode.HALF_EVEN)
-    val computeCost2Rounded: BigDecimal = BigDecimal(computeCost2).setScale(2, RoundingMode.HALF_EVEN)
-    val storageCost1Rounded: BigDecimal = BigDecimal(storageCost1).setScale(2, RoundingMode.HALF_EVEN)
-    val storageCost2Rounded: BigDecimal = BigDecimal(storageCost2).setScale(2, RoundingMode.HALF_EVEN)
-    val otherCost1Rounded: BigDecimal = BigDecimal(otherCost1).setScale(2, RoundingMode.HALF_EVEN)
-    val otherCost2Rounded: BigDecimal = BigDecimal(otherCost2).setScale(2, RoundingMode.HALF_EVEN)
-    val totalCost1 = computeCost1 + storageCost1 + otherCost1
-    val totalCost2 = computeCost2 + storageCost2 + otherCost2
-    val totalCostRounded: BigDecimal = BigDecimal(totalCost1 + totalCost2).setScale(2, RoundingMode.HALF_EVEN)
+    val credits1 = 0.0
+    val credits2 = 3.012
+    val credits3 = 1.12345
+    val storageCostWs1 = 100.582
+    val otherCostWs1 = 0.10111
+    val totalCostWs1 = storageCostWs1 + otherCostWs1
+    val storageCostRoundedWs1: BigDecimal = BigDecimal(storageCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs1: BigDecimal = BigDecimal(otherCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs1: BigDecimal = BigDecimal(totalCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val storageCostWs2 = 20.145
+    val computeCostWs2 = 150.4033
+    val totalCostWs2 = storageCostWs2 + computeCostWs2
+    val storageCostRoundedWs2: BigDecimal = BigDecimal(storageCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val computeCostRoundedWs2: BigDecimal = BigDecimal(computeCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs2: BigDecimal =
+      BigDecimal(totalCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+
+    val computeCostWs3 = 1111.222
+    val otherCostWs3 = 0.02
+    val totalCostWs3 = otherCostWs3 + computeCostWs3
+    val computeCostRoundedWs3: BigDecimal = BigDecimal(computeCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs3: BigDecimal = BigDecimal(otherCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs3: BigDecimal = BigDecimal(totalCostWs3).setScale(2, RoundingMode.HALF_EVEN)
 
     val table: List[Map[String, String]] = List(
       Map(
-        "storage_cost" -> s"$storageCost1",
-        "compute_cost" -> s"$computeCost1",
-        "other_cost" -> s"$otherCost1",
-        "total_cost" -> s"$totalCost1",
+        "storage_cost" -> s"$storageCostWs1",
+        "compute_cost" -> "0.0",
+        "other_cost" -> s"$otherCostWs1",
+        "total_cost" -> s"$totalCostWs1",
         "currency" -> "USD",
-        "project_id" -> "terra-workspace-project1",
-        "project_name" -> "terra-billing-project1"
+        "project_id" -> "workspace1ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "credits" -> s"$credits1"
       ),
       Map(
-        "storage_cost" -> s"$storageCost2",
-        "compute_cost" -> s"$computeCost2",
-        "other_cost" -> s"$otherCost2",
-        "total_cost" -> s"$totalCost2",
+        "storage_cost" -> s"$storageCostWs2",
+        "compute_cost" -> s"$computeCostWs2",
+        "other_cost" -> "0.0",
+        "total_cost" -> s"$totalCostWs2",
+        "project_id" -> "workspace2ProjectId",
+        "project_name" -> "terra-billing-project1",
         "currency" -> "USD",
-        "project_id" -> "terra-workspace-project2",
-        "project_name" -> "terra-billing-project2"
+        "credits" -> s"$credits2"
+      ),
+      Map(
+        "storage_cost" -> "0.0",
+        "compute_cost" -> s"$computeCostWs3",
+        "other_cost" -> s"$otherCostWs3",
+        "project_id" -> "workspace3ProjectId",
+        "project_name" -> "terra-billing-project2",
+        "total_cost" -> s"$totalCostWs3",
+        "currency" -> "USD",
+        "credits" -> s"$credits3"
       )
     )
 
@@ -598,14 +619,78 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(
-        GoogleProjectId("terra-workspace-project1") -> WorkspaceName("terra-billing-project1", "workspace1"),
-        GoogleProjectId("terra-workspace-project2") -> WorkspaceName("terra-billing-project2", "workspace2")
+        GoogleProjectId("workspace1ProjectId") -> WorkspaceName("workspace1", "namespace1"),
+        GoogleProjectId("workspace2ProjectId") -> WorkspaceName("workspace2", "namespace1"),
+        GoogleProjectId("workspace3ProjectId") -> WorkspaceName("workspace3", "namespace2")
       )
     )
-    reportingResults.spendSummary.cost shouldBe totalCostRounded.toString
-    reportingResults.spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
-    reportingResults.spendDetails.length shouldBe 2
+    val spendDetails = reportingResults.spendDetails
+    // We have 3 workspaces
+    spendDetails.length shouldBe 3
 
+    // Workspace 1
+    spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    val ws1SpendData = spendDetails.head.spendData
+    ws1SpendData.length shouldBe 1
+    verifyWorkspaceSpendData(ws1SpendData.head,
+                             totalCostRoundedWs1,
+                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN),
+                             storageCostRoundedWs1,
+                             otherCostRoundedWs1
+    )
+
+    // Workspace 2
+    spendDetails(1).aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    val ws2SpendData = spendDetails(1).spendData
+    ws2SpendData.length shouldBe 1
+    verifyWorkspaceSpendData(ws2SpendData.head,
+                             totalCostRoundedWs2,
+                             computeCostRoundedWs2,
+                             storageCostRoundedWs2,
+                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN)
+    )
+
+    // Workspace 3
+    spendDetails(2).aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    val ws3SpendData = spendDetails(2).spendData
+    ws3SpendData.length shouldBe 1
+    verifyWorkspaceSpendData(ws3SpendData.head,
+                             totalCostRoundedWs3,
+                             computeCostRoundedWs3,
+                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN),
+                             otherCostRoundedWs3
+    )
+
+  }
+  def verifyWorkspaceSpendData(actualSpendData: SpendReportingForDateRange,
+                               expectedTotal: BigDecimal,
+                               expectedCompute: BigDecimal,
+                               expectedStorage: BigDecimal,
+                               expectedOther: BigDecimal
+  ) = {
+    actualSpendData.cost shouldBe expectedTotal.toString
+    val aggSub = actualSpendData.subAggregation.get
+    aggSub.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+    verifyCategoricalSpendData(aggSub.spendData, expectedCompute, expectedStorage, expectedOther)
+  }
+
+  def verifyCategoricalSpendData(actualSpendData: Seq[SpendReportingForDateRange],
+                                 expectedCompute: BigDecimal,
+                                 expectedStorage: BigDecimal,
+                                 expectedOther: BigDecimal
+  ) = {
+    actualSpendData.length shouldBe 3
+    actualSpendData.foreach { spendData =>
+      spendData.category match {
+        case Some(TerraSpendCategories.Other) =>
+          spendData.cost shouldBe expectedOther.toString
+        case Some(TerraSpendCategories.Compute) =>
+          spendData.cost shouldBe expectedCompute.toString
+        case Some(TerraSpendCategories.Storage) =>
+          spendData.cost shouldBe expectedStorage.toString
+        case _ => fail("Unexpected category")
+      }
+    }
   }
 
   "getSpendForGCPBillingProject" should "throw an exception when BQ returns zero rows" in {
@@ -1191,6 +1276,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    project.id AS project_id,
           |    project.name AS project_name,
           |    currency,
+          |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |    CASE
           |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
           |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
@@ -1205,13 +1291,14 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  GROUP BY
           |    project_id,
           |    project_name,
-          |    currency,
-          |    spend_category
+          |    spend_category,
+          |    currency
           | UNION ALL
           |    SELECT
           |      project.id AS project_id,
           |      project.name AS project_name,
           |      currency,
+          |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |      CASE
           |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
           |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
@@ -1226,13 +1313,14 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    GROUP BY
           |      project_id,
           |      project_name,
-          |      currency,
-          |      spend_category
+          |      spend_category,
+          |      currency
           | UNION ALL
           |    SELECT
           |      project.id AS project_id,
           |      project.name AS project_name,
           |      currency,
+          |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |      CASE
           |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
           |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
@@ -1247,8 +1335,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    GROUP BY
           |      project_id,
           |      project_name,
-          |      currency,
-          |      spend_category
+          |      spend_category,
+          |      currency
           |)
           |SELECT
           |  project_id,
@@ -1257,7 +1345,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
           |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
           |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
-          |  currency
+          |  currency,
+          |  SUM(credits) as credits
           |FROM
           |  spend_categories
           |GROUP BY
@@ -1292,7 +1381,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   }
 
   "getBillingWithSpendPermission" should "return spendConfigurations for workspaces" in {
-    // todo: include non-rawls bps
+    // todo: include non-rawls bps and bps without accounts
 
     val dataSource = mock[SlickDataSource]
 
@@ -1430,139 +1519,46 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   }
 
-  "extractSpendReportingResultsAcrossBillingProjects" should "should return correct summary data" in {
-    val storageCostWs1 = 100.582
-    val otherCostWs1 = 0.10111
-    val totalCostWs1 = storageCostWs1 + otherCostWs1
-    val storageCostRoundedWs1: BigDecimal = BigDecimal(storageCostWs1).setScale(2, RoundingMode.HALF_EVEN)
-    val otherCostRoundedWs1: BigDecimal = BigDecimal(otherCostWs1).setScale(2, RoundingMode.HALF_EVEN)
-    val totalCostRoundedWs1: BigDecimal = BigDecimal(totalCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+  "getSpendForAllWorkspaces" should "handle no owned workspaces" in {
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
 
-    val storageCostWs2 = 20.145
-    val computeCostWs2 = 150.4033
-    val totalCostWs2 = storageCostWs2 + computeCostWs2
-    val storageCostRoundedWs2: BigDecimal = BigDecimal(storageCostWs2).setScale(2, RoundingMode.HALF_EVEN)
-    val computeCostRoundedWs2: BigDecimal = BigDecimal(computeCostWs2).setScale(2, RoundingMode.HALF_EVEN)
-    val totalCostRoundedWs2: BigDecimal =
-      BigDecimal(totalCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-    val computeCostWs3 = 1111.222
-    val otherCostWs3 = 0.02
-    val totalCostWs3 = otherCostWs3 + computeCostWs3
-    val computeCostRoundedWs3: BigDecimal = BigDecimal(computeCostWs3).setScale(2, RoundingMode.HALF_EVEN)
-    val otherCostRoundedWs3: BigDecimal = BigDecimal(otherCostWs3).setScale(2, RoundingMode.HALF_EVEN)
-    val totalCostRoundedWs3: BigDecimal = BigDecimal(totalCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(Future.successful(List.empty))
 
-    val table: List[Map[String, String]] = List(
-      Map(
-        "storage_cost" -> s"$storageCostWs1",
-        "compute_cost" -> "0.0",
-        "other_cost" -> s"$otherCostWs1",
-        "total_cost" -> s"$totalCostWs1",
-        "project_id" -> "workspace1ProjectId",
-        "currency" -> "USD"
-      ),
-      Map(
-        "storage_cost" -> s"$storageCostWs2",
-        "compute_cost" -> s"$computeCostWs2",
-        "other_cost" -> "0.0",
-        "total_cost" -> s"$totalCostWs2",
-        "project_id" -> "workspace2ProjectId",
-        "currency" -> "USD"
-      ),
-      Map(
-        "storage_cost" -> "0.0",
-        "compute_cost" -> s"$computeCostWs3",
-        "other_cost" -> s"$otherCostWs3",
-        "project_id" -> "workspace3ProjectId",
-        "total_cost" -> s"$totalCostWs3",
-        "currency" -> "USD"
-      )
-    )
+    val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
 
-    val tableResult: TableResult = createTableResult(table)
-
-    val reportingResults = SpendReportingService.extractCrossBillingProjectSpendReportingResults(
-      tableResult.getValues.asScala.toList,
-      DateTime.now().minusDays(1),
-      DateTime.now(),
-      Map(
-        GoogleProjectId("workspace1ProjectId") -> WorkspaceName("workspace1", "namespace1"),
-        GoogleProjectId("workspace2ProjectId") -> WorkspaceName("workspace2", "namespace1"),
-        GoogleProjectId("workspace3ProjectId") -> WorkspaceName("workspace3", "namespace2")
-      )
-    )
-
-    val spendDetails = reportingResults.spendDetails
-
-    // We have 3 workspaces
-    spendDetails.length shouldBe 3
-
-    // Workspace 1
-    spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
-    val ws1SpendData = spendDetails.head.spendData
-    ws1SpendData.length shouldBe 1
-    verifyWorkspaceSpendData(ws1SpendData.head,
-                             totalCostRoundedWs1,
-                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN),
-                             storageCostRoundedWs1,
-                             otherCostRoundedWs1
-    )
-
-    // Workspace 2
-    spendDetails(1).aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
-    val ws2SpendData = spendDetails(1).spendData
-    ws2SpendData.length shouldBe 1
-    verifyWorkspaceSpendData(ws2SpendData.head,
-                             totalCostRoundedWs2,
-                             computeCostRoundedWs2,
-                             storageCostRoundedWs2,
-                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN)
-    )
-
-    // Workspace 3
-    spendDetails(2).aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
-    val ws3SpendData = spendDetails(2).spendData
-    ws3SpendData.length shouldBe 1
-    verifyWorkspaceSpendData(ws3SpendData.head,
-                             totalCostRoundedWs3,
-                             computeCostRoundedWs3,
-                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN),
-                             otherCostRoundedWs3
-    )
-
-  }
-
-  def verifyWorkspaceSpendData(actualSpendData: SpendReportingForDateRange,
-                               expectedTotal: BigDecimal,
-                               expectedCompute: BigDecimal,
-                               expectedStorage: BigDecimal,
-                               expectedOther: BigDecimal
-  ) = {
-    actualSpendData.cost shouldBe expectedTotal.toString
-    val aggSub = actualSpendData.subAggregation.get
-    aggSub.aggregationKey shouldBe SpendReportingAggregationKeys.Category
-    verifyCategoricalSpendData(aggSub.spendData, expectedCompute, expectedStorage, expectedOther)
-  }
-
-  def verifyCategoricalSpendData(actualSpendData: Seq[SpendReportingForDateRange],
-                                 expectedCompute: BigDecimal,
-                                 expectedStorage: BigDecimal,
-                                 expectedOther: BigDecimal
-  ) = {
-    actualSpendData.length shouldBe 3
-    actualSpendData.foreach { spendData =>
-      spendData.category match {
-        case Some(TerraSpendCategories.Other) =>
-          spendData.cost shouldBe expectedOther.toString
-        case Some(TerraSpendCategories.Compute) =>
-          spendData.cost shouldBe expectedCompute.toString
-        case Some(TerraSpendCategories.Storage) =>
-          spendData.cost shouldBe expectedStorage.toString
-        case _ => fail("Unexpected category")
-      }
+    when(mockWorkspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(Future.successful(Map.empty))
+    val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
+      mockWorkspaceService
     }
 
+    val bigQueryService = mockBigQuery(List[Map[String, String]]())
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bigQueryService,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
+    )
+
+    val exceptionFuture = recoverToExceptionIf[RawlsExceptionWithErrorReport] {
+      service.getSpendForAllWorkspaces(from, to, 100, 0)
+    }
+    exceptionFuture.map { e =>
+      e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
+      e.errorReport.message.contains("no workspaces") shouldBe true
+    }
   }
 
   "getSpendForAllWorkspaces" should "get the spend report from multiple billing projects" ignore {
@@ -1754,13 +1750,15 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       Duration.Inf
     )
 
-    result.spendSummary.credits shouldBe "0"
-    result.spendSummary.cost shouldBe Seq(price1, price2).sum.toString()
-    result.spendSummary.currency shouldBe "USD"
-    result.spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
+    val spendSummary = result.get.spendSummary
+
+    spendSummary.credits shouldBe "0"
+    spendSummary.cost shouldBe Seq(price1, price2).sum.toString()
+    spendSummary.currency shouldBe "USD"
+    spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
       ISODateTimeFormat.date()
     )
-    result.spendSummary.endTime.get.toString(ISODateTimeFormat.date()) shouldBe to.toString(ISODateTimeFormat.date())
+    spendSummary.endTime.get.toString(ISODateTimeFormat.date()) shouldBe to.toString(ISODateTimeFormat.date())
 
     startDateCapture.getValue shouldBe from.toDate
     endDateCapture.getValue shouldBe to.toDate
