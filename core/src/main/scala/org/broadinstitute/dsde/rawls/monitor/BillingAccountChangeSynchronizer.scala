@@ -17,7 +17,12 @@ import cats.implicits.{
 import cats.mtl.Ask
 import cats.{Applicative, Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{BillingAccountChange, ReadWriteAction, WriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  BillingAccountChange,
+  BillingAccountChangeStatus,
+  ReadWriteAction,
+  WriteAction
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
@@ -96,6 +101,12 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     for {
       billingProject <- loadBillingProject
 
+      // Try out the new query using the STATUS column and compare results. If validation fails, don't
+      // fail the entire process.
+      _ <- validateStatusColumn.recover { case e: Exception =>
+        logger.warn(s"BillingAccountChangeStatus logic failed with ${e.getMessage}", e)
+      }
+
       // v1 billing projects are backed by google projects and are used for v1 workspace billing
       updateBillingProjectOutcome <- M.ifM(isV1BillingProject(billingProject.projectName))(
         updateBillingProjectGoogleProject(billingProject, tracingContext),
@@ -105,6 +116,44 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject, tracingContext)
       _ <- writeBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
     } yield ()
+
+  private def validateStatusColumn[F[_]](implicit
+    R: Ask[F, BillingAccountChange],
+    M: Monad[F],
+    L: LiftIO[F]
+  ): F[Unit] =
+    for {
+      (changeStatus, changeId) <- R.reader(x => (x.status, x.id))
+      byStatus <- inTransaction(BillingAccountChanges.nextOutstanding().result)
+    } yield
+    /* validation:
+          - byStatus should find exactly 1
+          - byStatus should have same id
+          - changeStatus should have status == Outstanding
+     */
+    if (
+      byStatus.length == 1 &&
+      byStatus.head.id == changeId &&
+      changeStatus == BillingAccountChangeStatus.Outstanding
+    ) {
+      logger.info(s"BillingAccountChangeStatus logic correct for change id $changeId")
+    } else {
+      // collect errors
+      val sb = new StringBuilder(s"BillingAccountChangeStatus logic error for change id $changeId!")
+      if (byStatus.isEmpty) {
+        sb.append(" By-status lookup was empty.")
+      }
+      if (byStatus.length > 1) {
+        sb.append(s" By-status lookup had length ${byStatus.length}.")
+      }
+      if (changeStatus != BillingAccountChangeStatus.Outstanding) {
+        sb.append(s" Legacy lookup had status $changeStatus.")
+      }
+      if (changeId != byStatus.head.id) {
+        sb.append(s" Legacy found id $changeId, but by-status head had id ${byStatus.head.id}")
+      }
+      logger.warn(sb.toString())
+    }
 
   private def loadBillingProject[F[_]](implicit
     R: Ask[F, BillingAccountChange],
@@ -278,11 +327,12 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         case Success          => info("Successfully synchronized Billing Account change")
         case Failure(message) => warn("Failed to synchronize Billing Account change", "details" -> message)
       }
-
       changeId <- R.reader(_.id)
       record = BillingAccountChanges.withId(changeId)
       _ <- inTransaction {
-        record.setGoogleSyncTime(Instant.now().some) *> record.setOutcome(outcome.some)
+        record.setGoogleSyncTime(Instant.now().some) *>
+          record.setOutcome(outcome.some) *>
+          record.setStatus(BillingAccountChangeStatus.Synchronized)
       }
     } yield ()
 

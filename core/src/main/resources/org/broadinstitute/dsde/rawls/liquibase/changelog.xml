@@ -126,4 +126,8 @@
     <include file="changesets/20240723_workspace_settings.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20240820_submission_cost_cap_threshold.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20240830_workflow_cost.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20241106_streamline_entity_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20241106_streamline_workspace_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20241120_rename_submission_cost_cap_threshold.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20241121_billing_account_changes_status.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

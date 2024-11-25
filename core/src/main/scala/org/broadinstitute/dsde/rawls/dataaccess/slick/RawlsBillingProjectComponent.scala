@@ -4,6 +4,7 @@ import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
+import org.broadinstitute.dsde.rawls.dataaccess.slick.BillingAccountChangeStatus.BillingAccountChangeStatus
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperationNames}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -101,8 +102,23 @@ final case class BillingAccountChange(id: Long,
                                       newBillingAccount: Option[RawlsBillingAccountName],
                                       created: Instant,
                                       googleSyncTime: Option[Instant],
+                                      status: BillingAccountChangeStatus,
                                       outcome: Option[Outcome]
 )
+
+object BillingAccountChangeStatus extends Enumeration {
+  type BillingAccountChangeStatus = Value
+  val Ignored: BillingAccountChangeStatus = Value("Ignored")
+  val Outstanding: BillingAccountChangeStatus = Value("Outstanding")
+  val Synchronized: BillingAccountChangeStatus = Value("Synchronized")
+
+  def apply(value: String): BillingAccountChangeStatus = value match {
+    case "Ignored"      => Ignored
+    case "Outstanding"  => Outstanding
+    case "Synchronized" => Synchronized
+    case _              => throw new NoSuchElementException()
+  }
+}
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -168,6 +184,8 @@ trait RawlsBillingProjectComponent {
 
     def googleSyncTime = column[Option[Timestamp]]("GOOGLE_SYNC_TIME")
 
+    def status = column[String]("STATUS")
+
     def outcome = column[Option[String]]("OUTCOME")
 
     def message = column[Option[String]]("MESSAGE")
@@ -181,6 +199,7 @@ trait RawlsBillingProjectComponent {
         newBillingAccount,
         created,
         googleSyncTime,
+        status,
         outcome,
         message
       ) <> (
@@ -447,12 +466,16 @@ trait RawlsBillingProjectComponent {
         // - so the `WorkspaceBillingAccountActor` can synchronise the changes with google
         // - to keep an audit log of billing account changes
         _ <- DBIO.sequence(billingProjects.map { project =>
-          BillingAccountChanges.create(
-            project.projectName,
-            project.billingAccount,
-            billingAccount,
-            userSubjectId
-          )
+          // ignore all currently-outstanding changes for this project
+          BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen {
+            // insert the most recent change for this project
+            BillingAccountChanges.create(
+              project.projectName,
+              project.billingAccount,
+              billingAccount,
+              userSubjectId
+            )
+          }
         })
       } yield count
   }
@@ -469,6 +492,7 @@ trait RawlsBillingProjectComponent {
       Option[String], // New billing account
       Timestamp, // Created
       Option[Timestamp], // Google sync time
+      String, // status
       Option[String], // Outcome
       Option[String] // Message
     )
@@ -481,6 +505,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount,
             created,
             googleSyncTime,
+            status,
             outcome,
             message
           ) =>
@@ -493,6 +518,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount.map(RawlsBillingAccountName),
             created.toInstant,
             googleSyncTime.map(_.toInstant),
+            BillingAccountChangeStatus.apply(status),
             outcome
           )
         }
@@ -508,6 +534,7 @@ trait RawlsBillingProjectComponent {
         billingAccountChange.newBillingAccount.map(_.value),
         Timestamp.from(billingAccountChange.created),
         billingAccountChange.googleSyncTime.map(Timestamp.from),
+        billingAccountChange.status.toString,
         outcome,
         message
       )
@@ -577,5 +604,20 @@ trait RawlsBillingProjectComponent {
 
     def setGoogleSyncTime(syncTime: Option[Instant]): WriteAction[Int] =
       query.map(_.googleSyncTime).update(syncTime.map(Timestamp.from))
+
+    def setStatus(status: BillingAccountChangeStatus): WriteAction[Int] =
+      query.map(_.status).update(status.toString)
+
+    def ignoreAllOutstanding(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
+      query
+        .filter(c =>
+          c.billingProjectName === billingProjectName.value && c.status === BillingAccountChangeStatus.Outstanding.toString
+        )
+        .map(_.status)
+        .update(BillingAccountChangeStatus.Ignored.toString)
+
+    def nextOutstanding(): BillingAccountChangeQuery =
+      query.filter(_.status === BillingAccountChangeStatus.Outstanding.toString).sortBy(_.id).take(1)
   }
+
 }

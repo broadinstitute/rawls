@@ -6,7 +6,11 @@ import cats.implicits.{catsSyntaxApplyOps, catsSyntaxOptionId, toFoldableOps}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestDriverComponentWithFlatSpecAndMatchers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  BillingAccountChangeStatus,
+  ReadAction,
+  TestDriverComponentWithFlatSpecAndMatchers
+}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
@@ -495,6 +499,7 @@ class BillingAccountChangeSynchronizerSpec
 
         lastChange.googleSyncTime shouldBe defined
         lastChange.newBillingAccount shouldBe Some(finalBillingAccountName)
+        lastChange.status shouldBe BillingAccountChangeStatus.Synchronized
 
         // all previous changes should be ignored
         every(previousChanges.map(_.googleSyncTime)) shouldBe empty
@@ -620,6 +625,7 @@ class BillingAccountChangeSynchronizerSpec
             case Failure(msg) =>
               msg should include(testData.billingProject.googleProjectId.value)
           }
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe defined
@@ -682,6 +688,7 @@ class BillingAccountChangeSynchronizerSpec
                 msg should include(workspace.googleProjectId.value)
               }
           }
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe empty
@@ -754,6 +761,7 @@ class BillingAccountChangeSynchronizerSpec
             case Failure(_) =>
               fail("should not fail when updating workspaces succeed")
           }
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe empty
