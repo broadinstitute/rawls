@@ -808,7 +808,7 @@ class SubmissionsService(
         monitoringScript = submissionRequest.monitoringScript,
         monitoringImage = submissionRequest.monitoringImage,
         monitoringImageScript = submissionRequest.monitoringImageScript,
-        costCapThreshold = submissionRequest.costCapThreshold
+        perWorkflowCostCap = submissionRequest.perWorkflowCostCap
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
