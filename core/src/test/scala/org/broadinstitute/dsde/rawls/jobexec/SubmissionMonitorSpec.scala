@@ -11,7 +11,10 @@ import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, Uncoordinat
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
+  ExecutionServiceStatusResponse,
+  StatusCheckComplete
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
@@ -1348,14 +1351,26 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     dataSource: SlickDataSource =>
       val cheapWorkflowId = UUID.randomUUID().toString
       val expensiveWorkflowId = UUID.randomUUID().toString
-      val cheapWorkflow = Workflow(Some(cheapWorkflowId), WorkflowStatuses.Submitted, new DateTime(), Some(testData.sample1.toReference), Seq.empty)
-      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId), WorkflowStatuses.Submitted, new DateTime(), Some(testData.sample2.toReference), Seq.empty)
-      val submission = testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(cheapWorkflow, expensiveWorkflow))
+      val cheapWorkflow = Workflow(Some(cheapWorkflowId),
+                                   WorkflowStatuses.Submitted,
+                                   new DateTime(),
+                                   Some(testData.sample1.toReference),
+                                   Seq.empty
+      )
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission = testData.submission1.copy(submissionId = UUID.randomUUID().toString,
+                                                 workflows = Seq(cheapWorkflow, expensiveWorkflow)
+      )
       runAndWait(submissionQuery.create(testData.workspace, submission))
       runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
 
       class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
-        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] = {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
           if (id.equals(cheapWorkflowId)) {
             Future.successful(WorkflowCostBreakdown(id, BigDecimal(1), "USD", status, Seq.empty))
           } else if (id.equals(expensiveWorkflowId)) {
@@ -1363,7 +1378,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           } else {
             Future.failed(new Exception("Unexpected workflow ID"))
           }
-        }
       }
 
       val monitor = createSubmissionMonitor(
@@ -1377,7 +1391,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       )
 
       val workflowCosts = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
-        case Success(Some(recordWithOutputs)) => recordWithOutputs._1.externalId.get -> (recordWithOutputs._1.status, recordWithOutputs._1.cost)
+        case Success(Some(recordWithOutputs)) =>
+          recordWithOutputs._1.externalId.get -> (recordWithOutputs._1.status, recordWithOutputs._1.cost)
       }.toMap
 
       workflowCosts(cheapWorkflowId) shouldEqual (WorkflowStatuses.Running.toString, Option(BigDecimal(1)))

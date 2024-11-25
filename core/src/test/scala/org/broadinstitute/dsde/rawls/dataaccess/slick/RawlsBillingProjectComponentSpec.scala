@@ -231,11 +231,12 @@ class RawlsBillingProjectComponentSpec
       runAndWait(rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(projectName))
     }
 
-    val actualSpendExports = runAndWait(rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(billingProjectNames))
+    val actualSpendExports =
+      runAndWait(rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(billingProjectNames))
 
     actualSpendExports shouldBe expectedSpendExports
   }
-    
+
   it should "set statuses properly in ignoreAllOutstanding" in withDefaultTestDatabase {
     import driver.api._
 
