@@ -31,6 +31,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Owner, WorkspaceAccessLevel}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import shapeless.syntax.std.tuple.productTupleOps
 
 import scala.util.Try
@@ -557,52 +558,58 @@ class SpendReportingService(
     end: DateTime,
     pageSize: Int,
     offset: Int
-  ): Future[Option[SpendReportingResults]] = {
-    validateReportParameters(start, end)
-    for {
-      billingMap <- getBillingWithSpendPermission()
-      _ = if (billingMap.isEmpty) {
-        return Future.successful(None)
-      }
-      projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-      query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
-      queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+  ): Future[Option[SpendReportingResults]] =
+    traceFutureWithParent("getSpendForAllWorkspaces", ctx) { childContext =>
+      validateReportParameters(start, end)
+      for {
+        billingMap <- getBillingWithSpendPermission(childContext)
+        _ = if (billingMap.isEmpty) {
+          return Future.successful(None)
+        }
+        projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
+        query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
+        queryJob = setUpAllUserWorkspaceQuery(query, start, end)
 
-      job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-      _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-      result = job.getQueryResults()
-    } yield result.getValues.asScala.toList match {
-      case Nil =>
-        None
-      case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+        result = job.getQueryResults()
+      } yield result.getValues.asScala.toList match {
+        case Nil =>
+          None
+        case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+      }
     }
-  }
 
   def getBillingWithSpendPermission(
+    parentContext: RawlsRequestContext
   ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
-    for {
-      ownerWorkspaces <- samDAO.listResourcesWithActions(
-        SamResourceTypeNames.workspace,
-        SamWorkspaceActions.readSpendReport,
-        ctx
-      )
-      groupedWorkspaces <-
-        if (ownerWorkspaces.isEmpty) {
-          Future.successful(Map.empty[RawlsBillingProjectName, Seq[Workspace]])
-        } else {
-          // Ignore non-UUID workspaceIds; these shouldn't happen but if they do, we don't want them
-          workspaceServiceConstructor(ctx).getGCPWorkspacesByBillingProjects(
-            ownerWorkspaces.map(_.resourceId).filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess).toList
-          )
-        }
-      // Only use the BPs we know exist in the DB and are GCP
-      spendConfigs <-
-        if (groupedWorkspaces.isEmpty) {
-          Future.successful(Seq.empty[BillingProjectSpendExport])
-        } else { getSpendExportConfigurations(groupedWorkspaces.keys.toList) }
-    } yield spendConfigs.map { config =>
-      config -> groupedWorkspaces
-        .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
-        .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
-    }.toMap
+    traceFutureWithParent("getBillingWithSpendPermission", parentContext) { childContext =>
+      for {
+        ownerWorkspaces <- samDAO.listResourcesWithActions(
+          SamResourceTypeNames.workspace,
+          SamWorkspaceActions.readSpendReport,
+          childContext
+        )
+        groupedWorkspaces <-
+          if (ownerWorkspaces.isEmpty) {
+            Future.successful(Map.empty[RawlsBillingProjectName, Seq[Workspace]])
+          } else {
+            // Ignore non-UUID workspaceIds; these shouldn't happen but if they do, we don't want them
+            workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(
+              ownerWorkspaces.map(_.resourceId).filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess).toList
+            )
+          }
+        // Only use the BPs we know exist in the DB and are GCP
+        spendConfigs <-
+          if (groupedWorkspaces.isEmpty) {
+            Future.successful(Seq.empty[BillingProjectSpendExport])
+          } else {
+            getSpendExportConfigurations(groupedWorkspaces.keys.toList)
+          }
+      } yield spendConfigs.map { config =>
+        config -> groupedWorkspaces
+          .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
+          .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+      }.toMap
+    }
 }

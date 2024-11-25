@@ -35,8 +35,6 @@ import org.mockito.{ArgumentCaptor, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.broadinstitute.dsde.rawls.model.TerraSpendCategories.TerraSpendCategory
 
 import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
@@ -1503,8 +1501,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
 
     val result = Await.result(
-      service.getBillingWithSpendPermission(
-      ),
+      service.getBillingWithSpendPermission(testContext),
       Duration.Inf
     )
 
@@ -1561,14 +1558,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     }
   }
 
-  "getSpendForAllWorkspaces" should "get the spend report from multiple billing projects" ignore {
-    val from = DateTime.now().minusMonths(2)
-    val to = from.plusMonths(1)
-
-    val price1 = BigDecimal("10.22")
-    val price2 = BigDecimal("50.74")
-    val currency = "USD"
-
+  "getSpendForAllWorkspaces" should "get the spend report from multiple billing projects" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
@@ -1594,16 +1584,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       None,
       billingProfileId = Option.apply(billingProfileId2.toString)
     )
-    val billingProfileId3 = UUID.randomUUID()
-    val projectName3 = RawlsBillingProjectName("billingProject3")
-    val billingAccount3 = RawlsBillingAccountName("billingAcct3")
-    val billingProject3 = RawlsBillingProject(
-      projectName3,
-      CreationStatuses.Ready,
-      Option(billingAccount3),
-      None,
-      billingProfileId = Option.apply(billingProfileId3.toString)
-    )
 
     // Billing project spend exports
     val billingProject1SpendExport =
@@ -1612,9 +1592,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                                 Some("billing1_bq_project.billing1_dataset.billing1_table")
       )
 
-    val billingProject3SpendExport =
-      BillingProjectSpendExport(RawlsBillingProjectName("billingProject3"),
-                                RawlsBillingAccountName("billingAccount3"),
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
                                 None
       )
 
@@ -1625,86 +1605,23 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                          WorkspaceVersions.V1,
                          "billingProject1"
       )
-    val workspace2Billing1 =
-      TestData.workspace("workspace2Billing1",
+    val workspace2Billing2 =
+      TestData.workspace("workspace2Billing2",
                          GoogleProjectId("workspace2ProjectId"),
-                         WorkspaceVersions.V2,
-                         "billingProject1"
-      )
-    val workspace1Billing2 =
-      TestData.workspace("workspace1Billing2",
-                         GoogleProjectId("workspace3ProjectId"),
                          WorkspaceVersions.V2,
                          "billingProject2"
       )
-    val workspace1Billing3 =
-      TestData.workspace("workspace1Billing3",
-                         GoogleProjectId("workspace4ProjectId"),
-                         WorkspaceVersions.V2,
-                         "billingProject3"
-      )
 
-    // Only workspaces 1 and 4 are owned
-    val workspace1Response = WorkspaceListResponse(
-      WorkspaceAccessLevels.Owner,
-      Some(true),
-      Some(true),
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace1Billing1,
-                                               Option(Set.empty),
-                                               true,
-                                               Some(WorkspaceCloudPlatform.Gcp)
-      ),
-      Option.empty,
-      false,
-      Some(List.empty)
-    )
-    val workspace2Response = WorkspaceListResponse(
-      WorkspaceAccessLevels.Read,
-      Some(true),
-      Some(true),
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace2Billing1,
-                                               Option(Set.empty),
-                                               true,
-                                               Some(WorkspaceCloudPlatform.Gcp)
-      ),
-      Option.empty,
-      false,
-      Some(List.empty)
-    )
-    val workspace3Response = WorkspaceListResponse(
-      WorkspaceAccessLevels.Write,
-      Some(true),
-      Some(true),
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace1Billing2,
-                                               Option(Set.empty),
-                                               true,
-                                               Some(WorkspaceCloudPlatform.Gcp)
-      ),
-      Option.empty,
-      false,
-      Some(List.empty)
-    )
-    val workspace4Response = WorkspaceListResponse(
-      WorkspaceAccessLevels.Owner,
-      Some(true),
-      Some(true),
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace1Billing3,
-                                               Option(Set.empty),
-                                               true,
-                                               Some(WorkspaceCloudPlatform.Gcp)
-      ),
-      Option.empty,
-      false,
-      Some(List.empty)
-    )
-
-    val dataSource = mock[SlickDataSource]
     val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-
-    when(mockWorkspaceService.listWorkspaces(any(), any()))
+    when(mockWorkspaceService.getGCPWorkspacesByBillingProjects(any()))
       .thenReturn(
-        Future.successful(Seq(workspace1Response, workspace2Response, workspace3Response, workspace4Response).toJson)
+        Future.successful(
+          Map(billingProject1.projectName -> List(workspace1Billing1),
+              billingProject2.projectName -> List(workspace2Billing2)
+          )
+        )
       )
+
     val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
       mockWorkspaceService
     }
@@ -1713,12 +1630,62 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       .thenReturn(Future.successful(Option.apply(billingProject1)))
     when(billingRepository.getBillingProject(mockitoEq(projectName2)))
       .thenReturn(Future.successful(Option.apply(billingProject2)))
-    when(billingRepository.getBillingProject(mockitoEq(projectName3)))
-      .thenReturn(Future.successful(Option.apply(billingProject3)))
 
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(
+      Future.successful(
+        List(
+          SamUserResource(
+            UUID.randomUUID().toString,
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          ),
+          SamUserResource(
+            UUID.randomUUID().toString,
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            SamRolesAndActions(Set.empty, Set.empty),
+            Set.empty,
+            Set.empty
+          )
+        )
+      )
+    )
 
-    val bigQueryService = mockBigQuery(List[Map[String, String]]())
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val price1 = BigDecimal("10.22")
+    val price2 = BigDecimal("50.74")
+    val zero = BigDecimal("0.00")
+    val total = price1 + price2
+
+    val table: List[Map[String, String]] = List(
+      Map(
+        "storage_cost" -> s"$price1",
+        "compute_cost" -> s"$zero",
+        "other_cost" -> s"$price2",
+        "total_cost" -> s"$total",
+        "currency" -> "USD",
+        "project_id" -> "workspace1ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "credits" -> s"$zero"
+      ),
+      Map(
+        "storage_cost" -> s"$price2",
+        "compute_cost" -> s"$zero",
+        "other_cost" -> s"$zero",
+        "total_cost" -> s"$price2",
+        "project_id" -> "workspace2ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "currency" -> "USD",
+        "credits" -> s"$zero"
+      )
+    )
+
+    val bigQueryService = mockBigQuery(table)
 
     val service = spy(
       new SpendReportingService(
@@ -1732,36 +1699,29 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         mockWorkspaceServiceConstructor
       )
     )
-    doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject3SpendExport)))
+    doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport)))
       .when(service)
       .getSpendExportConfigurations(
         any()
       )
-
-    val spendReport =
-      TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
-
-    val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
-    val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
-    val endDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
 
     val result = Await.result(
       service.getSpendForAllWorkspaces(from, to, 100, 0),
       Duration.Inf
     )
 
+    result.get.spendDetails.length shouldBe 2
+
     val spendSummary = result.get.spendSummary
 
-    spendSummary.credits shouldBe "0"
-    spendSummary.cost shouldBe Seq(price1, price2).sum.toString()
+    spendSummary.credits shouldBe zero.toString()
+    spendSummary.cost shouldBe (total + price2).toString()
     spendSummary.currency shouldBe "USD"
     spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
       ISODateTimeFormat.date()
     )
     spendSummary.endTime.get.toString(ISODateTimeFormat.date()) shouldBe to.toString(ISODateTimeFormat.date())
 
-    startDateCapture.getValue shouldBe from.toDate
-    endDateCapture.getValue shouldBe to.toDate
   }
 
 }
