@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
-import com.google.cloud.bigquery.{Field, FieldList, FieldValue, FieldValueList}
+import com.google.cloud.bigquery.FieldValueList
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -18,21 +18,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
-import org.broadinstitute.dsde.rawls.workspace.{AggregatedWorkspace, AggregatedWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
-import spray.json.{JsArray, JsValue}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Owner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
-import shapeless.syntax.std.tuple.productTupleOps
 
 import scala.util.Try
 
@@ -156,9 +152,15 @@ object SpendReportingService {
     var total = BigDecimal(0.0)
     var total_credits = BigDecimal(0.0)
 
+    // TODO: We may want to allow multiple currencies someday
     val currency = allRows.map(_.get("currency").getStringValue).distinct match {
-      case head :: _ => Currency.getInstance(head)
-      case _         => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
+      case head :: List() => Currency.getInstance(head)
+      case head :: tail =>
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.InternalServerError,
+          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
+        )
+      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
     }
 
     val all = allRows.map { row =>
@@ -180,26 +182,29 @@ object SpendReportingService {
       val subAggregation = List(
         SpendReportingForDateRange(
           getRoundedNumericValue("other_cost").toString,
-          getRoundedNumericValue("credits").toString,
+          getRoundedNumericValue("other_credits").toString,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Other)
         ),
         SpendReportingForDateRange(
           getRoundedNumericValue("storage_cost").toString,
-          getRoundedNumericValue("credits").toString,
+          getRoundedNumericValue("storage_credits").toString,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Storage)
         ),
         SpendReportingForDateRange(
           getRoundedNumericValue("compute_cost").toString,
-          getRoundedNumericValue("credits").toString,
+          getRoundedNumericValue("compute_credits").toString,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Compute)
         )
       )
 
       val total_cost = getRoundedNumericValue("total_cost")
-      val credits = getRoundedNumericValue("credits")
+      val credits =
+        getRoundedNumericValue("other_credits") + getRoundedNumericValue("storage_credits") + getRoundedNumericValue(
+          "compute_credits"
+        )
       total = total + total_cost
       total_credits = total_credits + credits
 
@@ -221,7 +226,7 @@ object SpendReportingService {
     val summary = SpendReportingForDateRange(
       total.toString,
       total_credits.toString,
-      currency.toString, // TODO: what to do about combined summary for currencies?
+      currency.toString,
       Option(start),
       Option(end)
     )
@@ -403,7 +408,9 @@ class SpendReportingService(
        |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
        |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
        |  currency,
-       |  SUM(credits) as credits
+       |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
+       |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
+       |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
        |FROM
        |  spend_categories
        |GROUP BY
@@ -569,14 +576,21 @@ class SpendReportingService(
         query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
         queryJob = setUpAllUserWorkspaceQuery(query, start, end)
 
-        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-        result = job.getQueryResults()
+        result <- runBigQueryJob(queryJob, childContext)
       } yield result.getValues.asScala.toList match {
         case Nil =>
           None
         case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
       }
+    }
+
+  def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
+    traceFutureWithParent("runBigQueryJob", ctx) { childContext =>
+      for {
+        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+        result = job.getQueryResults()
+      } yield result
     }
 
   def getBillingWithSpendPermission(

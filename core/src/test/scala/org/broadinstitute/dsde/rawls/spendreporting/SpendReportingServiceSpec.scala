@@ -42,9 +42,6 @@ import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.json.DefaultJsonProtocol._
-import spray.json._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 import org.broadinstitute.dsde.workbench.client.sam.model.FilteredHierarchicalResource
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 
@@ -587,7 +584,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "currency" -> "USD",
         "project_id" -> "workspace1ProjectId",
         "project_name" -> "terra-billing-project1",
-        "credits" -> s"$credits1"
+        "storage_credits" -> s"$credits1",
+        "compute_credits" -> "0.0",
+        "other_credits" -> "0.0"
       ),
       Map(
         "storage_cost" -> s"$storageCostWs2",
@@ -597,7 +596,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_id" -> "workspace2ProjectId",
         "project_name" -> "terra-billing-project1",
         "currency" -> "USD",
-        "credits" -> s"$credits2"
+        "compute_credits" -> s"$credits2",
+        "storage_credits" -> "0.0",
+        "other_credits" -> "0.0"
       ),
       Map(
         "storage_cost" -> "0.0",
@@ -607,7 +608,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_name" -> "terra-billing-project2",
         "total_cost" -> s"$totalCostWs3",
         "currency" -> "USD",
-        "credits" -> s"$credits3"
+        "other_credits" -> s"$credits3",
+        "compute_credits" -> "0.0",
+        "storage_credits" -> "0.0"
       )
     )
 
@@ -1345,7 +1348,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
           |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
           |  currency,
-          |  SUM(credits) as credits
+          |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
+          |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
+          |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
           |FROM
           |  spend_categories
           |GROUP BY
@@ -1642,7 +1647,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "currency" -> "USD",
         "project_id" -> "workspace1ProjectId",
         "project_name" -> "terra-billing-project1",
-        "credits" -> s"$zero"
+        "storage_credits" -> s"$zero",
+        "compute_credits" -> s"$zero",
+        "other_credits" -> s"$zero"
       ),
       Map(
         "storage_cost" -> s"$price2",
@@ -1652,7 +1659,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_id" -> "workspace2ProjectId",
         "project_name" -> "terra-billing-project1",
         "currency" -> "USD",
-        "credits" -> s"$zero"
+        "storage_credits" -> s"$zero",
+        "compute_credits" -> s"$zero",
+        "other_credits" -> s"$zero"
       )
     )
 
