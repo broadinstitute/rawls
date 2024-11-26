@@ -13,7 +13,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamUserStatusResponse,
   SamWorkspaceActions,
   SeparateSubmissionFinalOutputsSetting,
+  UseCromwellGcpBatchBackendSetting,
   UserInfo,
   Workspace,
   WorkspaceSettingTypes
@@ -184,7 +186,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty)),
       GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(7.days.toSeconds)),
       GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
-      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true))
+      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
+      UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
     )
 
     val workspaceRepository = mock[WorkspaceRepository]
