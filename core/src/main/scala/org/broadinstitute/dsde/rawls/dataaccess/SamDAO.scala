@@ -26,6 +26,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserIdInfo,
   UserInfo
 }
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredHierarchicalResource
 import org.broadinstitute.dsde.workbench.model._
 
 import scala.concurrent.Future
@@ -103,7 +104,7 @@ trait SamDAO {
   def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
                                action: SamResourceAction,
                                ctx: RawlsRequestContext
-  ): Future[Seq[SamUserResource]]
+  ): Future[Seq[FilteredHierarchicalResource]]
 
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
                               resourceId: String,

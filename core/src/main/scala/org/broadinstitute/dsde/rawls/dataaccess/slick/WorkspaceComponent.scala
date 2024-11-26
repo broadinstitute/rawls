@@ -265,7 +265,7 @@ trait WorkspaceComponent {
                                     workspaceType: WorkspaceType
     ): ReadWriteAction[Map[RawlsBillingProjectName, Seq[Workspace]]] = {
       val query = for {
-        workspace <- workspaceQuery if workspace.id inSet workspaceIds.toSet
+        workspace <- workspaceQuery if workspace.id inSetBind workspaceIds.toSet
         if workspace.workspaceType === workspaceType.toString
       } yield (workspace.namespace, workspace)
 

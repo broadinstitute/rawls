@@ -496,13 +496,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
-          description: You must be a project owner to view the spend report of a project
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        404:
-          description: The specified billing project could not be found
+          description: You must be a workspace owner to view the spend report of a workspace
           content:
             'application/json':
               schema:

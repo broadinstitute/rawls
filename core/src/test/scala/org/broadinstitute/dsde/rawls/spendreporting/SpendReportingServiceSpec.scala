@@ -45,6 +45,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredHierarchicalResource
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 
 class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
@@ -1405,37 +1406,21 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(
       Future.successful(
         Seq(
-          SamUserResource(
-            "workspace1Billing1",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
+          new FilteredHierarchicalResource(
+          ).resourceId(
+            "workspace1Billing1"
           ),
-          SamUserResource(
-            "workspace2Billing1",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
+          new FilteredHierarchicalResource(
+          ).resourceId(
+            "workspace2Billing1"
           ),
-          SamUserResource(
-            "workspace1Billing2",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
+          new FilteredHierarchicalResource(
+          ).resourceId(
+            "workspace1Billing2"
           ),
-          SamUserResource(
-            "workspace1Billing3",
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
+          new FilteredHierarchicalResource(
+          ).resourceId(
+            "workspace1Billing3"
           )
         )
       )
@@ -1634,22 +1619,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(
       Future.successful(
         List(
-          SamUserResource(
-            UUID.randomUUID().toString,
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          ),
-          SamUserResource(
-            UUID.randomUUID().toString,
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          )
+          new FilteredHierarchicalResource().resourceId(UUID.randomUUID().toString),
+          new FilteredHierarchicalResource().resourceId(UUID.randomUUID().toString)
         )
       )
     )

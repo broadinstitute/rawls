@@ -152,6 +152,7 @@ object SpendReportingService {
     names: Map[GoogleProjectId, WorkspaceName]
   ): SpendReportingResults = {
 
+    // Using vars because they will get updated as we process the rows
     var total = BigDecimal(0.0)
     var total_credits = BigDecimal(0.0)
 
@@ -181,8 +182,6 @@ object SpendReportingService {
           getRoundedNumericValue("other_cost").toString,
           getRoundedNumericValue("credits").toString,
           currencyCode.toString,
-          Option(start),
-          Option(end),
           category = Option(TerraSpendCategories.Other)
         ),
         SpendReportingForDateRange(
@@ -596,7 +595,10 @@ class SpendReportingService(
           } else {
             // Ignore non-UUID workspaceIds; these shouldn't happen but if they do, we don't want them
             workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(
-              ownerWorkspaces.map(_.resourceId).filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess).toList
+              ownerWorkspaces
+                .map(_.getResourceId)
+                .filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess)
+                .toList
             )
           }
         // Only use the BPs we know exist in the DB and are GCP

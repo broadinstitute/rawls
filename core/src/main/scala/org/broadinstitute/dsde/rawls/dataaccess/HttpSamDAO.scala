@@ -16,7 +16,9 @@ import org.broadinstitute.dsde.workbench.client.sam
 import org.broadinstitute.dsde.workbench.client.sam.api._
 import org.broadinstitute.dsde.workbench.client.sam.model.{
   FilteredFlatResourcePolicy,
+  FilteredHierarchicalResource,
   FilteredHierarchicalResourcePolicy,
+  FilteredResourcesHierarchicalResponse,
   ListResourcesV2200Response
 }
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
@@ -522,7 +524,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
   override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
                                         action: SamResourceAction,
                                         ctx: RawlsRequestContext
-  ): Future[Seq[SamUserResource]] =
+  ): Future[Seq[FilteredHierarchicalResource]] =
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[ListResourcesV2200Response]("listResourcesV2")
 
@@ -540,20 +542,6 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
         resourcesResponse.getFilteredResourcesHierarchicalResponse
           .getResources()
           .asScala
-          .map { resource =>
-            val resourcePolicies = resource.getPolicies.asScala.toList
-            val publicPolicies = resourcePolicies.filter(_.getIsPublic)
-            // might need to filter public policies out of this next statement:
-            val (inheritedPolicies, directPolicies) = resourcePolicies.partition(_.getInherited)
-            SamUserResource(
-              resource.getResourceId,
-              toSamRolesAndActions(directPolicies),
-              toSamRolesAndActions(inheritedPolicies),
-              toSamRolesAndActions(publicPolicies),
-              resource.getAuthDomainGroups.asScala.map(WorkbenchGroupName).toSet,
-              resource.getMissingAuthDomainGroups.asScala.map(WorkbenchGroupName).toSet
-            )
-          }
           .toSeq
       }
     }
@@ -563,12 +551,6 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       rolesAndActions.getRoles.asScala.map(SamResourceRole).toSet,
       rolesAndActions.getActions.asScala.map(SamResourceAction).toSet
     )
-
-  private def toSamRolesAndActions(policies: scala.collection.immutable.List[FilteredHierarchicalResourcePolicy]) = {
-    val roles = policies.flatMap(_.getRoles.asScala)
-    val actions = policies.flatMap(_.getActions.asScala)
-    SamRolesAndActions(roles.map(role => SamResourceRole(role.toString)).toSet, actions.map(SamResourceAction).toSet)
-  }
 
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId,
                                               userEmail: RawlsUserEmail

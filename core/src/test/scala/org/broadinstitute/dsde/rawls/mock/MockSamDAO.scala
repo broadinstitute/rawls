@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredHierarchicalResource
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -242,37 +243,16 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
                                         action: SamResourceAction,
                                         ctx: RawlsRequestContext
-  ): Future[Seq[SamUserResource]] =
+  ): Future[Seq[FilteredHierarchicalResource]] =
     resourceTypeName match {
       case SamResourceTypeNames.workspace =>
         dataSource
           .inTransaction(_ => workspaceQuery.listAll())
           .map(
             _.map(workspace =>
-              SamUserResource(
-                workspace.workspaceId,
-                SamRolesAndActions(Set.empty, Set(action)),
-                SamRolesAndActions(Set.empty, Set.empty),
-                SamRolesAndActions(Set.empty, Set.empty),
-                Set.empty,
-                Set.empty
-              )
-            )
-          )
-
-      case SamResourceTypeNames.billingProject =>
-        dataSource
-          .inTransaction(_ => rawlsBillingProjectQuery.read)
-          .map(
-            _.map(project =>
-              SamUserResource(
-                project.projectName.value,
-                SamRolesAndActions(Set.empty, Set(action)),
-                SamRolesAndActions(Set.empty, Set.empty),
-                SamRolesAndActions(Set.empty, Set.empty),
-                Set.empty,
-                Set.empty
-              )
+              new FilteredHierarchicalResource()
+                .resourceType(SamResourceTypeNames.workspace.value)
+                .resourceId(workspace.workspaceId)
             )
           )
 
@@ -429,7 +409,7 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
   override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
                                         action: SamResourceAction,
                                         ctx: RawlsRequestContext
-  ): Future[Seq[SamUserResource]] = {
+  ): Future[Seq[FilteredHierarchicalResource]] = {
     val userResources = for {
       ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
       userResource <- constructResourceFromPolicies(ctx, resourceId, resourcePolicies.values)
@@ -437,7 +417,9 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     if (userResources.isEmpty) {
       super.listResourcesWithActions(resourceTypeName, action, ctx)
     } else {
-      Future.successful(userResources.toSeq)
+      Future.successful(userResources.map { resource =>
+        new FilteredHierarchicalResource().resourceType(resourceTypeName.value).resourceId(resource.resourceId)
+      }.toSeq)
     }
   }
 
