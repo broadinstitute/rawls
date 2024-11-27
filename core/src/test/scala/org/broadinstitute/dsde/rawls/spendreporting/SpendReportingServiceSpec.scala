@@ -1385,7 +1385,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   }
 
   "getBillingWithSpendPermission" should "return spendConfigurations for workspaces" in {
-    // todo: include non-rawls bps and bps without accounts
 
     val dataSource = mock[SlickDataSource]
 
