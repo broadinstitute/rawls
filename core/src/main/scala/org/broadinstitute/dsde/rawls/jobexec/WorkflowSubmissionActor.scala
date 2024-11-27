@@ -311,6 +311,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         submission.submissionRoot,
+        submission.submissionRoot,
         final_workflow_outputs_dir,
         final_workflow_outputs_dir_metadata,
         workspace.googleProjectId,

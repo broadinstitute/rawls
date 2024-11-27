@@ -381,6 +381,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         Some(
           ExecutionServiceWorkflowOptions(
             jes_gcs_root = s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
+            gcp_batch_gcs_root = s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
             None,
             None,
             google_project = testData.workspace.googleProjectId.value,

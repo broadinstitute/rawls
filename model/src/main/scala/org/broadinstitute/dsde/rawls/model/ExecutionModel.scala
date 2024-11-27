@@ -89,6 +89,7 @@ case class ExecutionServiceCallLogs(
 // https://cromwell.readthedocs.io/en/stable/wf_options/Google/
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
+  gcp_batch_gcs_root: String,
   final_workflow_outputs_dir: Option[String],
   final_workflow_outputs_dir_metadata: Option[String],
   google_project: String,
@@ -469,7 +470,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat: RootJsonFormat[ExecutionServiceLogs] = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat20(
+  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat21(
     ExecutionServiceWorkflowOptions
   )
 
