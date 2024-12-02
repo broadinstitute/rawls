@@ -120,6 +120,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val useWorkflowCollectionLabel: Boolean = false,
     val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2"),
     val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
+    val gcpBatchBackend: CromwellBackend = CromwellBackend("GCPBatch"),
     val methodConfigResolver: MethodConfigResolver = methodConfigResolver,
     val bardService: BardService = mockBardService,
     val workspaceSettingRepository: WorkspaceSettingRepository = mockWorkspaceSettingRepository
@@ -938,6 +939,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           false,
           CromwellBackend("PAPIv2"),
           CromwellBackend("PAPIv2-CloudNAT"),
+          CromwellBackend("GCPBatch"),
           methodConfigResolver,
           mockBardService,
           mockWorkspaceSettingRepository
@@ -1006,6 +1008,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           false,
           CromwellBackend("PAPIv2"),
           CromwellBackend("PAPIv2-CloudNAT"),
+          CromwellBackend("GCPBatch"),
           methodConfigResolver,
           mockBardService,
           mockWorkspaceSettingRepository
