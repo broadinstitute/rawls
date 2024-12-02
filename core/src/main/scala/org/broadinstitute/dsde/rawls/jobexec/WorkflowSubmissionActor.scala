@@ -44,6 +44,7 @@ object WorkflowSubmissionActor {
             useWorkflowCollectionLabel: Boolean,
             defaultNetworkCromwellBackend: CromwellBackend,
             highSecurityNetworkCromwellBackend: CromwellBackend,
+            gcpBatchBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver,
             bardService: BardService,
             workspaceSettingRepository: WorkspaceSettingRepository
@@ -69,6 +70,7 @@ object WorkflowSubmissionActor {
         useWorkflowCollectionLabel,
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
+        gcpBatchBackend,
         methodConfigResolver,
         bardService,
         workspaceSettingRepository
@@ -105,6 +107,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val useWorkflowCollectionLabel: Boolean,
                               val defaultNetworkCromwellBackend: CromwellBackend,
                               val highSecurityNetworkCromwellBackend: CromwellBackend,
+                              val gcpBatchBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver,
                               val bardService: BardService,
                               val workspaceSettingRepository: WorkspaceSettingRepository
@@ -159,6 +162,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val useWorkflowCollectionLabel: Boolean
   val defaultNetworkCromwellBackend: CromwellBackend
   val highSecurityNetworkCromwellBackend: CromwellBackend
+  val gcpBatchBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
   val bardService: BardService
   val workspaceSettingRepository: WorkspaceSettingRepository
@@ -307,7 +311,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         }
         .exists(_.config.enabled)
       cromwellSubmissionBackend =
-        if (useCromwellGcpBatchBackend) CromwellBackend("GCPBatch") else highSecurityNetworkCromwellBackend
+        if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
 
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         submission.submissionRoot,
