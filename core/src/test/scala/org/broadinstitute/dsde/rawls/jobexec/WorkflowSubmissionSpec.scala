@@ -23,9 +23,11 @@ import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{
 import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock.{MockBardService, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.SeparateSubmissionFinalOutputsConfig
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.SeparateSubmissionFinalOutputs
-import org.broadinstitute.dsde.rawls.model.{WorkspaceSetting, _}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
+}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
@@ -1204,6 +1206,90 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       workflowOptions.get.final_workflow_outputs_dir should be(None)
       workflowOptions.get.final_workflow_outputs_dir_metadata should be(None)
     }
+  }
+
+  it should "submit workflows to Cromwell's GCP Batch backend when UseCromwellGcpBatchBackendSetting is true" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))).thenReturn(
+      Future.successful(List(UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))))
+    )
+
+    val workflowSubmission =
+      new TestWorkflowSubmission(slickDataSource, workspaceSettingRepository = workspaceSettingRepository) {
+        override val executionServiceCluster = mockExecCluster
+      }
+
+    val (workflowRecs, submissionRec, workspaceRec) =
+      getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.workspace)
+
+    Await.result(
+      workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
+      Duration.Inf
+    )
+
+    val workflowOptions = mockExecCluster.getDefaultSubmitMember
+      .asInstanceOf[MockExecutionServiceDAO]
+      .submitOptions
+      .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+    workflowOptions.get.backend should be(CromwellBackend("GCPBatch"))
+  }
+
+  it should "submit workflows to Cromwell's high security network backend when UseCromwellGcpBatchBackendSetting is false" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))).thenReturn(
+      Future.successful(List(UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(false))))
+    )
+
+    val workflowSubmission =
+      new TestWorkflowSubmission(slickDataSource, workspaceSettingRepository = workspaceSettingRepository) {
+        override val executionServiceCluster = mockExecCluster
+      }
+
+    val (workflowRecs, submissionRec, workspaceRec) =
+      getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.workspace)
+
+    Await.result(
+      workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
+      Duration.Inf
+    )
+
+    val workflowOptions = mockExecCluster.getDefaultSubmitMember
+      .asInstanceOf[MockExecutionServiceDAO]
+      .submitOptions
+      .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+    workflowOptions.get.backend should be(CromwellBackend("PAPIv2-CloudNAT"))
+  }
+
+  it should "submit workflows to Cromwell's high security network backend when UseCromwellGcpBatchBackendSetting is not set" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))).thenReturn(
+      Future.successful(List())
+    )
+
+    val workflowSubmission =
+      new TestWorkflowSubmission(slickDataSource, workspaceSettingRepository = workspaceSettingRepository) {
+        override val executionServiceCluster = mockExecCluster
+      }
+
+    val (workflowRecs, submissionRec, workspaceRec) =
+      getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.workspace)
+
+    Await.result(
+      workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
+      Duration.Inf
+    )
+
+    val workflowOptions = mockExecCluster.getDefaultSubmitMember
+      .asInstanceOf[MockExecutionServiceDAO]
+      .submitOptions
+      .map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+    workflowOptions.get.backend should be(CromwellBackend("PAPIv2-CloudNAT"))
   }
 
   private def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] =
