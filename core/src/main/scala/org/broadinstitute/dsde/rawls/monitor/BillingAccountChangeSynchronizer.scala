@@ -47,7 +47,7 @@ object BillingAccountChangeSynchronizer {
     Behaviors.setup { context =>
       val actor = BillingAccountChangeSynchronizer(dataSource, gcsDAO, samDAO)
       Behaviors.withTimers { scheduler =>
-        scheduler.startTimerAtFixedRate(UpdateBillingAccounts, initialDelay, pollInterval)
+        scheduler.startTimerWithFixedDelay(UpdateBillingAccounts, initialDelay, pollInterval)
         Behaviors.receiveMessage { case UpdateBillingAccounts =>
           try actor.updateBillingAccounts.unsafeRunSync()
           catch {
