@@ -15,13 +15,12 @@ import cats.implicits.{
   toFunctorOps
 }
 import cats.mtl.Ask
-import cats.{Applicative, Functor, Monad, MonadThrow}
+import cats.{Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   BillingAccountChange,
   BillingAccountChangeStatus,
-  ReadWriteAction,
-  WriteAction
+  ReadWriteAction
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._

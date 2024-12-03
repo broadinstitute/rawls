@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
+import com.google.common.annotations.VisibleForTesting
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
@@ -540,6 +541,7 @@ trait RawlsBillingProjectComponent {
       )
     }
 
+    @VisibleForTesting
     def getLastChange(billingProject: RawlsBillingProjectName): ReadAction[Option[BillingAccountChange]] =
       BillingAccountChanges
         .withProjectName(billingProject)
@@ -573,27 +575,6 @@ trait RawlsBillingProjectComponent {
 
     def withProjectName(billingProjectName: RawlsBillingProjectName): BillingAccountChangeQuery =
       query.filter(_.billingProjectName === billingProjectName.value)
-
-    /* SELECT *
-     * FROM BILLING_ACCOUNT_CHANGES BAC,
-     * (  SELECT BILLING_PROJECT_NAME, MAX(ID) AS MAXID
-     *    FROM BILLING_ACCOUNT_CHANGES
-     *    GROUP BY BILLING_PROJECT_NAME
-     * ) AS SUBTABLE
-     * WHERE SUBTABLE.MAXID = BAC.ID
-     */
-    /**
-      * Selects the latest changes for all billing projects in query.
-      */
-    def latestChanges: BillingAccountChangeQuery = {
-      val latestChangeIds = query
-        .groupBy(_.billingProjectName)
-        .map { case (_, group) => group.map(_.id).max }
-
-      query
-        .filter(_.id.in(latestChangeIds))
-        .sortBy(_.id.asc)
-    }
 
     def unsynced: BillingAccountChangeQuery =
       query.filter(_.googleSyncTime.isEmpty)
