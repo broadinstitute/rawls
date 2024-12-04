@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
+import com.google.cloud.bigquery.FieldValueList
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -17,6 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -26,6 +28,9 @@ import org.joda.time.{DateTime, Days}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
+
+import scala.util.Try
 
 object SpendReportingService {
   def constructor(
@@ -34,15 +39,18 @@ object SpendReportingService {
     billingRepository: BillingRepository,
     bpmDao: BillingProfileManagerDAO,
     samDAO: SamDAO,
-    spendReportingServiceConfig: SpendReportingServiceConfig
+    spendReportingServiceConfig: SpendReportingServiceConfig,
+    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
-    new SpendReportingService(ctx,
-                              dataSource,
-                              bigQueryService,
-                              billingRepository: BillingRepository,
-                              bpmDao,
-                              samDAO,
-                              spendReportingServiceConfig
+    new SpendReportingService(
+      ctx,
+      dataSource,
+      bigQueryService,
+      billingRepository: BillingRepository,
+      bpmDao,
+      samDAO,
+      spendReportingServiceConfig,
+      workspaceServiceConstructor
     )
 
   val SpendReportingMetrics = "spendReporting"
@@ -133,6 +141,98 @@ object SpendReportingService {
     SpendReportingResults(aggregations.map(aggregateRows(allRows, _)).toList, summary)
   }
 
+  def extractCrossBillingProjectSpendReportingResults(
+    allRows: List[FieldValueList],
+    start: DateTime,
+    end: DateTime,
+    names: Map[GoogleProjectId, WorkspaceName]
+  ): SpendReportingResults = {
+
+    // Using vars because they will get updated as we process the rows
+    var total = BigDecimal(0.0)
+    var total_credits = BigDecimal(0.0)
+
+    // TODO: We may want to allow multiple currencies someday
+    val currency = allRows.map(_.get("currency").getStringValue).distinct match {
+      case head :: List() => Currency.getInstance(head)
+      case head :: tail =>
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.InternalServerError,
+          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
+        )
+      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
+    }
+
+    val all = allRows.map { row =>
+      val currencyString = row.get("currency").getStringValue
+      val currencyCode = Currency.getInstance(currencyString)
+      val projectId = row.get("project_id").getStringValue
+      val workspaceName = names.getOrElse(
+        GoogleProjectId(projectId),
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.InternalServerError,
+          s"unexpected project $projectId returned by BigQuery"
+        )
+      )
+
+      def getRoundedNumericValue(field: String): BigDecimal =
+        BigDecimal(row.get(field).getDoubleValue)
+          .setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+
+      val subAggregation = List(
+        SpendReportingForDateRange(
+          getRoundedNumericValue("other_cost").toString,
+          getRoundedNumericValue("other_credits").toString,
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Other)
+        ),
+        SpendReportingForDateRange(
+          getRoundedNumericValue("storage_cost").toString,
+          getRoundedNumericValue("storage_credits").toString,
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Storage)
+        ),
+        SpendReportingForDateRange(
+          getRoundedNumericValue("compute_cost").toString,
+          getRoundedNumericValue("compute_credits").toString,
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Compute)
+        )
+      )
+
+      val total_cost = getRoundedNumericValue("total_cost")
+      val credits =
+        getRoundedNumericValue("other_credits") + getRoundedNumericValue("storage_credits") + getRoundedNumericValue(
+          "compute_credits"
+        )
+      total = total + total_cost
+      total_credits = total_credits + credits
+
+      val workspaceTotal = SpendReportingForDateRange(
+        total_cost.toString,
+        credits.toString,
+        currencyCode.toString,
+        Option(start),
+        Option(end),
+        workspace = Option(workspaceName),
+        googleProjectId = Option(GoogleProject(projectId)),
+        subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
+      )
+
+      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(workspaceTotal))
+
+    }
+
+    val summary = SpendReportingForDateRange(
+      total.toString,
+      total_credits.toString,
+      currency.toString,
+      Option(start),
+      Option(end)
+    )
+    SpendReportingResults(all, summary)
+  }
+
 }
 
 class SpendReportingService(
@@ -142,7 +242,8 @@ class SpendReportingService(
   billingRepository: BillingRepository,
   bpmDao: BillingProfileManagerDAO,
   samDAO: SamDAO,
-  spendReportingServiceConfig: SpendReportingServiceConfig
+  spendReportingServiceConfig: SpendReportingServiceConfig,
+  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented {
@@ -198,6 +299,20 @@ class SpendReportingService(
       )
     }
 
+  def getSpendExportConfigurations(projects: Seq[RawlsBillingProjectName]): Future[Seq[BillingProjectSpendExport]] =
+    dataSource
+      .inTransaction(_.rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(projects))
+      .recover { case ex: RawlsException =>
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.BadRequest,
+          ex.getMessage
+        )
+      }
+      .map { exportOptions =>
+        exportOptions.collect { case Some(export) => export }
+
+      }
+
   def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[Map[GoogleProjectId, WorkspaceName]] =
     dataSource.inTransaction(_.workspaceQuery.listWithBillingProject(projectName)).map {
       _.collect {
@@ -222,11 +337,8 @@ class SpendReportingService(
     // all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
     val queryKeys = aggregations.flatMap(a => Set(Option(a.key), a.subAggregationKey).flatten)
     val tableName = config.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-    val timePartitionColumn: String = {
-      val isBroadTable = tableName == spendReportingServiceConfig.defaultTableName
-      // The Broad table uses a view with a different column name.
-      if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
-    }
+    val timePartitionColumn: String = getTimePartitionColumn(tableName)
+
     s"""
        | SELECT
        |  SUM(cost) as cost,
@@ -237,8 +349,78 @@ class SpendReportingService(
        | AND $timePartitionColumn BETWEEN @startDate AND @endDate
        | AND project.id in UNNEST(@projects)
        | GROUP BY currency ${queryKeys.map(_.bigQueryGroupByClause()).mkString}
-       |""".stripMargin
-      .replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
+       |""".stripMargin.replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
+  }
+
+  private def getTimePartitionColumn(tableName: String): String = {
+    val isBroadTable = tableName == spendReportingServiceConfig.defaultTableName
+    // The Broad table uses a view with a different column name.
+    if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
+  }
+
+  def getAllUserWorkspaceQuery(
+    billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]],
+    pageSize: Int,
+    offset: Int
+  ): String = {
+    val baseQuery = s"""
+                       |  SELECT
+                       |    project.id AS project_id,
+                       |    project.name AS project_name,
+                       |    currency,
+                       |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+                       |    CASE
+                       |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+                       |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+                       |      ELSE 'Other'
+                       |    END AS spend_category,
+                       |    SUM(CAST(cost AS FLOAT64)) AS category_cost
+                       |  FROM
+                       |    _BILLING_ACCOUNT_TABLE
+                       |  where
+                       |    project.id in _PROJECT_ID_LIST AND
+                       |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+                       |  GROUP BY
+                       |    project_id,
+                       |    project_name,
+                       |    spend_category,
+                       |    currency""".stripMargin.trim
+
+    val bpSubQuery = billingProjects
+      .map { bp =>
+        val tableName = bp._1.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+        val timePartitionColumn: String = getTimePartitionColumn(tableName)
+        baseQuery
+          .replace("_PARTITIONTIME", timePartitionColumn)
+          .replace("_BILLING_ACCOUNT_TABLE", tableName)
+          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
+      }
+      .mkString("\nUNION ALL\n")
+
+    s"""WITH spend_categories AS (
+       |$bpSubQuery
+       |)
+       |SELECT
+       |  project_id,
+       |  project_name,
+       |  SUM(category_cost) AS total_cost,
+       |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
+       |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
+       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
+       |  currency,
+       |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
+       |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
+       |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
+       |FROM
+       |  spend_categories
+       |GROUP BY
+       |  project_id,
+       |  project_name,
+       |  currency
+       |ORDER BY
+       |  total_cost DESC
+       |limit $pageSize offset $offset
+       |""".stripMargin.trim
   }
 
   def setUpQuery(
@@ -265,6 +447,23 @@ class SpendReportingService(
       .addNamedParameter("startDate", queryParam(toISODateString(start)))
       .addNamedParameter("endDate", queryParam(toISODateString(end)))
       .addNamedParameter("projects", projectNamesParam)
+      .build()
+
+    JobInfo.newBuilder(queryConfig).build()
+  }
+
+  def setUpAllUserWorkspaceQuery(
+    query: String,
+    start: DateTime,
+    end: DateTime
+  ): JobInfo = {
+    def queryParam(value: String): QueryParameterValue =
+      QueryParameterValue.newBuilder().setType(StandardSQLTypeName.STRING).setValue(value).build()
+
+    val queryConfig = QueryJobConfiguration
+      .newBuilder(query)
+      .addNamedParameter("startDate", queryParam(toISODateString(start)))
+      .addNamedParameter("endDate", queryParam(toISODateString(end)))
       .build()
 
     JobInfo.newBuilder(queryConfig).build()
@@ -359,4 +558,74 @@ class SpendReportingService(
         case ex: Exception =>
           Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
       }
+
+  def getSpendForAllWorkspaces(
+    start: DateTime,
+    end: DateTime,
+    pageSize: Int,
+    offset: Int
+  ): Future[Option[SpendReportingResults]] =
+    traceFutureWithParent("getSpendForAllWorkspaces", ctx) { childContext =>
+      validateReportParameters(start, end)
+      for {
+        billingMap <- getBillingWithSpendPermission(childContext)
+        _ = if (billingMap.isEmpty) {
+          return Future.successful(None)
+        }
+        projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
+        query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
+        queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+
+        result <- runBigQueryJob(queryJob, childContext)
+      } yield result.getValues.asScala.toList match {
+        case Nil =>
+          None
+        case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+      }
+    }
+
+  def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
+    traceFutureWithParent("runBigQueryJob", ctx) { childContext =>
+      for {
+        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+        result = job.getQueryResults()
+      } yield result
+    }
+
+  def getBillingWithSpendPermission(
+    parentContext: RawlsRequestContext
+  ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
+    traceFutureWithParent("getBillingWithSpendPermission", parentContext) { childContext =>
+      for {
+        ownerWorkspaces <- samDAO.listResourcesWithActions(
+          SamResourceTypeNames.workspace,
+          SamWorkspaceActions.readSpendReport,
+          childContext
+        )
+        groupedWorkspaces <-
+          if (ownerWorkspaces.isEmpty) {
+            Future.successful(Map.empty[RawlsBillingProjectName, Seq[Workspace]])
+          } else {
+            // Ignore non-UUID workspaceIds; these shouldn't happen but if they do, we don't want them
+            workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(
+              ownerWorkspaces
+                .map(_.getResourceId)
+                .filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess)
+                .toList
+            )
+          }
+        // Only use the BPs we know exist in the DB and are GCP
+        spendConfigs <-
+          if (groupedWorkspaces.isEmpty) {
+            Future.successful(Seq.empty[BillingProjectSpendExport])
+          } else {
+            getSpendExportConfigurations(groupedWorkspaces.keys.toList)
+          }
+      } yield spendConfigs.map { config =>
+        config -> groupedWorkspaces
+          .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
+          .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+      }.toMap
+    }
 }
