@@ -19,6 +19,7 @@ import slick.jdbc.JdbcType
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import scala.util.Try
 
 final case class RawlsBillingProjectRecord(projectName: String,
                                            creationStatus: String,
@@ -362,6 +363,7 @@ trait RawlsBillingProjectComponent {
     def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
       setBillingProjectSpendConfiguration(billingProjectName, None, None, None)
 
+    // Throws an error if the Billing Project does not have a Billing Account
     def getBillingProjectSpendConfiguration(
       billingProjectName: RawlsBillingProjectName
     ): ReadAction[Option[BillingProjectSpendExport]] =
@@ -369,6 +371,17 @@ trait RawlsBillingProjectComponent {
         .withProjectName(billingProjectName)
         .result
         .map(_.headOption.map(RawlsBillingProjectRecord.toBillingProjectSpendExport))
+
+    // Ignores any Billing Projects that don't have Billing Accounts
+    def getBillingProjectsSpendConfiguration(
+      billingProjectNames: Seq[RawlsBillingProjectName]
+    ): ReadAction[Seq[Option[BillingProjectSpendExport]]] =
+      rawlsBillingProjectQuery
+        .withProjectNames(billingProjectNames)
+        .result
+        .map(projectRecords =>
+          projectRecords.map(record => Try(RawlsBillingProjectRecord.toBillingProjectSpendExport(record)).toOption)
+        )
 
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] =
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())

@@ -16,9 +16,11 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName,
   WorkspaceState,
   WorkspaceSubmissionStats,
-  WorkspaceTag
+  WorkspaceTag,
+  WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.DateTime
 
@@ -67,6 +69,14 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def listWorkspacesByBillingProject(billingProjectName: RawlsBillingProjectName): Future[Seq[Workspace]] =
     dataSource.inTransaction {
       _.workspaceQuery.listWithBillingProject(billingProjectName)
+    }
+
+  def groupByBillingProjectOfType(
+    workspaceIds: List[UUID],
+    workspaceType: WorkspaceType
+  ): Future[Map[RawlsBillingProjectName, Seq[Workspace]]] =
+    dataSource.inTransaction {
+      _.workspaceQuery.groupByBillingProjectOfType(workspaceIds, workspaceType)
     }
 
   def createWorkspace(workspace: Workspace): Future[Workspace] =

@@ -224,6 +224,19 @@ class RawlsBillingProjectComponentSpec
       }
     }
 
+  it should "return the appropriate list of Option[BillingProjectSpendExport]s for given RawlsBillingProjectNames" in withDefaultTestDatabase {
+    val billingProjectNames = Seq(testData.testProject1.projectName, testData.testProject2.projectName)
+
+    val expectedSpendExports = billingProjectNames.map { projectName =>
+      runAndWait(rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(projectName))
+    }
+
+    val actualSpendExports =
+      runAndWait(rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(billingProjectNames))
+
+    actualSpendExports shouldBe expectedSpendExports
+  }
+
   it should "set statuses properly in ignoreAllOutstanding" in withDefaultTestDatabase {
     import driver.api._
 
