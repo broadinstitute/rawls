@@ -87,6 +87,11 @@ case class ExecutionServiceCallLogs(
 )
 
 // https://cromwell.readthedocs.io/en/stable/wf_options/Google/
+// We provide both the key jes_gcs_root and the key gcp_batch_gcs_root
+// to accommodate the PAPI and GCP Batch Cromwell backends. Each backend
+// ignores the key that does not correspond to it. This is a temporary
+// measure, and jes_gcs_root can be removed when we complete the full
+// transition to GCP Batch.
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
   gcp_batch_gcs_root: String,
