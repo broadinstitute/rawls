@@ -534,7 +534,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
         /* policies = */ util.List.of(),
         /* roles = */ util.List.of(),
         /* actions = */ util.List.of(action.value),
-        /* includePublic = */ false,
+        /* includePublic = */ true,
         callback
       )
 
