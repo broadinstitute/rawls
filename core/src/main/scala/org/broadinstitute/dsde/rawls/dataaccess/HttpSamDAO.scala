@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
 import org.broadinstitute.dsde.workbench.client.sam.api._
 import org.broadinstitute.dsde.workbench.client.sam.model.{
+  FilteredFlatResource,
   FilteredFlatResourcePolicy,
   FilteredHierarchicalResource,
   FilteredHierarchicalResourcePolicy,
@@ -524,12 +525,12 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
   override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
                                         action: SamResourceAction,
                                         ctx: RawlsRequestContext
-  ): Future[Seq[FilteredHierarchicalResource]] =
+  ): Future[Seq[FilteredFlatResource]] =
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[ListResourcesV2200Response]("listResourcesV2")
 
       resourcesApi(ctx).listResourcesV2Async(
-        /* format = */ "hierarchical",
+        /* format = */ "flat",
         /* resourceTypes = */ util.List.of(resourceTypeName.value),
         /* policies = */ util.List.of(),
         /* roles = */ util.List.of(),
@@ -539,7 +540,7 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       )
 
       callback.future.map { resourcesResponse =>
-        resourcesResponse.getFilteredResourcesHierarchicalResponse
+        resourcesResponse.getFilteredResourcesFlatResponse
           .getResources()
           .asScala
           .toSeq
