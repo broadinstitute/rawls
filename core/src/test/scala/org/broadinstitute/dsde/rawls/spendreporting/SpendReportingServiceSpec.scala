@@ -42,7 +42,7 @@ import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.workbench.client.sam.model.FilteredHierarchicalResource
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 
 class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
@@ -1410,19 +1410,19 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(
       Future.successful(
         Seq(
-          new FilteredHierarchicalResource(
+          new FilteredFlatResource(
           ).resourceId(
             "workspace1Billing1"
           ),
-          new FilteredHierarchicalResource(
+          new FilteredFlatResource(
           ).resourceId(
             "workspace2Billing1"
           ),
-          new FilteredHierarchicalResource(
+          new FilteredFlatResource(
           ).resourceId(
             "workspace1Billing2"
           ),
-          new FilteredHierarchicalResource(
+          new FilteredFlatResource(
           ).resourceId(
             "workspace1Billing3"
           )
@@ -1623,8 +1623,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(
       Future.successful(
         List(
-          new FilteredHierarchicalResource().resourceId(UUID.randomUUID().toString),
-          new FilteredHierarchicalResource().resourceId(UUID.randomUUID().toString)
+          new FilteredFlatResource().resourceId(UUID.randomUUID().toString),
+          new FilteredFlatResource().resourceId(UUID.randomUUID().toString)
         )
       )
     )
