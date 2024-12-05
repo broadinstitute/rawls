@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.client.sam.model.{FilteredFlatResource, FilteredHierarchicalResource}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -239,6 +240,25 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       case _ => Future.successful(Seq.empty)
     }
 
+  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
+                                        action: SamResourceAction,
+                                        ctx: RawlsRequestContext
+  ): Future[Seq[FilteredFlatResource]] =
+    resourceTypeName match {
+      case SamResourceTypeNames.workspace =>
+        dataSource
+          .inTransaction(_ => workspaceQuery.listAll())
+          .map(
+            _.map(workspace =>
+              new FilteredFlatResource()
+                .resourceType(SamResourceTypeNames.workspace.value)
+                .resourceId(workspace.workspaceId)
+            )
+          )
+
+      case _ => Future.successful(Seq.empty)
+    }
+
   override def admin: SamAdminDAO = new MockSamAdminDAO()
 
   class MockSamAdminDAO extends SamAdminDAO {
@@ -263,6 +283,11 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                       ctx: RawlsRequestContext
     ): Future[Unit] =
       MockSamDAO.this.removeUserFromPolicy(resourceTypeName, resourceId, policyName, memberEmail, ctx)
+
+    override def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
+                                                    action: SamResourceAction,
+                                                    ctx: RawlsRequestContext
+    ): Future[Boolean] = ???
   }
 }
 
@@ -378,6 +403,23 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
       super.listUserResources(resourceTypeName, ctx)
     } else {
       Future.successful(userResources.toSeq)
+    }
+  }
+
+  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
+                                        action: SamResourceAction,
+                                        ctx: RawlsRequestContext
+  ): Future[Seq[FilteredFlatResource]] = {
+    val userResources = for {
+      ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
+      userResource <- constructResourceFromPolicies(ctx, resourceId, resourcePolicies.values)
+    } yield userResource
+    if (userResources.isEmpty) {
+      super.listResourcesWithActions(resourceTypeName, action, ctx)
+    } else {
+      Future.successful(userResources.map { resource =>
+        new FilteredFlatResource().resourceType(resourceTypeName.value).resourceId(resource.resourceId)
+      }.toSeq)
     }
   }
 

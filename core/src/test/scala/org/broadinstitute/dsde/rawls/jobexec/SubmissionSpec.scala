@@ -6,7 +6,6 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import bio.terra.workspace.model.CloningInstructionsEnum
-import cats.effect.IO
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
@@ -26,13 +25,14 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.SeparateSubmissionFinalOutputsConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -44,9 +44,8 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import spray.json._
 
-import java.time.temporal.ChronoUnit
 import java.util.UUID
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.jdk.DurationConverters.JavaDurationOps
@@ -407,13 +406,14 @@ class SubmissionSpec(_system: ActorSystem)
   }
 
   // WorkspaceManagerDAO is passed because some of the tests need it to set up shared state for downstream services
-  def withDataAndService[T](testCode: (SubmissionsService, WorkspaceManagerDAO) => T,
-                            withDataOp: (SlickDataSource => T) => T,
-                            executionServiceDAO: ExecutionServiceDAO =
-                              new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
-                            bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl =
-                              MockBigQueryServiceFactory.ioFactory(),
-                            dataRepoDAO: DataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
+  def withDataAndService[T](
+    testCode: (SubmissionsService, WorkspaceManagerDAO) => T,
+    withDataOp: (SlickDataSource => T) => T,
+    executionServiceDAO: ExecutionServiceDAO =
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
+    bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
+    dataRepoDAO: DataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS),
+    workspaceSettingRepository: WorkspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
   ): T = {
 
     withDataOp { dataSource =>
@@ -538,7 +538,8 @@ class SubmissionSpec(_system: ActorSystem)
         mockSubmissionCostService,
         genomicsServiceConstructor,
         workspaceServiceConfig,
-        new WorkspaceRepository(slickDataSource)
+        new WorkspaceRepository(slickDataSource),
+        workspaceSettingRepository
       ) _
       lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(testContext)
       try
@@ -1073,6 +1074,72 @@ class SubmissionSpec(_system: ActorSystem)
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
+  }
+
+  def workspaceSettingSubmissionTest[T](
+    SeparateSubmissionFinalOutputs: Boolean
+  )(test: (SubmissionsService) => T) = {
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+
+    when(
+      workspaceSettingRepository.getWorkspaceSettings(
+        UUID.fromString(testData.workspace.workspaceId)
+      )
+    ).thenReturn(
+      Future.successful(
+        List(
+          SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(SeparateSubmissionFinalOutputs))
+        )
+      )
+    )
+
+    withDataAndService((service, _) => test(service),
+                       withDefaultTestDatabase[T],
+                       workspaceSettingRepository = workspaceSettingRepository
+    )
+  }
+
+  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is true" in {
+    workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = true) { submissionsService =>
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option("Pair"),
+        entityName = Option("pair1"),
+        expression = Option("this.case"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
+
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+      submissionData.submissionRoot should include("intermediates")
+    }
+  }
+
+  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is false" in {
+    workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = false) { submissionsService =>
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option("Pair"),
+        entityName = Option("pair1"),
+        expression = Option("this.case"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
+
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+      submissionData.submissionRoot should not include "intermediates"
+    }
   }
 
   it should "create data repo submission" in {

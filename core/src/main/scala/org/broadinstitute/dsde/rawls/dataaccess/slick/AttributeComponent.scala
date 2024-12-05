@@ -33,9 +33,7 @@ trait AttributeRecord[OWNER_ID] {
   val deletedDate: Option[Timestamp]
 }
 
-trait AttributeScratchRecord[OWNER_ID] extends AttributeRecord[OWNER_ID] {
-  val transactionId: String
-}
+trait AttributeScratchRecord[OWNER_ID] extends AttributeRecord[OWNER_ID]
 
 case class EntityAttributeRecord(id: Long,
                                  ownerId: Long, // entity id
@@ -64,8 +62,7 @@ case class EntityAttributeTempRecord(id: Long,
                                      listIndex: Option[Int],
                                      listLength: Option[Int],
                                      deleted: Boolean,
-                                     deletedDate: Option[Timestamp],
-                                     transactionId: String
+                                     deletedDate: Option[Timestamp]
 ) extends AttributeScratchRecord[Long]
 
 case class WorkspaceAttributeRecord(id: Long,
@@ -95,8 +92,7 @@ case class WorkspaceAttributeTempRecord(id: Long,
                                         listIndex: Option[Int],
                                         listLength: Option[Int],
                                         deleted: Boolean,
-                                        deletedDate: Option[Timestamp],
-                                        transactionId: String
+                                        deletedDate: Option[Timestamp]
 ) extends AttributeScratchRecord[UUID]
 
 case class SubmissionAttributeRecord(id: Long,
@@ -148,9 +144,7 @@ trait AttributeComponent {
   abstract class AttributeScratchTable[OWNER_ID: TypedType, RECORD <: AttributeScratchRecord[OWNER_ID]](
     tag: Tag,
     tableName: String
-  ) extends AttributeTable[OWNER_ID, RECORD](tag, tableName) {
-    def transactionId = column[String]("transaction_id")
-  }
+  ) extends AttributeTable[OWNER_ID, RECORD](tag, tableName)
 
   class EntityAttributeTable(shard: ShardId)(tag: Tag)
       extends AttributeTable[Long, EntityAttributeRecord](tag, s"ENTITY_ATTRIBUTE_$shard") {
@@ -236,8 +230,7 @@ trait AttributeComponent {
              listIndex,
              listLength,
              deleted,
-             deletedDate,
-             transactionId
+             deletedDate
     ) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
   }
 
@@ -255,8 +248,7 @@ trait AttributeComponent {
              listIndex,
              listLength,
              deleted,
-             deletedDate,
-             transactionId
+             deletedDate
     ) <> (WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
@@ -315,14 +307,13 @@ trait AttributeComponent {
                    Option[Int],
                    Option[Int],
                    Boolean,
-                   Option[Timestamp],
-                   String
+                   Option[Timestamp]
     ) => TEMP_RECORD
   ) extends TableQuery[T](cons) {
-    def insertScratchAttributes(attributeRecs: Seq[RECORD])(transactionId: String): WriteAction[Int] =
-      batchInsertAttributes(attributeRecs, transactionId)
+    def insertScratchAttributes(attributeRecs: Seq[RECORD])(): WriteAction[Int] =
+      batchInsertAttributes(attributeRecs)
 
-    def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) =
+    def batchInsertAttributes(attributes: Seq[RECORD]) =
       insertInBatches(
         this,
         attributes.map(rec =>
@@ -339,8 +330,7 @@ trait AttributeComponent {
             rec.listIndex,
             rec.listLength,
             rec.deleted,
-            rec.deletedDate,
-            transactionId
+            rec.deletedDate
           )
         )
       )
@@ -597,7 +587,7 @@ trait AttributeComponent {
     def patchAttributesAction(inserts: Traversable[RECORD],
                               updates: Traversable[RECORD],
                               deleteIds: Traversable[Long],
-                              insertFunction: Seq[RECORD] => String => WriteAction[Int],
+                              insertFunction: Seq[RECORD] => () => WriteAction[Int],
                               tracingContext: RawlsTracingContext
     ) =
       traceDBIOWithParent("patchAttributesAction", tracingContext) { span =>
@@ -705,7 +695,7 @@ trait AttributeComponent {
      */
     def rewriteAttrsAction(attributesToSave: Traversable[RECORD],
                            existingAttributes: Traversable[RECORD],
-                           insertFunction: Seq[RECORD] => String => WriteAction[Int]
+                           insertFunction: Seq[RECORD] => () => WriteAction[Int]
     ): ReadWriteAction[Set[OWNER_ID]] =
       traceDBIOWithParent("AttributeComponent.rewriteAttrsAction", RawlsTracingContext(Option.empty)) {
         tracingContext =>
@@ -714,8 +704,6 @@ trait AttributeComponent {
 
           // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
           // therefore, we use this ComparableRecord class which omits the id when checking equality between existing and to-save.
-          // note this does not include transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
-          // here, and transactionId will eventually be going away, so don't bother
           object ComparableRecord {
             def fromRecord(rec: RECORD): ComparableRecord =
               new ComparableRecord(
@@ -795,7 +783,7 @@ trait AttributeComponent {
       // attributes.
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
-      def updateInMasterAction(transactionId: String) = {
+      def updateInMasterAction() = {
         val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
         sql"""
@@ -803,7 +791,6 @@ trait AttributeComponent {
               join #${joinTableName} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
-                  and ta.transaction_id = $transactionId
           set a.value_string=ta.value_string,
               a.value_number=ta.value_number,
               a.value_boolean=ta.value_boolean,
@@ -815,22 +802,10 @@ trait AttributeComponent {
              """.as[Int]
       }
 
-      def clearAttributeScratchTableAction(transactionId: String) = {
-        val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
-
-        if (joinTableName.endsWith("SCRATCH"))
-          sqlu"""delete from #${joinTableName} where transaction_id = $transactionId"""
-        else DBIO.successful(0)
-      }
-
-      def updateAction(insertIntoScratchFunction: String => WriteAction[Int], tracingContext: RawlsTracingContext) =
+      def updateAction(insertIntoScratchFunction: () => WriteAction[Int], tracingContext: RawlsTracingContext) =
         traceDBIOWithParent("updateAction", tracingContext) { span =>
-          val transactionId = UUID.randomUUID().toString
-          traceDBIOWithParent("insertIntoScratchFunction", span)(_ => insertIntoScratchFunction(transactionId)) andThen
-            traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction(transactionId)) andThen
-            traceDBIOWithParent("clearAttributeScratchTableAction", span)(_ =>
-              clearAttributeScratchTableAction(transactionId)
-            )
+          traceDBIOWithParent("insertIntoScratchFunction", span)(_ => insertIntoScratchFunction()) andThen
+            traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction())
         }
     }
 

@@ -456,7 +456,8 @@ object Boot extends IOApp with LazyLogging {
         submissionCostService,
         genomicsServiceConstructor,
         workspaceServiceConfig,
-        new WorkspaceRepository(slickDataSource)
+        new WorkspaceRepository(slickDataSource),
+        new WorkspaceSettingRepository(slickDataSource)
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -515,8 +516,12 @@ object Boot extends IOApp with LazyLogging {
           billingRepository,
           billingProfileManagerDAO,
           samDAO,
-          spendReportingServiceConfig
+          spendReportingServiceConfig,
+          workspaceServiceConstructor
         )
+
+      val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
+        new BillingAdminService(samDAO, billingRepository, workspaceRepository, _)
 
       val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
         BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
@@ -532,6 +537,7 @@ object Boot extends IOApp with LazyLogging {
         workspaceSettingServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,
+        billingAdminServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
@@ -594,7 +600,8 @@ object Boot extends IOApp with LazyLogging {
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
           methodConfigResolver,
-          bardService
+          bardService,
+          workspaceSettingRepository
         )
       } else
         logger.info(

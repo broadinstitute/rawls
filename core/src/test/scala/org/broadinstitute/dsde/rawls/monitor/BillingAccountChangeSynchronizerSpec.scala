@@ -6,7 +6,11 @@ import cats.implicits.{catsSyntaxApplyOps, catsSyntaxOptionId, toFoldableOps}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestDriverComponentWithFlatSpecAndMatchers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  BillingAccountChangeStatus,
+  ReadAction,
+  TestDriverComponentWithFlatSpecAndMatchers
+}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
@@ -495,6 +499,7 @@ class BillingAccountChangeSynchronizerSpec
 
         lastChange.googleSyncTime shouldBe defined
         lastChange.newBillingAccount shouldBe Some(finalBillingAccountName)
+        lastChange.status shouldBe BillingAccountChangeStatus.Synchronized
 
         // all previous changes should be ignored
         every(previousChanges.map(_.googleSyncTime)) shouldBe empty
@@ -620,6 +625,7 @@ class BillingAccountChangeSynchronizerSpec
             case Failure(msg) =>
               msg should include(testData.billingProject.googleProjectId.value)
           }
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe defined
@@ -682,6 +688,7 @@ class BillingAccountChangeSynchronizerSpec
                 msg should include(workspace.googleProjectId.value)
               }
           }
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe empty
@@ -689,7 +696,80 @@ class BillingAccountChangeSynchronizerSpec
           forAll(workspaces) { ws =>
             ws.errorMessage shouldBe defined
             ws.errorMessage.value should include(ws.googleProjectId.value)
+            ws.state shouldBe WorkspaceState.UpdateFailed
             ws.currentBillingAccountOnGoogleProject shouldBe Some(testData.billingAccountName)
+          }
+        }
+      }
+    }
+
+  it should "mark the change as successful after updating a workspace in the UpdateFailed state" in
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val newBillingAccount = RawlsBillingAccountName(UUID.randomUUID.toString).some
+      runAndWait {
+        for {
+          _ <- rawlsBillingProjectQuery.create(testData.billingProject)
+          _ <- List(
+            testData.workspace,
+            testData.workspace.copy(
+              name = testData.workspace.name + "copy",
+              workspaceId = UUID.randomUUID().toString,
+              state = WorkspaceState.UpdateFailed,
+              errorMessage = "update failed error".some
+            )
+          ).traverse_(workspaceQuery.createOrUpdate)
+          _ <- rawlsBillingProjectQuery.updateBillingAccount(
+            testData.billingProject.projectName,
+            billingAccount = newBillingAccount,
+            testData.userOwner.userSubjectId
+          )
+        } yield ()
+      }
+
+      val gcsDAO = new MockGoogleServicesDAO("test") {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId,
+                                           billingAccountName: RawlsBillingAccountName,
+                                           rawlsTracingContext: RawlsTracingContext
+        ): Future[ProjectBillingInfo] =
+          Future.successful(
+            new ProjectBillingInfo().setBillingAccountName(newBillingAccount.value.value).setBillingEnabled(true)
+          )
+      }
+
+      BillingAccountChangeSynchronizer(
+        dataSource,
+        gcsDAO,
+        new MockSamDAO(dataSource) {
+          override def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                                            resourceId: String,
+                                            ctx: RawlsRequestContext
+          ): Future[Seq[SamFullyQualifiedResourceId]] =
+            Future.successful(Seq.empty)
+        }
+      ).updateBillingAccounts
+        .unsafeRunSync()
+
+      runAndWait {
+        for {
+          lastChange <- BillingAccountChanges.getLastChange(testData.billingProject.projectName)
+          billingProject <- rawlsBillingProjectQuery.load(testData.billingProject.projectName)
+          workspaces <- workspaceQuery.withBillingProject(testData.billingProject.projectName).read
+        } yield {
+          lastChange.value.googleSyncTime shouldBe defined
+          lastChange.value.outcome.value match {
+            case Success =>
+            case Failure(_) =>
+              fail("should not fail when updating workspaces succeed")
+          }
+          lastChange.value.status shouldBe BillingAccountChangeStatus.Synchronized
+
+          billingProject.value.invalidBillingAccount shouldBe false
+          billingProject.value.message shouldBe empty
+
+          forAll(workspaces) { ws =>
+            ws.errorMessage shouldNot be(defined)
+            ws.state shouldBe WorkspaceState.Ready
+            ws.currentBillingAccountOnGoogleProject shouldBe newBillingAccount
           }
         }
       }

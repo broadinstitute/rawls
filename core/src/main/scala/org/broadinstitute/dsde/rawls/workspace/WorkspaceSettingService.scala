@@ -1,18 +1,13 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
-import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
-import com.typesafe.scalalogging.LazyLogging
 import cats.implicits._
+import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
+import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
-  GcpBucketLifecycleCondition,
-  GcpBucketLifecycleConfig,
-  GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig
-}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GcpBucketLifecycleSetting,
@@ -20,13 +15,15 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketSoftDeleteSetting,
   RawlsRequestContext,
   SamWorkspaceActions,
+  SeparateSubmissionFinalOutputsSetting,
+  UseCromwellGcpBatchBackendSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
   WorkspaceSettingResponse
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import java.time.Duration
 import scala.concurrent.duration.DurationInt
@@ -96,7 +93,9 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
-          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_)) => None
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
+          case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
+          case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
         }
       }
 
@@ -161,7 +160,14 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
           gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
 
-        case _ => throw new RawlsException("unsupported workspace setting")
+        // SeparateSubmissionFinalOutputsSetting and UseCromwellGcpBatchBackendSetting are not bucket settings,
+        // so we do not need to apply anything here
+
+        case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
+          Future.successful(())
+
+        case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_)) =>
+          Future.successful(())
       }
 
     validateSettings(workspaceSettings)

@@ -3,12 +3,16 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   GcpBucketLifecycleConfigFormat,
   GcpBucketRequesterPaysConfigFormat,
-  GcpBucketSoftDeleteConfigFormat
+  GcpBucketSoftDeleteConfigFormat,
+  SeparateSubmissionFinalOutputsConfigFormat,
+  UseCromwellGcpBatchBackendConfigFormat
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
@@ -65,6 +69,14 @@ object WorkspaceSettingRecord {
         GcpBucketSoftDeleteSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig])
       case WorkspaceSettingTypes.GcpBucketRequesterPays =>
         GcpBucketRequesterPaysSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketRequesterPaysConfig])
+      case WorkspaceSettingTypes.SeparateSubmissionFinalOutputs =>
+        SeparateSubmissionFinalOutputsSetting(
+          workspaceSettingRecord.config.parseJson.convertTo[SeparateSubmissionFinalOutputsConfig]
+        )
+      case WorkspaceSettingTypes.UseCromwellGcpBatchBackend =>
+        UseCromwellGcpBatchBackendSetting(
+          workspaceSettingRecord.config.parseJson.convertTo[UseCromwellGcpBatchBackendConfig]
+        )
     }
   }
 }
@@ -122,5 +134,16 @@ trait WorkspaceSettingComponent {
     ): ReadAction[List[WorkspaceSetting]] =
       filter(rec => rec.workspaceId === workspaceId && rec.status === status.toString).result
         .map(_.map(WorkspaceSettingRecord.toWorkspaceSetting).toList)
+
+    def getAppliedSettingForWorkspaceByType(workspaceId: UUID,
+                                            settingType: WorkspaceSettingType
+    ): ReadAction[Option[WorkspaceSetting]] =
+      uniqueResult(
+        filter(rec =>
+          rec.workspaceId === workspaceId
+            && rec.status === WorkspaceSettingRecord.SettingStatus.Applied.toString
+            && rec.settingType === settingType.toString
+        ).take(1).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSetting).toList)
+      )
   }
 }

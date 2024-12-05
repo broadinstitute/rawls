@@ -106,7 +106,7 @@ class PetSASpec extends ApiServiceSpec {
                                                      Some(WorkspaceCloudPlatform.Gcp)
             ),
             Option(WorkspaceSubmissionStats(None, None, 0)),
-            Option(WorkspaceBucketOptions(false)),
+            Option(WorkspaceBucketOptions(false, services.gcsDAO.bucketLocation)),
             Option(Set.empty),
             None,
             None
@@ -155,7 +155,7 @@ class PetSASpec extends ApiServiceSpec {
                                                      Some(WorkspaceCloudPlatform.Gcp)
             ),
             Option(WorkspaceSubmissionStats(None, None, 0)),
-            Option(WorkspaceBucketOptions(false)),
+            Option(WorkspaceBucketOptions(false, services.gcsDAO.bucketLocation)),
             Option(Set.empty),
             None,
             None

@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
+import com.google.common.annotations.VisibleForTesting
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
+import org.broadinstitute.dsde.rawls.dataaccess.slick.BillingAccountChangeStatus.BillingAccountChangeStatus
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperationNames}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -17,6 +19,7 @@ import slick.jdbc.JdbcType
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import scala.util.Try
 
 final case class RawlsBillingProjectRecord(projectName: String,
                                            creationStatus: String,
@@ -101,8 +104,23 @@ final case class BillingAccountChange(id: Long,
                                       newBillingAccount: Option[RawlsBillingAccountName],
                                       created: Instant,
                                       googleSyncTime: Option[Instant],
+                                      status: BillingAccountChangeStatus,
                                       outcome: Option[Outcome]
 )
+
+object BillingAccountChangeStatus extends Enumeration {
+  type BillingAccountChangeStatus = Value
+  val Ignored: BillingAccountChangeStatus = Value("Ignored")
+  val Outstanding: BillingAccountChangeStatus = Value("Outstanding")
+  val Synchronized: BillingAccountChangeStatus = Value("Synchronized")
+
+  def apply(value: String): BillingAccountChangeStatus = value match {
+    case "Ignored"      => Ignored
+    case "Outstanding"  => Outstanding
+    case "Synchronized" => Synchronized
+    case _              => throw new NoSuchElementException()
+  }
+}
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -168,6 +186,8 @@ trait RawlsBillingProjectComponent {
 
     def googleSyncTime = column[Option[Timestamp]]("GOOGLE_SYNC_TIME")
 
+    def status = column[String]("STATUS")
+
     def outcome = column[Option[String]]("OUTCOME")
 
     def message = column[Option[String]]("MESSAGE")
@@ -181,6 +201,7 @@ trait RawlsBillingProjectComponent {
         newBillingAccount,
         created,
         googleSyncTime,
+        status,
         outcome,
         message
       ) <> (
@@ -342,6 +363,7 @@ trait RawlsBillingProjectComponent {
     def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
       setBillingProjectSpendConfiguration(billingProjectName, None, None, None)
 
+    // Throws an error if the Billing Project does not have a Billing Account
     def getBillingProjectSpendConfiguration(
       billingProjectName: RawlsBillingProjectName
     ): ReadAction[Option[BillingProjectSpendExport]] =
@@ -349,6 +371,17 @@ trait RawlsBillingProjectComponent {
         .withProjectName(billingProjectName)
         .result
         .map(_.headOption.map(RawlsBillingProjectRecord.toBillingProjectSpendExport))
+
+    // Ignores any Billing Projects that don't have Billing Accounts
+    def getBillingProjectsSpendConfiguration(
+      billingProjectNames: Seq[RawlsBillingProjectName]
+    ): ReadAction[Seq[Option[BillingProjectSpendExport]]] =
+      rawlsBillingProjectQuery
+        .withProjectNames(billingProjectNames)
+        .result
+        .map(projectRecords =>
+          projectRecords.map(record => Try(RawlsBillingProjectRecord.toBillingProjectSpendExport(record)).toOption)
+        )
 
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] =
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
@@ -447,12 +480,16 @@ trait RawlsBillingProjectComponent {
         // - so the `WorkspaceBillingAccountActor` can synchronise the changes with google
         // - to keep an audit log of billing account changes
         _ <- DBIO.sequence(billingProjects.map { project =>
-          BillingAccountChanges.create(
-            project.projectName,
-            project.billingAccount,
-            billingAccount,
-            userSubjectId
-          )
+          // ignore all currently-outstanding changes for this project
+          BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen {
+            // insert the most recent change for this project
+            BillingAccountChanges.create(
+              project.projectName,
+              project.billingAccount,
+              billingAccount,
+              userSubjectId
+            )
+          }
         })
       } yield count
   }
@@ -469,6 +506,7 @@ trait RawlsBillingProjectComponent {
       Option[String], // New billing account
       Timestamp, // Created
       Option[Timestamp], // Google sync time
+      String, // status
       Option[String], // Outcome
       Option[String] // Message
     )
@@ -481,6 +519,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount,
             created,
             googleSyncTime,
+            status,
             outcome,
             message
           ) =>
@@ -493,6 +532,7 @@ trait RawlsBillingProjectComponent {
             newBillingAccount.map(RawlsBillingAccountName),
             created.toInstant,
             googleSyncTime.map(_.toInstant),
+            BillingAccountChangeStatus.apply(status),
             outcome
           )
         }
@@ -508,11 +548,13 @@ trait RawlsBillingProjectComponent {
         billingAccountChange.newBillingAccount.map(_.value),
         Timestamp.from(billingAccountChange.created),
         billingAccountChange.googleSyncTime.map(Timestamp.from),
+        billingAccountChange.status.toString,
         outcome,
         message
       )
     }
 
+    @VisibleForTesting
     def getLastChange(billingProject: RawlsBillingProjectName): ReadAction[Option[BillingAccountChange]] =
       BillingAccountChanges
         .withProjectName(billingProject)
@@ -547,27 +589,6 @@ trait RawlsBillingProjectComponent {
     def withProjectName(billingProjectName: RawlsBillingProjectName): BillingAccountChangeQuery =
       query.filter(_.billingProjectName === billingProjectName.value)
 
-    /* SELECT *
-     * FROM BILLING_ACCOUNT_CHANGES BAC,
-     * (  SELECT BILLING_PROJECT_NAME, MAX(ID) AS MAXID
-     *    FROM BILLING_ACCOUNT_CHANGES
-     *    GROUP BY BILLING_PROJECT_NAME
-     * ) AS SUBTABLE
-     * WHERE SUBTABLE.MAXID = BAC.ID
-     */
-    /**
-      * Selects the latest changes for all billing projects in query.
-      */
-    def latestChanges: BillingAccountChangeQuery = {
-      val latestChangeIds = query
-        .groupBy(_.billingProjectName)
-        .map { case (_, group) => group.map(_.id).max }
-
-      query
-        .filter(_.id.in(latestChangeIds))
-        .sortBy(_.id.asc)
-    }
-
     def unsynced: BillingAccountChangeQuery =
       query.filter(_.googleSyncTime.isEmpty)
 
@@ -577,5 +598,20 @@ trait RawlsBillingProjectComponent {
 
     def setGoogleSyncTime(syncTime: Option[Instant]): WriteAction[Int] =
       query.map(_.googleSyncTime).update(syncTime.map(Timestamp.from))
+
+    def setStatus(status: BillingAccountChangeStatus): WriteAction[Int] =
+      query.map(_.status).update(status.toString)
+
+    def ignoreAllOutstanding(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
+      query
+        .filter(c =>
+          c.billingProjectName === billingProjectName.value && c.status === BillingAccountChangeStatus.Outstanding.toString
+        )
+        .map(_.status)
+        .update(BillingAccountChangeStatus.Ignored.toString)
+
+    def nextOutstanding(): BillingAccountChangeQuery =
+      query.filter(_.status === BillingAccountChangeStatus.Outstanding.toString).sortBy(_.id).take(1)
   }
+
 }

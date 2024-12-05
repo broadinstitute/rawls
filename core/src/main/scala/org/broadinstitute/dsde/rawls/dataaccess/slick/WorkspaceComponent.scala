@@ -7,6 +7,7 @@ import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -260,6 +261,21 @@ trait WorkspaceComponent {
     def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
       workspaceQuery.withBillingProject(billingProject).read
 
+    def groupByBillingProjectOfType(workspaceIds: List[UUID],
+                                    workspaceType: WorkspaceType
+    ): ReadWriteAction[Map[RawlsBillingProjectName, Seq[Workspace]]] = {
+      val query = for {
+        workspace <- workspaceQuery if workspace.id inSetBind workspaceIds.toSet
+        if workspace.workspaceType === workspaceType.toString
+      } yield (workspace.namespace, workspace)
+
+      query.result.map { rows =>
+        rows.groupBy(_._1).map { case (billingProjectName, workspaces) =>
+          RawlsBillingProjectName(billingProjectName) -> workspaces.map(_._2).map(WorkspaceRecord.toWorkspace)
+        }
+      }
+    }
+
     def getTags(queryString: Option[String],
                 limit: Option[Int] = None,
                 ownerIds: Option[Seq[UUID]] = None
@@ -364,6 +380,9 @@ trait WorkspaceComponent {
     def findByIdOrFail(workspaceId: String): ReadAction[Workspace] = findById(workspaceId) map {
       _.getOrElse(throw new RawlsException(s"""No workspace found matching id "$workspaceId"."""))
     }
+
+    def findByGoogleProjectId(googleProjectId: GoogleProjectId): ReadAction[Option[Workspace]] =
+      loadWorkspace(findByGoogleProjectIdQuery(googleProjectId))
 
     def listByIds(workspaceIds: Seq[UUID],
                   attributeSpecs: Option[WorkspaceAttributeSpecs] = None
@@ -596,6 +615,9 @@ trait WorkspaceComponent {
     def findByGoogleProjectNumbersQuery(googleProjectNumbers: Seq[String]): WorkspaceQueryType =
       filter(w => w.googleProjectNumber.map(_.inSetBind(googleProjectNumbers)))
 
+    def findByGoogleProjectIdQuery(googleProjectId: GoogleProjectId): WorkspaceQueryType =
+      workspaceQuery.withGoogleProjectId(googleProjectId)
+
     private def loadWorkspace(lookup: WorkspaceQueryType,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =
@@ -638,6 +660,9 @@ trait WorkspaceComponent {
     def withBillingProject(projectName: RawlsBillingProjectName): WorkspaceQueryType =
       query.filter(_.namespace === projectName.value)
 
+    def withBillingProjects(projectNames: List[RawlsBillingProjectName]): WorkspaceQueryType =
+      query.filter(_.namespace.inSetBind(projectNames.map(_.value)))
+
     def withGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       query.filter(_.googleProjectId === googleProjectId.value)
 
@@ -659,6 +684,9 @@ trait WorkspaceComponent {
 
     def setIsLocked(isLocked: Boolean): WriteAction[Boolean] =
       query.map(_.isLocked).filter(_ =!= isLocked).update(isLocked).map(_ > 0)
+
+    def setState(state: WorkspaceState): WriteAction[Int] =
+      query.map(_.state).update(state.toString)
   }
 
   private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] =

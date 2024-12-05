@@ -1,4 +1,4 @@
-# To run against a local UI, set baseUrl = "http://local.broadinstitute.org/"
+# To run against a local UI, set baseUrl = "http://local.dsde-dev.broadinstitute.org/"
 fireCloud {
   baseUrl = "https://firecloudui.${BEE_ENV}.bee.envs-terra.bio/"
 

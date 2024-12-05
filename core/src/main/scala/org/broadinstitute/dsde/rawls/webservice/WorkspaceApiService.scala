@@ -67,13 +67,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / "id" / Segment) { workspaceId =>
           get {
-            parameterSeq { allParams =>
-              complete {
-                workspaceServiceConstructor(ctx).getWorkspaceById(workspaceId,
-                                                                  WorkspaceFieldSpecs.fromQueryParams(allParams,
-                                                                                                      "fields"
-                                                                  )
-                )
+            parameters("userProject".optional) { userProject =>
+              parameterSeq { allParams =>
+                complete {
+                  workspaceServiceConstructor(ctx).getWorkspaceById(workspaceId,
+                                                                    WorkspaceFieldSpecs.fromQueryParams(allParams,
+                                                                                                        "fields"
+                                                                    ),
+                                                                    userProject.map(GoogleProjectId)
+                  )
+                }
               }
             }
           }
@@ -89,11 +92,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
             }
           } ~
             get {
-              parameterSeq { allParams =>
-                complete {
-                  workspaceServiceConstructor(ctx).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
-                  )
+              parameters("userProject".optional) { userProject =>
+                parameterSeq { allParams =>
+                  complete {
+                    workspaceServiceConstructor(ctx).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                  WorkspaceFieldSpecs.fromQueryParams(allParams,
+                                                                                                      "fields"
+                                                                  ),
+                                                                  userProject.map(GoogleProjectId)
+                    )
+                  }
                 }
               }
             } ~
@@ -116,8 +124,13 @@ trait WorkspaceApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
           get {
-            complete {
-              workspaceServiceConstructor(ctx).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName))
+            parameters("userProject".optional) { userProject =>
+              complete {
+                workspaceServiceConstructor(ctx).getBucketOptions(
+                  WorkspaceName(workspaceNamespace, workspaceName),
+                  userProject.map(GoogleProjectId)
+                )
+              }
             }
           }
         } ~

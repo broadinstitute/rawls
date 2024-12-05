@@ -274,17 +274,10 @@ trait ApiServiceSpec
       gcsDAO
     ) _
 
-    val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
-    val spendReportingServiceConfig =
-      SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
-    override val spendReportingConstructor = SpendReportingService.constructor(
-      slickDataSource,
-      spendReportingBigQueryService,
-      mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      spendReportingServiceConfig
-    )
+    override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
+      new BillingAdminService(samDAO, billingRepository, new WorkspaceRepository(slickDataSource), _)(
+        testExecutionContext
+      )
 
     override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
       BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)
@@ -412,6 +405,19 @@ trait ApiServiceSpec
                                   samDAO
       )
 
+    val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
+    val spendReportingServiceConfig =
+      SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
+    override val spendReportingConstructor = SpendReportingService.constructor(
+      slickDataSource,
+      spendReportingBigQueryService,
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      spendReportingServiceConfig,
+      workspaceServiceConstructor
+    )
+
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
       MethodConfigurationService.constructor(
         slickDataSource,
@@ -438,7 +444,8 @@ trait ApiServiceSpec
       submissionCostService,
       genomicsServiceConstructor,
       workspaceServiceConfig,
-      new WorkspaceRepository(slickDataSource)
+      new WorkspaceRepository(slickDataSource),
+      new WorkspaceSettingRepository(slickDataSource)
     ) _
 
     override val entityServiceConstructor = EntityService.constructor(

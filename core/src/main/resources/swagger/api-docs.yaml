@@ -450,6 +450,59 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/v2/spendReport:
+    get:
+      tags:
+        - billing_v2
+      summary: get spend report for all workspaces user has owner access to
+      description: get spend report for all workspaces user has owner access to
+      operationId: getSpendReportAllWorkspaces
+      parameters:
+        - name: startDate
+          in: query
+          description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC on this date.
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: end date of report (YYYY-MM-DD). Data included in report will end at 11:59 PM UTC on this date.
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: pageSize
+          in: query
+          description: how many workspaces to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/SpendReport'
+        400:
+          description: invalid spend report parameters
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a workspace owner to view the spend report of a workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
       tags:
@@ -710,6 +763,36 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/billing/{projectId}:
+    get:
+      tags:
+        - admin
+      summary: get support summary information for billing project
+      description: get support summary information for billing project
+      operationId: adminGetBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BillingProjectAdminResponse'
+        403:
+          description: You must be an admin to call this API
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions:
     get:
       tags:
@@ -856,6 +939,23 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/workspaces/{workspaceId}:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: fetch workspace details and settings
+      description: fetch workspace details and settings
+      operationId: adminGetWorkspaceById
+      parameters:
+        - $ref: '#/components/parameters/workspaceIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceAdminResponse'
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:
@@ -3147,6 +3247,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -3339,6 +3440,7 @@ paths:
             type: array
             items:
               type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -3381,6 +3483,7 @@ paths:
             type: array
             items:
               type: string
+        - $ref: '#/components/parameters/userProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -5797,6 +5900,18 @@ components:
           description: True if the user can launch compute in this workspace, false
             otherwise
       description: ""
+    WorkspaceAdminResponse:
+      required:
+        - workspace
+        - settings
+      type: object
+      properties:
+        workspace:
+          $ref: '#/components/schemas/WorkspaceDetails'
+        settings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceSetting'
     WorkspaceDetails:
       required:
         - bucketName
@@ -5926,12 +6041,16 @@ components:
             - GcpBucketLifecycle
             - GcpBucketSoftDelete
             - GcpBucketRequesterPays
+            - SeparateSubmissionFinalOutputs
+            - UseCromwellGcpBatchBackend
         config:
           description: The configuration of the workspace setting
           oneOf:
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketLifecycleConfig'
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketSoftDeleteConfig'
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketRequesterPaysConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
       required:
         - rules
@@ -5990,6 +6109,22 @@ components:
         enabled:
           type: boolean
           description: Enabled status to set for requester pays
+    WorkspaceSettingSeparateSubmissionFinalOutputsConfig:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether submission final outputs should be separated from intermediate outputs
+    WorkspaceSettingUseCromwellGcpBatchBackendConfig:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether workflows submitted to Cromwell should be run using Cromwell's GCP Batch backend
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount
@@ -6256,11 +6391,15 @@ components:
     WorkspaceBucketOptions:
       required:
         - requesterPays
+        - location
       type: object
       properties:
         requesterPays:
           type: boolean
           description: Whether the bucket is requester pays
+        location:
+          type: string
+          description: The region the bucket is in
       description: Extra information about a GCS bucket attached to a workspace
     WorkspaceAccessLevel:
       type: string
@@ -6697,6 +6836,74 @@ components:
           $ref: '#/components/schemas/ProjectRole'
           description: the role of the user in the project
       description: an element of a list of project users and their role
+    BillingProjectAdminResponse:
+      required:
+        - billingProject
+        - workspaces
+      type: object
+      properties:
+        billingProject:
+          $ref: '#/components/schemas/RawlsBillingProject'
+        workspaces:
+          type: object
+          additionalProperties:
+            type: string
+            format: uuid
+          example:
+            "workspace1": "00000000-0000-0000-0000-000000000000"
+            "workspace2": "11111111-1111-1111-1111-111111111111"
+          description: "workspaces in the billing project with their IDs"
+    RawlsBillingProject:
+      required:
+        - projectName
+        - status
+        - invalidBillingAccount
+      type: object
+      description: internal representation of a billing project, returned by admin API only
+      properties:
+        projectName:
+          type: string
+          description: the name of the project
+        billingAccount:
+          type: string
+          description: the billing account to use in google projects (cloudPlatform GCP only)
+        invalidBillingAccount:
+          type: boolean
+          description: whether or not the billing account is usable by Terra
+        status:
+          $ref: '#/components/schemas/BillingProjectStatus'
+        message:
+          type: string
+          description: informational message about the project
+        azureManagedAppCoordinates:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
+        cloudPlatform:
+          $ref: '#/components/schemas/BillingProjectCloudPlatform'
+        landingZoneId:
+          type: string
+          format: uuid
+          description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
+        billingProfileId:
+          type: string
+          description: the billing profile ID associated with the project
+        cromwellBackend:
+          type: string
+          description: the cromwell backend to use for this billing project
+        servicePerimeter:
+          type: string
+          description: the name of the service perimeter for this billing project (cloudPlatform GCP only)
+        googleProjectNumber:
+          type: string
+          description: the google project number for this billing project (cloudPlatform GCP only)
+        spendReportDataset:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data (cloudPlatform GCP only)
+        spendReportTable:
+          type: string
+          description: the name of the BigQuery table containing project spend data (cloudPlatform GCP only)
+        spendReportDatasetGoogleProject:
+          type: string
+          description: the name of the Google Project where the BigQuery dataset resides (cloudPlatform GCP only)
     RawlsBillingProjectResponse:
       required:
         - projectName
@@ -6722,27 +6929,14 @@ components:
             $ref: '#/components/schemas/ProjectRole'
           description: the roles the caller has on the project
         status:
-          type: string
-          enum:
-            - Creating
-            - Ready
-            - Error
-            - Deleting
-            - DeletionFailed
-            - AddingToPerimeter
-            - CreatingLandingZone
-          description: the status of allocating the billing project's resources.
+          $ref: '#/components/schemas/BillingProjectStatus'
         message:
           type: string
           description: informational message about the project
         azureManagedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
         cloudPlatform:
-          type: string
-          enum:
-            - GCP
-            - AZURE
-            - UNKNOWN
+          $ref: '#/components/schemas/BillingProjectCloudPlatform'
         landingZoneId:
           type: string
           format: uuid
@@ -6755,6 +6949,24 @@ components:
           description: whether this billing project supports protected data (cloudPlatform AZURE only)
         organization:
           $ref: '#/components/schemas/RawlsBillingProjectOrganization'
+    BillingProjectStatus:
+      type: string
+      enum:
+        - Creating
+        - Ready
+        - Error
+        - Deleting
+        - DeletionFailed
+        - AddingToPerimeter
+        - CreatingLandingZone
+      description: the status of allocating the billing project's resources.
+    BillingProjectCloudPlatform:
+      type: string
+      enum:
+        - GCP
+        - AZURE
+        - UNKNOWN
+      description: the cloud platform of the billing project
     AzureManagedAppCoordinates:
       required:
         - tenantId
@@ -7069,6 +7281,14 @@ components:
       in: path
       description: Submission Id
       required: true
+      schema:
+        type: string
+    userProjectQueryParam:
+      name: userProject
+      in: query
+      description: |
+        When specified, bill google storage requests to this project
+      required: false
       schema:
         type: string
     workbenchRolePathParam:

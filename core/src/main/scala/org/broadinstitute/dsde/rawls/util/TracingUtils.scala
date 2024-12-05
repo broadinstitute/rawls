@@ -96,6 +96,33 @@ object TracingUtils {
   def traceFuture[T](name: String)(f: RawlsTracingContext => Future[T])(implicit ec: ExecutionContext): Future[T] =
     traceFutureWithParent(name, RawlsTracingContext(otelContext = Option(Context.root())))(f)
 
+  /**
+    * Trace a sync operation with the RawlsRequestContext
+    *
+    * @param name The name that will be used in the trace
+    * @param parentContext the RawlsRequestContext to use for tracing, if `parentContext.otelContext` is defined
+    * @param f the operation to execute within the trace
+    * @return the result of the operation `f`
+    */
+  def trace[T](name: String, parentContext: RawlsRequestContext)(f: RawlsRequestContext => T): T =
+    parentContext.otelContext match {
+      case Some(otelContext) if instrumenter.shouldStart(otelContext, name) =>
+        val childContext = instrumenter.start(otelContext, name)
+        val result = Try(f(parentContext.copy(otelContext = Option(childContext))))
+        instrumenter.end(childContext, name, name, result.failed.toOption.orNull)
+        result.get
+      case _ =>
+        f(parentContext)
+    }
+
+  /**
+    * Trace a sync operation with the RawlsTracingContext
+    *
+    * @param name          The name that will be used in the trace
+    * @param parentContext the RawlsTracingContext to use for tracing, if `parentContext.otelContext` is defined
+    * @param f             the operation to execute within the trace
+    * @return the result of the operation `f`
+    */
   def traceNakedWithParent[T](name: String, parentContext: RawlsTracingContext)(
     f: RawlsTracingContext => T
   ): T =

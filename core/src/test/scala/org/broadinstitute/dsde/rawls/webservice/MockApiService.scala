@@ -75,7 +75,9 @@ class MockApiService(
     mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
   override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService = _ =>
     mock[BucketMigrationService](RETURNS_SMART_NULLS),
-  override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS)
+  override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
+  override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService = _ =>
+    mock[BillingAdminService](RETURNS_SMART_NULLS)
 )(implicit val executionContext: ExecutionContext)
     extends RawlsApiService
     with AdminApiService

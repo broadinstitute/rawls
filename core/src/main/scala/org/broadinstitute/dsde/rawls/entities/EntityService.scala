@@ -17,19 +17,15 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
-  Entity,
-  EntityCopyDefinition,
-  EntityQuery,
-  ErrorReport,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  WorkspaceName,
-  _
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  EntitySupport,
+  JsonFilterUtils,
+  WorkspaceSupport
 }
-import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AttributeUpdateOperationException, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 

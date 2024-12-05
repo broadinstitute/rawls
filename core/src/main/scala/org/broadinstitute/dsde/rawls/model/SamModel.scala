@@ -70,6 +70,7 @@ object SamWorkspaceActions {
   val delete = SamResourceAction("delete")
   val migrate = SamResourceAction("migrate")
   val viewMigrationStatus = SamResourceAction("view_migration_status")
+  val readSpendReport = SamResourceAction("read_spend_report")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
 }
 
@@ -91,6 +92,10 @@ object SamBillingProjectActions {
 
 object SamServicePerimeterActions {
   val addProject = SamResourceAction("add_project")
+}
+
+object SamResourceTypeAdminActions {
+  val readSummaryInformation = SamResourceAction("admin_read_summary_information")
 }
 
 /*

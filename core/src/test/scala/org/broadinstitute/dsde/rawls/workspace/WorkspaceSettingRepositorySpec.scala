@@ -7,12 +7,20 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleAction,
   GcpBucketLifecycleCondition,
   GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule
+  GcpBucketLifecycleRule,
+  GcpBucketRequesterPaysConfig,
+  GcpBucketSoftDeleteConfig,
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
 }
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketSoftDelete
 import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
+  GcpBucketRequesterPaysSetting,
+  GcpBucketSoftDeleteSetting,
+  SeparateSubmissionFinalOutputsSetting,
+  UseCromwellGcpBatchBackendSetting,
   Workspace,
-  WorkspaceSetting,
   WorkspaceSettingTypes
 }
 import org.joda.time.DateTime
@@ -92,6 +100,125 @@ class WorkspaceSettingRepositorySpec
     val result = Await.result(repo.getWorkspaceSettings(ws.workspaceIdAsUUID), Duration.Inf)
 
     assertResult(result)(List(appliedSetting))
+  }
+
+  // Helps ensure that WorkspaceSettingRecord.toWorkspaceSetting in WorkspaceSettingComponent.scala
+  // is able to successfully create every type of workspace setting from a corresponding record
+  for {
+    workspaceSetting <- List(
+      GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List())),
+      GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
+      GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
+      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
+      UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
+    )
+  }
+    it should s"be able to get a ${workspaceSetting.getClass.getSimpleName}" in {
+      val repo = new WorkspaceSettingRepository(slickDataSource)
+      val workspaceRepo = new WorkspaceRepository(slickDataSource)
+      val ws: Workspace = makeWorkspace()
+      Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
+
+      Await.result(
+        slickDataSource.inTransaction { dataAccess =>
+          for {
+            _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                          List(workspaceSetting),
+                                                          userInfo.userSubjectId
+            )
+            _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+              ws.workspaceIdAsUUID,
+              workspaceSetting.settingType,
+              WorkspaceSettingRecord.SettingStatus.Pending,
+              WorkspaceSettingRecord.SettingStatus.Applied
+            )
+          } yield ()
+        },
+        Duration.Inf
+      )
+
+      val result = Await.result(repo.getWorkspaceSettings(ws.workspaceIdAsUUID), Duration.Inf)
+
+      assertResult(result)(List(workspaceSetting))
+    }
+
+  behavior of "getWorkspacesSettingsOfType"
+
+  it should "return applied soft delete setting when soft delete type is requested" in {
+    val repo = new WorkspaceSettingRepository(slickDataSource)
+    val workspaceRepo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
+    val appliedSoftDeleteSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0))
+    val appliedRequesterPaysSetting = GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true))
+    val pendingSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(2_000_000))
+
+    Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        for {
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(appliedSoftDeleteSetting, appliedRequesterPaysSetting),
+                                                        userInfo.userSubjectId
+          )
+          _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+            ws.workspaceIdAsUUID,
+            WorkspaceSettingTypes.GcpBucketSoftDelete,
+            WorkspaceSettingRecord.SettingStatus.Pending,
+            WorkspaceSettingRecord.SettingStatus.Applied
+          )
+          _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+            ws.workspaceIdAsUUID,
+            WorkspaceSettingTypes.GcpBucketRequesterPays,
+            WorkspaceSettingRecord.SettingStatus.Pending,
+            WorkspaceSettingRecord.SettingStatus.Applied
+          )
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(pendingSetting),
+                                                        userInfo.userSubjectId
+          )
+        } yield ()
+      },
+      Duration.Inf
+    )
+
+    val result = Await.result(repo.getWorkspaceSettingOfType(ws.workspaceIdAsUUID, GcpBucketSoftDelete), Duration.Inf)
+
+    assertResult(result)(Some(appliedSoftDeleteSetting))
+  }
+
+  it should "return none if no setting of requested type is applied" in {
+    val repo = new WorkspaceSettingRepository(slickDataSource)
+    val workspaceRepo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
+    val appliedRequesterPaysSetting = GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true))
+    val pendingSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(2_000_000))
+
+    Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        for {
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(appliedRequesterPaysSetting),
+                                                        userInfo.userSubjectId
+          )
+          _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+            ws.workspaceIdAsUUID,
+            WorkspaceSettingTypes.GcpBucketRequesterPays,
+            WorkspaceSettingRecord.SettingStatus.Pending,
+            WorkspaceSettingRecord.SettingStatus.Applied
+          )
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(pendingSetting),
+                                                        userInfo.userSubjectId
+          )
+        } yield ()
+      },
+      Duration.Inf
+    )
+
+    val result = Await.result(repo.getWorkspaceSettingOfType(ws.workspaceIdAsUUID, GcpBucketSoftDelete), Duration.Inf)
+
+    assertResult(result)(None)
   }
 
   behavior of "createWorkspaceSettingsRecords"

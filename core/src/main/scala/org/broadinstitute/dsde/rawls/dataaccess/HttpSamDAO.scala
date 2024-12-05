@@ -14,12 +14,21 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
 import org.broadinstitute.dsde.workbench.client.sam.api._
+import org.broadinstitute.dsde.workbench.client.sam.model.{
+  FilteredFlatResource,
+  FilteredFlatResourcePolicy,
+  FilteredHierarchicalResource,
+  FilteredHierarchicalResourcePolicy,
+  FilteredResourcesHierarchicalResponse,
+  ListResourcesV2200Response
+}
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.List
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
@@ -513,6 +522,31 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
       }
     }
 
+  override def listResourcesWithActions(resourceTypeName: SamResourceTypeName,
+                                        action: SamResourceAction,
+                                        ctx: RawlsRequestContext
+  ): Future[Seq[FilteredFlatResource]] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[ListResourcesV2200Response]("listResourcesV2")
+
+      resourcesApi(ctx).listResourcesV2Async(
+        /* format = */ "flat",
+        /* resourceTypes = */ util.List.of(resourceTypeName.value),
+        /* policies = */ util.List.of(),
+        /* roles = */ util.List.of(),
+        /* actions = */ util.List.of(action.value),
+        /* includePublic = */ true,
+        callback
+      )
+
+      callback.future.map { resourcesResponse =>
+        resourcesResponse.getFilteredResourcesFlatResponse
+          .getResources()
+          .asScala
+          .toSeq
+      }
+    }
+
   private def toSamRolesAndActions(rolesAndActions: sam.model.RolesAndActions) =
     SamRolesAndActions(
       rolesAndActions.getRoles.asScala.map(SamResourceRole).toSet,
@@ -683,6 +717,17 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
         callback.future.map(_ => ())
       }
+
+    override def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
+                                                    action: SamResourceAction,
+                                                    ctx: RawlsRequestContext
+    ): Future[Boolean] = retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[java.lang.Boolean]("resourceTypeAdminPermission")
+
+      adminApi(ctx).resourceTypeAdminPermissionAsync(resourceTypeName.value, action.value, callback)
+
+      callback.future.map(_.booleanValue())
+    }
   }
 
   override def getStatus(): Future[SubsystemStatus] = {

@@ -127,7 +127,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
     val test = ExecutionServiceWorkflowOptions(
       jes_gcs_root = "jes_gcs_root",
       final_workflow_outputs_dir = None,
-      final_workflow_outputs_mode = None,
+      final_workflow_outputs_dir_metadata = None,
       google_project = "google_project",
       account_name = "account_name",
       google_compute_service_account = "account@foo.com",

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
+    <changeSet id="add_billing_account_changes_status" author="davidan" logicalFilePath="dummy">
+        <!-- add BILLING_ACCOUNT_CHANGES.STATUS column, defaulting to 'outstanding' -->
+        <addColumn tableName="BILLING_ACCOUNT_CHANGES">
+            <column name="STATUS"
+                    type="ENUM('Ignored','Outstanding','Synchronized')"
+                    defaultValue="Outstanding"
+                    afterColumn="GOOGLE_SYNC_TIME">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <!-- add an index on the BILLING_ACCOUNT_CHANGES.STATUS column -->
+        <createIndex tableName="BILLING_ACCOUNT_CHANGES" indexName="BILLING_ACCOUNT_CHANGES_STATUS" unique="false">
+            <column name="STATUS"
+            remarks="Has this change been synchronized with GCP?"/>
+        </createIndex>
+        <!-- set STATUS='synchronized' for all previously-synchronized rows -->
+        <sql>update BILLING_ACCOUNT_CHANGES
+             set STATUS='Synchronized'
+             where GOOGLE_SYNC_TIME is not null;</sql>
+    </changeSet>
+</databaseChangeLog>

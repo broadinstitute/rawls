@@ -15,9 +15,13 @@ import cats.implicits.{
   toFunctorOps
 }
 import cats.mtl.Ask
-import cats.{Applicative, Functor, Monad, MonadThrow}
+import cats.{Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{BillingAccountChange, ReadWriteAction, WriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  BillingAccountChange,
+  BillingAccountChangeStatus,
+  ReadWriteAction
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
@@ -42,7 +46,7 @@ object BillingAccountChangeSynchronizer {
     Behaviors.setup { context =>
       val actor = BillingAccountChangeSynchronizer(dataSource, gcsDAO, samDAO)
       Behaviors.withTimers { scheduler =>
-        scheduler.startTimerAtFixedRate(UpdateBillingAccounts, initialDelay, pollInterval)
+        scheduler.startTimerWithFixedDelay(UpdateBillingAccounts, initialDelay, pollInterval)
         Behaviors.receiveMessage { case UpdateBillingAccounts =>
           try actor.updateBillingAccounts.unsafeRunSync()
           catch {
@@ -83,9 +87,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
 
   def readABillingProjectChange: IO[Option[BillingAccountChange]] =
     inTransaction {
-      BillingAccountChanges.latestChanges.unsynced
-        .take(1)
-        .result
+      BillingAccountChanges.nextOutstanding().result
     }.map(_.headOption)
 
   private def syncBillingAccountChange[F[_]](tracingContext: RawlsTracingContext)(implicit
@@ -254,9 +256,14 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       billingAccount <- R.reader(_.newBillingAccount)
       _ <- inTransaction {
         workspacesToUpdate.setErrorMessage(errorMessage) *>
-          Applicative[WriteAction].whenA(errorMessage.isEmpty) {
-            workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount)
-          }
+          (errorMessage match {
+            case Some(_) => workspacesToUpdate.setState(WorkspaceState.UpdateFailed)
+            case None =>
+              DBIO.seq(
+                workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount),
+                workspacesToUpdate.setState(WorkspaceState.Ready)
+              )
+          })
       }
     } yield ()
 
@@ -273,11 +280,12 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         case Success          => info("Successfully synchronized Billing Account change")
         case Failure(message) => warn("Failed to synchronize Billing Account change", "details" -> message)
       }
-
       changeId <- R.reader(_.id)
       record = BillingAccountChanges.withId(changeId)
       _ <- inTransaction {
-        record.setGoogleSyncTime(Instant.now().some) *> record.setOutcome(outcome.some)
+        record.setGoogleSyncTime(Instant.now().some) *>
+          record.setOutcome(outcome.some) *>
+          record.setStatus(BillingAccountChangeStatus.Synchronized)
       }
     } yield ()
 
