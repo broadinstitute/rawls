@@ -168,9 +168,6 @@ If you have trouble submitting workflows and see errors like `HTTP error calling
 * Connect to the NonSplit VPN and try again
 * CromIAM doesn't accept requests from outside the Broad trusted IP space 
 
-When running back Rawls with a DB clone, the app may crash on launch with an error related to `OpenTelemetry`.
-* Work around by setting `entityStatisticsCache.enabled = false`.
-
 For integration test issues, see [automation/README.md](automation/README.md).
 
 
