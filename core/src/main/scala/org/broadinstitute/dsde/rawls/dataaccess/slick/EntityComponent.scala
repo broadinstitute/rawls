@@ -1026,7 +1026,10 @@ trait EntityComponent {
     def save(workspaceContext: Workspace, entity: Entity): ReadWriteAction[Entity] =
       save(workspaceContext, Seq(entity)).map(_.head)
 
-    def save(workspaceContext: Workspace, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
+    def save(workspaceContext: Workspace,
+             entities: Traversable[Entity],
+             parentContext: RawlsTracingContext = RawlsTracingContext()
+    ): ReadWriteAction[Traversable[Entity]] = {
       entities.foreach(validateEntity)
 
       for {
@@ -1044,7 +1047,8 @@ trait EntityComponent {
           workspaceContext.workspaceIdAsUUID,
           entities,
           savingEntityRecs.map(_.id),
-          referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap
+          referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap,
+          parentContext
         )
         // find the pre-existing records that we updated
         actuallyUpdatedPreExistingEntityRecs = preExistingEntityRecs.filter(e =>
@@ -1112,7 +1116,8 @@ trait EntityComponent {
     private def rewriteAttributes(workspaceId: UUID,
                                   entitiesToSave: Traversable[Entity],
                                   entityIds: Seq[Long],
-                                  entityIdsByRef: Map[AttributeEntityReference, Long]
+                                  entityIdsByRef: Map[AttributeEntityReference, Long],
+                                  parentContext: RawlsTracingContext = RawlsTracingContext()
     ) = {
       val attributesToSave = for {
         entity <- entitiesToSave
@@ -1127,7 +1132,8 @@ trait EntityComponent {
       entityAttributeShardQuery(workspaceId).findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
         entityAttributeShardQuery(workspaceId).rewriteAttrsAction(attributesToSave,
                                                                   existingAttributes,
-                                                                  entityAttributeTempQuery.insertScratchAttributes
+                                                                  entityAttributeTempQuery.insertScratchAttributes,
+                                                                  parentContext
         )
       }
     }
