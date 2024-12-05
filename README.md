@@ -58,21 +58,25 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 
 ### Requirements
 
+* Broad campus network or NonSplit VPN
 * [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ recommended)
-* Make sure you have `kubectl` and `gcloud` installed.
-* You will then need to authenticate in gcloud; if you are not already then running the script will ask you to.
-* Render the local configuration files. From the root of the Rawls repo, run:
+* `kubectl` and `gcloud` installed.
+
+### Initial setup
+
+1. You will need to authenticate in gcloud; if you are not already then running the script will ask you to.
+2. Render the local configuration files. From the root of the Rawls repo, run:
 ```sh
 ./local-dev/bin/render
 ```
-*  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
+3. Edit the `/etc/hosts` file on your machine to add this entry for calling Rawls endpoints:
 ```sh
 127.0.0.1	local.dsde-dev.broadinstitute.org
 ```
 
 ### Front Rawls (default)
 
-After satisfying the above requirements, execute the following command from the root of the Rawls repo:
+Next, execute the following command from the root of the Rawls repo:
 
 ```sh
 ./config/docker-rsync-local-rawls.sh
@@ -87,12 +91,11 @@ When Rawls starts up, access the Rawls Swagger page: https://local.dsde-dev.broa
 
 ### Back Rawls
 
-#### Additional requirements for Back Rawls
+#### Additional setup for Back Rawls
 
-1. Broad campus network or NonSplit VPN
-2. Personal clone of the [Rawls Dev database](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev)
-3. Edit `local-dev/templates/sqlproxy.env` to set your clone instance name 
-4. Re-render local config: `./local-dev/bin/render`
+1. Personal clone of the [Rawls Dev database](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev)
+2. Edit `local-dev/templates/sqlproxy.env` to set your clone instance name 
+3. Re-render local config: `./local-dev/bin/render`
 
 By default, a locally run Rawls will boot as a "front" instance of Rawls. A front Rawls will serve all HTTP requests and can modify the database, but it will not do monitoring tasks such as submission monitoring, PFB imports, or Google billing project creation.
 
@@ -104,7 +107,7 @@ BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 
 ### Developing Database Schema Changes
 
-If you are writing Liquibase migrations or doing database work, set up a database clone by following steps #2 through #4 of [running Back Rawls](#additional-requirements-for-back-rawls).
+If you are writing Liquibase migrations or doing database work, set up a database clone by following the steps for [running Back Rawls](#additional-requirements-for-back-rawls).
 
 ## Developer quick links:
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
