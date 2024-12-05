@@ -56,10 +56,9 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 
 ## Running Locally
 
-### Requirements:
+### Requirements
 
-* [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
-* Broad internal internet connection (or VPN, non-split recommended)
+* [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ recommended)
 * Make sure you have `kubectl` and `gcloud` installed.
 * You will then need to authenticate in gcloud; if you are not already then running the script will ask you to.
 * Render the local configuration files. From the root of the Rawls repo, run:
