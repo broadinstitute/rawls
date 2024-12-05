@@ -174,6 +174,10 @@ If you have trouble submitting workflows and see errors like `HTTP error calling
 or you get unusual errors for other workflows-related functionality (like accessing workflow configurations):
 * Connect to the NonSplit VPN and try again
 * CromIAM doesn't accept requests from outside the Broad trusted IP space
+* **Note:** Local Rawls instances are currently unable to submit workflows to CromIAM due to an issue with the
+`caas-collection-name` label. If you are able to make a workflow submission to your local back Rawls instance and have
+it run on Cromwell, check that you did not use the dev database and accidentally allow dev Rawls to pick up your
+submission.
 
 When running back Rawls with a DB clone, the app may crash on launch with an error related to `OpenTelemetry`.
 * Work around by setting `entityStatisticsCache.enabled = false`.
