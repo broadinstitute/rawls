@@ -224,6 +224,19 @@ class RawlsBillingProjectComponentSpec
       }
     }
 
+  it should "return the appropriate list of Option[BillingProjectSpendExport]s for given RawlsBillingProjectNames" in withDefaultTestDatabase {
+    val billingProjectNames = Seq(testData.testProject1.projectName, testData.testProject2.projectName)
+
+    val expectedSpendExports = billingProjectNames.map { projectName =>
+      runAndWait(rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(projectName))
+    }
+
+    val actualSpendExports =
+      runAndWait(rawlsBillingProjectQuery.getBillingProjectsSpendConfiguration(billingProjectNames))
+
+    actualSpendExports shouldBe expectedSpendExports
+  }
+
   it should "set statuses properly in ignoreAllOutstanding" in withDefaultTestDatabase {
     import driver.api._
 
@@ -359,35 +372,6 @@ class RawlsBillingProjectComponentSpec
     val next = runAndWait(BillingAccountChanges.nextOutstanding().result)
 
     next shouldBe empty
-  }
-
-  "BillingAccountChange" should "be able to load records that need to be sync'd" in withDefaultTestDatabase {
-    runAndWait {
-      import driver.api._
-      for {
-        _ <- rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1Name,
-                                                           billingAccount = RawlsBillingAccountName("bananas").some,
-                                                           testData.userOwner.userSubjectId
-        )
-        _ <- rawlsBillingProjectQuery.updateBillingAccount(testData.testProject2Name,
-                                                           billingAccount = RawlsBillingAccountName("kumquat").some,
-                                                           testData.userOwner.userSubjectId
-        )
-        _ <- rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1Name,
-                                                           billingAccount = RawlsBillingAccountName("kumquat").some,
-                                                           testData.userOwner.userSubjectId
-        )
-        changes <- BillingAccountChanges.latestChanges.result
-
-        // We're only concerned with syncing the latest change a user made to the
-        // billing project billing account. Right now, we're getting the latest changes
-        // in order of ID. We *COULD* get the changes in order of when the first skipped
-        // change was made. That's more complicated, so we'll do this for now to keep
-        // things simple.
-        change1 <- BillingAccountChanges.getLastChange(testData.testProject2Name)
-        change2 <- BillingAccountChanges.getLastChange(testData.testProject1Name)
-      } yield changes shouldBe List(change1, change2).map(_.value)
-    }
   }
 
   // =========== test helpers

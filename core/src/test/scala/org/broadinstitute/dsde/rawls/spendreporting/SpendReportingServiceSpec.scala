@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
 import bio.terra.profile.model.{
@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.billing.{
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeys, _}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
@@ -34,14 +34,18 @@ import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 
 import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
+import org.scalatest.RecoverMethods.recoverToExceptionIf
 
-class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils {
+class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
 
   implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
@@ -59,6 +63,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                                                                 Option(billingAccountName),
                                                                 None
   )
+
+  val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = {
+    lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
+    _ => mockWorkspaceService
+  }
 
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
@@ -541,6 +550,151 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
+  "extractCrossBillingProjectSpendReportingResults" should "break down results by workspace and category" in {
+    val credits1 = 0.0
+    val credits2 = 3.012
+    val credits3 = 1.12345
+    val storageCostWs1 = 100.582
+    val otherCostWs1 = 0.10111
+    val totalCostWs1 = storageCostWs1 + otherCostWs1
+    val storageCostRoundedWs1: BigDecimal = BigDecimal(storageCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs1: BigDecimal = BigDecimal(otherCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs1: BigDecimal = BigDecimal(totalCostWs1).setScale(2, RoundingMode.HALF_EVEN)
+    val storageCostWs2 = 20.145
+    val computeCostWs2 = 150.4033
+    val totalCostWs2 = storageCostWs2 + computeCostWs2
+    val storageCostRoundedWs2: BigDecimal = BigDecimal(storageCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val computeCostRoundedWs2: BigDecimal = BigDecimal(computeCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs2: BigDecimal =
+      BigDecimal(totalCostWs2).setScale(2, RoundingMode.HALF_EVEN)
+
+    val computeCostWs3 = 1111.222
+    val otherCostWs3 = 0.02
+    val totalCostWs3 = otherCostWs3 + computeCostWs3
+    val computeCostRoundedWs3: BigDecimal = BigDecimal(computeCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    val otherCostRoundedWs3: BigDecimal = BigDecimal(otherCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+    val totalCostRoundedWs3: BigDecimal = BigDecimal(totalCostWs3).setScale(2, RoundingMode.HALF_EVEN)
+
+    val table: List[Map[String, String]] = List(
+      Map(
+        "storage_cost" -> s"$storageCostWs1",
+        "compute_cost" -> "0.0",
+        "other_cost" -> s"$otherCostWs1",
+        "total_cost" -> s"$totalCostWs1",
+        "currency" -> "USD",
+        "project_id" -> "workspace1ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "storage_credits" -> s"$credits1",
+        "compute_credits" -> "0.0",
+        "other_credits" -> "0.0"
+      ),
+      Map(
+        "storage_cost" -> s"$storageCostWs2",
+        "compute_cost" -> s"$computeCostWs2",
+        "other_cost" -> "0.0",
+        "total_cost" -> s"$totalCostWs2",
+        "project_id" -> "workspace2ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "currency" -> "USD",
+        "compute_credits" -> s"$credits2",
+        "storage_credits" -> "0.0",
+        "other_credits" -> "0.0"
+      ),
+      Map(
+        "storage_cost" -> "0.0",
+        "compute_cost" -> s"$computeCostWs3",
+        "other_cost" -> s"$otherCostWs3",
+        "project_id" -> "workspace3ProjectId",
+        "project_name" -> "terra-billing-project2",
+        "total_cost" -> s"$totalCostWs3",
+        "currency" -> "USD",
+        "other_credits" -> s"$credits3",
+        "compute_credits" -> "0.0",
+        "storage_credits" -> "0.0"
+      )
+    )
+
+    val tableResult: TableResult = createTableResult(table)
+
+    val reportingResults = SpendReportingService.extractCrossBillingProjectSpendReportingResults(
+      tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      Map(
+        GoogleProjectId("workspace1ProjectId") -> WorkspaceName("workspace1", "namespace1"),
+        GoogleProjectId("workspace2ProjectId") -> WorkspaceName("workspace2", "namespace1"),
+        GoogleProjectId("workspace3ProjectId") -> WorkspaceName("workspace3", "namespace2")
+      )
+    )
+    val spendDetails = reportingResults.spendDetails
+    // We have 3 workspaces
+    spendDetails.length shouldBe 3
+
+    // Workspace 1
+    spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    val ws1SpendData = spendDetails.head.spendData
+    ws1SpendData.length shouldBe 1
+    verifyWorkspaceSpendData(ws1SpendData.head,
+                             totalCostRoundedWs1,
+                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN),
+                             storageCostRoundedWs1,
+                             otherCostRoundedWs1
+    )
+
+    // Workspace 2
+    spendDetails(1).aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    val ws2SpendData = spendDetails(1).spendData
+    ws2SpendData.length shouldBe 1
+    verifyWorkspaceSpendData(ws2SpendData.head,
+                             totalCostRoundedWs2,
+                             computeCostRoundedWs2,
+                             storageCostRoundedWs2,
+                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN)
+    )
+
+    // Workspace 3
+    spendDetails(2).aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    val ws3SpendData = spendDetails(2).spendData
+    ws3SpendData.length shouldBe 1
+    verifyWorkspaceSpendData(ws3SpendData.head,
+                             totalCostRoundedWs3,
+                             computeCostRoundedWs3,
+                             BigDecimal(0.00).setScale(2, RoundingMode.HALF_EVEN),
+                             otherCostRoundedWs3
+    )
+
+  }
+  def verifyWorkspaceSpendData(actualSpendData: SpendReportingForDateRange,
+                               expectedTotal: BigDecimal,
+                               expectedCompute: BigDecimal,
+                               expectedStorage: BigDecimal,
+                               expectedOther: BigDecimal
+  ) = {
+    actualSpendData.cost shouldBe expectedTotal.toString
+    val aggSub = actualSpendData.subAggregation.get
+    aggSub.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+    verifyCategoricalSpendData(aggSub.spendData, expectedCompute, expectedStorage, expectedOther)
+  }
+
+  def verifyCategoricalSpendData(actualSpendData: Seq[SpendReportingForDateRange],
+                                 expectedCompute: BigDecimal,
+                                 expectedStorage: BigDecimal,
+                                 expectedOther: BigDecimal
+  ) = {
+    actualSpendData.length shouldBe 3
+    actualSpendData.foreach { spendData =>
+      spendData.category match {
+        case Some(TerraSpendCategories.Other) =>
+          spendData.cost shouldBe expectedOther.toString
+        case Some(TerraSpendCategories.Compute) =>
+          spendData.cost shouldBe expectedCompute.toString
+        case Some(TerraSpendCategories.Storage) =>
+          spendData.cost shouldBe expectedStorage.toString
+        case _ => fail("Unexpected category")
+      }
+    }
+  }
+
   "getSpendForGCPBillingProject" should "throw an exception when BQ returns zero rows" in {
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
@@ -558,7 +712,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -600,7 +755,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -631,7 +787,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -646,6 +803,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
+
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
     when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any()))
@@ -657,7 +815,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val projectName = RawlsBillingProjectName("fakeProject")
 
@@ -673,6 +832,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
+
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
     val badRow = Map(
@@ -691,7 +851,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -754,7 +915,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(
@@ -796,6 +958,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+
     val bigQueryService = mockBigQuery(TestData.Workspace.table)
     val service = spy(
       new SpendReportingService(
@@ -805,7 +968,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -843,6 +1007,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+
     val bigQueryService = mockBigQuery(TestData.Workspace.table)
     val service = spy(
       new SpendReportingService(
@@ -852,7 +1017,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingRepository,
         bpmDAO,
         samDAO,
-        spendReportingServiceConfig
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
       )
     )
     val billingProjectSpendExport =
@@ -914,7 +1080,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       billingRepository,
       bpmDAO,
       samDAO,
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -936,7 +1103,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange)
     val endDate = DateTime.now()
@@ -951,7 +1119,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now()
     val endDate = DateTime.now().minusDays(1)
@@ -967,7 +1136,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange + 1)
     val endDate = DateTime.now()
@@ -996,7 +1166,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val result = service.getQuery(
       Set(
@@ -1029,7 +1200,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
     val result = service.getQuery(
       Set(
@@ -1058,12 +1230,477 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
       mock[SamDAO],
-      spendReportingServiceConfig
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
     )
 
     val result = Await.result(service.getWorkspaceGoogleProjects(RawlsBillingProjectName("")), Duration.Inf)
 
     result shouldBe Map(GoogleProjectId("v2ProjectId") -> v2Workspace.toWorkspaceName)
+  }
+
+  "getAllUserWorkspaceQuery" should "union all billingProjects with their workspace projects" in {
+
+    val billingProject1SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
+                                RawlsBillingAccountName("billingAccount1"),
+                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+      )
+
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                Some("billing2_bq_project.billing2_dataset.billing2_table")
+      )
+
+    val billingProject3SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject3"),
+                                RawlsBillingAccountName("billingAccount3"),
+                                None
+      )
+
+    val inputMap = Map(
+      billingProject1SpendExport -> Seq(
+        (GoogleProjectId("workspace2ProjectId"), WorkspaceName("billingProject1", "workspace2")),
+        (GoogleProjectId("workspace1ProjectId"), WorkspaceName("billingProject1", "workspace1"))
+      ),
+      billingProject2SpendExport -> Seq(
+        (GoogleProjectId("workspace3ProjectId"), WorkspaceName("billingProject2", "workspace3"))
+      ),
+      billingProject3SpendExport -> Seq(
+        (GoogleProjectId("workspace4ProjectId"), WorkspaceName("billingProject3", "workspace4"))
+      )
+    )
+
+    val expectedQuery =
+      s"""|WITH spend_categories AS (
+          |  SELECT
+          |    project.id AS project_id,
+          |    project.name AS project_name,
+          |    currency,
+          |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+          |    CASE
+          |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+          |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+          |      ELSE 'Other'
+          |    END AS spend_category,
+          |    SUM(CAST(cost AS FLOAT64)) AS category_cost
+          |  FROM
+          |    billing1_bq_project.billing1_dataset.billing1_table
+          |  where
+          |    project.id in ("workspace2ProjectId", "workspace1ProjectId") AND
+          |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |  GROUP BY
+          |    project_id,
+          |    project_name,
+          |    spend_category,
+          |    currency
+          | UNION ALL
+          |    SELECT
+          |      project.id AS project_id,
+          |      project.name AS project_name,
+          |      currency,
+          |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+          |      CASE
+          |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+          |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+          |        ELSE 'Other'
+          |      END AS spend_category,
+          |      SUM(CAST(cost AS FLOAT64)) AS category_cost
+          |    FROM
+          |      billing2_bq_project.billing2_dataset.billing2_table
+          |    where
+          |      project.id in ("workspace3ProjectId") AND
+          |      _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |    GROUP BY
+          |      project_id,
+          |      project_name,
+          |      spend_category,
+          |      currency
+          | UNION ALL
+          |    SELECT
+          |      project.id AS project_id,
+          |      project.name AS project_name,
+          |      currency,
+          |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+          |      CASE
+          |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+          |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+          |        ELSE 'Other'
+          |      END AS spend_category,
+          |      SUM(CAST(cost AS FLOAT64)) AS category_cost
+          |    FROM
+          |      fakeTable
+          |    where
+          |      project.id in ("workspace4ProjectId") AND
+          |      fakeTimePartitionColumn BETWEEN @startDate AND @endDate
+          |    GROUP BY
+          |      project_id,
+          |      project_name,
+          |      spend_category,
+          |      currency
+          |)
+          |SELECT
+          |  project_id,
+          |  project_name,
+          |  SUM(category_cost) AS total_cost,
+          |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
+          |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
+          |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
+          |  currency,
+          |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
+          |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
+          |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
+          |FROM
+          |  spend_categories
+          |GROUP BY
+          |  project_id,
+          |  project_name,
+          |  currency
+          |ORDER BY
+          |  total_cost DESC
+          |limit 5 offset 5
+          |""".stripMargin
+
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      mock[SamDAO],
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor
+    )
+    val result = service.getAllUserWorkspaceQuery(
+      inputMap,
+      5,
+      5
+    )
+
+    // It's easier and more reliable to do this than tweak line changes in the query or expected query
+    def normalizeWhitespace(str: String): String = str.replaceAll("\\s+", " ").trim
+    normalizeWhitespace(result) shouldEqual normalizeWhitespace(expectedQuery)
+
+  }
+
+  "getBillingWithSpendPermission" should "return spendConfigurations for workspaces" in {
+
+    val dataSource = mock[SlickDataSource]
+
+    val billingProject1SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
+                                RawlsBillingAccountName("billingAccount1"),
+                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+      )
+
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                Some("billing2_bq_project.billing2_dataset.billing2_table")
+      )
+
+    val billingProject3SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject3"),
+                                RawlsBillingAccountName("billingAccount3"),
+                                None
+      )
+    val samDAO = mock[SamDAO]
+
+    doReturn(
+      Future.successful(
+        Seq(
+          new FilteredFlatResource(
+          ).resourceId(
+            "workspace1Billing1"
+          ),
+          new FilteredFlatResource(
+          ).resourceId(
+            "workspace2Billing1"
+          ),
+          new FilteredFlatResource(
+          ).resourceId(
+            "workspace1Billing2"
+          ),
+          new FilteredFlatResource(
+          ).resourceId(
+            "workspace1Billing3"
+          )
+        )
+      )
+    )
+      .when(samDAO)
+      .listResourcesWithActions(mockitoEq(SamResourceTypeNames.workspace), any(), any())
+
+    val workspace1Billing1 =
+      TestData.workspace("workspace1Billing1",
+                         GoogleProjectId("workspace1ProjectId"),
+                         WorkspaceVersions.V1,
+                         "billingProject1"
+      )
+    val workspace2Billing1 =
+      TestData.workspace("workspace2Billing1",
+                         GoogleProjectId("workspace2ProjectId"),
+                         WorkspaceVersions.V2,
+                         "billingProject1"
+      )
+    val workspace1Billing2 =
+      TestData.workspace("workspace1Billing2",
+                         GoogleProjectId("workspace3ProjectId"),
+                         WorkspaceVersions.V2,
+                         "billingProject2"
+      )
+    val workspace1Billing3 =
+      TestData.workspace("workspace1Billing3",
+                         GoogleProjectId("workspace4ProjectId"),
+                         WorkspaceVersions.V2,
+                         "billingProject3"
+      )
+
+    val workspaces = Map(
+      RawlsBillingProjectName("billingProject1") -> Seq(workspace1Billing1, workspace2Billing1),
+      RawlsBillingProjectName("billingProject2") -> Seq(workspace1Billing2),
+      RawlsBillingProjectName("billingProject3") -> Seq(workspace1Billing3)
+    )
+    val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+
+    when(mockWorkspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(Future.successful(workspaces))
+    val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
+      mockWorkspaceService
+    }
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        dataSource,
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
+    )
+
+    doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport, billingProject3SpendExport)))
+      .when(service)
+      .getSpendExportConfigurations(
+        any()
+      )
+
+    val result = Await.result(
+      service.getBillingWithSpendPermission(testContext),
+      Duration.Inf
+    )
+
+    result shouldBe Map(
+      billingProject1SpendExport -> Seq(
+        (workspace1Billing1.googleProjectId, workspace1Billing1.toWorkspaceName),
+        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName)
+      ),
+      billingProject2SpendExport -> Seq((workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)),
+      billingProject3SpendExport -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
+    )
+
+  }
+
+  "getSpendForAllWorkspaces" should "handle no owned workspaces" in {
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(Future.successful(List.empty))
+
+    val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+
+    when(mockWorkspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(Future.successful(Map.empty))
+    val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
+      mockWorkspaceService
+    }
+
+    val bigQueryService = mockBigQuery(List[Map[String, String]]())
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bigQueryService,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
+    )
+
+    val exceptionFuture = recoverToExceptionIf[RawlsExceptionWithErrorReport] {
+      service.getSpendForAllWorkspaces(from, to, 100, 0)
+    }
+    exceptionFuture.map { e =>
+      e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
+      e.errorReport.message.contains("no workspaces") shouldBe true
+    }
+  }
+
+  "getSpendForAllWorkspaces" should "get the spend report from multiple billing projects" in {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+    // Billing projects
+    val billingProfileId1 = UUID.randomUUID()
+    val projectName1 = RawlsBillingProjectName("billingProject1")
+    val billingAccount1 = RawlsBillingAccountName("billingAcct1")
+    val billingProject1 = RawlsBillingProject(
+      projectName1,
+      CreationStatuses.Ready,
+      Option(billingAccount1),
+      None,
+      billingProfileId = Option.apply(billingProfileId1.toString)
+    )
+    val billingProfileId2 = UUID.randomUUID()
+    val projectName2 = RawlsBillingProjectName("billingProject2")
+    val billingAccount2 = RawlsBillingAccountName("billingAcct2")
+    val billingProject2 = RawlsBillingProject(
+      projectName2,
+      CreationStatuses.Ready,
+      Option(billingAccount2),
+      None,
+      billingProfileId = Option.apply(billingProfileId2.toString)
+    )
+
+    // Billing project spend exports
+    val billingProject1SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
+                                RawlsBillingAccountName("billingAccount1"),
+                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+      )
+
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                None
+      )
+
+    // Workspaces
+    val workspace1Billing1 =
+      TestData.workspace("workspace1Billing1",
+                         GoogleProjectId("workspace1ProjectId"),
+                         WorkspaceVersions.V1,
+                         "billingProject1"
+      )
+    val workspace2Billing2 =
+      TestData.workspace("workspace2Billing2",
+                         GoogleProjectId("workspace2ProjectId"),
+                         WorkspaceVersions.V2,
+                         "billingProject2"
+      )
+
+    val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+    when(mockWorkspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(
+        Future.successful(
+          Map(billingProject1.projectName -> List(workspace1Billing1),
+              billingProject2.projectName -> List(workspace2Billing2)
+          )
+        )
+      )
+
+    val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
+      mockWorkspaceService
+    }
+
+    when(billingRepository.getBillingProject(mockitoEq(projectName1)))
+      .thenReturn(Future.successful(Option.apply(billingProject1)))
+    when(billingRepository.getBillingProject(mockitoEq(projectName2)))
+      .thenReturn(Future.successful(Option.apply(billingProject2)))
+
+    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(
+      Future.successful(
+        List(
+          new FilteredFlatResource().resourceId(UUID.randomUUID().toString),
+          new FilteredFlatResource().resourceId(UUID.randomUUID().toString)
+        )
+      )
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val price1 = BigDecimal("10.22")
+    val price2 = BigDecimal("50.74")
+    val zero = BigDecimal("0.00")
+    val total = price1 + price2
+
+    val table: List[Map[String, String]] = List(
+      Map(
+        "storage_cost" -> s"$price1",
+        "compute_cost" -> s"$zero",
+        "other_cost" -> s"$price2",
+        "total_cost" -> s"$total",
+        "currency" -> "USD",
+        "project_id" -> "workspace1ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "storage_credits" -> s"$zero",
+        "compute_credits" -> s"$zero",
+        "other_credits" -> s"$zero"
+      ),
+      Map(
+        "storage_cost" -> s"$price2",
+        "compute_cost" -> s"$zero",
+        "other_cost" -> s"$zero",
+        "total_cost" -> s"$price2",
+        "project_id" -> "workspace2ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "currency" -> "USD",
+        "storage_credits" -> s"$zero",
+        "compute_credits" -> s"$zero",
+        "other_credits" -> s"$zero"
+      )
+    )
+
+    val bigQueryService = mockBigQuery(table)
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bigQueryService,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
+    )
+    doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport)))
+      .when(service)
+      .getSpendExportConfigurations(
+        any()
+      )
+
+    val result = Await.result(
+      service.getSpendForAllWorkspaces(from, to, 100, 0),
+      Duration.Inf
+    )
+
+    result.get.spendDetails.length shouldBe 2
+
+    val spendSummary = result.get.spendSummary
+
+    spendSummary.credits shouldBe zero.toString()
+    spendSummary.cost shouldBe (total + price2).toString()
+    spendSummary.currency shouldBe "USD"
+    spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
+      ISODateTimeFormat.date()
+    )
+    spendSummary.endTime.get.toString(ISODateTimeFormat.date()) shouldBe to.toString(ISODateTimeFormat.date())
+
   }
 
 }

@@ -450,6 +450,59 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/v2/spendReport:
+    get:
+      tags:
+        - billing_v2
+      summary: get spend report for all workspaces user has owner access to
+      description: get spend report for all workspaces user has owner access to
+      operationId: getSpendReportAllWorkspaces
+      parameters:
+        - name: startDate
+          in: query
+          description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC on this date.
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: end date of report (YYYY-MM-DD). Data included in report will end at 11:59 PM UTC on this date.
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: pageSize
+          in: query
+          description: how many workspaces to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/SpendReport'
+        400:
+          description: invalid spend report parameters
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a workspace owner to view the spend report of a workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
       tags:
