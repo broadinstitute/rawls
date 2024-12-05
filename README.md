@@ -102,8 +102,6 @@ BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 ```
 
 **Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls by cloning the [dev Rawls DB](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev). See note below on database work.
-* If you use the dev database itself, your local Rawls instance (with your code changes!) and dev Rawls can interact in
-unpredictable ways, affecting both your own local testing and others' testing in the dev environment.
 
 #### Developing Database Schema Changes
 
