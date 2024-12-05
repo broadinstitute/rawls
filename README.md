@@ -79,10 +79,7 @@ After satisfying the above requirements, execute the following command from the 
 ./config/docker-rsync-local-rawls.sh
 ```
 
-**Reminder:** You should be on a Broad internal internet connection or VPN every time you want to run Rawls locally!
-If you are not, Rawls may start up, but certain functionality may not work as expected.
-
-By default, this command will set up an instance of rawls pointing to the database and Sam in dev. 
+By default, this will set up an instance of rawls pointing to the database and Sam in dev. 
 It will also set up a process that will watch the local files for changes, and restart the service when source files change.
 
 See docker-rsync-local-rawls.sh for more configuration options.
@@ -168,14 +165,9 @@ After publishing:
 If you get the error message `release version 17 not supported`:
 * Run `java -version` and verify that you're running 17. If not, you will need to install / update your PATH.
 
-If you have trouble submitting workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`,
-or you get unusual errors for other workflows-related functionality (like accessing workflow configurations):
+If you have trouble submitting workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`:
 * Connect to the NonSplit VPN and try again
-* CromIAM doesn't accept requests from outside the Broad trusted IP space
-* **Note:** Local Rawls instances are currently unable to submit workflows to CromIAM due to an issue with the
-`caas-collection-name` label. If you are able to make a workflow submission to your local back Rawls instance and have
-it run on Cromwell, check that you did not use the dev database and accidentally allow dev Rawls to pick up your
-submission.
+* CromIAM doesn't accept requests from outside the Broad trusted IP space 
 
 When running back Rawls with a DB clone, the app may crash on launch with an error related to `OpenTelemetry`.
 * Work around by setting `entityStatisticsCache.enabled = false`.
