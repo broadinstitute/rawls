@@ -56,63 +56,63 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 
 ## Running Locally
 
-### Requirements:
+### Requirements
 
-* [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
-* Broad internal internet connection (or VPN, non-split recommended)
-* Make sure you have `kubectl` and `gcloud` installed.
-* You will then need to authenticate in gcloud; if you are not already then running the script will ask you to.
-* Render the local configuration files. From the root of the Rawls repo, run:
+* Broad campus network or NonSplit VPN
+* [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ recommended)
+* `kubectl` and `gcloud` installed.
+
+### Initial setup
+
+1. You will need to authenticate in gcloud; if you are not already then running the script will ask you to.
+2. Render the local configuration files. From the root of the Rawls repo, run:
 ```sh
 ./local-dev/bin/render
 ```
-*  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
+3. Edit the `/etc/hosts` file on your machine to add this entry for calling Rawls endpoints:
 ```sh
 127.0.0.1	local.dsde-dev.broadinstitute.org
 ```
 
-### Running:
+### Front Rawls (default)
 
-After satisfying the above requirements, execute the following command from the root of the Rawls repo:
+Next, execute the following command from the root of the Rawls repo:
 
 ```sh
+# Requires Broad campus network or NonSplit VPN
 ./config/docker-rsync-local-rawls.sh
 ```
 
 By default, this will set up an instance of rawls pointing to the database and Sam in dev. 
 It will also set up a process that will watch the local files for changes, and restart the service when source files change.
 
-See docker-rsync-local-rawls.sh for more configuration options.
+See `docker-rsync-local-rawls.sh` for more configuration options.
 
-If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.dsde-dev.broadinstitute.org:20443/
+When Rawls starts up, access the Rawls Swagger page: https://local.dsde-dev.broadinstitute.org:20443/
 
-### Useful Tricks:
+### Back Rawls
 
-#### Front & Back Rawls
+#### Additional setup for Back Rawls
+
+1. Personal clone of the [Rawls Dev database](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev)
+2. Edit `local-dev/templates/sqlproxy.env` to set your clone instance name 
+3. Re-render local config: `./local-dev/bin/render`
 
 By default, a locally run Rawls will boot as a "front" instance of Rawls. A front Rawls will serve all HTTP requests and can modify the database, but it will not do monitoring tasks such as submission monitoring, PFB imports, or Google billing project creation.
 
-If you are developing a ticket that deals with any sort of monitoring or asynchronous features, you will likely want to boot your Rawls as a "back" instance, which will run a fully-featured instance of Rawls with monitoring tasks enabled. To boot your local instance as a "back" instance, run*:
+If you are developing a ticket that deals with any sort of monitoring or asynchronous features, you will likely want to boot your Rawls as a "back" instance, which will run a fully-featured instance of Rawls with monitoring tasks enabled. To boot your local instance as a "back" instance, run:
 
-```
+Likewise, use a DB clone whenever writing Liquibase migrations or doing database work, so as not to disrupt the shared Dev instance.
+
+```sh
+# Requires Broad campus network or NonSplit VPN
 BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 ```
-
-**Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls by cloning the [dev Rawls DB](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev). See note below on database work.
-
-#### Developing Database Schema Changes
-
-If you are writing Liquibase migrations or doing database work, it is mandatory that you create your own Cloud SQL instance and develop against that. To point to your own CloudSQL instance, modify `/config/sqlproxy.env` accordingly.
-
-
-
 ## Developer quick links:
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
 
 ## Build Rawls docker image
 
-Note: this may use more than 4.5 GB of Docker memory. If your Docker is not configured with enough memory (Docker for Mac defaults to 2GB), you may see a cryptic error messages saying `Killed`.
- 
 Build Rawls jar
 
 ```sh
@@ -164,15 +164,7 @@ After publishing:
 If you get the error message `release version 17 not supported`:
 * Run `java -version` and verify that you're running 17. If not, you will need to install / update your PATH.
 
-If you have trouble submitting workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`:
-* Connect to the NonSplit VPN and try again
-* CromIAM doesn't accept requests from outside the Broad trusted IP space 
-
-When running back Rawls with a DB clone, the app may crash on launch with an error related to `OpenTelemetry`.
-* Work around by setting `entityStatisticsCache.enabled = false`.
-
 For integration test issues, see [automation/README.md](automation/README.md).
-
 
 ## Debugging in Intellij IDEA
 You can attach Intellij's interactive debugger to Rawls running locally in a 
