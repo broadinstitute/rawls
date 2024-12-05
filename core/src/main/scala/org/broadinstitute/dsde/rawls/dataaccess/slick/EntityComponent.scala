@@ -1033,15 +1033,21 @@ trait EntityComponent {
       entities.foreach(validateEntity)
 
       for {
-        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
-        preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
-        savingEntityRecs <- entityQueryWithInlineAttributes
-          .insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference))
-          .map(_ ++ preExistingEntityRecs)
-        referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext,
-                                                                      entities,
-                                                                      savingEntityRecs.map(_.toReference)
-        ).map(_ ++ savingEntityRecs)
+        _ <- traceDBIOWithParent("updateLastModified", parentContext)(_ =>
+          workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+        )
+        preExistingEntityRecs <- traceDBIOWithParent("getEntityRecords", parentContext)(_ =>
+          getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
+        )
+        savingEntityRecs <- traceDBIOWithParent("insertNewEntities", parentContext)(_ =>
+          entityQueryWithInlineAttributes
+            .insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference))
+            .map(_ ++ preExistingEntityRecs)
+        )
+        referencedAndSavingEntityRecs <- traceDBIOWithParent("lookupNotYetLoadedReferences", parentContext)(_ =>
+          lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs.map(_.toReference))
+            .map(_ ++ savingEntityRecs)
+        )
 
         actuallyUpdatedEntityIds <- rewriteAttributes(
           workspaceContext.workspaceIdAsUUID,
@@ -1068,7 +1074,9 @@ trait EntityComponent {
         //  2) were repeated in the input payload, causing one insert and subsequent update(s)
         recsToUpdate = (actuallyUpdatedPreExistingEntityRecs ++ insertedRepeats).distinct
 
-        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
+        _ <- traceDBIOWithParent("optimisticLockUpdate", parentContext)(_ =>
+          entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
+        )
       } yield entities
     }
 
