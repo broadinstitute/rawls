@@ -70,7 +70,7 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 127.0.0.1	local.dsde-dev.broadinstitute.org
 ```
 
-### Running:
+### Running Front Rawls (default)
 
 After satisfying the above requirements, execute the following command from the root of the Rawls repo:
 
@@ -81,13 +81,18 @@ After satisfying the above requirements, execute the following command from the 
 By default, this will set up an instance of rawls pointing to the database and Sam in dev. 
 It will also set up a process that will watch the local files for changes, and restart the service when source files change.
 
-See docker-rsync-local-rawls.sh for more configuration options.
+See `docker-rsync-local-rawls.sh` for more configuration options.
 
-If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.dsde-dev.broadinstitute.org:20443/
+When Rawls starts up, access the Rawls Swagger page: https://local.dsde-dev.broadinstitute.org:20443/
 
-### Useful Tricks:
+### Running Back Rawls
 
-#### Front & Back Rawls
+#### Additional requirements for Back Rawls
+
+1. Broad campus network or NonSplit VPN
+2. Personal clone of the [Rawls Dev database](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/overview?project=broad-dsde-dev)
+3. Edit `local-dev/templates/sqlproxy.env` to set your clone instance name 
+4. Re-render local configuration after editing the template: `./local-dev/bin/render`
 
 By default, a locally run Rawls will boot as a "front" instance of Rawls. A front Rawls will serve all HTTP requests and can modify the database, but it will not do monitoring tasks such as submission monitoring, PFB imports, or Google billing project creation.
 
