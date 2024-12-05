@@ -79,7 +79,7 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 Next, execute the following command from the root of the Rawls repo:
 
 ```sh
-# Requires Broad campus network or NonSplit VPN.
+# Requires Broad campus network or NonSplit VPN
 ./config/docker-rsync-local-rawls.sh
 ```
 
@@ -100,9 +100,10 @@ When Rawls starts up, access the Rawls Swagger page: https://local.dsde-dev.broa
 
 By default, a locally run Rawls will boot as a "front" instance of Rawls. A front Rawls will serve all HTTP requests and can modify the database, but it will not do monitoring tasks such as submission monitoring, PFB imports, or Google billing project creation.
 
-If you are developing a ticket that deals with any sort of monitoring or asynchronous features, you will likely want to boot your Rawls as a "back" instance, which will run a fully-featured instance of Rawls with monitoring tasks enabled. To boot your local instance as a "back" instance, run*:
+If you are developing a ticket that deals with any sort of monitoring or asynchronous features, you will likely want to boot your Rawls as a "back" instance, which will run a fully-featured instance of Rawls with monitoring tasks enabled. To boot your local instance as a "back" instance, run:
 
-```
+```sh
+# Requires Broad campus network or NonSplit VPN
 BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 ```
 
