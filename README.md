@@ -164,12 +164,7 @@ After publishing:
 If you get the error message `release version 17 not supported`:
 * Run `java -version` and verify that you're running 17. If not, you will need to install / update your PATH.
 
-If you have trouble submitting workflows and see errors like `HTTP error calling URI https://cromiam-priv.dsde-dev.broadinstitute.org`:
-* Connect to the NonSplit VPN and try again
-* CromIAM doesn't accept requests from outside the Broad trusted IP space 
-
 For integration test issues, see [automation/README.md](automation/README.md).
-
 
 ## Debugging in Intellij IDEA
 You can attach Intellij's interactive debugger to Rawls running locally in a 
