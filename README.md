@@ -102,15 +102,12 @@ By default, a locally run Rawls will boot as a "front" instance of Rawls. A fron
 
 If you are developing a ticket that deals with any sort of monitoring or asynchronous features, you will likely want to boot your Rawls as a "back" instance, which will run a fully-featured instance of Rawls with monitoring tasks enabled. To boot your local instance as a "back" instance, run:
 
+Likewise, use a DB clone whenever writing Liquibase migrations or doing database work, so as not to disrupt the shared Dev instance.
+
 ```sh
 # Requires Broad campus network or NonSplit VPN
 BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
 ```
-
-### Developing Database Schema Changes
-
-If you are writing Liquibase migrations or doing database work, set up a database clone by following the steps for [running Back Rawls](#additional-requirements-for-back-rawls).
-
 ## Developer quick links:
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
 
