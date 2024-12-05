@@ -314,6 +314,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
 
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
+        // We pass the submission root as the value for two options,
+        // one for the PAPI Cromwell backend and one for the GCP Batch backend.
         submission.submissionRoot,
         submission.submissionRoot,
         final_workflow_outputs_dir,
