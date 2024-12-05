@@ -113,8 +113,6 @@ If you are writing Liquibase migrations or doing database work, set up a databas
 
 ## Build Rawls docker image
 
-Note: this may use more than 4.5 GB of Docker memory. If your Docker is not configured with enough memory (Docker for Mac defaults to 2GB), you may see a cryptic error messages saying `Killed`.
- 
 Build Rawls jar
 
 ```sh
