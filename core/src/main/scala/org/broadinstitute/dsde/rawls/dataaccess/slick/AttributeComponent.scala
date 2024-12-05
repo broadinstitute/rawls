@@ -804,8 +804,10 @@ trait AttributeComponent {
 
       def updateAction(insertIntoScratchFunction: () => WriteAction[Int], tracingContext: RawlsTracingContext) =
         traceDBIOWithParent("updateAction", tracingContext) { span =>
-          traceDBIOWithParent("insertIntoScratchFunction", span)(_ => insertIntoScratchFunction()) andThen
-            traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction())
+          for {
+            _ <- traceDBIOWithParent("insertIntoScratchFunction", span)(_ => insertIntoScratchFunction())
+            numUpdates <- traceDBIOWithParent("updateInMasterAction", span)(_ => updateInMasterAction())
+          } yield numUpdates
         }
     }
 
