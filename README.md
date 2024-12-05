@@ -79,6 +79,7 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 Next, execute the following command from the root of the Rawls repo:
 
 ```sh
+# Requires Broad campus network or NonSplit VPN.
 ./config/docker-rsync-local-rawls.sh
 ```
 
