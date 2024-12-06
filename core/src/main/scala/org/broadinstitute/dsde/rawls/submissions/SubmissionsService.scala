@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.submissions
 
 import akka.http.scaladsl.model.StatusCodes
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
@@ -531,9 +532,42 @@ class SubmissionsService(
       ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
 
+  @VisibleForTesting
+  def validateCostCap(costCap: Option[BigDecimal]) =
+    // must be a positive number
+    costCap.foreach { cap =>
+      if (cap.sign != 1) {
+        throw new RawlsExceptionWithErrorReport(
+          errorReport = ErrorReport(
+            StatusCodes.BadRequest,
+            s"per-workflow cost cap must be positive"
+          )
+        )
+      }
+      // backend supports decimal(10,2)
+      if (!(cap * 100).isWhole) {
+        throw new RawlsExceptionWithErrorReport(
+          errorReport = ErrorReport(
+            StatusCodes.BadRequest,
+            s"per-workflow cost cap must have a max of two decimal places"
+          )
+        )
+      }
+      if (cap.compare(BigDecimal.valueOf(10000000000L)) >= 0) {
+        throw new RawlsExceptionWithErrorReport(
+          errorReport = ErrorReport(
+            StatusCodes.BadRequest,
+            s"per-workflow cost cap must be less than 10,000,000,000"
+          )
+        )
+      }
+    }
+
   private def prepareSubmission(workspaceName: WorkspaceName,
                                 submissionRequest: SubmissionRequest
   ): Future[PreparedSubmission] = {
+
+    validateCostCap(submissionRequest.perWorkflowCostCap)
 
     val submissionId: UUID = UUID.randomUUID()
 
