@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
+import com.google.common.annotations.VisibleForTesting
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
@@ -18,6 +19,7 @@ import slick.jdbc.JdbcType
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import scala.util.Try
 
 final case class RawlsBillingProjectRecord(projectName: String,
                                            creationStatus: String,
@@ -361,6 +363,7 @@ trait RawlsBillingProjectComponent {
     def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
       setBillingProjectSpendConfiguration(billingProjectName, None, None, None)
 
+    // Throws an error if the Billing Project does not have a Billing Account
     def getBillingProjectSpendConfiguration(
       billingProjectName: RawlsBillingProjectName
     ): ReadAction[Option[BillingProjectSpendExport]] =
@@ -368,6 +371,17 @@ trait RawlsBillingProjectComponent {
         .withProjectName(billingProjectName)
         .result
         .map(_.headOption.map(RawlsBillingProjectRecord.toBillingProjectSpendExport))
+
+    // Ignores any Billing Projects that don't have Billing Accounts
+    def getBillingProjectsSpendConfiguration(
+      billingProjectNames: Seq[RawlsBillingProjectName]
+    ): ReadAction[Seq[Option[BillingProjectSpendExport]]] =
+      rawlsBillingProjectQuery
+        .withProjectNames(billingProjectNames)
+        .result
+        .map(projectRecords =>
+          projectRecords.map(record => Try(RawlsBillingProjectRecord.toBillingProjectSpendExport(record)).toOption)
+        )
 
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] =
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
@@ -540,6 +554,7 @@ trait RawlsBillingProjectComponent {
       )
     }
 
+    @VisibleForTesting
     def getLastChange(billingProject: RawlsBillingProjectName): ReadAction[Option[BillingAccountChange]] =
       BillingAccountChanges
         .withProjectName(billingProject)
@@ -573,27 +588,6 @@ trait RawlsBillingProjectComponent {
 
     def withProjectName(billingProjectName: RawlsBillingProjectName): BillingAccountChangeQuery =
       query.filter(_.billingProjectName === billingProjectName.value)
-
-    /* SELECT *
-     * FROM BILLING_ACCOUNT_CHANGES BAC,
-     * (  SELECT BILLING_PROJECT_NAME, MAX(ID) AS MAXID
-     *    FROM BILLING_ACCOUNT_CHANGES
-     *    GROUP BY BILLING_PROJECT_NAME
-     * ) AS SUBTABLE
-     * WHERE SUBTABLE.MAXID = BAC.ID
-     */
-    /**
-      * Selects the latest changes for all billing projects in query.
-      */
-    def latestChanges: BillingAccountChangeQuery = {
-      val latestChangeIds = query
-        .groupBy(_.billingProjectName)
-        .map { case (_, group) => group.map(_.id).max }
-
-      query
-        .filter(_.id.in(latestChangeIds))
-        .sortBy(_.id.asc)
-    }
 
     def unsynced: BillingAccountChangeQuery =
       query.filter(_.googleSyncTime.isEmpty)

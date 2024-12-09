@@ -299,6 +299,8 @@ object Boot extends IOApp with LazyLogging {
         CromwellBackend(appConfigManager.conf.getString("executionservice.defaultNetworkBackend"))
       val highSecurityNetworkCromwellBackend: CromwellBackend =
         CromwellBackend(appConfigManager.conf.getString("executionservice.highSecurityNetworkBackend"))
+      val gcpBatchBackend: CromwellBackend =
+        CromwellBackend(appConfigManager.conf.getString("executionservice.gcpBatchBackend"))
 
       val wdlParsingConfig = WDLParserConfig(appConfigManager.conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -516,7 +518,8 @@ object Boot extends IOApp with LazyLogging {
           billingRepository,
           billingProfileManagerDAO,
           samDAO,
-          spendReportingServiceConfig
+          spendReportingServiceConfig,
+          workspaceServiceConstructor
         )
 
       val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
@@ -598,6 +601,7 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
+          gcpBatchBackend,
           methodConfigResolver,
           bardService,
           workspaceSettingRepository

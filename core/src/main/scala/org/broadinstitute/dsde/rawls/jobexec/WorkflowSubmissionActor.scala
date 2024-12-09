@@ -44,6 +44,7 @@ object WorkflowSubmissionActor {
             useWorkflowCollectionLabel: Boolean,
             defaultNetworkCromwellBackend: CromwellBackend,
             highSecurityNetworkCromwellBackend: CromwellBackend,
+            gcpBatchBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver,
             bardService: BardService,
             workspaceSettingRepository: WorkspaceSettingRepository
@@ -69,6 +70,7 @@ object WorkflowSubmissionActor {
         useWorkflowCollectionLabel,
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
+        gcpBatchBackend,
         methodConfigResolver,
         bardService,
         workspaceSettingRepository
@@ -105,6 +107,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val useWorkflowCollectionLabel: Boolean,
                               val defaultNetworkCromwellBackend: CromwellBackend,
                               val highSecurityNetworkCromwellBackend: CromwellBackend,
+                              val gcpBatchBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver,
                               val bardService: BardService,
                               val workspaceSettingRepository: WorkspaceSettingRepository
@@ -159,6 +162,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val useWorkflowCollectionLabel: Boolean
   val defaultNetworkCromwellBackend: CromwellBackend
   val highSecurityNetworkCromwellBackend: CromwellBackend
+  val gcpBatchBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
   val bardService: BardService
   val workspaceSettingRepository: WorkspaceSettingRepository
@@ -301,7 +305,17 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
+      useCromwellGcpBatchBackend: Boolean = currentSettings.exists {
+        case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled
+        case _                                                 => false
+      }
+      cromwellSubmissionBackend =
+        if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
+
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
+        // We pass the submission root as the value for two options,
+        // one for the PAPI Cromwell backend and one for the GCP Batch backend.
+        submission.submissionRoot,
         submission.submissionRoot,
         final_workflow_outputs_dir,
         final_workflow_outputs_dir_metadata,
@@ -315,7 +329,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         deleteIntermediateOutputFiles,
         useReferenceDisks,
         memoryRetryMultiplier,
-        highSecurityNetworkCromwellBackend,
+        cromwellSubmissionBackend,
         workflowFailureMode,
         google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
         ignoreEmptyOutputs,

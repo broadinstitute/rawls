@@ -30,7 +30,14 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceRepository,
+  WorkspaceService,
+  WorkspaceSettingRepository
+}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -579,6 +586,51 @@ class SubmissionsServiceSpec
       ) // a random suffix is added in this case, should be something like "testConfig1_HoQyHjLZ"
       assert(result.deleted)
       assert(result.deletedDate.isDefined)
+  }
+
+  behavior of "per-workflow cost cap validation"
+  // all tests can use the same db and services; none of these tests perform writes
+  withTestDataServices { services =>
+    it should "pass when no cap is specified" in {
+      val input = Option.empty
+      services.submissionsService.validateCostCap(input)
+    }
+    it should "pass for a reasonable number" in {
+      val input = Option(BigDecimal(25.99))
+      services.submissionsService.validateCostCap(input)
+    }
+    it should "fail for zero" in {
+      val input = Option(BigDecimal(0))
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        services.submissionsService.validateCostCap(input)
+      }
+      actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
+      actual.errorReport.message shouldBe "per-workflow cost cap must be positive"
+    }
+    it should "fail for a negative number" in {
+      val input = Option(BigDecimal(-1))
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        services.submissionsService.validateCostCap(input)
+      }
+      actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
+      actual.errorReport.message shouldBe "per-workflow cost cap must be positive"
+    }
+    it should "fail for too many decimal places" in {
+      val input = Option(BigDecimal(12.345))
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        services.submissionsService.validateCostCap(input)
+      }
+      actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
+      actual.errorReport.message shouldBe "per-workflow cost cap must have a max of two decimal places"
+    }
+    it should "fail when too large too many decimal places" in {
+      val input = Option(BigDecimal.valueOf(10000000000L))
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        services.submissionsService.validateCostCap(input)
+      }
+      actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
+      actual.errorReport.message shouldBe "per-workflow cost cap must be less than 10,000,000,000"
+    }
   }
 
 }

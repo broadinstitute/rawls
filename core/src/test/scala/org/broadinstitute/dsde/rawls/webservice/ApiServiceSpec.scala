@@ -274,18 +274,6 @@ trait ApiServiceSpec
       gcsDAO
     ) _
 
-    val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
-    val spendReportingServiceConfig =
-      SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
-    override val spendReportingConstructor = SpendReportingService.constructor(
-      slickDataSource,
-      spendReportingBigQueryService,
-      mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      spendReportingServiceConfig
-    )
-
     override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
       new BillingAdminService(samDAO, billingRepository, new WorkspaceRepository(slickDataSource), _)(
         testExecutionContext
@@ -416,6 +404,19 @@ trait ApiServiceSpec
                                   gcsDAO,
                                   samDAO
       )
+
+    val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
+    val spendReportingServiceConfig =
+      SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
+    override val spendReportingConstructor = SpendReportingService.constructor(
+      slickDataSource,
+      spendReportingBigQueryService,
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      spendReportingServiceConfig,
+      workspaceServiceConstructor
+    )
 
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
       MethodConfigurationService.constructor(

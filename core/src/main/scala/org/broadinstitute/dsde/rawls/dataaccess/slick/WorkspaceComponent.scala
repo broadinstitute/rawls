@@ -7,6 +7,7 @@ import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -259,6 +260,21 @@ trait WorkspaceComponent {
 
     def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
       workspaceQuery.withBillingProject(billingProject).read
+
+    def groupByBillingProjectOfType(workspaceIds: List[UUID],
+                                    workspaceType: WorkspaceType
+    ): ReadWriteAction[Map[RawlsBillingProjectName, Seq[Workspace]]] = {
+      val query = for {
+        workspace <- workspaceQuery if workspace.id inSetBind workspaceIds.toSet
+        if workspace.workspaceType === workspaceType.toString
+      } yield (workspace.namespace, workspace)
+
+      query.result.map { rows =>
+        rows.groupBy(_._1).map { case (billingProjectName, workspaces) =>
+          RawlsBillingProjectName(billingProjectName) -> workspaces.map(_._2).map(WorkspaceRecord.toWorkspace)
+        }
+      }
+    }
 
     def getTags(queryString: Option[String],
                 limit: Option[Int] = None,
@@ -643,6 +659,9 @@ trait WorkspaceComponent {
 
     def withBillingProject(projectName: RawlsBillingProjectName): WorkspaceQueryType =
       query.filter(_.namespace === projectName.value)
+
+    def withBillingProjects(projectNames: List[RawlsBillingProjectName]): WorkspaceQueryType =
+      query.filter(_.namespace.inSetBind(projectNames.map(_.value)))
 
     def withGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       query.filter(_.googleProjectId === googleProjectId.value)
