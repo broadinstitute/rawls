@@ -533,35 +533,26 @@ class SubmissionsService(
     )
 
   @VisibleForTesting
-  def validateCostCap(costCap: Option[BigDecimal]) =
-    // must be a positive number
-    costCap.foreach { cap =>
-      if (cap.sign != 1) {
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.BadRequest,
-            s"per-workflow cost cap must be positive"
-          )
-        )
-      }
-      // backend supports decimal(10,2)
-      if (!(cap * 100).isWhole) {
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.BadRequest,
-            s"per-workflow cost cap must have a max of two decimal places"
-          )
-        )
-      }
-      if (cap.compare(BigDecimal.valueOf(10000000000L)) >= 0) {
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.BadRequest,
-            s"per-workflow cost cap must be less than 10,000,000,000"
-          )
-        )
-      }
+  def validateCostCap(costCap: Option[BigDecimal]): Unit = {
+    // must be a positive number, no more than two decimal places, and a max of ... 10 billion?
+    val maybeErrorMessage = costCap.map {
+      case cap if cap.sign != 1 => "per-workflow cost cap must be positive"
+      case cap if cap.compare(BigDecimal.valueOf(10000000000L)) >= 0 =>
+        "per-workflow cost cap must be less than 10,000,000,000"
+      case cap if !(cap * 100).isWhole =>
+        "per-workflow cost cap must have a max of two decimal places"
     }
+
+    maybeErrorMessage.foreach { msg =>
+      throw new RawlsExceptionWithErrorReport(
+        errorReport = ErrorReport(
+          StatusCodes.BadRequest,
+          msg
+        )
+      )
+    }
+
+  }
 
   private def prepareSubmission(workspaceName: WorkspaceName,
                                 submissionRequest: SubmissionRequest
