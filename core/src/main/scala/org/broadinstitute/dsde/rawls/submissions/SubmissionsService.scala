@@ -535,7 +535,7 @@ class SubmissionsService(
   @VisibleForTesting
   def validateCostCap(costCap: Option[BigDecimal]): Unit = {
     // must be a positive number, no more than two decimal places, and a max of ... 10 billion?
-    val maybeErrorMessage = costCap.map {
+    val maybeErrorMessage = costCap.collectFirst {
       case cap if cap.sign != 1 => "per-workflow cost cap must be positive"
       case cap if cap.compare(BigDecimal.valueOf(10000000000L)) >= 0 =>
         "per-workflow cost cap must be less than 10,000,000,000"
