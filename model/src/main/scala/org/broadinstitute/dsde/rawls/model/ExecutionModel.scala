@@ -87,8 +87,14 @@ case class ExecutionServiceCallLogs(
 )
 
 // https://cromwell.readthedocs.io/en/stable/wf_options/Google/
+// We provide both the key jes_gcs_root and the key gcp_batch_gcs_root
+// to accommodate the PAPI and GCP Batch Cromwell backends. Each backend
+// ignores the key that does not correspond to it. This is a temporary
+// measure, and jes_gcs_root can be removed when we complete the full
+// transition to GCP Batch.
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
+  gcp_batch_gcs_root: String,
   final_workflow_outputs_dir: Option[String],
   final_workflow_outputs_dir_metadata: Option[String],
   google_project: String,
@@ -110,7 +116,8 @@ case class ExecutionServiceWorkflowOptions(
   monitoring_image_script: Option[String] = None
 )
 
-// current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
+// Current possible backends are "PAPIv2-beta" (not in current use),
+// "PAPIv2-CloudNAT", and "GCPBatch".
 final case class CromwellBackend(value: String) extends ValueObject
 
 case class ExecutionServiceLabelResponse(
@@ -469,7 +476,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat: RootJsonFormat[ExecutionServiceLogs] = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat20(
+  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat21(
     ExecutionServiceWorkflowOptions
   )
 

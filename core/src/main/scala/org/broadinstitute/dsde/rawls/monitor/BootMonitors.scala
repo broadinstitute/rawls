@@ -94,6 +94,7 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
+                   gcpBatchBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver,
                    bardService: BardService,
                    workspaceSettingRepository: WorkspaceSettingRepository
@@ -147,6 +148,7 @@ object BootMonitors extends LazyLogging {
         useWorkflowCollectionLabel,
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
+        gcpBatchBackend,
         methodConfigResolver,
         bardService,
         workspaceSettingRepository
@@ -338,6 +340,7 @@ object BootMonitors extends LazyLogging {
                                             useWorkflowCollectionLabel: Boolean,
                                             defaultNetworkCromwellBackend: CromwellBackend,
                                             highSecurityNetworkCromwellBackend: CromwellBackend,
+                                            gcpBatchBackend: CromwellBackend,
                                             methodConfigResolver: MethodConfigResolver,
                                             bardService: BardService,
                                             workspaceSettingRepository: WorkspaceSettingRepository
@@ -366,6 +369,7 @@ object BootMonitors extends LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
+          gcpBatchBackend,
           methodConfigResolver,
           bardService,
           workspaceSettingRepository
