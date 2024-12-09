@@ -481,7 +481,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         monitoringImageScript = submissionRec.monitoringImageScript
       )
     } yield {
-      logger.error("Test workflow options: " + wfOpts.toString);
       val submissionAndWorkspaceLabels =
         Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString)
       val wfLabels = workspaceRec.workflowCollection match {
