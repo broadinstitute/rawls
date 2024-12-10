@@ -295,7 +295,7 @@ class WorkspaceApiSpec
               eventually {
                 workspaceResponse(
                   Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)
-                ).bucketOptions should contain(WorkspaceBucketOptions(true))
+                ).bucketOptions.get should matchPattern { case WorkspaceBucketOptions(true, _) => }
               }
 
               // The user clones the workspace into their project
