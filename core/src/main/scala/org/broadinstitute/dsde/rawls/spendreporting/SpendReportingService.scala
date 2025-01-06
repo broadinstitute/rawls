@@ -4,8 +4,7 @@ import java.util.{Currency, UUID}
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
-import com.google.cloud.bigquery.FieldValueList
+import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -366,7 +365,7 @@ class SpendReportingService(
     val baseQuery = s"""
                        |  SELECT
                        |    project.id AS project_id,
-                       |    project.name AS project_name,
+                       |    COALESCE(project.name, '') AS project_name,
                        |    currency,
                        |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
                        |    CASE
@@ -382,7 +381,7 @@ class SpendReportingService(
                        |    _PARTITIONTIME BETWEEN @startDate AND @endDate
                        |  GROUP BY
                        |    project_id,
-                       |    project_name,
+                       |    COALESCE(project.name, ''),
                        |    spend_category,
                        |    currency""".stripMargin.trim
 
@@ -402,7 +401,7 @@ class SpendReportingService(
        |)
        |SELECT
        |  project_id,
-       |  project_name,
+       |  MAX(project_name) AS project_name,
        |  SUM(category_cost) AS total_cost,
        |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
        |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
@@ -415,7 +414,6 @@ class SpendReportingService(
        |  spend_categories
        |GROUP BY
        |  project_id,
-       |  project_name,
        |  currency
        |ORDER BY
        |  total_cost DESC
