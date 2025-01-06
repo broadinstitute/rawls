@@ -64,11 +64,11 @@ object Dependencies {
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.2"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.13.0"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.19.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "7.19.1"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.12.0"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.15"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.16"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
@@ -130,7 +130,7 @@ object Dependencies {
   val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1169-SNAPSHOT")
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
-  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.595-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.596-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.332")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
