@@ -365,7 +365,6 @@ class SpendReportingService(
     val baseQuery = s"""
                        |  SELECT
                        |    project.id AS project_id,
-                       |    COALESCE(project.name, '') AS project_name,
                        |    currency,
                        |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
                        |    CASE
@@ -381,7 +380,6 @@ class SpendReportingService(
                        |    _PARTITIONTIME BETWEEN @startDate AND @endDate
                        |  GROUP BY
                        |    project_id,
-                       |    COALESCE(project.name, ''),
                        |    spend_category,
                        |    currency""".stripMargin.trim
 
@@ -401,7 +399,6 @@ class SpendReportingService(
        |)
        |SELECT
        |  project_id,
-       |  MAX(project_name) AS project_name,
        |  SUM(category_cost) AS total_cost,
        |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
        |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
