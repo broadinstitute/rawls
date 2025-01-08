@@ -1276,7 +1276,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       s"""|WITH spend_categories AS (
           |  SELECT
           |    project.id AS project_id,
-          |    project.name AS project_name,
           |    currency,
           |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |    CASE
@@ -1292,13 +1291,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    _PARTITIONTIME BETWEEN @startDate AND @endDate
           |  GROUP BY
           |    project_id,
-          |    project_name,
           |    spend_category,
           |    currency
           | UNION ALL
           |    SELECT
           |      project.id AS project_id,
-          |      project.name AS project_name,
           |      currency,
           |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |      CASE
@@ -1314,13 +1311,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |      _PARTITIONTIME BETWEEN @startDate AND @endDate
           |    GROUP BY
           |      project_id,
-          |      project_name,
           |      spend_category,
           |      currency
           | UNION ALL
           |    SELECT
           |      project.id AS project_id,
-          |      project.name AS project_name,
           |      currency,
           |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |      CASE
@@ -1336,13 +1331,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |      fakeTimePartitionColumn BETWEEN @startDate AND @endDate
           |    GROUP BY
           |      project_id,
-          |      project_name,
           |      spend_category,
           |      currency
           |)
           |SELECT
           |  project_id,
-          |  project_name,
           |  SUM(category_cost) AS total_cost,
           |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
           |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
@@ -1355,7 +1348,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  spend_categories
           |GROUP BY
           |  project_id,
-          |  project_name,
           |  currency
           |ORDER BY
           |  total_cost DESC
