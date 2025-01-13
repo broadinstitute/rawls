@@ -243,8 +243,8 @@ class WorkspaceService(
           getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(options.attrSpecs))
         workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
-      // post-process JSON to remove calculated-but-undesired keys
-      deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
+        // post-process JSON to remove calculated-but-undesired keys
+        deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
@@ -259,8 +259,8 @@ class WorkspaceService(
           getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.read, Option(options.attrSpecs))
         workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
-      // post-process JSON to remove calculated-but-undesired keys
-      deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
+        // post-process JSON to remove calculated-but-undesired keys
+        deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 

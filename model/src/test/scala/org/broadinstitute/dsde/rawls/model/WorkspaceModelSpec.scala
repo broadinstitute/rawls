@@ -39,29 +39,26 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
       "Serialize" - {
 
-        "Agora" in {
+        "Agora" in
           assertResult {
             """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"agora"}""".parseJson
           } {
             MethodRepoMethodFormat.write(AgoraMethod("test-namespace", "test-name", 555))
           }
-        }
 
-        "Dockstore" in {
+        "Dockstore" in
           assertResult {
             """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
           } {
             MethodRepoMethodFormat.write(DockstoreMethod("test-path", "test-version"))
           }
-        }
 
-        "DockstoreTools" in {
+        "DockstoreTools" in
           assertResult {
             """{"methodUri":"dockstoretools://test-path/test-version","sourceRepo":"dockstoretools","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
           } {
             MethodRepoMethodFormat.write(DockstoreToolsMethod("test-path", "test-version"))
           }
-        }
       }
 
       "Deserialize" - {

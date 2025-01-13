@@ -1586,7 +1586,7 @@ class SubmissionSpec(_system: ActorSystem)
     }
   }
 
-  it should "report error when root entity type does not refer to a table in the snapshot" in {
+  it should "report error when root entity type does not refer to a table in the snapshot" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
       runAndWait(
         methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(rootEntityType = Some("unknown")))
@@ -1608,7 +1608,6 @@ class SubmissionSpec(_system: ActorSystem)
       ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
       ex.errorReport.message shouldBe "Validation errors: Invalid inputs: three_step.cgrep.pattern -> Table `unknown` does not exist in snapshot"
     }
-  }
 
   "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestSubmissionsService {
     submissionsService =>

@@ -77,11 +77,12 @@ class HttpSamDAOSpec
                      1 minute
       )
     assertResult(SamDAO.NotUser) {
-      Await.result(dao.getUserIdInfo(
-                     "group@example.com",
-                     RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
-                   ),
-                   Duration.Inf
+      Await.result(
+        dao.getUserIdInfo(
+          "group@example.com",
+          RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
+        ),
+        Duration.Inf
       )
     }
   }

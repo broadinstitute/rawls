@@ -2990,15 +2990,16 @@ class WorkspaceServiceSpec
                                         "testUser1",
                                         Map.empty
         )
-      val googleWorkspace = Workspace("test_namespace2",
-                                      "googleWorkspaceWithWsmRecord",
-                                      workspaceId2,
-                                      "aBucket",
-                                      Some("workflow-collection"),
-                                      new DateTime(),
-                                      new DateTime(),
-                                      "testUser2",
-                                      Map.empty
+      val googleWorkspace = Workspace(
+        "test_namespace2",
+        "googleWorkspaceWithWsmRecord",
+        workspaceId2,
+        "aBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "testUser2",
+        Map.empty
       )
       val googleWorkspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))

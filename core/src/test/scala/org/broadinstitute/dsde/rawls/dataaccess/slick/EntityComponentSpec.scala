@@ -30,16 +30,17 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace("test_namespace",
-                                         workspaceId.toString,
-                                         workspaceId.toString,
-                                         "bucketname",
-                                         Some("workflow-collection"),
-                                         currentTime(),
-                                         currentTime(),
-                                         "me",
-                                         Map.empty,
-                                         false
+    val workspace: Workspace = Workspace(
+      "test_namespace",
+      workspaceId.toString,
+      workspaceId.toString,
+      "bucketname",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "me",
+      Map.empty,
+      false
     )
     runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
@@ -243,16 +244,17 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "list all entity types with their namespaced attribute names" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace("test_namespace",
-                                         workspaceId.toString,
-                                         workspaceId.toString,
-                                         "bucketname",
-                                         Some("workflow-collection"),
-                                         currentTime(),
-                                         currentTime(),
-                                         "me",
-                                         Map.empty,
-                                         false
+    val workspace: Workspace = Workspace(
+      "test_namespace",
+      workspaceId.toString,
+      workspaceId.toString,
+      "bucketname",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "me",
+      Map.empty,
+      false
     )
     runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
@@ -992,8 +994,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         val a3 = Entity(
           "a3",
           "test",
-          Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a4"),
-              AttributeName.withDefaultNS("side") -> AttributeEntityReference("test", "a")
+          Map(
+            AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a4"),
+            AttributeName.withDefaultNS("side") -> AttributeEntityReference("test", "a")
           )
         )
         val a2 =
@@ -1149,16 +1152,17 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "save a new entity with the same name as a deleted entity" in withDefaultTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace("test_namespace",
-                                         workspaceId.toString,
-                                         workspaceId.toString,
-                                         "bucketname",
-                                         Some("workflow-collection"),
-                                         currentTime(),
-                                         currentTime(),
-                                         "me",
-                                         Map.empty,
-                                         false
+    val workspace: Workspace = Workspace(
+      "test_namespace",
+      workspaceId.toString,
+      workspaceId.toString,
+      "bucketname",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "me",
+      Map.empty,
+      false
     )
     runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
@@ -1403,11 +1407,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
                  AttributeName.withDefaultNS("foo") -> AttributeString("bar")
              )
       ),
-      Entity("name-3",
-             "mytype",
-             Map(AttributeName.withDefaultNS("case") -> AttributeString("value3"),
-                 AttributeName.withDefaultNS("CASE") -> AttributeString("value4")
-             )
+      Entity(
+        "name-3",
+        "mytype",
+        Map(AttributeName.withDefaultNS("case") -> AttributeString("value3"),
+            AttributeName.withDefaultNS("CASE") -> AttributeString("value4")
+        )
       ),
       Entity("name-4", "anothertype", Map(AttributeName.withDefaultNS("case") -> AttributeString("value5"))),
       Entity("name-5", "anothertype", Map(AttributeName.withDefaultNS("CASE") -> AttributeString("value6")))

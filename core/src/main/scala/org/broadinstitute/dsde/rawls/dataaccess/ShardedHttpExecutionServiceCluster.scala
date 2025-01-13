@@ -120,13 +120,12 @@ class ShardedHttpExecutionServiceCluster(readMembers: Set[ClusterMember],
                                                 userInfo: UserInfo
   ): Unit = {
     // execute but don't wait for completion
-    val labelFutureToIgnore = Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) {
-      subWorkflowId =>
-        retryUntilSuccessOrTimeout(failureLogMessage =
-          s"error patching label on workflow [$subWorkflowId], submission [$submissionId]"
-        )(2 seconds, 10 seconds) { () =>
-          getMember(executionServiceId).dao.patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
-        }
+    val labelFutureToIgnore = Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) { subWorkflowId =>
+      retryUntilSuccessOrTimeout(failureLogMessage =
+        s"error patching label on workflow [$subWorkflowId], submission [$submissionId]"
+      )(2 seconds, 10 seconds) { () =>
+        getMember(executionServiceId).dao.patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
+      }
     }
   }
 

@@ -304,8 +304,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "allow library attributes in input for create method configuration by non-curator" in withTestDataApiServices {
     services =>
-      val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"),
-                       "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo")
+      val inputs = Map(
+        "goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"),
+        "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo")
       )
       val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),
                         "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar")
@@ -745,9 +746,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     check200AddMC(Put)
   }
 
-  it should "return 200 on post method configuration" in {
+  it should "return 200 on post method configuration" in
     check200AddMC(Post)
-  }
 
   def checkLastModified(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs =
@@ -782,9 +782,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     checkLastModified(Put)
   }
 
-  it should "update the workspace last modified date on post method configuration" in {
+  it should "update the workspace last modified date on post method configuration" in
     checkLastModified(Post)
-  }
 
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
@@ -832,9 +831,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     checkValidAttributeSyntax(Put)
   }
 
-  it should "validate attribute syntax in post method configuration" in {
+  it should "validate attribute syntax in post method configuration" in
     checkValidAttributeSyntax(Post)
-  }
 
   def checkNoLibraryAttributesInOutputsByCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
@@ -859,9 +857,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     checkNoLibraryAttributesInOutputsByCurator(Put)
   }
 
-  it should "not allow library attributes in outputs for post method configuration by curator" in {
+  it should "not allow library attributes in outputs for post method configuration by curator" in
     checkNoLibraryAttributesInOutputsByCurator(Post)
-  }
 
   def checkNoLibraryAttributesInOutputsByNonCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
@@ -1381,13 +1378,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         }
   }
 
-  it should "return 404 getting method inputs and outputs from a missing method" in withTestDataApiServices {
-    services =>
-      Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde", "three_step", 2))) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
-        check {
-          assertResult(StatusCodes.NotFound)(status)
-        }
+  it should "return 404 getting method inputs and outputs from a missing method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde", "three_step", 2))) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
+      check {
+        assertResult(StatusCodes.NotFound)(status)
+      }
   }
 
   it should "return 400 when generating a method config template from an invalid method" in withTestDataApiServices {

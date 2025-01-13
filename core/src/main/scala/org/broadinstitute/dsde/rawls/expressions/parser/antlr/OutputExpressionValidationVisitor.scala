@@ -29,9 +29,9 @@ class OutputExpressionValidationVisitor
       aggregate <- aggregateT
       nextResult <- nextResultT
     } yield
-    // return whichever of aggregate and nextResult is bound
-    if (aggregate(AttributeNull) == UnboundOutputExpression) nextResult
-    else aggregate
+      // return whichever of aggregate and nextResult is bound
+      if (aggregate(AttributeNull) == UnboundOutputExpression) nextResult
+      else aggregate
 
   override def visitRelation(ctx: RelationContext): Try[Attribute => OutputExpression] =
     Failure(new RawlsException("Entity references not permitted in the middle of output expressions"))

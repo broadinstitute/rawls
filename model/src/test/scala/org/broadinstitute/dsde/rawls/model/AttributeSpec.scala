@@ -701,9 +701,8 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
     )
 
     numbers.foreach { case (attribute, string) =>
-      s"should not stringify large number [$string] in scientific notation" in {
+      s"should not stringify large number [$string] in scientific notation" in
         assertResult(string)(AttributeStringifier(attribute))
-      }
     }
   }
 

@@ -486,9 +486,8 @@ class SubmissionsServiceSpec
     )
   )
   forAll(getTerminalStatusDateTests) { (description, submission, workflowId, expectedOutput) =>
-    it should s"run getTerminalStatusDate test for $description" in {
+    it should s"run getTerminalStatusDate test for $description" in
       assertResult(SubmissionsService.getTerminalStatusDate(submission, workflowId))(expectedOutput)
-    }
   }
 
   behavior of "getSpendReportTableName"

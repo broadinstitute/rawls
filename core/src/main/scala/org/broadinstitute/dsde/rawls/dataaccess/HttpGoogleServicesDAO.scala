@@ -589,8 +589,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       firecloudHasAccess <- testTerraBillingAccountAccess(billingAccount)
       userHasAccess <- cred.traverse(c => testBillingAccountAccess(billingAccount, c))
     } yield
-    // Return false if the user does not have a Google token
-    firecloudHasAccess && userHasAccess.getOrElse(false)
+      // Return false if the user does not have a Google token
+      firecloudHasAccess && userHasAccess.getOrElse(false)
   }
 
   protected def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, credential: Credential)(implicit
