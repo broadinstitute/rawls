@@ -1168,9 +1168,8 @@ trait EntityComponent {
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] =
-      EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
+      EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
-      }
 
     def countReferringEntitiesForType(workspaceContext: Workspace, entityType: String): ReadAction[Int] =
       EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)

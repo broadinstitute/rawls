@@ -363,21 +363,18 @@ class MethodConfigurationService(
     getV2WorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap {
       workspaceContext =>
         dataSource.inTransaction { dataAccess =>
-          withMethodConfig(workspaceContext,
-                           methodRepoQuery.source.namespace,
-                           methodRepoQuery.source.name,
-                           dataAccess
-          ) { methodConfig =>
-            DBIO.from(
-              methodRepoDAO.postMethodConfig(
-                methodRepoQuery.methodRepoNamespace,
-                methodRepoQuery.methodRepoName,
-                methodConfig.copy(namespace = methodRepoQuery.methodRepoNamespace,
-                                  name = methodRepoQuery.methodRepoName
-                ),
-                ctx.userInfo
+          withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) {
+            methodConfig =>
+              DBIO.from(
+                methodRepoDAO.postMethodConfig(
+                  methodRepoQuery.methodRepoNamespace,
+                  methodRepoQuery.methodRepoName,
+                  methodConfig.copy(namespace = methodRepoQuery.methodRepoNamespace,
+                                    name = methodRepoQuery.methodRepoName
+                  ),
+                  ctx.userInfo
+                )
               )
-            )
           }
         }
     }

@@ -25,11 +25,12 @@ class UserInfoSpec extends AnyFlatSpec with Matchers {
     )
     userInfo.isB2C shouldBe true
 
-    val userInfo2 = UserInfo(RawlsUserEmail("fake@email.com"),
-                             OAuth2BearerToken("some-token"),
-                             300,
-                             RawlsUserSubjectId("another-user"),
-                             Some(OAuth2BearerToken("some-google-token"))
+    val userInfo2 = UserInfo(
+      RawlsUserEmail("fake@email.com"),
+      OAuth2BearerToken("some-token"),
+      300,
+      RawlsUserSubjectId("another-user"),
+      Some(OAuth2BearerToken("some-google-token"))
     )
     userInfo2.isB2C shouldBe true
   }

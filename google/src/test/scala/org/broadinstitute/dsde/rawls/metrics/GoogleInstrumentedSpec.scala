@@ -97,7 +97,7 @@ class GoogleInstrumentedSpec
     }
   }
 
-  it should "get counters from a request/exception" in {
+  it should "get counters from a request/exception" in
     GoogleInstrumentedService.values.foreach { implicit service =>
       withStatsD {
         val counters = googleCounters
@@ -113,6 +113,5 @@ class GoogleInstrumentedSpec
         capturedMetrics should contain(s"test.googleService.$service.httpRequestMethod.get.latency.samples", "1")
       }
     }
-  }
 
 }

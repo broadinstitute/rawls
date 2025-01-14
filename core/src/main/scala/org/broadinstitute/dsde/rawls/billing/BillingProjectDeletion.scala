@@ -43,7 +43,10 @@ class BillingProjectDeletion(
     for {
       _ <- billingRepository.deleteBillingProject(projectName)
       _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, projectName.value, ctx) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
+        .deleteResource(SamResourceTypeNames.billingProject,
+                        projectName.value,
+                        ctx
+        ) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
         case t: Throwable =>
           logger.warn(
             s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`",

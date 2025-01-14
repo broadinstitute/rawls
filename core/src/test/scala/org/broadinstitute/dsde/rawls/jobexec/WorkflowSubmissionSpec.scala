@@ -557,14 +557,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           "test_input_dos_array"
         )
       )
-      val submissionDos = createTestSubmission(data.workspace,
-                                               data.agoraMethodConfig,
-                                               sampleSet,
-                                               WorkbenchEmail(data.userOwner.userEmail.value),
-                                               Seq(sample),
-                                               Map(sample -> inputResolutions),
-                                               Seq(),
-                                               Map()
+      val submissionDos = createTestSubmission(
+        data.workspace,
+        data.agoraMethodConfig,
+        sampleSet,
+        WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample),
+        Map(sample -> inputResolutions),
+        Seq(),
+        Map()
       )
 
       runAndWait(entityQuery.save(ctx, sample))
@@ -627,14 +628,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           "test_input_dos_array"
         )
       )
-      val submissionDrs = createTestSubmission(data.workspace,
-                                               data.agoraMethodConfig,
-                                               sampleSet,
-                                               WorkbenchEmail(data.userOwner.userEmail.value),
-                                               Seq(sample),
-                                               Map(sample -> inputResolutions),
-                                               Seq(),
-                                               Map()
+      val submissionDrs = createTestSubmission(
+        data.workspace,
+        data.agoraMethodConfig,
+        sampleSet,
+        WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample),
+        Map(sample -> inputResolutions),
+        Seq(),
+        Map()
       )
 
       runAndWait(entityQuery.save(ctx, sample))
@@ -697,14 +699,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           "test_input_dos_array"
         )
       )
-      val submissionDrs = createTestSubmission(data.workspace,
-                                               data.agoraMethodConfig,
-                                               sampleSet,
-                                               WorkbenchEmail(data.userOwner.userEmail.value),
-                                               Seq(sample),
-                                               Map(sample -> inputResolutions),
-                                               Seq(),
-                                               Map()
+      val submissionDrs = createTestSubmission(
+        data.workspace,
+        data.agoraMethodConfig,
+        sampleSet,
+        WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample),
+        Map(sample -> inputResolutions),
+        Seq(),
+        Map()
       )
 
       runAndWait(entityQuery.save(ctx, sample))
@@ -771,14 +774,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           "test_input_dos_array"
         )
       )
-      val submissionDrs = createTestSubmission(data.workspace,
-                                               data.agoraMethodConfig,
-                                               sampleSet,
-                                               WorkbenchEmail(data.userOwner.userEmail.value),
-                                               Seq(sample),
-                                               Map(sample -> inputResolutions),
-                                               Seq(),
-                                               Map()
+      val submissionDrs = createTestSubmission(
+        data.workspace,
+        data.agoraMethodConfig,
+        sampleSet,
+        WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample),
+        Map(sample -> inputResolutions),
+        Seq(),
+        Map()
       )
 
       runAndWait(entityQuery.save(ctx, sample))

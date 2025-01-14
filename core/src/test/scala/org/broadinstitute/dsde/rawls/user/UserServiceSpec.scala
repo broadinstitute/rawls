@@ -1915,7 +1915,7 @@ class UserServiceSpec
     }
   }
 
-  it should "not update Sam permissions if billing profile member deletion fails" in {
+  it should "not update Sam permissions if billing profile member deletion fails" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1958,5 +1958,4 @@ class UserServiceSpec
                                                    testContext
       )
     }
-  }
 }

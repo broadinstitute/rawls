@@ -675,7 +675,7 @@ trait SubmissionComponent {
           deleteSubmissionAttributes("WORKFLOW", "workflow_id"),
           deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW", "workflow_id"),
           deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id")
-        ) andThen {
+        ) andThen
           DBIO.sequence(Seq("WORKFLOW") map { workflow_table =>
             // delete workflows
             sqlu"""delete w from #$workflow_table w
@@ -683,7 +683,6 @@ trait SubmissionComponent {
                    where s.workspace_id=$workspaceId
             """
           })
-        }
       }
     }
 

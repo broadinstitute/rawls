@@ -29,7 +29,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
                       |"ignoreEmptyOutputs": false
                       |}""".stripMargin.parseJson.asJsObject
 
-    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+    SubmissionRequestFormat.read(inputJSON) shouldEqual
       SubmissionRequest(
         methodConfigurationNamespace = "asdf",
         methodConfigurationName = "echo",
@@ -43,7 +43,6 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         memoryRetryMultiplier = 3.141,
         ignoreEmptyOutputs = false
       )
-    }
   }
 
   "SubmissionRequest deserialization" should "translate missing fields to None" in {
@@ -55,7 +54,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
                       |"useCallCache": true
                       |}""".stripMargin.parseJson.asJsObject
 
-    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+    SubmissionRequestFormat.read(inputJSON) shouldEqual
       SubmissionRequest(
         methodConfigurationNamespace = "asdf",
         methodConfigurationName = "echo",
@@ -67,7 +66,6 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         deleteIntermediateOutputFiles = false,
         ignoreEmptyOutputs = false
       )
-    }
   }
 
   "WorkflowQueueStatusByUserResponse" should "serialize/deserialize to/from JSON" in {

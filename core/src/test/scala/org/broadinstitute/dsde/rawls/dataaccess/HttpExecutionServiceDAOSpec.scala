@@ -179,7 +179,7 @@ class HttpExecutionServiceDAOSpec
     }
   }
 
-  it should "get the version" in {
+  it should "get the version" in
     withStatsD {
       val result = test.version.futureValue
       result.cromwell shouldBe "25"
@@ -191,6 +191,5 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
 }
