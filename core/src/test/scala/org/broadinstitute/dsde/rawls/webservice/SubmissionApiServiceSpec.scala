@@ -1127,7 +1127,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   forAll(passingDeleteIntermediateOutputFilesCases) {
     (description, deleteIntermediateOutputFilesOption, deleteIntermediateOutputFilesResult) =>
-      it should description in {
+      it should description in
         withTestDataApiServices { services =>
           val workspaceName = testData.wsName
           val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1153,7 +1153,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               )
             }
         }
-      }
 
   }
 
@@ -1165,7 +1164,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   )
 
   forAll(useReferenceDisksCases) { (description, useReferenceDisksOption, useReferenceDisksResult) =>
-    it should description in {
+    it should description in
       withTestDataApiServices { services =>
         val workspaceName = testData.wsName
         val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1188,7 +1187,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             requestUseReferenceDisksOption should be(Option(JsBoolean(useReferenceDisksResult)))
           }
       }
-    }
   }
 
   private val validMemoryRetryMultiplierCases = Table(
@@ -1199,7 +1197,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   )
 
   forAll(validMemoryRetryMultiplierCases) { (description, memoryRetryMultiplierOption, memoryRetryMultiplierResult) =>
-    it should description in {
+    it should description in
       withTestDataApiServices { services =>
         val workspaceName = testData.wsName
         val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1222,7 +1220,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             requestMemoryRetryMultiplier should be(Option(JsNumber(memoryRetryMultiplierResult)))
           }
       }
-    }
   }
 
   it should "return a parameter error if the memoryRetryMultiplier is invalid" in {
@@ -1249,7 +1246,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in {
+  it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1271,7 +1268,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           response should be("The request content was malformed:\nExpected JsBoolean, but got 415")
         }
     }
-  }
 
   private val userComment1000character = RandomStringUtils.randomGraph(1000)
   private val validUserCommentCases = Table(
@@ -1305,7 +1301,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   )
 
   forAll(validUserCommentCases) { (description, userCommentInput, userCommentResult) =>
-    it should description in {
+    it should description in
       withTestDataApiServices { services =>
         val workspaceName = testData.wsName
         val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1328,7 +1324,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             requestUserComment.get shouldBe userCommentResult
           }
       }
-    }
   }
 
   it should "return a parameter error if the userComment is invalid" in {

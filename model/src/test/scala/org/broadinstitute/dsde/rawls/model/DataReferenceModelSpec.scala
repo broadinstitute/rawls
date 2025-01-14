@@ -228,23 +228,20 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
         }
       }
 
-      "UpdateDataReferenceRequestBody should work when updating name and description" in {
+      "UpdateDataReferenceRequestBody should work when updating name and description" in
         assertResult(s"""{"name":"foo","description":"bar","instanceName":null,"snapshot":null}""".parseJson) {
           new UpdateDataRepoSnapshotReferenceRequestBody().name("foo").description("bar").toJson
         }
-      }
 
-      "UpdateDataReferenceRequestBody should work with only one parameter" in {
+      "UpdateDataReferenceRequestBody should work with only one parameter" in
         assertResult(s"""{"name":null,"description":"foo","instanceName":null,"snapshot":null}""".parseJson) {
           new UpdateDataRepoSnapshotReferenceRequestBody().description("foo").toJson
         }
-      }
 
-      "UpdateDataReferenceRequestBody with no parameters should fail" in {
+      "UpdateDataReferenceRequestBody with no parameters should fail" in
         assertThrows[DeserializationException] {
           s"""{}""".parseJson.convertTo[UpdateDataRepoSnapshotReferenceRequestBody]
         }
-      }
     }
   }
 }

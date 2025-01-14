@@ -156,7 +156,7 @@ class GoogleUtilitiesSpec
     }
   }
 
-  it should "not retry after a success" in {
+  it should "not retry after a success" in
     withStatsD {
       val counter = new Counter()
       whenReady(retryWhen500orGoogleError(() => counter.boomOnce())) { s =>
@@ -167,7 +167,6 @@ class GoogleUtilitiesSpec
       capturedMetrics should contain("test.histo.samples", "1")
       capturedMetrics should contain("test.histo.max", "1") // 1 exception
     }
-  }
 
   "retryWithRecoverWhen500orGoogleError" should "stop retrying if it recovers" in {
     withStatsD {
@@ -187,7 +186,7 @@ class GoogleUtilitiesSpec
     }
   }
 
-  it should "keep retrying and fail if it doesn't recover" in {
+  it should "keep retrying and fail if it doesn't recover" in
     withStatsD {
       val counter = new Counter()
 
@@ -203,7 +202,6 @@ class GoogleUtilitiesSpec
       capturedMetrics should contain("test.histo.samples", "1")
       capturedMetrics should contain("test.histo.max", "4") // 4 exceptions
     }
-  }
 }
 
 class GoogleJsonSpec extends AnyFlatSpecLike with Matchers {

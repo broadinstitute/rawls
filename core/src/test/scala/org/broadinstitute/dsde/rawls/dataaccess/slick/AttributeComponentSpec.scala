@@ -1915,9 +1915,8 @@ class AttributeComponentSpec
     attributeTestData.combinations(2).flatMap(x => List(x, x.reverse)).foreach {
       case List(AttributeTestData(description1, attribute1), AttributeTestData(description2, attribute2)) =>
         it should s"reflect ${attributeTestFunction.description} changes in " +
-          s"a new attribute when $description1 changes to $description2" in {
-            attributeTestFunction.run(attribute1, attribute2)
-          }
+          s"a new attribute when $description1 changes to $description2" in
+          attributeTestFunction.run(attribute1, attribute2)
       case x =>
         throw new Exception(s"${x} is unexpected")
     }

@@ -102,7 +102,7 @@ class FastPassGrantComponentSpec
   )
 
   "FastPassGrantRecord" - {
-    "Translates between FastPassGrant and FastPassGrantRecord" in {
+    "Translates between FastPassGrant and FastPassGrantRecord" in
       Seq(IamResourceTypes.Bucket, IamResourceTypes.Project).foreach { gcpResourceType =>
         val resourceTypeModel = model.copy(resourceType = gcpResourceType)
         val resourceTypeRecord = record.copy(resourceType = gcpResourceType.value)
@@ -121,30 +121,25 @@ class FastPassGrantComponentSpec
 
         }
       }
-    }
     "CRUD Operations" - {
-      "Does not find a non-existent FastPassGrant by ID" in {
+      "Does not find a non-existent FastPassGrant by ID" in
         assertResult(None) {
           runAndWait(fastPassGrantQuery.findById(-1L))
         }
-      }
-      "Does not find a FastPassGrant for a non-existent user" in {
+      "Does not find a FastPassGrant for a non-existent user" in
         assertResult(Seq.empty) {
           runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(WorkbenchUserId("404")))
         }
-      }
-      "Does not find a FastPassGrant for a non-existent workspace" in {
+      "Does not find a FastPassGrant for a non-existent workspace" in
         assertResult(Seq.empty) {
           runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(UUID.randomUUID()))
         }
-      }
-      "Does not find a FastPassGrant for a non-existent workspace and user" in {
+      "Does not find a FastPassGrant for a non-existent workspace and user" in
         assertResult(Seq.empty) {
           runAndWait(
             fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(UUID.randomUUID(), WorkbenchUserId("404"))
           )
         }
-      }
 
       "Inserts a FastPassGrant with a linked workspace" in {
         runAndWait(workspaceQuery.delete(WorkspaceName(workspace.namespace, workspace.name)))

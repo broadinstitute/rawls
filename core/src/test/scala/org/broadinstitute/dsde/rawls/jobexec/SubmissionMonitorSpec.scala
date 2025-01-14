@@ -1443,12 +1443,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         runAndWait(submissionQuery.create(context, subUnboundExpr))
       }
 
-      val monitor = createSubmissionMonitor(dataSource,
-                                            mockSamDAO,
-                                            mockGoogleServicesDAO,
-                                            subUnboundExpr,
-                                            testData.wsName,
-                                            new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        subUnboundExpr,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
       )
       val workflowRec =
         runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUnboundExpr.submissionId))).head

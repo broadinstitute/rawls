@@ -147,7 +147,9 @@ trait RawlsApiService
 
   def apiRoutes =
     options(complete(OK)) ~
-      withExecutionContext(ExecutionContext.global) { // Serve real work off the global EC to free up the dispatcher to run more routes, including status
+      withExecutionContext(
+        ExecutionContext.global
+      ) { // Serve real work off the global EC to free up the dispatcher to run more routes, including status
         traceRequests(baseApiRoutes)
       }
 

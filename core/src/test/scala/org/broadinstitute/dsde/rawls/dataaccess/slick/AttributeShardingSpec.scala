@@ -40,9 +40,8 @@ class AttributeShardingSpec
   )
 
   uuidCases foreach { case (uuidString, expectedShardId) =>
-    it should s"calculate shardId for UUID('$uuidString') correctly" in {
+    it should s"calculate shardId for UUID('$uuidString') correctly" in
       assertResult(expectedShardId)(determineShard(UUID.fromString(uuidString)))
-    }
   }
 
 }
