@@ -359,7 +359,7 @@ class SpendReportingService(
 
   def getAllUserWorkspaceQuery(
     spendExportTable: String,
-    workspaces: Seq[(GoogleProjectId, WorkspaceName)],
+    workspaces: Seq[GoogleProjectId],
     pageSize: Int,
     offset: Int
   ): String = {
@@ -389,7 +389,11 @@ class SpendReportingService(
       baseQuery
         .replace("_PARTITIONTIME", timePartitionColumn)
         .replace("_BILLING_ACCOUNT_TABLE", spendExportTable)
-        .replace("_PROJECT_ID_LIST", "(" + workspaces.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
+        .replace("_PROJECT_ID_LIST",
+                 workspaces
+                   .map(projectId => s""""${projectId}"""")
+                   .mkString("(", ", ", ")")
+        )
 
     s"""WITH spend_categories AS (
        |$bpSubQuery
@@ -565,8 +569,11 @@ class SpendReportingService(
           return Future.successful(None)
         }
         projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-        results <- Future.sequence(billingMap.map { case (spendExportTable, workspaces) =>
-          val query = getAllUserWorkspaceQuery(spendExportTable, workspaces, pageSize, offset)
+        tableToProjectIdsMap: Map[String, Seq[GoogleProjectId]] = billingMap.map { case (table, workspaces) =>
+          table -> workspaces.map(_._1)
+        }
+        results <- Future.sequence(tableToProjectIdsMap.map { case (spendExportTable, projects) =>
+          val query = getAllUserWorkspaceQuery(spendExportTable, projects, pageSize, offset)
           val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
           runBigQueryJob(queryJob, childContext)
             .map { result =>
@@ -575,7 +582,8 @@ class SpendReportingService(
                 case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
               }
             }
-            .recoverWith { case ex =>
+            .recoverWith { case ex: Throwable =>
+              logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
               Future.successful(None)
             }
         })

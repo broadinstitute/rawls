@@ -1248,8 +1248,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
 
     val workspaces = Seq(
-      (GoogleProjectId("workspace2ProjectId"), WorkspaceName("billingProject1", "workspace2")),
-      (GoogleProjectId("workspace1ProjectId"), WorkspaceName("billingProject1", "workspace1"))
+      GoogleProjectId("workspace2ProjectId"),
+      GoogleProjectId("workspace1ProjectId")
     )
 
     val expectedQuery =
