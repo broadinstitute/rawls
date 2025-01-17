@@ -358,7 +358,8 @@ class SpendReportingService(
   }
 
   def getAllUserWorkspaceQuery(
-    billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]],
+    billingProject: BillingProjectSpendExport,
+    workspaces: Seq[(GoogleProjectId, WorkspaceName)],
     pageSize: Int,
     offset: Int
   ): String = {
@@ -383,16 +384,17 @@ class SpendReportingService(
                        |    spend_category,
                        |    currency""".stripMargin.trim
 
-    val bpSubQuery = billingProjects
-      .map { bp =>
-        val tableName = bp._1.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-        val timePartitionColumn: String = getTimePartitionColumn(tableName)
-        baseQuery
-          .replace("_PARTITIONTIME", timePartitionColumn)
-          .replace("_BILLING_ACCOUNT_TABLE", tableName)
-          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
-      }
-      .mkString("\nUNION ALL\n")
+//    val bpSubQuery = billingProjects
+//      .map { bp =>
+    val tableName = billingProject.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+    val timePartitionColumn: String = getTimePartitionColumn(tableName)
+    val bpSubQuery =
+      baseQuery
+        .replace("_PARTITIONTIME", timePartitionColumn)
+        .replace("_BILLING_ACCOUNT_TABLE", tableName)
+        .replace("_PROJECT_ID_LIST", "(" + workspaces.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
+//      }
+//      .mkString("\nUNION ALL\n")
 
     s"""WITH spend_categories AS (
        |$bpSubQuery
@@ -417,6 +419,67 @@ class SpendReportingService(
        |limit $pageSize offset $offset
        |""".stripMargin.trim
   }
+
+//  def getAllUserWorkspaceQuery(
+//                                billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]],
+//                                pageSize: Int,
+//                                offset: Int
+//                              ): String = {
+//    val baseQuery = s"""
+//                       |  SELECT
+//                       |    project.id AS project_id,
+//                       |    currency,
+//                       |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+//                       |    CASE
+//                       |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
+//                       |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
+//                       |      ELSE 'Other'
+//                       |    END AS spend_category,
+//                       |    SUM(CAST(cost AS FLOAT64)) AS category_cost
+//                       |  FROM
+//                       |    _BILLING_ACCOUNT_TABLE
+//                       |  where
+//                       |    project.id in _PROJECT_ID_LIST AND
+//                       |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+//                       |  GROUP BY
+//                       |    project_id,
+//                       |    spend_category,
+//                       |    currency""".stripMargin.trim
+//
+//    val bpSubQuery = billingProjects
+//      .map { bp =>
+//        val tableName = bp._1.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+//        val timePartitionColumn: String = getTimePartitionColumn(tableName)
+//        baseQuery
+//          .replace("_PARTITIONTIME", timePartitionColumn)
+//          .replace("_BILLING_ACCOUNT_TABLE", tableName)
+//          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
+//      }
+//      .mkString("\nUNION ALL\n")
+//
+//    s"""WITH spend_categories AS (
+//       |$bpSubQuery
+//       |)
+//       |SELECT
+//       |  project_id,
+//       |  SUM(category_cost) AS total_cost,
+//       |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
+//       |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
+//       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
+//       |  currency,
+//       |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
+//       |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
+//       |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
+//       |FROM
+//       |  spend_categories
+//       |GROUP BY
+//       |  project_id,
+//       |  currency
+//       |ORDER BY
+//       |  total_cost DESC
+//       |limit $pageSize offset $offset
+//       |""".stripMargin.trim
+//  }
 
   def setUpQuery(
     query: String,
@@ -568,15 +631,35 @@ class SpendReportingService(
           return Future.successful(None)
         }
         projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-        query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
-        queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+        results <- Future.sequence(billingMap.map { case (billingProject, workspaces) =>
+          val query = getAllUserWorkspaceQuery(billingProject, workspaces, pageSize, offset)
+          val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+          runBigQueryJob(queryJob, childContext).map { result =>
+            result.getValues.asScala.toList match {
+              case Nil  => None
+              case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+            }
+          }
+        })
+        combinedResults = results.flatten.reduceOption((acc, res) =>
+          SpendReportingResults(
+            acc.spendDetails ++ res.spendDetails,
+            SpendReportingForDateRange(
+              (BigDecimal(acc.spendSummary.cost) + BigDecimal(res.spendSummary.cost)).toString,
+              (BigDecimal(acc.spendSummary.credits) + BigDecimal(res.spendSummary.credits)).toString,
+              acc.spendSummary.currency,
+              acc.spendSummary.startTime,
+              acc.spendSummary.endTime
+            )
+          )
+        )
+      } yield combinedResults
 
-        result <- runBigQueryJob(queryJob, childContext)
-      } yield result.getValues.asScala.toList match {
-        case Nil =>
-          None
-        case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
-      }
+//      } yield result.getValues.asScala.toList match {
+//        case Nil =>
+//          None
+//        case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+//      }
     }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
