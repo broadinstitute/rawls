@@ -318,7 +318,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           updatedWorkflowRec <-
             if (
               costBreakdown.cost > costCap &&
-              !WorkflowStatuses.abortableStatuses.contains(
+              WorkflowStatuses.abortableStatuses.contains(
                 WorkflowStatuses
                   .withName(costBreakdown.status)
               )
