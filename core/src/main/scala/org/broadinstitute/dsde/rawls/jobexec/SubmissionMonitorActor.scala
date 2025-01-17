@@ -317,7 +317,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
           updatedWorkflowRec <-
             if (
-              costBreakdown.cost > costCap && costBreakdown.status != WorkflowStatuses.Aborted.toString && costBreakdown.status != WorkflowStatuses.Aborting.toString
+              costBreakdown.cost > costCap && !List(WorkflowStatuses.Aborted.toString,
+                                                    WorkflowStatuses.Aborting.toString,
+                                                    WorkflowStatuses.Succeeded.toString,
+                                                    WorkflowStatuses.Failed.toString
+              ).contains(costBreakdown.status)
             ) {
               executionServiceCluster.abort(workflowRec, petUser).map {
                 case Success(abortedWfRec) =>
