@@ -358,7 +358,7 @@ class SpendReportingService(
   }
 
   def getAllUserWorkspaceQuery(
-    billingProject: BillingProjectSpendExport,
+    spendExportTable: String,
     workspaces: Seq[(GoogleProjectId, WorkspaceName)],
     pageSize: Int,
     offset: Int
@@ -384,17 +384,12 @@ class SpendReportingService(
                        |    spend_category,
                        |    currency""".stripMargin.trim
 
-//    val bpSubQuery = billingProjects
-//      .map { bp =>
-    val tableName = billingProject.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-    val timePartitionColumn: String = getTimePartitionColumn(tableName)
+    val timePartitionColumn: String = getTimePartitionColumn(spendExportTable)
     val bpSubQuery =
       baseQuery
         .replace("_PARTITIONTIME", timePartitionColumn)
-        .replace("_BILLING_ACCOUNT_TABLE", tableName)
+        .replace("_BILLING_ACCOUNT_TABLE", spendExportTable)
         .replace("_PROJECT_ID_LIST", "(" + workspaces.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
-//      }
-//      .mkString("\nUNION ALL\n")
 
     s"""WITH spend_categories AS (
        |$bpSubQuery
@@ -419,67 +414,6 @@ class SpendReportingService(
        |limit $pageSize offset $offset
        |""".stripMargin.trim
   }
-
-//  def getAllUserWorkspaceQuery(
-//                                billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]],
-//                                pageSize: Int,
-//                                offset: Int
-//                              ): String = {
-//    val baseQuery = s"""
-//                       |  SELECT
-//                       |    project.id AS project_id,
-//                       |    currency,
-//                       |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-//                       |    CASE
-//                       |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
-//                       |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
-//                       |      ELSE 'Other'
-//                       |    END AS spend_category,
-//                       |    SUM(CAST(cost AS FLOAT64)) AS category_cost
-//                       |  FROM
-//                       |    _BILLING_ACCOUNT_TABLE
-//                       |  where
-//                       |    project.id in _PROJECT_ID_LIST AND
-//                       |    _PARTITIONTIME BETWEEN @startDate AND @endDate
-//                       |  GROUP BY
-//                       |    project_id,
-//                       |    spend_category,
-//                       |    currency""".stripMargin.trim
-//
-//    val bpSubQuery = billingProjects
-//      .map { bp =>
-//        val tableName = bp._1.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-//        val timePartitionColumn: String = getTimePartitionColumn(tableName)
-//        baseQuery
-//          .replace("_PARTITIONTIME", timePartitionColumn)
-//          .replace("_BILLING_ACCOUNT_TABLE", tableName)
-//          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
-//      }
-//      .mkString("\nUNION ALL\n")
-//
-//    s"""WITH spend_categories AS (
-//       |$bpSubQuery
-//       |)
-//       |SELECT
-//       |  project_id,
-//       |  SUM(category_cost) AS total_cost,
-//       |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
-//       |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
-//       |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
-//       |  currency,
-//       |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
-//       |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
-//       |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
-//       |FROM
-//       |  spend_categories
-//       |GROUP BY
-//       |  project_id,
-//       |  currency
-//       |ORDER BY
-//       |  total_cost DESC
-//       |limit $pageSize offset $offset
-//       |""".stripMargin.trim
-//  }
 
   def setUpQuery(
     query: String,
@@ -631,8 +565,8 @@ class SpendReportingService(
           return Future.successful(None)
         }
         projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-        results <- Future.sequence(billingMap.map { case (billingProject, workspaces) =>
-          val query = getAllUserWorkspaceQuery(billingProject, workspaces, pageSize, offset)
+        results <- Future.sequence(billingMap.map { case (spendExportTable, workspaces) =>
+          val query = getAllUserWorkspaceQuery(spendExportTable, workspaces, pageSize, offset)
           val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
           runBigQueryJob(queryJob, childContext)
             .map { result =>
@@ -672,7 +606,7 @@ class SpendReportingService(
 
   def getBillingWithSpendPermission(
     parentContext: RawlsRequestContext
-  ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
+  ): Future[Map[String, Seq[(GoogleProjectId, WorkspaceName)]]] =
     traceFutureWithParent("getBillingWithSpendPermission", parentContext) { childContext =>
       for {
         ownerWorkspaces <- samDAO.listResourcesWithActions(
@@ -699,10 +633,17 @@ class SpendReportingService(
           } else {
             getSpendExportConfigurations(groupedWorkspaces.keys.toList)
           }
-      } yield spendConfigs.map { config =>
-        config -> groupedWorkspaces
-          .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
-          .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
-      }.toMap
+        groupedByTable = spendConfigs.groupBy(
+          _.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+        )
+        combinedResults = groupedByTable.map { case (table, configs) =>
+          val combinedWorkspaces = configs.flatMap { config =>
+            groupedWorkspaces
+              .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
+              .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+          }
+          table -> combinedWorkspaces
+        }
+      } yield combinedResults
     }
 }

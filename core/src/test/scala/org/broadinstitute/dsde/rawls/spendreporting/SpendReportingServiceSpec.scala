@@ -1305,7 +1305,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mockWorkspaceServiceConstructor
     )
     val result = service.getAllUserWorkspaceQuery(
-      billingProjectSpendExport,
+      billingProjectSpendExport.spendExportTable.get,
       workspaces,
       5,
       5
@@ -1317,20 +1317,20 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   }
 
-  "getBillingWithSpendPermission" should "return spendConfigurations for workspaces" in {
+  "getBillingWithSpendPermission" should "return spendExportTables for workspaces" in {
 
     val dataSource = mock[SlickDataSource]
 
     val billingProject1SpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
                                 RawlsBillingAccountName("billingAccount1"),
-                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+                                Some("billing_bq_project.billing_dataset.billing_table")
       )
 
     val billingProject2SpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
                                 RawlsBillingAccountName("billingAccount2"),
-                                Some("billing2_bq_project.billing2_dataset.billing2_table")
+                                Some("billing_bq_project.billing_dataset.billing_table")
       )
 
     val billingProject3SpendExport =
@@ -1428,12 +1428,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
 
     result shouldBe Map(
-      billingProject1SpendExport -> Seq(
+      "billing_bq_project.billing_dataset.billing_table" -> Seq(
         (workspace1Billing1.googleProjectId, workspace1Billing1.toWorkspaceName),
-        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName)
+        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName),
+        (workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)
       ),
-      billingProject2SpendExport -> Seq((workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)),
-      billingProject3SpendExport -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
+      "fakeTable" -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
     )
 
   }
