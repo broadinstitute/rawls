@@ -634,12 +634,16 @@ class SpendReportingService(
         results <- Future.sequence(billingMap.map { case (billingProject, workspaces) =>
           val query = getAllUserWorkspaceQuery(billingProject, workspaces, pageSize, offset)
           val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
-          runBigQueryJob(queryJob, childContext).map { result =>
-            result.getValues.asScala.toList match {
-              case Nil  => None
-              case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+          runBigQueryJob(queryJob, childContext)
+            .map { result =>
+              result.getValues.asScala.toList match {
+                case Nil  => None
+                case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+              }
             }
-          }
+            .recoverWith { case ex =>
+              Future.successful(None)
+            }
         })
         combinedResults = results.flatten.reduceOption((acc, res) =>
           SpendReportingResults(
@@ -655,11 +659,6 @@ class SpendReportingService(
         )
       } yield combinedResults
 
-//      } yield result.getValues.asScala.toList match {
-//        case Nil =>
-//          None
-//        case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
-//      }
     }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
