@@ -587,18 +587,7 @@ class SpendReportingService(
               Future.successful(None)
             }
         })
-        combinedResults = results.flatten.reduceOption((acc, res) =>
-          SpendReportingResults(
-            acc.spendDetails ++ res.spendDetails,
-            SpendReportingForDateRange(
-              (BigDecimal(acc.spendSummary.cost) + BigDecimal(res.spendSummary.cost)).toString,
-              (BigDecimal(acc.spendSummary.credits) + BigDecimal(res.spendSummary.credits)).toString,
-              acc.spendSummary.currency,
-              acc.spendSummary.startTime,
-              acc.spendSummary.endTime
-            )
-          )
-        )
+        combinedResults = results.flatten.reduceOption((acc, res) => acc + res)
       } yield combinedResults
 
     }
