@@ -33,7 +33,7 @@ class SubmissionsRepository(
           // If a workflow is not done, automatically change its status to Aborted
           _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspace).result.map { workflowRecords =>
             workflowRecords
-              .filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
+              .filter(workflowRecord => !workflowRecord.status.isDone)
               .foreach { workflowRecord =>
                 dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Aborted) { status =>
                   if (trackDetailedSubmissionMetrics)

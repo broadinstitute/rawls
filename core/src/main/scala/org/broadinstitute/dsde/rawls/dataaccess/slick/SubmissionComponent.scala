@@ -429,7 +429,7 @@ trait SubmissionComponent {
             (wr.id,
              Workflow(
                wr.externalId,
-               WorkflowStatuses.withName(wr.status),
+               wr.status,
                new DateTime(wr.statusLastChangedDate.getTime),
                entityRef,
                workflowResolutions.sortBy(_.inputName), // enforce consistent sorting
@@ -475,7 +475,7 @@ trait SubmissionComponent {
     def getSubmissionWorkflowStatusCounts(submissionId: UUID): ReadAction[Map[String, Int]] = {
       val query = for {
         workflow <- workflowQuery if workflow.submissionId === submissionId
-      } yield workflow.status
+      } yield workflow.status.toString
 
       query.result.map(wfs => wfs.groupBy(identity).view.mapValues(_.size).toMap)
     }

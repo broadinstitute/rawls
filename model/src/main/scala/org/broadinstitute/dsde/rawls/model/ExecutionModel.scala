@@ -151,7 +151,12 @@ case class WorkflowCost(
   cost: Option[Float]
 )
 
-case class WorkflowCostBreakdown(id: String, cost: BigDecimal, currency: String, status: String, errors: Seq[String])
+case class WorkflowCostBreakdown(id: String,
+                                 cost: BigDecimal,
+                                 currency: String,
+                                 status: WorkflowStatus,
+                                 errors: Seq[String]
+)
 
 case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
 
@@ -593,6 +598,8 @@ object WorkflowStatuses {
   sealed trait WorkflowStatus extends RawlsEnumeration[WorkflowStatus] {
     def isDone =
       terminalStatuses.contains(this)
+    def isAbortable =
+      abortableStatuses.contains(this)
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = WorkflowStatuses.withName(name)
   }

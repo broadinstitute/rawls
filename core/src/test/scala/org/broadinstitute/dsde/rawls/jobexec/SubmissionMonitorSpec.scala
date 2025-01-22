@@ -24,15 +24,13 @@ import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, never, spy, verify}
+import org.mockito.Mockito.{never, spy, verify}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import spray.json.JsObject
 
 import java.util.UUID
-import scala.Option
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -100,7 +98,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             workflowsRecs.map { workflowRec =>
               scala.util.Success(
                 Option(
-                  (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString),
+                  (workflowRec.copy(status = WorkflowStatuses.Succeeded),
                    Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> Left(AttributeString("foo")))))
                   )
                 )
@@ -156,7 +154,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         ignoreStatusLastChangedDate(
           ExecutionServiceStatusResponse(
             workflowsRecs.map { workflowRec =>
-              scala.util.Success(Option((workflowRec.copy(status = status.toString), None)))
+              scala.util.Success(Option((workflowRec.copy(status = status), None)))
             }
           )
         )
@@ -189,7 +187,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             ExecutionServiceStatusResponse(
               workflowsRecs.map { workflowRec =>
                 scala.util.Success(
-                  Option((workflowRec.copy(status = status.toString, cost = Some(BigDecimal(5))), None))
+                  Option((workflowRec.copy(status = status, cost = Some(BigDecimal(5))), None))
                 )
               }
             )
@@ -330,7 +328,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         workflowQuery
           .findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId))
           .map(_.status)
-          .update(status.toString)
+          .update(status)
       )
 
       val initialStatus = SubmissionStatuses.Submitted
@@ -366,7 +364,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         workflowQuery
           .findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId))
           .map(_.status)
-          .update(status.toString)
+          .update(status)
       )
 
       Set(SubmissionStatuses.Aborting, SubmissionStatuses.Submitted).foreach { initialStatus =>
@@ -403,7 +401,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             workflowQuery
               .findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId))
               .map(_.status)
-              .update(status.toString)
+              .update(status)
           )
 
           Set(SubmissionStatuses.Aborting, SubmissionStatuses.Submitted).foreach { initialStatus =>
@@ -457,7 +455,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       (WorkflowRecord(1,
                       Option("foo"),
                       UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
+                      WorkflowStatuses.Succeeded,
                       null,
                       Some(entityId),
                       0,
@@ -513,7 +511,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       (WorkflowRecord(1,
                       Option("foo"),
                       UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
+                      WorkflowStatuses.Succeeded,
                       null,
                       Some(entityId),
                       0,
@@ -568,7 +566,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       (WorkflowRecord(1,
                       Option("foo"),
                       UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
+                      WorkflowStatuses.Succeeded,
                       null,
                       Some(entityId),
                       0,
@@ -617,7 +615,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       (WorkflowRecord(1,
                       Option("foo"),
                       UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
+                      WorkflowStatuses.Succeeded,
                       null,
                       Some(entityId),
                       0,
@@ -655,7 +653,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           1,
           Option("foo"),
           UUID.randomUUID(),
-          WorkflowStatuses.Succeeded.toString,
+          WorkflowStatuses.Succeeded,
           null,
           Some(entityId),
           0,
@@ -700,7 +698,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       (WorkflowRecord(1,
                       Option("foo"),
                       UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
+                      WorkflowStatuses.Succeeded,
                       null,
                       Some(entityId),
                       0,
@@ -730,17 +728,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   it should "attachOutputs with no root entity" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
-      (WorkflowRecord(1,
-                      Option("foo"),
-                      UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
-                      null,
-                      None,
-                      0,
-                      None,
-                      None,
-                      None
-       ),
+      (WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded, null, None, 0, None, None, None),
        outputs
       )
     )
@@ -766,7 +754,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val workflowRecord = WorkflowRecord(1,
                                         Option("foo"),
                                         UUID.randomUUID(),
-                                        WorkflowStatuses.Succeeded.toString,
+                                        WorkflowStatuses.Succeeded,
                                         null,
                                         Some(entityId),
                                         0,
@@ -1236,7 +1224,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           await(
             monitor.handleStatusResponses(
               ExecutionServiceStatusResponse(
-                workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status.toString), None))))
+                workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status), None))))
               )
             )
           )
@@ -1262,7 +1250,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           await(
             monitor.handleStatusResponses(
               ExecutionServiceStatusResponse(
-                workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status.toString), None))))
+                workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status), None))))
               )
             )
           )
@@ -1291,7 +1279,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
               workflowsRecs.map(r =>
                 scala.util.Success(
                   Option(
-                    (r.copy(status = status.toString),
+                    (r.copy(status = status),
                      Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
                     )
                   )
@@ -1337,7 +1325,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           ExecutionServiceStatusResponse(
             workflowsRecs.map(r =>
               scala.util.Success(
-                Option((r.copy(status = WorkflowStatuses.Running.toString, cost = Option(BigDecimal(5))), None))
+                Option((r.copy(status = WorkflowStatuses.Running, cost = Option(BigDecimal(5))), None))
               )
             )
           )
@@ -1374,9 +1362,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
         override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
           if (id.equals(cheapWorkflowId)) {
-            Future.successful(WorkflowCostBreakdown(id, BigDecimal(1), "USD", status, Seq.empty))
+            Future.successful(
+              WorkflowCostBreakdown(id, BigDecimal(1), "USD", WorkflowStatuses.withName(status), Seq.empty)
+            )
           } else if (id.equals(expensiveWorkflowId)) {
-            Future.successful(WorkflowCostBreakdown(id, BigDecimal(11), "USD", status, Seq.empty))
+            Future.successful(
+              WorkflowCostBreakdown(id, BigDecimal(11), "USD", WorkflowStatuses.withName(status), Seq.empty)
+            )
           } else {
             Future.failed(new Exception("Unexpected workflow ID"))
           }
@@ -1430,10 +1422,12 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
         override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
           if (id.equals(cheapWorkflowId)) {
-            Future.successful(WorkflowCostBreakdown(id, BigDecimal(1), "USD", status, Seq.empty))
+            Future.successful(
+              WorkflowCostBreakdown(id, BigDecimal(1), "USD", WorkflowStatuses.withName(status), Seq.empty)
+            )
           } else if (id.equals(expensiveWorkflowId)) {
             Future.successful(
-              WorkflowCostBreakdown(id, BigDecimal(11), "USD", WorkflowStatuses.Aborting.toString, Seq.empty)
+              WorkflowCostBreakdown(id, BigDecimal(11), "USD", WorkflowStatuses.Aborting, Seq.empty)
             )
           } else {
             Future.failed(new Exception("Unexpected workflow ID"))
@@ -2180,7 +2174,9 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String, workflowCost:
   }
 
   override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
-    Future.successful(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, Seq.empty))
+    Future.successful(
+      WorkflowCostBreakdown(id, workflowCost, "USD", WorkflowStatuses.withName(workflowStatus), Seq.empty)
+    )
 
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 

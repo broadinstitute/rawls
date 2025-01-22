@@ -514,13 +514,9 @@ trait WorkspaceComponent {
           workflows <- workflowQuery if submissions.id === workflows.submissionId
         } yield (submissions.id, submissions.workspaceId, workflows.status, workflows.statusLastChangedDate)
       ).filter { case (_, _, status, _) =>
-        status === WorkflowStatuses.Failed.toString || status === WorkflowStatuses.Succeeded.toString
+        status == WorkflowStatuses.Failed || status == WorkflowStatuses.Succeeded
       }.map { case (submissionId, workspaceId, status, statusLastChangedDate) =>
-        (submissionId,
-         workspaceId,
-         Case If (status === WorkflowStatuses.Failed.toString) Then 1 Else 0,
-         statusLastChangedDate
-        )
+        (submissionId, workspaceId, Case If (status == WorkflowStatuses.Failed) Then 1 Else 0, statusLastChangedDate)
       }.groupBy { case (submissionId, workspaceId, _, _) =>
         (submissionId, workspaceId)
       }.map { case ((submissionId, workspaceId), recs) =>

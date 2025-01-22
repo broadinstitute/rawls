@@ -11,8 +11,9 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+import slick.ast.BaseTypedType
 import slick.dbio.Effect.Write
-import slick.jdbc.JdbcProfile
+import slick.jdbc.{JdbcProfile, JdbcType}
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -24,7 +25,7 @@ import java.util.UUID
 case class WorkflowRecord(id: Long,
                           externalId: Option[String],
                           submissionId: UUID,
-                          status: String,
+                          status: WorkflowStatus,
                           statusLastChangedDate: Timestamp,
                           workflowEntityId: Option[Long],
                           recordVersion: Long,
@@ -44,11 +45,17 @@ trait WorkflowComponent {
 
   import driver.api._
 
+  implicit lazy val workflowStatusColumnType: JdbcType[WorkflowStatus] with BaseTypedType[WorkflowStatus] =
+    MappedColumnType.base[WorkflowStatus, String](
+      status => status.toString,
+      stringValue => WorkflowStatuses.withName(stringValue)
+    )
+
   class WorkflowTable(tag: Tag) extends Table[WorkflowRecord](tag, "WORKFLOW") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def externalId = column[Option[String]]("EXTERNAL_ID", O.SqlType("CHAR(36)"))
     def submissionId = column[UUID]("SUBMISSION_ID")
-    def status = column[String]("STATUS", O.Length(32))
+    def status = column[WorkflowStatus]("STATUS", O.Length(32))
     def statusLastChangedDate =
       column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
@@ -75,6 +82,7 @@ trait WorkflowComponent {
     def uniqueWorkflowEntity = index("idx_workflow_entity", (submissionId, workflowEntityId), unique = true)
     def statusIndex = index("idx_workflow_status", status)
     def executionServiceKeyIndex = index("idx_workflow_exec_service_key", executionServiceKey)
+
   }
 
   class WorkflowMessageTable(tag: Tag) extends Table[WorkflowMessageRecord](tag, "WORKFLOW_MESSAGE") {
@@ -158,7 +166,7 @@ trait WorkflowComponent {
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
-          recsToInsert.foreach(wf => wfStatusCounter(WorkflowStatuses.withName(wf.status)).foreach(_ += 1))
+          recsToInsert.foreach(wf => wfStatusCounter(wf.status).foreach(_ += 1))
           rows
         } andThen {
           externalEntityInfo match {
@@ -342,7 +350,7 @@ trait WorkflowComponent {
           )
         )
         .map { result =>
-          wfStatusCounter(WorkflowStatuses.withName(workflowRecord.status)).foreach(_ += result)
+          wfStatusCounter(workflowRecord.status).foreach(_ += result)
           result
         }
 
@@ -376,7 +384,7 @@ trait WorkflowComponent {
 
     def findActiveWorkflows(workspaceContext: Workspace): WorkflowQueryType =
       findWorkflowsByWorkspace(workspaceContext).filter(
-        _.status inSetBind ((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map { _.toString })
+        _.status inSetBind (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses)
       )
 
     def deleteWorkflowAttributes(id: Long) =
@@ -420,22 +428,25 @@ trait WorkflowComponent {
     def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID,
                                                  statuses: WorkflowStatuses.WorkflowStatus*
     ): ReadAction[Seq[WorkflowRecord]] =
-      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind (statuses.map(_.toString))).result
+      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind statuses).result
 
     def countWorkflowsForSubmissionByQueueStatus(submissionId: UUID): ReadAction[Map[String, Int]] = {
       val groupedSeq = findWorkflowsBySubmissionId(submissionId)
         .groupBy(_.status)
-        .map { case (status, recs) => (status, recs.length) }
+        .map { case (status, recs) => (status.toString, recs.length) }
         .result
       groupedSeq.map(_.toMap)
     }
 
     def countAllStatuses: ReadAction[Map[String, Int]] =
-      groupBy(_.status).map { case (status, workflows) => status -> workflows.length }.result map { _.toMap }
+      groupBy(_.status).map { case (status, workflows) => status.toString -> workflows.length }.result map { _.toMap }
 
     def countWorkflowsByQueueStatus: ReadAction[Map[String, Int]] = {
       val groupedSeq =
-        findQueuedAndRunningWorkflows.groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
+        findQueuedAndRunningWorkflows
+          .groupBy(_.status)
+          .map { case (status, recs) => (status.toString, recs.length) }
+          .result
       groupedSeq.map(_.toMap)
     }
 
@@ -449,7 +460,7 @@ trait WorkflowComponent {
 
       val groupedSeq = userWorkflowQuery
         .groupBy { case (submission, workflow) =>
-          (submission.submitterId, workflow.status)
+          (submission.submitterId, workflow.status.toString)
         }
         .map { case ((email, status), recs) =>
           (email, status, recs.length)
@@ -490,7 +501,7 @@ trait WorkflowComponent {
     def getFirstQueuedWorkflow(submitter: String): ReadAction[Option[WorkflowRecord]] = {
       val query = for {
         submission <- submissionQuery.filter(_.submitterId === submitter)
-        workflows <- filter(_.status === WorkflowStatuses.Queued.toString).filter(_.submissionId === submission.id)
+        workflows <- filter(_.status == WorkflowStatuses.Queued).filter(_.submissionId === submission.id)
       } yield workflows
 
       uniqueResult(query.sortBy(_.statusLastChangedDate).take(1).result)
@@ -519,7 +530,7 @@ trait WorkflowComponent {
                                             statuses: Seq[WorkflowStatuses.WorkflowStatus]
     ): ReadAction[Seq[(String, Int)]] = {
       val query = for {
-        workflows <- this if workflows.status inSetBind (statuses.map(_.toString))
+        workflows <- this if workflows.status inSetBind statuses
         submission <- submissionQuery if workflows.submissionId === submission.id
       } yield (submission.submitterId, workflows)
 
@@ -531,7 +542,7 @@ trait WorkflowComponent {
     }
 
     def countWorkflows(statuses: Seq[WorkflowStatuses.WorkflowStatus]): ReadAction[Int] =
-      filter(_.status inSetBind (statuses.map(_.toString))).length.result
+      filter(_.status inSetBind statuses).length.result
 
     /*
       the find methods
@@ -550,7 +561,7 @@ trait WorkflowComponent {
       filter(wf => wf.externalId === externalId && wf.submissionId === submissionId)
 
     def findWorkflowsForAbort(submissionId: UUID): WorkflowQueryType = {
-      val statuses: Traversable[String] = WorkflowStatuses.abortableStatuses map (_.toString)
+      val statuses: Traversable[WorkflowStatus] = WorkflowStatuses.abortableStatuses
       filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses))
     }
 
@@ -570,7 +581,7 @@ trait WorkflowComponent {
     def findQueuedWorkflows(excludedSubmitters: Seq[String],
                             excludedSubmissionStatuses: Seq[SubmissionStatus]
     ): WorkflowQueryType = {
-      val queuedWorkflows = filter(_.status === WorkflowStatuses.Queued.toString)
+      val queuedWorkflows = filter(_.status == WorkflowStatuses.Queued)
       val query = if (excludedSubmitters.isEmpty && excludedSubmissionStatuses.isEmpty) {
         queuedWorkflows
       } else {
@@ -592,7 +603,8 @@ trait WorkflowComponent {
     }
 
     def findWorkflowsQueuedBefore(lastChangedDate: Timestamp): WorkflowQueryType =
-      filter(wf => wf.status === WorkflowStatuses.Queued.toString && wf.statusLastChangedDate < lastChangedDate)
+      filter(wf => wf.status.equals(WorkflowStatuses.Queued) && wf.statusLastChangedDate < lastChangedDate)
+//      filter(wf => wf.status == WorkflowStatuses.Queued && wf.statusLastChangedDate < lastChangedDate)
 
     def findWorkflowMessagesById(workflowId: Long) =
       workflowMessageQuery filter (_.workflowId === workflowId)
@@ -610,9 +622,7 @@ trait WorkflowComponent {
       } yield wf
 
     def findQueuedAndRunningWorkflows: WorkflowQueryType =
-      filter(rec =>
-        rec.status inSetBind ((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map { _.toString })
-      )
+      filter(rec => rec.status inSetBind (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses))
 
     /*
       the marshal and unmarshal methods
@@ -627,7 +637,7 @@ trait WorkflowComponent {
         0,
         workflow.workflowId,
         submissionId,
-        workflow.status.toString,
+        workflow.status,
         new Timestamp(workflow.statusLastChangedDate.toDate.getTime),
         entityId,
         0,
@@ -643,7 +653,7 @@ trait WorkflowComponent {
     ): Workflow =
       Workflow(
         workflowRec.externalId,
-        WorkflowStatuses.withName(workflowRec.status),
+        workflowRec.status,
         new DateTime(workflowRec.statusLastChangedDate.getTime),
         entity,
         inputResolutions,

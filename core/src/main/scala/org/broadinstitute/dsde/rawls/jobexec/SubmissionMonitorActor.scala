@@ -5,9 +5,7 @@ import akka.pattern._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
@@ -52,7 +50,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
-import spray.json._
 
 /**
  * Created by dvoet on 6/26/15.
@@ -256,7 +253,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord], petUser: UserInfo) =
       Future.traverse(externalWorkflowIds) { workflowRec =>
-        // for each workflow query the exec service for status and if has Succeeded query again for outputs
+        // for each workflow query the exec service for status and if it has Succeeded query again for outputs
         toFutureTry(execServiceStatus(workflowRec, petUser) flatMap {
           case Some(updatedWorkflowRec) =>
             execServiceOutputs(updatedWorkflowRec, petUser)
@@ -318,17 +315,17 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           updatedWorkflowRec <-
             if (
               costBreakdown.cost > costCap &&
-              WorkflowStatuses.abortableStatuses.contains(
-                WorkflowStatuses
-                  .withName(costBreakdown.status)
-              )
+              costBreakdown.status.isAbortable
             ) {
               executionServiceCluster.abort(workflowRec, petUser).map {
                 case Success(abortedWfRec) =>
                   logger.info(
                     s"Aborted workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap."
                   )
-                  Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
+                  Option(
+                    workflowRec
+                      .copy(status = WorkflowStatuses.withName(abortedWfRec.status), cost = costBreakdown.cost.some)
+                  )
                 case Failure(t) =>
                   logger.error(
                     s"Failed to abort workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap. Error: ${t.getMessage}"
@@ -345,7 +342,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // fetch workflow status only if cost cap threshold is not defined
       case (Some(externalId), None) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
-          if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
+          if (newStatus.status != workflowRec.status.toString)
+            Option(workflowRec.copy(status = WorkflowStatuses.withName(newStatus.status)))
           else None
         }
       case _ => Future.successful(None)
@@ -354,7 +352,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def execServiceOutputs(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit
     executionContext: ExecutionContext
   ): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] =
-    WorkflowStatuses.withName(workflowRec.status) match {
+    workflowRec.status match {
       case status if status == WorkflowStatuses.Succeeded =>
         executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
       case _ => Future.successful(Some((workflowRec, None)))
@@ -482,18 +480,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             currentRec <- dataAccess.workflowQuery.findWorkflowById(workflowRec.id).result.head
             // No need to update statuses for any workflows that are in terminal statuses.
             // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by handleOutputs.
-            doRecordUpdate = !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(currentRec.status))
+            doRecordUpdate = !currentRec.status.isDone
             numRowsUpdated <-
               if (doRecordUpdate) {
                 for {
                   updateResult <-
                     if (perWorkflowCostCap.isDefined) {
                       dataAccess.workflowQuery.updateStatusAndCost(currentRec,
-                                                                   WorkflowStatuses.withName(workflowRec.status),
+                                                                   workflowRec.status,
                                                                    workflowRec.cost.getOrElse(BigDecimal(0))
                       )
                     } else {
-                      dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
+                      dataAccess.workflowQuery.updateStatus(currentRec, workflowRec.status)
                     }
                   _ = logger.info(
                     s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"

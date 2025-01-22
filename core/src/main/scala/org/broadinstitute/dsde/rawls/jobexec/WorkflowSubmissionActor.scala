@@ -551,7 +551,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         // save successes as submitted workflows and hook up their cromwell ids
         val successUpdates = results collect { case (wfRec, Left(success: ExecutionServiceStatus)) =>
           val updatedWfRec = wfRec.copy(externalId = Option(success.id),
-                                        status = success.status,
+                                        status = WorkflowStatuses.withName(success.status),
                                         executionServiceKey = Option(executionServiceKey.toString)
           )
           dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
