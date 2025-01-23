@@ -347,10 +347,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                   )
               }
             } else {
-              // TODO CORE-217: don't update unless status or cost has actually changed?
-              //   Do we need to incrementally update cost?
-              //   If we track cost changes on every iteration, we're going to blow up the AUDIT_WORKFLOW_STATUS table
-              Future.successful(Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some)))
+              // don't update unless status or cost has actually changed
+              if (costBreakdown.status != workflowRec.status || Option(costBreakdown.cost) != workflowRec.cost) {
+                Future.successful(
+                  Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+                )
+              } else {
+                Future.successful(None)
+              }
             }
         } yield updatedWorkflowRec
       // fetch workflow status only if cost cap threshold is not defined
