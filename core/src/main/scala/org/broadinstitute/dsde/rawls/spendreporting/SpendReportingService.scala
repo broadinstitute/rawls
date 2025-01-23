@@ -358,7 +358,8 @@ class SpendReportingService(
   }
 
   def getAllUserWorkspaceQuery(
-    billingProjects: Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]],
+    spendExportTable: String,
+    workspaces: Seq[GoogleProjectId],
     pageSize: Int,
     offset: Int
   ): String = {
@@ -383,16 +384,16 @@ class SpendReportingService(
                        |    spend_category,
                        |    currency""".stripMargin.trim
 
-    val bpSubQuery = billingProjects
-      .map { bp =>
-        val tableName = bp._1.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-        val timePartitionColumn: String = getTimePartitionColumn(tableName)
-        baseQuery
-          .replace("_PARTITIONTIME", timePartitionColumn)
-          .replace("_BILLING_ACCOUNT_TABLE", tableName)
-          .replace("_PROJECT_ID_LIST", "(" + bp._2.map(tuple => s""""${tuple._1.value}"""").mkString(", ") + ")")
-      }
-      .mkString("\nUNION ALL\n")
+    val timePartitionColumn: String = getTimePartitionColumn(spendExportTable)
+    val bpSubQuery =
+      baseQuery
+        .replace("_PARTITIONTIME", timePartitionColumn)
+        .replace("_BILLING_ACCOUNT_TABLE", spendExportTable)
+        .replace("_PROJECT_ID_LIST",
+                 workspaces
+                   .map(projectId => s""""${projectId}"""")
+                   .mkString("(", ", ", ")")
+        )
 
     s"""WITH spend_categories AS (
        |$bpSubQuery
@@ -568,15 +569,27 @@ class SpendReportingService(
           return Future.successful(None)
         }
         projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
-        query = getAllUserWorkspaceQuery(billingMap, pageSize, offset)
-        queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+        tableToProjectIdsMap: Map[String, Seq[GoogleProjectId]] = billingMap.map { case (table, workspaces) =>
+          table -> workspaces.map(_._1)
+        }
+        results <- Future.sequence(tableToProjectIdsMap.map { case (spendExportTable, projects) =>
+          val query = getAllUserWorkspaceQuery(spendExportTable, projects, pageSize, offset)
+          val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+          runBigQueryJob(queryJob, childContext)
+            .map { result =>
+              result.getValues.asScala.toList match {
+                case Nil  => None
+                case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+              }
+            }
+            .recoverWith { case ex: Throwable =>
+              logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
+              Future.successful(None)
+            }
+        })
+        combinedResults = results.flatten.reduceOption((acc, res) => acc + res)
+      } yield combinedResults
 
-        result <- runBigQueryJob(queryJob, childContext)
-      } yield result.getValues.asScala.toList match {
-        case Nil =>
-          None
-        case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
-      }
     }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
@@ -590,7 +603,7 @@ class SpendReportingService(
 
   def getBillingWithSpendPermission(
     parentContext: RawlsRequestContext
-  ): Future[Map[BillingProjectSpendExport, Seq[(GoogleProjectId, WorkspaceName)]]] =
+  ): Future[Map[String, Seq[(GoogleProjectId, WorkspaceName)]]] =
     traceFutureWithParent("getBillingWithSpendPermission", parentContext) { childContext =>
       for {
         ownerWorkspaces <- samDAO.listResourcesWithActions(
@@ -617,10 +630,17 @@ class SpendReportingService(
           } else {
             getSpendExportConfigurations(groupedWorkspaces.keys.toList)
           }
-      } yield spendConfigs.map { config =>
-        config -> groupedWorkspaces
-          .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
-          .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
-      }.toMap
+        groupedByTable = spendConfigs.groupBy(
+          _.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+        )
+        combinedResults = groupedByTable.map { case (table, configs) =>
+          val combinedWorkspaces = configs.flatMap { config =>
+            groupedWorkspaces
+              .getOrElse(RawlsBillingProjectName(config.billingProjectName.value), Seq.empty)
+              .map(ws => (ws.googleProjectId, ws.toWorkspaceName))
+          }
+          table -> combinedWorkspaces
+        }
+      } yield combinedResults
     }
 }

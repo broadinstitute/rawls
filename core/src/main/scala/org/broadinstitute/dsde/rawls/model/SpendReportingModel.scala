@@ -23,7 +23,21 @@ case class SpendReportingAggregationKeyWithSub(key: SpendReportingAggregationKey
                                                subAggregationKey: Option[SpendReportingAggregationKey] = None
 )
 
-case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
+case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation],
+                                 spendSummary: SpendReportingForDateRange
+) {
+  def +(other: SpendReportingResults): SpendReportingResults =
+    new SpendReportingResults(
+      spendDetails ++ other.spendDetails,
+      SpendReportingForDateRange(
+        (BigDecimal(this.spendSummary.cost) + BigDecimal(other.spendSummary.cost)).toString,
+        (BigDecimal(this.spendSummary.credits) + BigDecimal(other.spendSummary.credits)).toString,
+        this.spendSummary.currency,
+        this.spendSummary.startTime,
+        this.spendSummary.endTime
+      )
+    )
+}
 object SpendReportingResults {
   def apply(spendReport: bio.terra.profile.model.SpendReport): SpendReportingResults = {
 

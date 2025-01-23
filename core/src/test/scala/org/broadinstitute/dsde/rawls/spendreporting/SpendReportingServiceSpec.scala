@@ -1239,37 +1239,17 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     result shouldBe Map(GoogleProjectId("v2ProjectId") -> v2Workspace.toWorkspaceName)
   }
 
-  "getAllUserWorkspaceQuery" should "union all billingProjects with their workspace projects" in {
+  "getAllUserWorkspaceQuery" should "generate a query for a billingProject with its workspace projects" in {
 
-    val billingProject1SpendExport =
+    val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
                                 RawlsBillingAccountName("billingAccount1"),
                                 Some("billing1_bq_project.billing1_dataset.billing1_table")
       )
 
-    val billingProject2SpendExport =
-      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
-                                RawlsBillingAccountName("billingAccount2"),
-                                Some("billing2_bq_project.billing2_dataset.billing2_table")
-      )
-
-    val billingProject3SpendExport =
-      BillingProjectSpendExport(RawlsBillingProjectName("billingProject3"),
-                                RawlsBillingAccountName("billingAccount3"),
-                                None
-      )
-
-    val inputMap = Map(
-      billingProject1SpendExport -> Seq(
-        (GoogleProjectId("workspace2ProjectId"), WorkspaceName("billingProject1", "workspace2")),
-        (GoogleProjectId("workspace1ProjectId"), WorkspaceName("billingProject1", "workspace1"))
-      ),
-      billingProject2SpendExport -> Seq(
-        (GoogleProjectId("workspace3ProjectId"), WorkspaceName("billingProject2", "workspace3"))
-      ),
-      billingProject3SpendExport -> Seq(
-        (GoogleProjectId("workspace4ProjectId"), WorkspaceName("billingProject3", "workspace4"))
-      )
+    val workspaces = Seq(
+      GoogleProjectId("workspace2ProjectId"),
+      GoogleProjectId("workspace1ProjectId")
     )
 
     val expectedQuery =
@@ -1293,46 +1273,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    project_id,
           |    spend_category,
           |    currency
-          | UNION ALL
-          |    SELECT
-          |      project.id AS project_id,
-          |      currency,
-          |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-          |      CASE
-          |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
-          |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
-          |        ELSE 'Other'
-          |      END AS spend_category,
-          |      SUM(CAST(cost AS FLOAT64)) AS category_cost
-          |    FROM
-          |      billing2_bq_project.billing2_dataset.billing2_table
-          |    where
-          |      project.id in ("workspace3ProjectId") AND
-          |      _PARTITIONTIME BETWEEN @startDate AND @endDate
-          |    GROUP BY
-          |      project_id,
-          |      spend_category,
-          |      currency
-          | UNION ALL
-          |    SELECT
-          |      project.id AS project_id,
-          |      currency,
-          |      SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-          |      CASE
-          |        WHEN service.description IN ('Cloud Storage') THEN 'Storage'
-          |        WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
-          |        ELSE 'Other'
-          |      END AS spend_category,
-          |      SUM(CAST(cost AS FLOAT64)) AS category_cost
-          |    FROM
-          |      fakeTable
-          |    where
-          |      project.id in ("workspace4ProjectId") AND
-          |      fakeTimePartitionColumn BETWEEN @startDate AND @endDate
-          |    GROUP BY
-          |      project_id,
-          |      spend_category,
-          |      currency
           |)
           |SELECT
           |  project_id,
@@ -1365,7 +1305,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mockWorkspaceServiceConstructor
     )
     val result = service.getAllUserWorkspaceQuery(
-      inputMap,
+      billingProjectSpendExport.spendExportTable.get,
+      workspaces,
       5,
       5
     )
@@ -1376,20 +1317,20 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   }
 
-  "getBillingWithSpendPermission" should "return spendConfigurations for workspaces" in {
+  "getBillingWithSpendPermission" should "return spendExportTables for workspaces" in {
 
     val dataSource = mock[SlickDataSource]
 
     val billingProject1SpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
                                 RawlsBillingAccountName("billingAccount1"),
-                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+                                Some("billing_bq_project.billing_dataset.billing_table")
       )
 
     val billingProject2SpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
                                 RawlsBillingAccountName("billingAccount2"),
-                                Some("billing2_bq_project.billing2_dataset.billing2_table")
+                                Some("billing_bq_project.billing_dataset.billing_table")
       )
 
     val billingProject3SpendExport =
@@ -1487,12 +1428,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
 
     result shouldBe Map(
-      billingProject1SpendExport -> Seq(
+      "billing_bq_project.billing_dataset.billing_table" -> Seq(
         (workspace1Billing1.googleProjectId, workspace1Billing1.toWorkspaceName),
-        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName)
+        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName),
+        (workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)
       ),
-      billingProject2SpendExport -> Seq((workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)),
-      billingProject3SpendExport -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
+      "fakeTable" -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
     )
 
   }
@@ -1629,7 +1570,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val zero = BigDecimal("0.00")
     val total = price1 + price2
 
-    val table: List[Map[String, String]] = List(
+    val table1: List[Map[String, String]] = List(
       Map(
         "storage_cost" -> s"$price1",
         "compute_cost" -> s"$zero",
@@ -1641,7 +1582,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
         "other_credits" -> s"$zero"
-      ),
+      )
+    )
+    val table2: List[Map[String, String]] = List(
       Map(
         "storage_cost" -> s"$price2",
         "compute_cost" -> s"$zero",
@@ -1656,13 +1599,22 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     )
 
-    val bigQueryService = mockBigQuery(table)
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val job1 = mock[Job]
+    when(job1.getQueryResults(any())).thenReturn(createTableResult(table1))
+    when(job1.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
+    when(job1.waitFor()).thenReturn(job1)
+    val job2 = mock[Job]
+    when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
+    when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
+    when(job2.waitFor()).thenReturn(job2)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job1), IO(job2))
 
     val service = spy(
       new SpendReportingService(
         testContext,
         mock[SlickDataSource],
-        bigQueryService,
+        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
         billingRepository,
         bpmDAO,
         samDAO,
@@ -1687,6 +1639,157 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     spendSummary.credits shouldBe zero.toString()
     spendSummary.cost shouldBe (total + price2).toString()
+    spendSummary.currency shouldBe "USD"
+    spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
+      ISODateTimeFormat.date()
+    )
+    spendSummary.endTime.get.toString(ISODateTimeFormat.date()) shouldBe to.toString(ISODateTimeFormat.date())
+
+  }
+
+  "getSpendForAllWorkspaces" should "handle errors from bigquery gracefully" in {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+    // Billing projects
+    val billingProfileId1 = UUID.randomUUID()
+    val projectName1 = RawlsBillingProjectName("billingProject1")
+    val billingAccount1 = RawlsBillingAccountName("billingAcct1")
+    val billingProject1 = RawlsBillingProject(
+      projectName1,
+      CreationStatuses.Ready,
+      Option(billingAccount1),
+      None,
+      billingProfileId = Option.apply(billingProfileId1.toString)
+    )
+    val billingProfileId2 = UUID.randomUUID()
+    val projectName2 = RawlsBillingProjectName("billingProject2")
+    val billingAccount2 = RawlsBillingAccountName("billingAcct2")
+    val billingProject2 = RawlsBillingProject(
+      projectName2,
+      CreationStatuses.Ready,
+      Option(billingAccount2),
+      None,
+      billingProfileId = Option.apply(billingProfileId2.toString)
+    )
+
+    // Billing project spend exports
+    val billingProject1SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject1"),
+                                RawlsBillingAccountName("billingAccount1"),
+                                Some("billing1_bq_project.billing1_dataset.billing1_table")
+      )
+
+    val billingProject2SpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                None
+      )
+
+    // Workspaces
+    val workspace1Billing1 =
+      TestData.workspace("workspace1Billing1",
+                         GoogleProjectId("workspace1ProjectId"),
+                         WorkspaceVersions.V1,
+                         "billingProject1"
+      )
+    val workspace2Billing2 =
+      TestData.workspace("workspace2Billing2",
+                         GoogleProjectId("workspace2ProjectId"),
+                         WorkspaceVersions.V2,
+                         "billingProject2"
+      )
+
+    val mockWorkspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+    when(mockWorkspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(
+        Future.successful(
+          Map(billingProject1.projectName -> List(workspace1Billing1),
+              billingProject2.projectName -> List(workspace2Billing2)
+          )
+        )
+      )
+
+    val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = { _ =>
+      mockWorkspaceService
+    }
+
+    when(billingRepository.getBillingProject(mockitoEq(projectName1)))
+      .thenReturn(Future.successful(Option.apply(billingProject1)))
+    when(billingRepository.getBillingProject(mockitoEq(projectName2)))
+      .thenReturn(Future.successful(Option.apply(billingProject2)))
+
+    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(
+      Future.successful(
+        List(
+          new FilteredFlatResource().resourceId(UUID.randomUUID().toString),
+          new FilteredFlatResource().resourceId(UUID.randomUUID().toString)
+        )
+      )
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val price1 = BigDecimal("10.22")
+    val price2 = BigDecimal("50.74")
+    val zero = BigDecimal("0.00")
+    val total = price1 + price2
+
+    val table: List[Map[String, String]] = List(
+      Map(
+        "storage_cost" -> s"$price1",
+        "compute_cost" -> s"$zero",
+        "other_cost" -> s"$price2",
+        "total_cost" -> s"$total",
+        "currency" -> "USD",
+        "project_id" -> "workspace1ProjectId",
+        "project_name" -> "terra-billing-project1",
+        "storage_credits" -> s"$zero",
+        "compute_credits" -> s"$zero",
+        "other_credits" -> s"$zero"
+      )
+    )
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any()))
+      .thenReturn(IO(job))
+      .thenAnswer(_ => IO.raiseError(new RuntimeException("BigQuery has errored")))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
+    )
+    doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport)))
+      .when(service)
+      .getSpendExportConfigurations(
+        any()
+      )
+
+    val result = Await.result(
+      service.getSpendForAllWorkspaces(from, to, 100, 0),
+      Duration.Inf
+    )
+
+    result.get.spendDetails.length shouldBe 1
+
+    val spendSummary = result.get.spendSummary
+
+    spendSummary.credits shouldBe zero.toString()
+    spendSummary.cost shouldBe total.toString()
     spendSummary.currency shouldBe "USD"
     spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
       ISODateTimeFormat.date()
