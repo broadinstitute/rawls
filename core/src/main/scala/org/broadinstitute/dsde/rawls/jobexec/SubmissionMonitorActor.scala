@@ -323,17 +323,28 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                   .withName(costBreakdown.status)
               )
             ) {
-              executionServiceCluster.abort(workflowRec, petUser).map {
+              executionServiceCluster.abort(workflowRec, petUser).flatMap {
                 case Success(abortedWfRec) =>
-                  logger.info(
-                    s"Aborted workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap."
-                  )
-                  Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
+                  datasource
+                    .inTransaction { dataAccess =>
+                      dataAccess.workflowQuery.saveMessages(
+                        Seq(AttributeString("Cost limit reached. Workflow was aborted to prevent cost overrun.")),
+                        workflowRec.id
+                      )
+                    }
+                    .map { _ =>
+                      logger.info(
+                        s"Aborted workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap."
+                      )
+                      Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
+                    }
                 case Failure(t) =>
                   logger.error(
                     s"Failed to abort workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap. Error: ${t.getMessage}"
                   )
-                  Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+                  Future.successful(
+                    Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+                  )
               }
             } else {
               // TODO CORE-217: don't update unless status or cost has actually changed?

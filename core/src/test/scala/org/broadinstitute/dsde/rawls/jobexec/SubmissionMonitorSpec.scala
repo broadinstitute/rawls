@@ -1462,6 +1462,53 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       verify(spyExecutionServiceDAO, never()).abort(any[String], any[UserInfo])
   }
 
+  it should "persist a message when aborting a workflow due to cost cap" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission =
+        testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(expensiveWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(11), "USD", status, Seq.empty))
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
+        perWorkflowCostCap = Option(BigDecimal(2))
+      )
+
+      // trigger a monitor pass, which should abort the workflow due to cost limit
+      val workflows = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflows should have size 1
+      // check the messages for the workflow
+      val actualMessages =
+        runAndWait(workflowQuery.get(workflows.head.id))
+          .getOrElse(fail())
+          .messages
+      actualMessages should have size 1
+      actualMessages.head.value shouldBe "Cost limit reached. Workflow was aborted to prevent cost overrun."
+  }
+
   it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val unboundExprStr = AttributeString("")
