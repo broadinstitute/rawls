@@ -433,7 +433,8 @@ trait SubmissionComponent {
                new DateTime(wr.statusLastChangedDate.getTime),
                entityRef,
                workflowResolutions.sortBy(_.inputName), // enforce consistent sorting
-               messages
+               messages,
+               wr.cost.map(_.floatValue)
              )
             )
           }.toSeq

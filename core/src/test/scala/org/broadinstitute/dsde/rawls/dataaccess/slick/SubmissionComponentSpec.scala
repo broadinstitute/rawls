@@ -6,6 +6,7 @@ import cats.implicits._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.scalatest.AppendedClues.convertToClueful
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -406,6 +407,47 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
         }
       })
     }
+  }
+
+  it should "return workflow costs when getting a submission" in withDefaultTestDatabase {
+    val workspaceContext = testData.workspace
+
+    assert(submissionExternalEntities.externalEntityInfo.isDefined)
+
+    runAndWait(submissionQuery.create(workspaceContext, submissionExternalEntities))
+
+    // get the 3 workflows in this query
+    val workflowRecs =
+      runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionExternalEntities.submissionId)))
+
+    // update the costs for the workflows, using their external entities "e1", "e2", and "e3" to identify them
+    // the workflow which ran on entity "e1" will have cost 1. "e2" will have cost 2 and "e3" will have cost 3.
+    List(1, 2, 3) foreach { idx =>
+      val targetWorkflowRec = workflowRecs
+        .find(w => w.externalEntityId.contains(s"e$idx"))
+        .getOrElse(fail(s"workflow record not found for idx: $idx"))
+      runAndWait(
+        workflowQuery.updateStatusAndCost(targetWorkflowRec,
+                                          WorkflowStatuses.withName(targetWorkflowRec.status),
+                                          BigDecimal(idx)
+        )
+      )
+    }
+
+    // after updating costs, get the submission
+    val actualSubmission = runAndWait(submissionQuery.get(workspaceContext, submissionExternalEntities.submissionId))
+      .getOrElse(fail("submission not found after updating costs"))
+
+    actualSubmission.workflows should have size 3
+
+    actualSubmission.workflows.foreach { workflow =>
+      val idx =
+        workflow.workflowEntity.map(_.entityName).getOrElse(fail("workflow entity not found")).replaceFirst("e", "")
+      workflow.cost should contain(
+        BigDecimal(idx).floatValue
+      ) withClue s"for workflow with external entity e$idx"
+    }
+
   }
 
   "WorkflowComponent" should "update the status of a workflow and increment record version" in withDefaultTestDatabase {
