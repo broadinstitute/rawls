@@ -457,8 +457,12 @@ class SubmissionsService(
             case Success(costMap) =>
               val costedWorkflows = submission.workflows.map { workflow =>
                 workflow.workflowId match {
-                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
-                  case None       => workflow
+                  case Some(wfId) =>
+                    // prefer the actual cost from the cost map;
+                    // use Cromwell-estimated cost from the workflow if not
+                    val calculatedCost = costMap.get(wfId).orElse(workflow.cost)
+                    workflow.copy(cost = calculatedCost)
+                  case None => workflow
                 }
               }
               val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
