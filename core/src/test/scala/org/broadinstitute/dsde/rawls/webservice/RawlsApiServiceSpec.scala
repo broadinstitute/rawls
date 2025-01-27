@@ -35,7 +35,7 @@ class RawlsApiServiceSpec extends ApiServiceSpec with VersionApiService {
   )
   override val appVersion = ApplicationVersion("githash", "buildnumber", "version")
 
-  "RootRawlsApiService" should "get a version" in {
+  "RootRawlsApiService" should "get a version" in
     withStatsD {
       Get("/version") ~>
         sealRoute(captureRequestMetrics(traceRequests(_ => versionRoutes))) ~>
@@ -47,16 +47,14 @@ class RawlsApiServiceSpec extends ApiServiceSpec with VersionApiService {
       val expected = expectedHttpRequestMetrics("get", "version", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
-  }
 
-  it should "return the cromwell version" in {
+  it should "return the cromwell version" in
     Get("/version/executionEngine") ~>
-      sealRoute(versionRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-        responseAs[ExecutionServiceVersion]
-      }
-  }
+    sealRoute(versionRoutes) ~>
+    check {
+      assertResult(StatusCodes.OK)(status)
+      responseAs[ExecutionServiceVersion]
+    }
 
   behavior of "ExceptionHandler"
 

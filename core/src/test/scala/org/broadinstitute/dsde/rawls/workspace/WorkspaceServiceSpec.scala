@@ -513,7 +513,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "pass sam read action check for a user with read access in a locked workspace" in {
+  it should "pass sam read action check for a user with read access in a locked workspace" in
     withTestDataServicesCustomSam { services =>
       populateWorkspacePolicies(services,
                                 testData.workspaceNoSubmissions
@@ -538,7 +538,6 @@ class WorkspaceServiceSpec
         rqComplete
       }
     }
-  }
 
   it should "fail sam write action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(
     testData.userReader

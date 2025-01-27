@@ -1735,7 +1735,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     }
   }
 
-  it should "handleStatusResponses and fail workflows that have invalid output expressions" in {
+  it should "handleStatusResponses and fail workflows that have invalid output expressions" in
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       runAndWait {
         withWorkspaceContext(testData.workspace) { context =>
@@ -1797,7 +1797,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         ).get.status
       }
     }
-  }
 
   it should "fail workflows that exceed the configured workspace attribute maximum" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>

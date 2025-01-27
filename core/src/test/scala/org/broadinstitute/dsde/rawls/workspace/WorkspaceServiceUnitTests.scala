@@ -399,7 +399,7 @@ class WorkspaceServiceUnitTests
     verify(sam).userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.compute, ctx)
   }
 
-  it should "return true for canShare if the user is a workspace or project owner" in {
+  it should "return true for canShare if the user is a workspace or project owner" in
     forAll(Table("role", "OWNER", "PROJECT_OWNER")) { (role: String) =>
       val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
       val wsm = mock[WorkspaceManagerDAO]
@@ -416,9 +416,8 @@ class WorkspaceServiceUnitTests
       result.canShare shouldBe Some(true)
       verify(sam).listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
     }
-  }
 
-  it should "query sam for canShare if the user is not an owner" in {
+  it should "query sam for canShare if the user is not an owner" in
     forAll(
       Table(
         ("role", "samAnswer"),
@@ -457,7 +456,6 @@ class WorkspaceServiceUnitTests
         ctx
       )
     }
-  }
 
   it should "get the bucket options from gcs when requested" in {
     val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
@@ -554,7 +552,7 @@ class WorkspaceServiceUnitTests
     result shouldBe JsArray.empty
   }
 
-  it should "return workspaces the user has an access level role on" in {
+  it should "return workspaces the user has an access level role on" in
     forAll(
       Table(
         ("role", "hasAccess"),
@@ -611,7 +609,6 @@ class WorkspaceServiceUnitTests
           resultWorkspace.get.workspace shouldBe details
       }
     }
-  }
 
   it should "return the highest access level" in {
     val workspaceSamResource = SamUserResource(
@@ -642,7 +639,7 @@ class WorkspaceServiceUnitTests
     resultWorkspace.get.accessLevel shouldBe WorkspaceAccessLevels.Owner
   }
 
-  it should "return the matching value of canShare" in {
+  it should "return the matching value of canShare" in
     forAll(
       Table(
         ("highestAccessLevel", "additionalRoles", "canShareResult"),
@@ -686,9 +683,8 @@ class WorkspaceServiceUnitTests
       }
       resultWorkspace.get.canShare.get shouldBe canShareResult
     }
-  }
 
-  it should "return the matching value of canCompute" in {
+  it should "return the matching value of canCompute" in
     forAll(
       Table(
         ("cloudPlatform", "highestAccessLevel", "additionalRoles", "canComputeResult"),
@@ -760,7 +756,6 @@ class WorkspaceServiceUnitTests
       }
       resultWorkspace.get.canCompute.get shouldBe canComputeResult
     }
-  }
 
   it should "map the results of the resource auth domains" in {
     val authGroupName = "expected-auth-group"

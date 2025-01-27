@@ -151,7 +151,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           }
         }
 
-        "DockstoreTools" in {
+        "DockstoreTools" in
           assertResult {
             DockstoreToolsMethod("test-path", "test-version")
           } {
@@ -159,7 +159,6 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
               """{"sourceRepo":"dockstoretools","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
             )
           }
-        }
 
         // Bad "sourceRepo"
         intercept[spray.json.DeserializationException] {

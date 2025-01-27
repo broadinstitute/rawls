@@ -143,7 +143,7 @@ class GoogleUtilitiesSpec
     when500orGoogleError(new IOException("boom")) shouldBe true
   }
 
-  "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in {
+  "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in
     withStatsD {
       val counter = new Counter()
       whenReady(retryWhen500orGoogleError(() => counter.alwaysBoom()).failed) { f =>
@@ -154,7 +154,6 @@ class GoogleUtilitiesSpec
       capturedMetrics should contain("test.histo.samples", "1")
       capturedMetrics should contain("test.histo.max", "4") // 4 exceptions
     }
-  }
 
   it should "not retry after a success" in
     withStatsD {
@@ -168,7 +167,7 @@ class GoogleUtilitiesSpec
       capturedMetrics should contain("test.histo.max", "1") // 1 exception
     }
 
-  "retryWithRecoverWhen500orGoogleError" should "stop retrying if it recovers" in {
+  "retryWithRecoverWhen500orGoogleError" should "stop retrying if it recovers" in
     withStatsD {
       val counter = new Counter()
 
@@ -184,7 +183,6 @@ class GoogleUtilitiesSpec
       capturedMetrics should contain("test.histo.samples", "1")
       capturedMetrics should contain("test.histo.max", "0") // 0 exceptions
     }
-  }
 
   it should "keep retrying and fail if it doesn't recover" in
     withStatsD {
