@@ -3448,17 +3448,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // filter-by-name and filter-by-column tests. All of these tests are read-only and use the same set of exemplar data,
   // so we only create that data once:
   withPaginationTestDataApiServices { services =>
-    it should "return 400 when specifying both filterTerms and columnFilter" in {
+    it should "return 400 when specifying both filterTerms and columnFilter" in
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&columnFilter=bar%3Dbaz"
       ) ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
+      sealRoute(services.entityRoutes()) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
-    }
+      }
 
     it should "return correct result when filtering by name on entity query" in {
       val entityNameFilter = "entity_99"
@@ -3814,17 +3813,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
     }
 
-    it should "return 400 when column filter is incomplete" in {
+    it should "return 400 when column filter is incomplete" in
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=incorrectFilter"
       ) ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
+      sealRoute(services.entityRoutes()) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
-    }
+      }
 
     it should "return 400 when column filter is invalid" in
       Get(

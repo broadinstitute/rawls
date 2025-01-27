@@ -63,7 +63,7 @@ class HttpExecutionServiceDAOSpec
     super.afterAll()
   }
 
-  "HttpExecutionServiceDAO" should "submit workflows" in {
+  "HttpExecutionServiceDAO" should "submit workflows" in
     withStatsD {
       val submitResult =
         test.submitWorkflows(WdlSource("wdl"), Seq("input1", "input2"), None, None, None, userInfo).futureValue
@@ -83,9 +83,8 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
-  it should "query for status" in {
+  it should "query for status" in
     withStatsD {
       val result = test.status("foo", userInfo).futureValue
       result.status shouldBe "Running"
@@ -97,9 +96,8 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
-  it should "query for metadata" in {
+  it should "query for metadata" in
     withStatsD {
       val result =
         test.callLevelMetadata("8afafe21-2b70-4180-a565-748cb573e10c", MetadataParams(), userInfo).futureValue
@@ -112,9 +110,8 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
-  it should "query for outputs" in {
+  it should "query for outputs" in
     withStatsD {
       val result = test.outputs("69d1d92f-3895-4a7b-880a-82535e9a096e", userInfo).futureValue
       result.id shouldBe "this_workflow_exists"
@@ -127,9 +124,8 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
-  it should "query for logs" in {
+  it should "query for logs" in
     withStatsD {
       val result = test.logs("8afafe21-2b70-4180-a565-748cb573e10c", userInfo).futureValue
       result.id shouldBe "8afafe21-2b70-4180-a565-748cb573e10c"
@@ -142,9 +138,8 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
-  it should "abort workflows" in {
+  it should "abort workflows" in
     withStatsD {
       val result = test.abort("workflowA", userInfo).futureValue
       result.isSuccess shouldBe true
@@ -158,9 +153,8 @@ class HttpExecutionServiceDAOSpec
                                                                                Option(Subsystems.Cromwell)
       ))
     }
-  }
 
-  it should "get labels and patch labels" in {
+  it should "get labels and patch labels" in
     withStatsD {
       val labels = Map("key1" -> "val1", "key2" -> "val2")
 
@@ -177,7 +171,6 @@ class HttpExecutionServiceDAOSpec
           expectedHttpRequestMetrics("patch", "api.workflows.v1.redacted.labels", 200, 1, Option(Subsystems.Cromwell))
       )
     }
-  }
 
   it should "get the version" in
     withStatsD {

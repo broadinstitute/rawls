@@ -58,9 +58,8 @@ class HealthMonitorSpec
     sub -> SubsystemStatus(false, Option(List(s"""{"$sub": "is unhappy"}""")))
   }).toMap
 
-  "HealthMonitor" should "start with unknown status for all subsystems" in {
+  "HealthMonitor" should "start with unknown status for all subsystems" in
     checkCurrentStatus(newHealthMonitorActor(), false, unknowns = AllSubsystems)
-  }
 
   it should "return ok status for all subsystems" in {
     val actor = newHealthMonitorActor()

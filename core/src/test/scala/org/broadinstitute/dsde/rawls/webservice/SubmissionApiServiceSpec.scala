@@ -1222,7 +1222,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       }
   }
 
-  it should "return a parameter error if the memoryRetryMultiplier is invalid" in {
+  it should "return a parameter error if the memoryRetryMultiplier is invalid" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1244,7 +1244,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           )
         }
     }
-  }
 
   it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in
     withTestDataApiServices { services =>
@@ -1326,7 +1325,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       }
   }
 
-  it should "return a parameter error if the userComment is invalid" in {
+  it should "return a parameter error if the userComment is invalid" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1348,9 +1347,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           response should include("Invalid input userComment. Input may be a max of 1000 characters.")
         }
     }
-  }
 
-  it should "successfully update userComment after submission creation" in {
+  it should "successfully update userComment after submission creation" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1393,9 +1391,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
         }
     }
-  }
 
-  it should "return the submission root when getting an individual submission" in {
+  it should "return the submission root when getting an individual submission" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1423,9 +1420,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
         }
     }
-  }
 
-  it should "fail to update comment if submission doesn't exist" in {
+  it should "fail to update comment if submission doesn't exist" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
 
@@ -1444,7 +1440,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           )
         }
     }
-  }
 
   it should "return a 201 when a comment is updated" in {
     val wsName = testData.wsName

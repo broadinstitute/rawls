@@ -43,7 +43,7 @@ class SubmissionValidationSpec extends AnyFlatSpec with Matchers with TableDrive
     )
   )
 
-  it should "validate perWorkflowCostCap" in {
+  it should "validate perWorkflowCostCap" in
     forAll(perWorkflowCostCapValidations) { (_, value, expectedErrors) =>
       val submission =
         SubmissionRequest("name", "namespace", None, None, None, false, false, perWorkflowCostCap = value)
@@ -62,9 +62,8 @@ class SubmissionValidationSpec extends AnyFlatSpec with Matchers with TableDrive
         }
       }
     }
-  }
 
-  it should "validate workflowFailureMode" in {
+  it should "validate workflowFailureMode" in
     forAll(
       Table(
         ("WorkflowFailureMode value", "valid value"),
@@ -95,7 +94,6 @@ class SubmissionValidationSpec extends AnyFlatSpec with Matchers with TableDrive
         errors.head.message should include(workflowFailureMode.getOrElse("None"))
       }
     }
-  }
 
   behavior of "entity name and type validation"
 

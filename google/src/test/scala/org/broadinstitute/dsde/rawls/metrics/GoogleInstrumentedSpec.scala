@@ -51,7 +51,7 @@ class GoogleInstrumentedSpec
       case exception: HttpResponseException => exception // return the exception
     }
 
-  "GoogleInstrumented" should "get counters from a request/response" in {
+  "GoogleInstrumented" should "get counters from a request/response" in
     GoogleInstrumentedService.values.foreach { implicit service =>
       withStatsD {
         val counters = googleCounters
@@ -72,9 +72,8 @@ class GoogleInstrumentedSpec
         )
       }
     }
-  }
 
-  it should "get counters from a request/HttpResponseException" in {
+  it should "get counters from a request/HttpResponseException" in
     GoogleInstrumentedService.values.foreach { implicit service =>
       withStatsD {
         val counters = googleCounters
@@ -95,7 +94,6 @@ class GoogleInstrumentedSpec
         )
       }
     }
-  }
 
   it should "get counters from a request/exception" in
     GoogleInstrumentedService.values.foreach { implicit service =>
