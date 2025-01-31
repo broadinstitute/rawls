@@ -7095,8 +7095,6 @@ components:
                 - Google Billing is misbehaving!
             GoogleBuckets:
               ok: true
-            GoogleGenomics:
-              ok: true
             GoogleGroups:
               ok: true
             GooglePubSub:

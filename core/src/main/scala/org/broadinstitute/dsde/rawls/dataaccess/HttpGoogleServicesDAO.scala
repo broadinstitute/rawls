@@ -909,19 +909,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     handleByOperationIdType(opId, papiv1Handler, papiv2Alpha1Handler, lifeSciencesBetaHandler, noMatchHandler)
   }
 
-  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
-    implicit val service = GoogleInstrumentedService.Genomics
-    val opId = s"projects/$serviceProject/operations"
-    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential)
-      .setApplicationName(appName)
-      .build()
-    val operationRequest = genomicsApi.projects().operations().list(opId).setPageSize(1)
-    retryWhen500orGoogleError { () =>
-      executeGoogleRequest(operationRequest)
-      true
-    }
-  }
-
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential

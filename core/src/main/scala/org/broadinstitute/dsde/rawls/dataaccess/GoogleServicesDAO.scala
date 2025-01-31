@@ -182,18 +182,6 @@ trait GoogleServicesDAO extends ErrorReportable {
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
-  /**
-   * Checks that a query can be performed against the genomics api.
-   *
-   * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
-   * is because this method is used for health monitoring, and we want health checks to use a
-   * different execution context (thread pool) than user-facing operations.
-   *
-   * @param executionContext the execution context to use for aysnc operations
-   * @return sequence of Google operations
-   */
-  def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean]
-
   def getResourceBufferServiceAccountCredential: Credential
 
   def getServiceAccountUserInfo(): Future[UserInfo]
