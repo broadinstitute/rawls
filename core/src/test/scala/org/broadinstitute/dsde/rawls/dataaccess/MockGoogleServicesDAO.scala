@@ -228,9 +228,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] =
-    Future.successful(true)
-
   override def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] =
     Future.successful(WorkspaceBucketOptions(false, bucketLocation))
 
