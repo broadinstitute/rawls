@@ -155,7 +155,7 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     // override commons-codec to address a non-CVE warning from DefectDojo
-    "commons-codec"                 % "commons-codec"         % "1.17.2"
+    "commons-codec"                 % "commons-codec"         % "1.18.0"
   )
 
   val extraOpenTelemetryDependencies = Seq(
