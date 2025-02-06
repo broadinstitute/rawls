@@ -17,6 +17,7 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
+import com.google.api.gax.core.FixedCredentialsProvider
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{
   BillingAccount,
@@ -38,7 +39,12 @@ import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
+import com.google.cloud.monitoring.v3.{MetricServiceClient, MetricServiceSettings}
+import com.google.monitoring.v3.{ListTimeSeriesRequest, TimeInterval}
+import com.google.api.services.monitoring.v3.MonitoringScopes
+import com.google.protobuf.util.Timestamps
 import com.google.auth.oauth2.ServiceAccountCredentials
+import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.{BucketSourceOption, BucketTargetOption}
 import com.google.cloud.storage.{BucketInfo, Cors, HttpMethod, StorageClass, StorageException}
@@ -117,6 +123,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
+  val monitoringScopes = Seq(MonitoringScopes.MONITORING_READ)
   val genomicsScopes = Seq(
     GenomicsScopes.GENOMICS
   ) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
@@ -1125,6 +1132,40 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   def getStorage(credential: Credential) =
     new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
 
+  override def getBucketMetrics(
+    projectId: GoogleProjectId
+  ): Future[BucketMetricsResponse] = {
+    val metricServiceClient = MetricServiceClient.create(
+      MetricServiceSettings
+        .newBuilder()
+        .setCredentialsProvider(FixedCredentialsProvider.create(getBucketServiceAccountCredentials))
+        .build()
+    )
+    val projectName = projectId.value
+    val now = System.currentTimeMillis
+    val fiveMinutesAgo = now - 5 * 60 * 1000
+    val interval =
+      TimeInterval
+        .newBuilder()
+        .setEndTime(Timestamps.fromMillis(now))
+        .setStartTime(Timestamps.fromMillis(fiveMinutesAgo))
+        .build()
+    val request = ListTimeSeriesRequest
+      .newBuilder()
+      .setName("projects/" + projectName)
+      .setFilter("metric.type=\"storage.googleapis.com/storage/v2/total_bytes\"")
+      .setInterval(interval)
+      .build()
+    val response = metricServiceClient.listTimeSeries(request)
+    val metrics = response.iterateAll().asScala.toSeq.flatMap { timeSeries =>
+      timeSeries.getPointsList.asScala.map { point =>
+        BucketMetric(timeSeries.getMetric.getLabelsMap.get("storage_class"), point.getValue.getDoubleValue)
+      }
+    }
+    metricServiceClient.close()
+    Future(BucketMetricsResponse(metrics))
+  }
+
   def getGroupDirectory =
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential)
       .setApplicationName(appName)
@@ -1153,6 +1194,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(storageScopes.asJava) // grant bucket-creation powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+
+  def getBucketServiceAccountCredentials: GoogleCredentials =
+    ServiceAccountCredentials
+      .fromStream(new FileInputStream("/etc/rawls-account.json"))
+      .toBuilder()
+      .setScopes(monitoringScopes.asJava)
       .build()
 
   def getGenomicsServiceAccountCredential: Credential =

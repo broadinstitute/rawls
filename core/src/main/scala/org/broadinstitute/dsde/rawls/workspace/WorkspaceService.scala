@@ -62,6 +62,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
+import com.google.cloud.monitoring.v3.{MetricServiceClient, MetricServiceSettings}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -1495,6 +1496,17 @@ class WorkspaceService(
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = (for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
     bucketUsage <- gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName, None)
+  } yield bucketUsage).recover {
+    // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
+    // instead of a 500 to avoid Sentry notifications.
+    case t: GoogleJsonResponseException =>
+      val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+      throw new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString))
+  }
+
+  def getBucketUsageV2(workspaceName: WorkspaceName): Future[BucketMetricsResponse] = (for {
+    workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+    bucketUsage <- gcsDAO.getBucketMetrics(workspaceContext.googleProjectId)
   } yield bucketUsage).recover {
     // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
     // instead of a 500 to avoid Sentry notifications.

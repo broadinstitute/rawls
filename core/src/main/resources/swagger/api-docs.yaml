@@ -4337,7 +4337,23 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceRequest
-
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketUsage:
+    get:
+      tags:
+        - workspaces_v2
+      summary: Get usage of bucket in bytes
+      description: #TODO update this and figure out response shape
+      operationId: getBucketUsageV2
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BucketMetricsResponse'
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketMigration:
     get:
       tags:
@@ -6239,6 +6255,16 @@ components:
           type: string
           format: timestamp
           description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
+      description: ""
+    BucketMetricsResponse:
+      type: object
+      properties:
+        usageInBytes:
+          type: integer
+          description: The current storage bucket usage in bytes
+        storageClass:
+          type: string
+          description: storage class that applies to those bytes #TODO better description
       description: ""
     PendingCloneWorkspaceFileTransfer:
       required:
