@@ -1506,7 +1506,7 @@ class WorkspaceService(
 
   def getBucketUsageV2(workspaceName: WorkspaceName): Future[BucketMetricsResponse] = (for {
     workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
-    bucketUsage <- gcsDAO.getBucketMetrics(workspaceContext.googleProjectId)
+    bucketUsage = gcsDAO.getBucketMetrics(workspaceContext.googleProjectId)
   } yield bucketUsage).recover {
     // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
     // instead of a 500 to avoid Sentry notifications.

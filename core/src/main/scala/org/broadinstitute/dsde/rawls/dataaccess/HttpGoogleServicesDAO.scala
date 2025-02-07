@@ -3,9 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
-import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
 import cats.data.NonEmptyList
 import cats.effect.unsafe.implicits.global
@@ -1134,7 +1133,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def getBucketMetrics(
     projectId: GoogleProjectId
-  ): Future[BucketMetricsResponse] = {
+  ): BucketMetricsResponse = {
     val metricServiceClient = MetricServiceClient.create(
       MetricServiceSettings
         .newBuilder()
@@ -1157,13 +1156,19 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setInterval(interval)
       .build()
     val response = metricServiceClient.listTimeSeries(request)
-    val metrics = response.iterateAll().asScala.toSeq.flatMap { timeSeries =>
+    metricServiceClient.close()
+    listTimeSeriesPagedResponseToBucketMetricsResponse(response)
+  }
+
+  def listTimeSeriesPagedResponseToBucketMetricsResponse(
+    ltspResponse: MetricServiceClient.ListTimeSeriesPagedResponse
+  ): BucketMetricsResponse = {
+    val metrics = ltspResponse.iterateAll().asScala.toSeq.flatMap { timeSeries =>
       timeSeries.getPointsList.asScala.map { point =>
         BucketMetric(timeSeries.getMetric.getLabelsMap.get("storage_class"), point.getValue.getDoubleValue)
       }
     }
-    metricServiceClient.close()
-    Future(BucketMetricsResponse(metrics))
+    BucketMetricsResponse(metrics)
   }
 
   def getGroupDirectory =
@@ -1198,7 +1203,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   def getBucketServiceAccountCredentials: GoogleCredentials =
     ServiceAccountCredentials
-      .fromStream(new FileInputStream("/etc/rawls-account.json"))
+      .fromStream(new FileInputStream("/etc/rawls-account.json")) // TODO get this from config
       .toBuilder()
       .setScopes(monitoringScopes.asJava)
       .build()

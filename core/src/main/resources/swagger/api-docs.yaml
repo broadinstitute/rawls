@@ -4342,7 +4342,7 @@ paths:
       tags:
         - workspaces_v2
       summary: Get usage of bucket in bytes
-      description: #TODO update this and figure out response shape
+      description: Itemizes bucket usage by storage class
       operationId: getBucketUsageV2
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -6264,7 +6264,7 @@ components:
           description: The current storage bucket usage in bytes
         storageClass:
           type: string
-          description: storage class that applies to those bytes #TODO better description
+          description: The storage class of data in bucket
       description: ""
     PendingCloneWorkspaceFileTransfer:
       required:

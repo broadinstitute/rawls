@@ -5,9 +5,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.directory.model.Group
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
-import com.google.auth.oauth2.GoogleCredentials
-import com.google.cloud.monitoring.v3.MetricServiceClient
+import com.google.api.services.storage.model.{Bucket, StorageObject}
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.SoftDeletePolicy
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
@@ -108,7 +106,7 @@ trait GoogleServicesDAO extends ErrorReportable {
                      maxResults: Option[Long] = None
   ): Future[BucketUsageResponse]
 
-  def getBucketMetrics(projectId: GoogleProjectId): Future[BucketMetricsResponse]
+  def getBucketMetrics(projectId: GoogleProjectId): BucketMetricsResponse
 
   /**
    * Gets a Google bucket.
