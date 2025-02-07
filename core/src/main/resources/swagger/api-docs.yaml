@@ -6257,7 +6257,7 @@ components:
           description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
       description: ""
     BucketMetricsResponse:
-      type: object
+      type: array
       properties:
         usageInBytes:
           type: integer
