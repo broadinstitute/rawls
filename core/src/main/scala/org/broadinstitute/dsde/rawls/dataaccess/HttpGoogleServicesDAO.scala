@@ -92,7 +92,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             googleStorageService: GoogleStorageService[IO],
                             override val workbenchMetricBaseName: String,
                             proxyNamePrefix: String,
-                            terraBucketReaderRole: String,
+                            override val terraBucketReaderRole: String,
                             terraBucketWriterRole: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO,
                             resourceBufferJsonFile: String

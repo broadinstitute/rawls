@@ -9,6 +9,8 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActors, TestKitBase}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -61,6 +63,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
 import org.mockito.ArgumentMatcher
@@ -402,7 +405,8 @@ trait ApiServiceSpec
                                   new WorkspaceSettingRepository(slickDataSource),
                                   new WorkspaceRepository(slickDataSource),
                                   gcsDAO,
-                                  samDAO
+                                  samDAO,
+                                  mock[GoogleStorageService[IO]]
       )
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))

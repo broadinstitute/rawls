@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.workbench.client.sam.model.{
   ListResourcesV2200Response
 }
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup, WorkbenchGroupName}
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -749,6 +749,28 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
         }
       )
     }
+  }
+
+  override def setPolicyPublic(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               public: Boolean,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[Void]("setPolicyPublic")
+
+      resourcesApi(ctx).setPolicyPublicV2Async(resourceTypeName.value, resourceId, policyName.value, public, callback)
+
+      callback.future.map(_ => ())
+    }
+
+  override def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail] = {
+    val callback = new SamApiCallback[String]("getAllUsersGroup")
+
+    groupApi(ctx).getGroupAsync(allUsersGroupName.value, callback)
+
+    callback.future.map(WorkbenchEmail)
   }
 }
 
