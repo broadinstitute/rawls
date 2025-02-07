@@ -93,6 +93,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             billingPemFile: String,
                             val billingEmail: String,
                             val billingGroupEmail: String,
+                            credentialsJson: String,
                             maxPageSize: Int = 200,
                             googleStorageService: GoogleStorageService[IO],
                             override val workbenchMetricBaseName: String,
@@ -1203,7 +1204,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   def getBucketServiceAccountCredentials: GoogleCredentials =
     ServiceAccountCredentials
-      .fromStream(new FileInputStream("/etc/rawls-account.json")) // TODO get this from config
+      .fromStream(new FileInputStream(credentialsJson))
       .toBuilder()
       .setScopes(monitoringScopes.asJava)
       .build()

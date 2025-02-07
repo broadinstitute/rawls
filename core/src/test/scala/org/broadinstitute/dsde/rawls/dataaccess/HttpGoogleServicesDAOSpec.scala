@@ -72,6 +72,7 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     "fakeBillingPemFile",
     "fakeBillingEmail",
     "fakeBillingGroupEmail",
+    "fakeCredentialsJson",
     "fakeResourceBufferJsonFile"
   )
 
@@ -196,6 +197,7 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
       "billingPemFile",
       "billingEmail",
       "billingGroupEmail",
+      "credentialsJson",
       200,
       googleStorageService,
       "workbenchMetricBaseName",

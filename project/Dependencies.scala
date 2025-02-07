@@ -53,7 +53,6 @@ object Dependencies {
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.4.0-jre"
 
   val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % "v3-rev540-1.25.0"
-  val googleMonitoring2: ModuleID = "com.google.cloud" % "google-cloud-monitoring" % "3.57.0"
 
   // metrics4-scala and metrics3-statsd are pulled in by workbench-metrics, which is pulled in by
   // workbench-google (workbenchGoogle variable in this file). Thus, anything that depends on workbench-google, such as
@@ -195,8 +194,7 @@ object Dependencies {
     googleCompute,
     googlePubSub,
     googleGuava,
-    googleMonitoring,
-    googleMonitoring2
+    googleMonitoring
   )
 
   val google2Dependencies = Seq(
