@@ -25,6 +25,7 @@ object GoogleServicesDAO {
 
 trait GoogleServicesDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
+  val terraBucketReaderRole: String
 
   val accessContextManagerDAO: AccessContextManagerDAO
 

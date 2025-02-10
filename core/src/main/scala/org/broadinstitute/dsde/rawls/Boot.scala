@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import cats.effect._
+import cats.effect.unsafe.IORuntime
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.cloud.opentelemetry.trace.{TraceConfiguration, TraceExporter}
@@ -530,7 +531,13 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
       val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-        new WorkspaceSettingService(_, workspaceSettingRepository, workspaceRepository, gcsDAO, samDAO)
+        new WorkspaceSettingService(_,
+                                    workspaceSettingRepository,
+                                    workspaceRepository,
+                                    gcsDAO,
+                                    samDAO,
+                                    appDependencies.googleStorageService
+        )(implicitly, IORuntime.global)
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
