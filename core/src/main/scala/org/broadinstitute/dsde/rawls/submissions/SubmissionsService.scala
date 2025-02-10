@@ -60,6 +60,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserCommentUpdateOperation,
   Workflow,
   WorkflowCost,
+  WorkflowCostTypes,
   WorkflowFailureModes,
   WorkflowOutputs,
   WorkflowQueueStatusByUserResponse,
@@ -460,8 +461,13 @@ class SubmissionsService(
                   case Some(wfId) =>
                     // prefer the actual cost from the cost map;
                     // use Cromwell-estimated cost from the workflow if not
-                    val calculatedCost = costMap.get(wfId).orElse(workflow.cost)
-                    workflow.copy(cost = calculatedCost)
+                    if (costMap.contains(wfId)) {
+                      workflow.copy(cost = costMap.get(wfId), costType = Option(WorkflowCostTypes.Actual))
+                    } else {
+                      workflow.copy(cost = workflow.cost,
+                                    costType = workflow.cost.map(_ => WorkflowCostTypes.Estimated)
+                      )
+                    }
                   case None => workflow
                 }
               }
