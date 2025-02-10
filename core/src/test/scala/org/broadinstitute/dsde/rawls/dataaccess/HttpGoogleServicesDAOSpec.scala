@@ -4,12 +4,17 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.ActorMaterializer
 import cats.effect.IO
+import com.google.api.Metric
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
+import com.google.cloud.monitoring.v3.MetricServiceClient.ListTimeSeriesPagedResponse
 import com.google.cloud.storage.{Cors, HttpMethod, StorageClass}
+import com.google.monitoring.v3.{Point, TimeInterval, TimeSeries, TypedValue}
+import com.google.protobuf.Timestamp
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.model.{
+  BucketMetric,
   GoogleProjectId,
   RawlsBillingAccount,
   RawlsRequestContext,
@@ -67,6 +72,7 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     "fakeBillingPemFile",
     "fakeBillingEmail",
     "fakeBillingGroupEmail",
+    "fakeCredentialsJson",
     "fakeResourceBufferJsonFile"
   )
 
@@ -191,6 +197,7 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
       "billingPemFile",
       "billingEmail",
       "billingGroupEmail",
+      "credentialsJson",
       200,
       googleStorageService,
       "workbenchMetricBaseName",
@@ -225,5 +232,68 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
       autoclassTerminalStorageClass = ArgumentMatchers.eq(Option(StorageClass.ARCHIVE)),
       cors = ArgumentMatchers.eq(expectedCorsPolicy)
     )
+  }
+
+  behavior of "listTimeSeriesPagedResponseToBucketMetricsResponse"
+
+  it should "pull out the bytes and storage classes" in {
+    val mockResponse = mock[ListTimeSeriesPagedResponse]
+    val labelsMap1 = Map("storage_class" -> "COLDLINE", "type" -> "live-object")
+
+    val metric1 = Metric
+      .newBuilder()
+      .setType("storage.googleapis.com/storage/v2/total_bytes")
+      .putAllLabels(labelsMap1.asJava)
+      .build()
+    val timeSeries1 = TimeSeries
+      .newBuilder()
+      .setMetric(metric1)
+      .addPoints(
+        Point
+          .newBuilder()
+          .setValue(TypedValue.newBuilder().setDoubleValue(123.45).build())
+          .setInterval(
+            TimeInterval
+              .newBuilder()
+              .setStartTime(Timestamp.newBuilder().setSeconds(1609459200).build())
+              .setEndTime(Timestamp.newBuilder().setSeconds(1609462800).build())
+              .build()
+          )
+          .build()
+      )
+      .build()
+
+    val labelsMap2 = Map("storage_class" -> "REGIONAL", "type" -> "soft-deleted-object")
+
+    val metric2 = Metric
+      .newBuilder()
+      .setType("storage.googleapis.com/storage/v2/total_bytes")
+      .putAllLabels(labelsMap2.asJava)
+      .build()
+    val timeSeries2 = TimeSeries
+      .newBuilder()
+      .setMetric(metric2)
+      .addPoints(
+        Point
+          .newBuilder()
+          .setValue(TypedValue.newBuilder().setDoubleValue(5432.1).build())
+          .setInterval(
+            TimeInterval
+              .newBuilder()
+              .setStartTime(Timestamp.newBuilder().setSeconds(1609459200).build())
+              .setEndTime(Timestamp.newBuilder().setSeconds(1609462800).build())
+              .build()
+          )
+          .build()
+      )
+      .build()
+    when(mockResponse.iterateAll()).thenReturn(Seq(timeSeries1, timeSeries2).asJava)
+    val response = httpGoogleServicesDao.listTimeSeriesPagedResponseToBucketMetricsResponse(mockResponse)
+    response.metrics.length shouldBe 2
+    val expectedMetrics = Set(
+      BucketMetric("COLDLINE", 123.45),
+      BucketMetric("REGIONAL", 5432.1)
+    )
+    response.metrics.toSet shouldBe expectedMetrics
   }
 }

@@ -1086,6 +1086,16 @@ case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, S
 
 case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: Option[DateTime])
 
+case class BucketMetricsResponse(
+  metrics: Seq[BucketMetric]
+)
+
+//See https://cloud.google.com/storage/docs/storage-classes
+//I believe the options for storageclass are STANDARD, NEARLINE, COLDLINE, ARCHIVE, REGIONAL, MULTI-REGIONAL and DRA.
+//I've seen REGIONAL and MULTI_REGIONAL in practice; I have not seen DRA so I don't know exactly how it would be coded
+//Hence I'm afraid to make an enumeration until I can verify what's possible to see.
+case class BucketMetric(storageClass: String, valueInBytes: Double)
+
 case class ErrorReport(source: String,
                        message: String,
                        statusCode: Option[StatusCode],
@@ -1354,6 +1364,10 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceStatusFormat: RootJsonFormat[WorkspaceStatus] = jsonFormat2(WorkspaceStatus)
 
   implicit val BucketUsageResponseFormat: RootJsonFormat[BucketUsageResponse] = jsonFormat2(BucketUsageResponse)
+
+  implicit val BucketMetricsFormat: RootJsonFormat[BucketMetric] = jsonFormat2(BucketMetric)
+
+  implicit val BucketMetricsResponseFormat: RootJsonFormat[BucketMetricsResponse] = jsonFormat1(BucketMetricsResponse)
 
   implicit val MethodConfigurationNameFormat: RootJsonFormat[MethodConfigurationName] = jsonFormat3(
     MethodConfigurationName
