@@ -814,9 +814,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Failed))
 
       submission.workflows.foreach { workflow =>
-        assertResult(Seq(AttributeString("a"), AttributeString("b"))) {
-          workflow.messages
-        }
+        workflow.messages should contain theSameElementsAs Seq(AttributeString("a"), AttributeString("b"))
       }
     } { capturedMetrics =>
       capturedMetrics should contain(
