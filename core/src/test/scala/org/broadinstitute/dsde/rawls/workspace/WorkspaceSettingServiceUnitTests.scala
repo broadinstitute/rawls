@@ -670,7 +670,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
 
-    val workspaceRepository = mock[WorkspaceRepository]
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
 
     val workspaceSettings = List(PubliclyReadableSetting(PubliclyReadableConfig(true)))
@@ -735,14 +735,34 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         googleStorageService = googleStorageService
       )
 
-    Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    val result = Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    result.successes should contain theSameElementsAs workspaceSettings
+    result.failures shouldEqual Map.empty
+    verify(samDAO).setPolicyPublic(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspaceId.toString),
+      ArgumentMatchers.eq(SamWorkspacePolicyNames.reader),
+      ArgumentMatchers.eq(true),
+      any()
+    )
+    verify(googleStorageService).setIamPolicy(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(
+        Map[StorageRole, NonEmptyList[Identity]](
+          StorageRole.CustomStorageRole("terra-bucket-reader") -> NonEmptyList.one(Identity.group("allUsers@fc.org"))
+        )
+      ),
+      any(),
+      any(),
+      any()
+    )
   }
 
   it should "unset public in sam and remove all users from bucket" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
 
-    val workspaceRepository = mock[WorkspaceRepository]
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
     when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
 
     val workspaceSettings = List(PubliclyReadableSetting(PubliclyReadableConfig(false)))
@@ -807,6 +827,82 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         googleStorageService = googleStorageService
       )
 
-    Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    val result = Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    result.successes should contain theSameElementsAs workspaceSettings
+    result.failures shouldEqual Map.empty
+    verify(samDAO).setPolicyPublic(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspaceId.toString),
+      ArgumentMatchers.eq(SamWorkspacePolicyNames.reader),
+      ArgumentMatchers.eq(false),
+      any()
+    )
+    verify(googleStorageService).removeIamPolicy(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(
+        Map[StorageRole, NonEmptyList[Identity]](
+          StorageRole.CustomStorageRole("terra-bucket-reader") -> NonEmptyList.one(Identity.group("allUsers@fc.org"))
+        )
+      ),
+      any(),
+      any(),
+      any()
+    )
+  }
+
+  it should "fail when sam returns error" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val workspaceSettings = List(PubliclyReadableSetting(PubliclyReadableConfig(true)))
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+    when(
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                workspaceSettings,
+                                                                defaultRequestContext.userInfo.userSubjectId
+      )
+    ).thenReturn(Future.successful(workspaceSettings))
+    workspaceSettings.foreach(workspaceSetting =>
+      when(workspaceSettingRepository.removePendingSetting(workspaceId, workspaceSetting.settingType))
+        .thenReturn(Future.successful(1))
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+    when(
+      samDAO.setPolicyPublic(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspacePolicyNames.reader),
+        ArgumentMatchers.eq(true),
+        any()
+      )
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "no permissions"))))
+
+    val service =
+      workspaceSettingServiceConstructor(
+        samDAO = samDAO,
+        workspaceRepository = workspaceRepository,
+        workspaceSettingRepository = workspaceSettingRepository,
+        gcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
+        googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
+      )
+
+    val result = Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    result.successes shouldEqual List.empty
+    result.failures.keys should contain theSameElementsAs List(WorkspaceSettingTypes.PubliclyReadable)
+    result.failures(WorkspaceSettingTypes.PubliclyReadable).statusCode shouldBe Some(StatusCodes.Forbidden)
   }
 }
