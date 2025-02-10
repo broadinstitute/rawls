@@ -623,7 +623,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       sealRoute(services.submissionRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
-        assertResult(testData.costedSubmission1)(responseAs[Submission])
+
+        // withTestDataApiServices includes a mock that returns $1.23 actual cost for each workflow.
+        // this test must expect actual cost instead of estimated cost.
+        val expectedCostedWorkflows =
+          testData.costedSubmission1.workflows.map(w => w.copy(costType = Option(WorkflowCostTypes.Actual)))
+        val expectedSubmission = testData.costedSubmission1.copy(workflows = expectedCostedWorkflows)
+
+        assertResult(expectedSubmission)(responseAs[Submission])
       }
   }
 
