@@ -434,7 +434,8 @@ trait SubmissionComponent {
                entityRef,
                workflowResolutions.sortBy(_.inputName), // enforce consistent sorting
                messages,
-               wr.cost.map(_.floatValue)
+               wr.cost.map(_.floatValue),
+               wr.cost.map(_ => WorkflowCostTypes.Estimated)
              )
             )
           }.toSeq

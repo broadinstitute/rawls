@@ -446,6 +446,9 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       workflow.cost should contain(
         BigDecimal(idx).floatValue
       ) withClue s"for workflow with external entity e$idx"
+      workflow.costType should contain(
+        WorkflowCostTypes.Estimated
+      ) withClue s"for workflow with external entity e$idx"
     }
 
   }

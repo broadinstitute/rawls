@@ -461,13 +461,10 @@ class SubmissionsService(
                   case Some(wfId) =>
                     // prefer the actual cost from the cost map;
                     // use Cromwell-estimated cost from the workflow if not
-                    if (costMap.contains(wfId)) {
+                    if (costMap.contains(wfId))
                       workflow.copy(cost = costMap.get(wfId), costType = Option(WorkflowCostTypes.Actual))
-                    } else {
-                      workflow.copy(cost = workflow.cost,
-                                    costType = workflow.cost.map(_ => WorkflowCostTypes.Estimated)
-                      )
-                    }
+                    else
+                      workflow
                   case None => workflow
                 }
               }
