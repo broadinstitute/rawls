@@ -5,7 +5,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.directory.model.Group
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
+import com.google.api.services.storage.model.{Bucket, StorageObject}
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.SoftDeletePolicy
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
@@ -25,6 +25,7 @@ object GoogleServicesDAO {
 
 trait GoogleServicesDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
+  val terraBucketReaderRole: String
 
   val accessContextManagerDAO: AccessContextManagerDAO
 
@@ -106,6 +107,8 @@ trait GoogleServicesDAO extends ErrorReportable {
                      maxResults: Option[Long] = None
   ): Future[BucketUsageResponse]
 
+  def getBucketMetrics(projectId: GoogleProjectId): BucketMetricsResponse
+
   /**
    * Gets a Google bucket.
    *
@@ -181,18 +184,6 @@ trait GoogleServicesDAO extends ErrorReportable {
   ): Future[ProjectBillingInfo]
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
-
-  /**
-   * Checks that a query can be performed against the genomics api.
-   *
-   * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
-   * is because this method is used for health monitoring, and we want health checks to use a
-   * different execution context (thread pool) than user-facing operations.
-   *
-   * @param executionContext the execution context to use for aysnc operations
-   * @return sequence of Google operations
-   */
-  def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean]
 
   def getResourceBufferServiceAccountCredential: Credential
 

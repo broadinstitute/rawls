@@ -37,6 +37,7 @@ object GoogleServicesDAOFactory {
           gcsConfig.getString("pathToBillingPem"),
           gcsConfig.getString("billingEmail"),
           gcsConfig.getString("billingGroupEmail"),
+          gcsConfig.getString("pathToCredentialJson"),
           googleStorageService = appDependencies.googleStorageService,
           workbenchMetricBaseName = metricsPrefix,
           proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),

@@ -814,9 +814,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Failed))
 
       submission.workflows.foreach { workflow =>
-        assertResult(Seq(AttributeString("a"), AttributeString("b"))) {
-          workflow.messages
-        }
+        workflow.messages should contain theSameElementsAs Seq(AttributeString("a"), AttributeString("b"))
       }
     } { capturedMetrics =>
       capturedMetrics should contain(
@@ -1560,7 +1558,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           .getOrElse(fail())
           .messages
       actualMessages should have size 1
-      actualMessages.head.value shouldBe "Cost limit reached. Workflow was aborted to prevent cost overrun."
+      actualMessages.head.value shouldBe "Cost limit reached. Workflow was aborted to stay on budget."
   }
 
   it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase {
@@ -1735,7 +1733,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     }
   }
 
-  it should "handleStatusResponses and fail workflows that have invalid output expressions" in {
+  it should "handleStatusResponses and fail workflows that have invalid output expressions" in
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       runAndWait {
         withWorkspaceContext(testData.workspace) { context =>
@@ -1797,7 +1795,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         ).get.status
       }
     }
-  }
 
   it should "fail workflows that exceed the configured workspace attribute maximum" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>

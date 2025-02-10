@@ -36,6 +36,7 @@ import scala.concurrent.Future
   */
 trait SamDAO {
   val errorReportSource = ErrorReportSource("sam")
+  val allUsersGroupName = WorkbenchGroupName("All_Users")
 
   def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]]
 
@@ -164,11 +165,20 @@ trait SamDAO {
                            ctx: RawlsRequestContext
   ): Future[Seq[SamFullyQualifiedResourceId]]
 
+  def setPolicyPublic(resourceTypeName: SamResourceTypeName,
+                      resourceId: String,
+                      policyName: SamResourcePolicyName,
+                      public: Boolean,
+                      ctx: RawlsRequestContext
+  ): Future[Unit]
+
   def admin: SamAdminDAO
 
   def rawlsSAContext: RawlsRequestContext = RawlsRequestContext(
     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""), None)
   )
+
+  def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail]
 }
 
 trait SamAdminDAO {

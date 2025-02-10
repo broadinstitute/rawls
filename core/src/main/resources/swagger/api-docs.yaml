@@ -4337,7 +4337,23 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceRequest
-
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketUsage:
+    get:
+      tags:
+        - workspaces_v2
+      summary: Get usage of bucket in bytes
+      description: Itemizes bucket usage by storage class
+      operationId: getBucketUsageV2
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BucketMetricsResponse'
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketMigration:
     get:
       tags:
@@ -6044,6 +6060,7 @@ components:
             - GcpBucketRequesterPays
             - SeparateSubmissionFinalOutputs
             - UseCromwellGcpBatchBackend
+            - PubliclyReadable
         config:
           description: The configuration of the workspace setting
           oneOf:
@@ -6052,6 +6069,7 @@ components:
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketRequesterPaysConfig'
             - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
             - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingPubliclyReadableConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
       required:
         - rules
@@ -6126,6 +6144,14 @@ components:
         enabled:
           type: boolean
           description: Whether workflows submitted to Cromwell should be run using Cromwell's GCP Batch backend
+    WorkspaceSettingPubliclyReadableConfig:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether or not the workspace should be publicly readable
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount
@@ -6239,6 +6265,16 @@ components:
           type: string
           format: timestamp
           description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
+      description: ""
+    BucketMetricsResponse:
+      type: array
+      properties:
+        usageInBytes:
+          type: integer
+          description: The current storage bucket usage in bytes
+        storageClass:
+          type: string
+          description: The storage class of data in bucket
       description: ""
     PendingCloneWorkspaceFileTransfer:
       required:
@@ -7094,8 +7130,6 @@ components:
               messages:
                 - Google Billing is misbehaving!
             GoogleBuckets:
-              ok: true
-            GoogleGenomics:
               ok: true
             GoogleGroups:
               ok: true

@@ -120,7 +120,7 @@ class UserServiceSpec
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
-  "UserService" should "add a service perimeter field for an existing project when user has correct permissions" in {
+  "UserService" should "add a service perimeter field for an existing project when user has correct permissions" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -151,10 +151,9 @@ class UserServiceSpec
 
       updatedProject.servicePerimeter shouldBe Option(defaultServicePerimeterName)
     }
-  }
 
   // 204 when all of the above even if project doesn't have a google project number
-  it should "add a service perimeter field and update the status for an existing project when user has correct permissions even if there isn't a project number already" in {
+  it should "add a service perimeter field and update the status for an existing project when user has correct permissions even if there isn't a project number already" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(googleProjectNumber = None)
 
@@ -198,10 +197,9 @@ class UserServiceSpec
       updatedProject.servicePerimeter shouldBe Option(defaultServicePerimeterName)
       updatedProject.googleProjectNumber shouldBe Option(googleProjectNumber)
     }
-  }
 
   // 400 when project has a perimeter already
-  it should "fail with a 400 when the project already has a perimeter" in {
+  it should "fail with a 400 when the project already has a perimeter" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(servicePerimeter =
         Option(ServicePerimeterName("accessPolicies/123/servicePerimeters/other_perimeter"))
@@ -217,10 +215,9 @@ class UserServiceSpec
         StatusCodes.BadRequest
       )
     }
-  }
 
   // 400 when project is not 'Ready'
-  it should "fail with a 400 when the project's status is not 'Ready'" in {
+  it should "fail with a 400 when the project's status is not 'Ready'" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(status = CreationStatuses.Creating)
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -234,10 +231,9 @@ class UserServiceSpec
         StatusCodes.BadRequest
       )
     }
-  }
 
   // 403 when user isn't owner of project or project dne
-  it should "fail with a 403 when Sam says the user does not have permission on the billing project" in {
+  it should "fail with a 403 when Sam says the user does not have permission on the billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -267,10 +263,9 @@ class UserServiceSpec
         StatusCodes.Forbidden
       )
     }
-  }
 
   // 404 when user doesn't have permissions on service-perimeter or s-p dne
-  it should "fail with a 404 when Sam says the user does not have permission on the service perimeter" in {
+  it should "fail with a 404 when Sam says the user does not have permission on the service perimeter" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -298,10 +293,9 @@ class UserServiceSpec
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.NotFound)
     }
-  }
 
   // 200 when billing project is deleted
-  it should "Successfully to delete a billing project" in {
+  it should "Successfully to delete a billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
@@ -349,9 +343,8 @@ class UserServiceSpec
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
       actual shouldEqual ()
     }
-  }
 
-  it should "Successfully to delete a billing project when the google project does not exist on GCP" in {
+  it should "Successfully to delete a billing project when the google project does not exist on GCP" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
@@ -399,9 +392,8 @@ class UserServiceSpec
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
       actual shouldEqual ()
     }
-  }
 
-  it should "fail with a 400 when workspace exists in this billing project to be deleted" in {
+  it should "fail with a 400 when workspace exists in this billing project to be deleted" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       // A workspace with the which namespaceName equals to defaultBillingProject's billing project name.
@@ -436,9 +428,8 @@ class UserServiceSpec
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
-  }
 
-  it should "fail with a 403 when Sam says the user does not have permission to delete billing project" in {
+  it should "fail with a 403 when Sam says the user does not have permission to delete billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -459,9 +450,8 @@ class UserServiceSpec
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
-  }
 
-  it should "set the spend configuration of a billing project when the user has permission" in {
+  it should "set the spend configuration of a billing project when the user has permission" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("test_dataset")
@@ -495,9 +485,8 @@ class UserServiceSpec
         s"gcp_billing_export_v1_${billingProject.billingAccount.get.value.stripPrefix("billingAccounts/").replace("-", "_")}"
       spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName.value), Some(spendReportTableName))
     }
-  }
 
-  it should "not set the spend configuration of a billing project when the user doesn't have permission" in {
+  it should "not set the spend configuration of a billing project when the user doesn't have permission" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("test_dataset")
@@ -535,9 +524,8 @@ class UserServiceSpec
       // assert that no change was made to the spend configuration
       spendReportConfigInDb.head shouldEqual (None, None)
     }
-  }
 
-  it should "clear the spend configuration of a billing project" in {
+  it should "clear the spend configuration of a billing project" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("test_dataset")
@@ -566,9 +554,8 @@ class UserServiceSpec
 
       spendReportConfigInDb.head shouldEqual (None, None)
     }
-  }
 
-  it should "not clear the spend configuration of a billing project when the user doesn't have permission" in {
+  it should "not clear the spend configuration of a billing project when the user doesn't have permission" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("should_not_clear_dataset")
@@ -613,9 +600,8 @@ class UserServiceSpec
       // assert that no change was made to the spend configuration
       spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName.value), Some(spendReportTableName.value))
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset does not exist or can't be accessed" in {
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset does not exist or can't be accessed" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("dataset_does_not_exist")
@@ -642,9 +628,8 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed" in {
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject =
         RawlsBillingProject(RawlsBillingProjectName("project_without_table"), CreationStatuses.Ready, None, None)
@@ -674,9 +659,8 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the billing project does not have a billing account associated with it" in {
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the billing project does not have a billing account associated with it" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(RawlsBillingProjectName("project_without_billing_account"),
                                                CreationStatuses.Ready,
@@ -709,9 +693,8 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset has an invalid name" in {
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset has an invalid name" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("test-dataset")
@@ -738,9 +721,8 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
     }
-  }
 
-  it should "update the billing account for a billing project" in {
+  it should "update the billing account for a billing project" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
@@ -806,9 +788,8 @@ class UserServiceSpec
         any()
       )
     }
-  }
 
-  it should "remove the billing account for a billing project" in {
+  it should "remove the billing account for a billing project" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
 
@@ -854,9 +835,8 @@ class UserServiceSpec
         any()
       )
     }
-  }
 
-  it should "not update the billing account for a billing project if the user does not have access to the billing project" in {
+  it should "not update the billing account for a billing project if the user does not have access to the billing project" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
@@ -892,9 +872,8 @@ class UserServiceSpec
         .getOrElse(fail("project not found"))
         .billingAccount shouldEqual billingProject.billingAccount
     }
-  }
 
-  it should "not update the billing account for a billing project if the user does not have access to the billing account" in {
+  it should "not update the billing account for a billing project if the user does not have access to the billing account" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
@@ -930,9 +909,8 @@ class UserServiceSpec
         .getOrElse(fail("project not found"))
         .billingAccount shouldEqual billingProject.billingAccount
     }
-  }
 
-  it should "not remove the billing account for a billing project if the user does not have access to the billing project" in {
+  it should "not remove the billing account for a billing project if the user does not have access to the billing project" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
@@ -963,9 +941,8 @@ class UserServiceSpec
         .getOrElse(fail("project not found"))
         .billingAccount shouldEqual billingProject.billingAccount
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when updating the billing account for a billing project and the billing account name is not valid" in {
+  it should "throw a RawlsExceptionWithErrorReport when updating the billing account for a billing project and the billing account name is not valid" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("INVALID")
@@ -1001,9 +978,8 @@ class UserServiceSpec
         .getOrElse(fail("project not found"))
         .billingAccount shouldEqual billingProject.billingAccount
     }
-  }
 
-  it should "not call BPM when updating or removing a billing account if the billing project has no billing profile" in {
+  it should "not call BPM when updating or removing a billing account if the billing project has no billing profile" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject =
         minimalTestData.billingProject.copy(projectName = RawlsBillingProjectName("noProfile"), billingProfileId = None)
@@ -1044,9 +1020,8 @@ class UserServiceSpec
 
       verifyNoInteractions(mockBpmDAO)
     }
-  }
 
-  it should "not throw if BPM errors while updating the billing profile" in {
+  it should "not throw if BPM errors while updating the billing profile" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
@@ -1103,9 +1078,8 @@ class UserServiceSpec
         any()
       )
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset google project has an invalid name" in {
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset google project has an invalid name" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("test-dataset")
@@ -1132,9 +1106,8 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
     }
-  }
 
-  it should "get the spend report configuration of a billing project when the user has permission" in {
+  it should "get the spend report configuration of a billing project when the user has permission" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = BigQueryDatasetName("test_dataset")
@@ -1169,9 +1142,8 @@ class UserServiceSpec
 
       result shouldEqual Some(spendReportConfiguration)
     }
-  }
 
-  it should "return None when the user calls getSpendReportConfiguration but it isn't configured" in {
+  it should "return None when the user calls getSpendReportConfiguration but it isn't configured" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
 
@@ -1198,9 +1170,8 @@ class UserServiceSpec
 
       result shouldEqual None
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport when the user does not have permission to get the spend report configuration" in {
+  it should "throw a RawlsExceptionWithErrorReport when the user does not have permission to get the spend report configuration" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
 
@@ -1221,9 +1192,8 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
     }
-  }
 
-  it should "throw a RawlsExceptionWithErrorReport getting the spend report configuration for a project does not exist" in {
+  it should "throw a RawlsExceptionWithErrorReport getting the spend report configuration for a project does not exist" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val projectName = RawlsBillingProjectName("fake-project")
 
@@ -1244,7 +1214,6 @@ class UserServiceSpec
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
     }
-  }
 
   behavior of "getBillingProject"
 
@@ -1620,7 +1589,7 @@ class UserServiceSpec
 
   behavior of "addUserToBillingProjectV2"
 
-  it should "update billing profile record when a user is added to a billing project" in {
+  it should "update billing profile record when a user is added to a billing project" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1668,9 +1637,8 @@ class UserServiceSpec
                                      testContext
       )
     }
-  }
 
-  it should "update billing profile record when an owner is added to a billing project" in {
+  it should "update billing profile record when an owner is added to a billing project" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1718,9 +1686,8 @@ class UserServiceSpec
                                      testContext
       )
     }
-  }
 
-  it should "not update Sam permissions if billing profile member addition fails" in {
+  it should "not update Sam permissions if billing profile member addition fails" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1763,11 +1730,10 @@ class UserServiceSpec
                                               testContext
       )
     }
-  }
 
   behavior of "removeUserFromBillingProjectV2"
 
-  it should "update billing profile record when a user is removed from a billing project" in {
+  it should "update billing profile record when a user is removed from a billing project" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1815,9 +1781,8 @@ class UserServiceSpec
                                           testContext
       )
     }
-  }
 
-  it should "update billing profile record when an owner is removed from a billing project" in {
+  it should "update billing profile record when an owner is removed from a billing project" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1865,9 +1830,8 @@ class UserServiceSpec
                                           testContext
       )
     }
-  }
 
-  it should "update billing profile record when an owner removes themself from a project" in {
+  it should "update billing profile record when an owner removes themself from a project" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1913,7 +1877,6 @@ class UserServiceSpec
                                           testContext
       )
     }
-  }
 
   it should "not update Sam permissions if billing profile member deletion fails" in
     withMinimalTestDatabase { dataSource =>

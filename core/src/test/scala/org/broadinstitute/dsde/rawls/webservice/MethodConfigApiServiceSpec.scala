@@ -742,9 +742,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     }
   }
 
-  it should "return 200 on put method configuration" in {
+  it should "return 200 on put method configuration" in
     check200AddMC(Put)
-  }
 
   it should "return 200 on post method configuration" in
     check200AddMC(Post)
@@ -778,9 +777,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     }
   }
 
-  it should "update the workspace last modified date on put method configuration" in {
+  it should "update the workspace last modified date on put method configuration" in
     checkLastModified(Put)
-  }
 
   it should "update the workspace last modified date on post method configuration" in
     checkLastModified(Post)
@@ -827,9 +825,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "validate attribute syntax in put method configuration" in {
+  it should "validate attribute syntax in put method configuration" in
     checkValidAttributeSyntax(Put)
-  }
 
   it should "validate attribute syntax in post method configuration" in
     checkValidAttributeSyntax(Post)
@@ -853,9 +850,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "not allow library attributes in outputs for put method configuration by curator" in {
+  it should "not allow library attributes in outputs for put method configuration by curator" in
     checkNoLibraryAttributesInOutputsByCurator(Put)
-  }
 
   it should "not allow library attributes in outputs for post method configuration by curator" in
     checkNoLibraryAttributesInOutputsByCurator(Post)
@@ -881,13 +877,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "not allow library attributes in outputs for put method configuration by non-curator" in {
+  it should "not allow library attributes in outputs for put method configuration by non-curator" in
     checkNoLibraryAttributesInOutputsByNonCurator(Put)
-  }
 
-  it should "not allow library attributes in outputs for post method configuration by non-curator" in {
+  it should "not allow library attributes in outputs for post method configuration by non-curator" in
     checkNoLibraryAttributesInOutputsByNonCurator(Post)
-  }
 
   it should "return 400 on put method configuration if the location differs between URI and JSON body" in withTestDataApiServices {
     services =>
@@ -960,7 +954,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "get syntax validation information when using a reserved output attribute" in {
+  it should "get syntax validation information when using a reserved output attribute" in
     withTestDataApiServices { services =>
       val entityType = "some_type_of_entity"
 
@@ -1007,7 +1001,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
         }
     }
-  }
 
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/methodconfigs/update}", httpJson(testData.agoraMethodConfig)) ~>

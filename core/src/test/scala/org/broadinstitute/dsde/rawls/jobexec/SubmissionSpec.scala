@@ -1100,7 +1100,7 @@ class SubmissionSpec(_system: ActorSystem)
     )
   }
 
-  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is true" in {
+  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is true" in
     workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = true) { submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1119,9 +1119,8 @@ class SubmissionSpec(_system: ActorSystem)
 
       submissionData.submissionRoot should include("intermediates")
     }
-  }
 
-  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is false" in {
+  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is false" in
     workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = false) { submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1140,7 +1139,6 @@ class SubmissionSpec(_system: ActorSystem)
 
       submissionData.submissionRoot should not include "intermediates"
     }
-  }
 
   it should "create data repo submission" in {
     val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> s"value $rowId").toMap
@@ -1539,7 +1537,7 @@ class SubmissionSpec(_system: ActorSystem)
     }
   }
 
-  it should "report error when data reference exists with entity name" in {
+  it should "report error when data reference exists with entity name" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = methodConfig.namespace,
@@ -1558,9 +1556,8 @@ class SubmissionSpec(_system: ActorSystem)
       ex.errorReport.causes should have length 1
       ex.errorReport.causes.head.message shouldBe "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
     }
-  }
 
-  it should "report error when data reference points to unknown snapshot" in {
+  it should "report error when data reference points to unknown snapshot" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
       runAndWait(
         methodConfigurationQuery.upsert(minimalTestData.workspace,
@@ -1584,7 +1581,6 @@ class SubmissionSpec(_system: ActorSystem)
       ex.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
       ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
     }
-  }
 
   it should "report error when root entity type does not refer to a table in the snapshot" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>

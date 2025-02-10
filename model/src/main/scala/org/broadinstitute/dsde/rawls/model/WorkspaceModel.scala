@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
+  PubliclyReadableConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -25,6 +26,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
   GcpBucketLifecycle,
   GcpBucketRequesterPays,
   GcpBucketSoftDelete,
+  PubliclyReadable,
   SeparateSubmissionFinalOutputs,
   UseCromwellGcpBatchBackend,
   WorkspaceSettingType
@@ -596,6 +598,9 @@ case class SeparateSubmissionFinalOutputsSetting(override val config: SeparateSu
 case class UseCromwellGcpBatchBackendSetting(override val config: UseCromwellGcpBatchBackendConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.UseCromwellGcpBatchBackend, config)
 
+case class PubliclyReadableSetting(override val config: PubliclyReadableConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.PubliclyReadable, config)
+
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -608,6 +613,7 @@ object WorkspaceSettingTypes {
     case "gcpbucketrequesterpays"         => GcpBucketRequesterPays
     case "separatesubmissionfinaloutputs" => SeparateSubmissionFinalOutputs
     case "usecromwellgcpbatchbackend"     => UseCromwellGcpBatchBackend
+    case "publiclyreadable"               => PubliclyReadable
     case _                                => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
@@ -620,6 +626,8 @@ object WorkspaceSettingTypes {
   case object SeparateSubmissionFinalOutputs extends WorkspaceSettingType
 
   case object UseCromwellGcpBatchBackend extends WorkspaceSettingType
+
+  case object PubliclyReadable extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig
@@ -639,6 +647,8 @@ object WorkspaceSettingConfig {
   case class SeparateSubmissionFinalOutputsConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
   case class UseCromwellGcpBatchBackendConfig(enabled: Boolean) extends WorkspaceSettingConfig
+
+  case class PubliclyReadableConfig(enabled: Boolean) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1086,6 +1096,16 @@ case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, S
 
 case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: Option[DateTime])
 
+case class BucketMetricsResponse(
+  metrics: Seq[BucketMetric]
+)
+
+//See https://cloud.google.com/storage/docs/storage-classes
+//I believe the options for storageclass are STANDARD, NEARLINE, COLDLINE, ARCHIVE, REGIONAL, MULTI-REGIONAL and DRA.
+//I've seen REGIONAL and MULTI_REGIONAL in practice; I have not seen DRA so I don't know exactly how it would be coded
+//Hence I'm afraid to make an enumeration until I can verify what's possible to see.
+case class BucketMetric(storageClass: String, valueInBytes: Double)
+
 case class ErrorReport(source: String,
                        message: String,
                        statusCode: Option[StatusCode],
@@ -1275,6 +1295,10 @@ class WorkspaceJsonSupport extends JsonSupport {
     UseCromwellGcpBatchBackendConfig.apply
   )
 
+  implicit val PubliclyReadableConfigFormat: RootJsonFormat[PubliclyReadableConfig] = jsonFormat1(
+    PubliclyReadableConfig.apply
+  )
+
   implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
     override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
 
@@ -1291,6 +1315,7 @@ class WorkspaceJsonSupport extends JsonSupport {
       case config: GcpBucketRequesterPaysConfig         => config.toJson
       case config: SeparateSubmissionFinalOutputsConfig => config.toJson
       case config: UseCromwellGcpBatchBackendConfig     => config.toJson
+      case config: PubliclyReadableConfig               => config.toJson
     }
 
     // We prevent reading WorkspaceSettingConfig directly because we need
@@ -1318,6 +1343,8 @@ class WorkspaceJsonSupport extends JsonSupport {
           SeparateSubmissionFinalOutputsSetting(fields("config").convertTo[SeparateSubmissionFinalOutputsConfig])
         case UseCromwellGcpBatchBackend =>
           UseCromwellGcpBatchBackendSetting(fields("config").convertTo[UseCromwellGcpBatchBackendConfig])
+        case PubliclyReadable =>
+          PubliclyReadableSetting(fields("config").convertTo[PubliclyReadableConfig])
       }
     }
   }
@@ -1354,6 +1381,10 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceStatusFormat: RootJsonFormat[WorkspaceStatus] = jsonFormat2(WorkspaceStatus)
 
   implicit val BucketUsageResponseFormat: RootJsonFormat[BucketUsageResponse] = jsonFormat2(BucketUsageResponse)
+
+  implicit val BucketMetricsFormat: RootJsonFormat[BucketMetric] = jsonFormat2(BucketMetric)
+
+  implicit val BucketMetricsResponseFormat: RootJsonFormat[BucketMetricsResponse] = jsonFormat1(BucketMetricsResponse)
 
   implicit val MethodConfigurationNameFormat: RootJsonFormat[MethodConfigurationName] = jsonFormat3(
     MethodConfigurationName

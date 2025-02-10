@@ -289,6 +289,15 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                                     ctx: RawlsRequestContext
     ): Future[Boolean] = ???
   }
+
+  override def setPolicyPublic(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               public: Boolean,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] = ???
+
+  override def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail] = ???
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext)
