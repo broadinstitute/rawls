@@ -451,30 +451,33 @@ class SubmissionsService(
                                                      submissionDoneDate,
                                                      tableName
             )
-          ) map {
-            case Failure(ex) =>
-              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-              submission
-            case Success(costMap) =>
-              val costedWorkflows = submission.workflows.map { workflow =>
-                workflow.workflowId match {
-                  case Some(wfId) =>
-                    // prefer the actual cost from the cost map;
-                    // use Cromwell-estimated cost from the workflow if not
-                    if (costMap.contains(wfId))
-                      workflow.copy(cost = costMap.get(wfId), costType = Option(WorkflowCostTypes.Actual))
-                    else
-                      workflow
-                  case None => workflow
-                }
-              }
-              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-              costedSubmission
-          }
+          ) map { costMapTry => annotateSubmissionWithActualCost(submission, costMapTry) }
         }
       }
     }
   }
+
+  def annotateSubmissionWithActualCost(submission: Submission, costMap: Try[Map[String, Float]]): Submission =
+    costMap match {
+      case Failure(ex) =>
+        logger.error(s"Unable to get workflow costs for submission ${submission.submissionId}", ex)
+        submission
+      case Success(costMap) =>
+        val costedWorkflows = submission.workflows.map { workflow =>
+          workflow.workflowId match {
+            case Some(wfId) =>
+              // prefer the actual cost from the cost map;
+              // use Cromwell-estimated cost from the workflow if not
+              if (costMap.contains(wfId))
+                workflow.copy(cost = costMap.get(wfId), costType = Option(WorkflowCostTypes.Actual))
+              else
+                workflow
+            case None => workflow
+          }
+        }
+        val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
+        costedSubmission
+    }
 
   def retrySubmission(workspaceName: WorkspaceName,
                       submissionRetry: SubmissionRetry,

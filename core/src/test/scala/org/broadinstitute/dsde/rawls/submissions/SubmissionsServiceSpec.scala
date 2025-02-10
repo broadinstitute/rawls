@@ -38,7 +38,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   WorkspaceService,
   WorkspaceSettingRepository
 }
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -49,13 +49,16 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import spire.random.Random
 
+import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
+import scala.util.{Failure, Success}
 
 class SubmissionsServiceSpec
     extends AnyFlatSpec
@@ -588,6 +591,7 @@ class SubmissionsServiceSpec
   }
 
   behavior of "per-workflow cost cap validation"
+
   // all tests can use the same db and services; none of these tests perform writes
   withTestDataServices { services =>
     it should "pass when no cap is specified" in {
@@ -630,6 +634,67 @@ class SubmissionsServiceSpec
       actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
       actual.errorReport.message shouldBe "per-workflow cost cap must be less than 10,000,000,000"
     }
+  }
+
+  behavior of "estimated and actual costs"
+
+  // all tests can use the same db and services; none of these tests perform writes
+  withTestDataServices { services =>
+    it should "show estimated costs when actual costs aren't available" in {
+      val submission = testData.costedSubmission1
+      val costMap = Success(Map.empty[String, Float])
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
+        wf.costType should contain(WorkflowCostTypes.Estimated)
+      }
+    }
+
+    it should "show actual costs when actual costs are available" in {
+      val submission = testData.costedSubmission1
+      val workflowIds = submission.workflows.map(_.workflowId.getOrElse(fail("workflow should have an id")))
+      val actualCosts = workflowIds.map(id => id -> new SecureRandom().nextFloat(1, 10)).toMap
+
+      val costMap = Success(actualCosts)
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        val expectedCost = actualCosts(wf.workflowId.getOrElse(fail("workflow should have an id")))
+        wf.cost should contain(expectedCost)
+        wf.costType should contain(WorkflowCostTypes.Actual)
+      }
+    }
+
+    it should "show a mix of estimated and actual costs when actual costs are partially available" in {
+      val submission = testData.costedSubmission1
+      // note use of .take(1) to only provide actual costs for one workflow
+      val workflowIds = submission.workflows.take(1).map(_.workflowId.getOrElse(fail("workflow should have an id")))
+      val actualCosts = workflowIds.map(id => id -> new SecureRandom().nextFloat(1, 10)).toMap
+
+      val costMap = Success(actualCosts)
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        val wfid = wf.workflowId.getOrElse(fail("workflow should have an id"))
+        if (actualCosts.contains(wfid)) {
+          val expectedCost = actualCosts(wfid)
+          wf.cost should contain(expectedCost)
+          wf.costType should contain(WorkflowCostTypes.Actual)
+        } else {
+          wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
+          wf.costType should contain(WorkflowCostTypes.Estimated)
+        }
+      }
+    }
+
+    it should "show estimated costs when actual cost retrieval hit an error" in {
+      val submission = testData.costedSubmission1
+      val costMap = Failure(new RawlsException("intentional unit test failure"))
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
+        wf.costType should contain(WorkflowCostTypes.Estimated)
+      }
+    }
+
   }
 
 }
