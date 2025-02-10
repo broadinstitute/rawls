@@ -7,5 +7,6 @@ This file documents changes to the `rawls-model` library, including notes on how
 Added:
 - Support 2.13
 - ExecutionModel classes moved from core to model
+- getBucketUsageV2 API
 
-SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.258-SNAP"`
+SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.287-SNAP"`
