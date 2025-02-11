@@ -461,7 +461,11 @@ class SubmissionsService(
                   case None       => workflow
                 }
               }
-              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
+              val costedSubmission = submission.copy(
+                cost = Some(costMap.values.sum), 
+                workflows = costedWorkflows,
+                perWorkflowCostCap = submission.perWorkflowCostCap // Include the cost cap data
+              )
               costedSubmission
           }
         }
