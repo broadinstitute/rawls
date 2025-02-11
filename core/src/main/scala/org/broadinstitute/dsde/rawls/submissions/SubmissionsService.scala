@@ -475,8 +475,8 @@ class SubmissionsService(
             case None => workflow
           }
         }
-        val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-        costedSubmission
+        val submissionCost = costedWorkflows.flatMap(_.cost).sum
+        submission.copy(cost = Some(submissionCost), workflows = costedWorkflows)
     }
 
   def retrySubmission(workspaceName: WorkspaceName,

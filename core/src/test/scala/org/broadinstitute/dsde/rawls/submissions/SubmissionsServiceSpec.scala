@@ -49,9 +49,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
-import spire.random.Random
 
-import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -640,7 +638,7 @@ class SubmissionsServiceSpec
 
   // all tests can use the same db and services; none of these tests perform writes
   withTestDataServices { services =>
-    it should "show estimated costs when actual costs aren't available" in {
+    it should "show estimated workflow costs when actual costs aren't available" in {
       val submission = testData.costedSubmission1
       val costMap = Success(Map.empty[String, Float])
       val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
@@ -650,10 +648,14 @@ class SubmissionsServiceSpec
       }
     }
 
-    it should "show actual costs when actual costs are available" in {
+    it should "show actual workflow costs when actual costs are available" in {
       val submission = testData.costedSubmission1
       val workflowIds = submission.workflows.map(_.workflowId.getOrElse(fail("workflow should have an id")))
-      val actualCosts = workflowIds.map(id => id -> new SecureRandom().nextFloat(1, 10)).toMap
+      // testData.costedSubmission1 has 3 workflows
+      val actualCostValues = Seq(4.56f, 5.67f, 6.78f)
+      val actualCosts: Map[String, Float] = workflowIds
+        .zip(actualCostValues)
+        .toMap
 
       val costMap = Success(actualCosts)
       val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
@@ -664,11 +666,11 @@ class SubmissionsServiceSpec
       }
     }
 
-    it should "show a mix of estimated and actual costs when actual costs are partially available" in {
+    it should "show a mix of estimated and actual workflow costs when actual costs are partially available" in {
       val submission = testData.costedSubmission1
       // note use of .take(1) to only provide actual costs for one workflow
       val workflowIds = submission.workflows.take(1).map(_.workflowId.getOrElse(fail("workflow should have an id")))
-      val actualCosts = workflowIds.map(id => id -> new SecureRandom().nextFloat(1, 10)).toMap
+      val actualCosts = workflowIds.map(id => id -> 4.56f).toMap
 
       val costMap = Success(actualCosts)
       val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
@@ -685,7 +687,7 @@ class SubmissionsServiceSpec
       }
     }
 
-    it should "show estimated costs when actual cost retrieval hit an error" in {
+    it should "show estimated workflow costs when actual cost retrieval hit an error" in {
       val submission = testData.costedSubmission1
       val costMap = Failure(new RawlsException("intentional unit test failure"))
       val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
@@ -693,6 +695,49 @@ class SubmissionsServiceSpec
         wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
         wf.costType should contain(WorkflowCostTypes.Estimated)
       }
+    }
+
+    it should "calculate submission cost of 0 when no workflow has a cost" in {
+      val workflows = testData.costedSubmission1.workflows.map(wf => wf.copy(cost = None, costType = None))
+      val submission = testData.costedSubmission1.copy(workflows = workflows)
+
+      val costMap = Success(Map.empty[String, Float])
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.cost should contain(0f)
+    }
+
+    it should "calculate submission cost when actual workflow costs aren't available" in {
+      val submission = testData.costedSubmission1
+      val costMap = Success(Map.empty[String, Float])
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      val expectedCost = 1.23f * submission.workflows.size // 1.23f hard-coded into testData.costedSubmission1
+      actual.cost should contain(expectedCost)
+    }
+
+    it should "calculate submission cost when actual costs are partially available" in {
+      val submission = testData.costedSubmission1
+      // note use of .take(1) to only provide actual costs for one workflow
+      val workflowIds = submission.workflows.take(1).map(_.workflowId.getOrElse(fail("workflow should have an id")))
+      val actualCosts = workflowIds.map(id => id -> 4.56f).toMap
+
+      val costMap = Success(actualCosts)
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+
+      // 1.23f hard-coded into testData.costedSubmission1
+      // multiply by (size-1) to reflect the one workflow that has an actual cost
+      val expectedCost =
+        (1.23f * (submission.workflows.size - 1)) +
+          actualCosts.values.sum
+
+      actual.cost should contain(expectedCost)
+    }
+
+    it should "calculate submission cost when actual cost retrieval hit an error" in {
+      val submission = testData.costedSubmission1
+      val costMap = Failure(new RawlsException("intentional unit test failure"))
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      val expectedCost = 1.23f * submission.workflows.size // 1.23f hard-coded into testData.costedSubmission1
+      actual.cost should contain(expectedCost)
     }
 
   }
