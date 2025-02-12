@@ -39,7 +39,7 @@ import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Cond
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.cloud.monitoring.v3.{MetricServiceClient, MetricServiceSettings}
-import com.google.monitoring.v3.{ListTimeSeriesRequest, TimeInterval}
+import com.google.monitoring.v3.{Aggregation, ListTimeSeriesRequest, TimeInterval}
 import com.google.api.services.monitoring.v3.MonitoringScopes
 import com.google.protobuf.util.Timestamps
 import com.google.auth.oauth2.ServiceAccountCredentials
@@ -47,6 +47,8 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.{BucketSourceOption, BucketTargetOption}
 import com.google.cloud.storage.{BucketInfo, Cors, HttpMethod, StorageClass, StorageException}
+import com.google.monitoring.v3.Aggregation.Aligner
+import com.google.protobuf.Duration
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -1155,6 +1157,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setName("projects/" + projectName)
       .setFilter("metric.type=\"storage.googleapis.com/storage/v2/total_bytes\"")
       .setInterval(interval)
+      .setAggregation(
+        Aggregation
+          .newBuilder()
+          .setAlignmentPeriod(Duration.newBuilder().setSeconds(86400).build())
+          .setCrossSeriesReducer(Aggregation.Reducer.REDUCE_NONE)
+          .setPerSeriesAligner(Aligner.ALIGN_MEAN)
+          .build()
+      )
       .build()
     val response = metricServiceClient.listTimeSeries(request)
     metricServiceClient.close()
