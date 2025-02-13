@@ -1401,6 +1401,67 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       workflowsSecondPass should have size 0
   }
 
+  it should "skip updates to workflow costs if the cost has only changed by fractions of a penny" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission =
+        testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        // this mock DAO uses a var. The first time the test calls getCost it will return $0.09;
+        // the second time it is called it will return $0.0901.
+        var statefulCost = BigDecimal(0.09)
+        val increment = BigDecimal(0.0001)
+
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(expensiveWorkflowId)) {
+            val resp = Future.successful(WorkflowCostBreakdown(id, statefulCost, "USD", status, Seq.empty))
+            statefulCost += increment
+            resp
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
+        perWorkflowCostCap = Option(BigDecimal(99))
+      )
+
+      // Trigger a monitor pass. This first pass will update the workflow to Running/cost=$0.09
+      // due to our CostCapTestExecutionServiceDAO.getCost override
+      val executionServiceStatusResponse = await(monitor.queryExecutionServiceForStatus())
+      val workflowsFirstPass = executionServiceStatusResponse.statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsFirstPass should have size 1
+      workflowsFirstPass.head.status shouldBe "Running"
+      workflowsFirstPass.head.cost should contain(BigDecimal(0.09))
+
+      // make sure the monitor processes the response of the first pass
+      await(monitor.handleStatusResponses(executionServiceStatusResponse))
+
+      // Trigger another monitor pass. This second pass will receive a Cromwell cost of $0.0901,
+      // which it should round, notice that the rounded value hasn't changed, and not return the workflow.
+      val workflowsSecondPass = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsSecondPass should have size 0
+  }
+
   it should "abort a workflow that has exceeded the per-workflow cost cap but not abort the entire submission" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val cheapWorkflowId = UUID.randomUUID().toString
