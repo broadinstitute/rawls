@@ -3647,7 +3647,8 @@ paths:
       tags:
         - workspaces
       summary: Get bucket usage
-      description: Get the storage bucket usage
+      deprecated: true
+      description: Deprecated in favor of /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketUsage
       operationId: getBucketUsage
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
