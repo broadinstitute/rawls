@@ -52,7 +52,7 @@ object Dependencies {
   val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20230109-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.4.0-jre"
 
-  val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % "v3-rev540-1.25.0"
+  val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % "v3-rev20250130-2.0.0"
 
   // metrics4-scala and metrics3-statsd are pulled in by workbench-metrics, which is pulled in by
   // workbench-google (workbenchGoogle variable in this file). Thus, anything that depends on workbench-google, such as
