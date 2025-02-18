@@ -54,6 +54,8 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import spray.json._
 
+import scala.math.BigDecimal.RoundingMode
+
 /**
  * Created by dvoet on 6/26/15.
  */
@@ -348,7 +350,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               }
             } else {
               // don't update unless status or cost has actually changed
-              if (costBreakdown.status != workflowRec.status || Option(costBreakdown.cost) != workflowRec.cost) {
+              // round the Cromwell cost estimate to 2 decimal places before comparing.
+              // the existing workflow cost will already be 2 decimal places due to Rawls db precision.
+              val roundedEstimate = costBreakdown.cost.setScale(2, RoundingMode.HALF_UP)
+              if (costBreakdown.status != workflowRec.status || Option(roundedEstimate) != workflowRec.cost) {
                 Future.successful(
                   Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
                 )
