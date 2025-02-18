@@ -1790,14 +1790,61 @@ class WorkspaceService(
     } else {
       Set(WorkbenchEmail(ctx.userInfo.userEmail.value))
     }
+    val groupedAclUpdates: Map[WorkspaceAccessLevel, List[WorkspaceACLUpdate]] = workspaceRequest.addUsers
+      .map { aclUpdates =>
+        aclUpdates.groupBy(_.accessLevel)
+      }
+      .getOrElse(Map.empty)
+
     val ownerPolicy =
-      SamWorkspacePolicyNames.owner -> SamPolicy(ownerPolicyMembership, Set.empty, Set(SamWorkspaceRoles.owner))
-    val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.writer))
-    val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.reader))
+      SamWorkspacePolicyNames.owner -> SamPolicy(
+        ownerPolicyMembership ++ groupedAclUpdates
+          .getOrElse(WorkspaceAccessLevels.Owner, Set.empty)
+          .map(update => WorkbenchEmail(update.email))
+          .toSet,
+        Set.empty,
+        Set(SamWorkspaceRoles.owner)
+      )
+    val writerPolicy =
+      SamWorkspacePolicyNames.writer -> SamPolicy(
+        groupedAclUpdates
+          .getOrElse(WorkspaceAccessLevels.Write, Set.empty)
+          .map(update => WorkbenchEmail(update.email))
+          .toSet,
+        Set.empty,
+        Set(SamWorkspaceRoles.writer)
+      )
+    val readerPolicy =
+      SamWorkspacePolicyNames.reader -> SamPolicy(
+        groupedAclUpdates
+          .getOrElse(WorkspaceAccessLevels.Read, Set.empty)
+          .map(update => WorkbenchEmail(update.email))
+          .toSet,
+        Set.empty,
+        Set(SamWorkspaceRoles.reader)
+      )
+
     val shareReaderPolicy =
-      SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.shareReader))
+      SamWorkspacePolicyNames.shareReader -> SamPolicy(
+        groupedAclUpdates
+          .getOrElse(WorkspaceAccessLevels.Read, Set.empty)
+          .filter(_.canShare.get)
+          .map(update => WorkbenchEmail(update.email))
+          .toSet,
+        Set.empty,
+        Set(SamWorkspaceRoles.shareReader)
+      )
     val shareWriterPolicy =
-      SamWorkspacePolicyNames.shareWriter -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.shareWriter))
+      SamWorkspacePolicyNames.shareWriter -> SamPolicy(
+        groupedAclUpdates
+          .getOrElse(WorkspaceAccessLevels.Write, Set.empty)
+          .filter(update => update.canShare.contains(true))
+          .map(update => WorkbenchEmail(update.email))
+          .toSet,
+        Set.empty,
+        Set(SamWorkspaceRoles.shareWriter)
+      )
+    // TODO what goes here
     val canComputePolicy =
       SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.canCompute))
     val canCatalogPolicy =
