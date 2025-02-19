@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
+    <changeSet logicalFilePath="dummy" author="sehsan" id="create_WORKSPACE_SPEND_REPORT_TABLE">
+        <createTable tableName="WORKSPACE_SPEND_REPORT">
+            <column name="ID" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="GOOGLE_PROJECT_ID" type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="REPORT_START_DATE" type="DATETIME">
+                <constraints nullable="false"/>
+            </column>
+            <column name="REPORT_END_DATE" type="DATETIME">
+                <constraints nullable="false"/>
+            </column>
+            <column name="TOTAL_COMPUTE" type="NUMBER(10,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="TOTAL_STORAGE" type="NUMBER(10,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="OTHER_SPEND" type="NUMBER(10,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="IS_DATA_AVAILABLE" type="BOOLEAN">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint columnNames="GOOGLE_PROJECT_ID, REPORT_START_DATE, REPORT_END_DATE" constraintName="IDX_WORKSPACE_SPEND_REPORT" tableName="WORKSPACE_SPEND_REPORT"/>
+    </changeSet>
+</databaseChangeLog>
