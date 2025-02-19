@@ -6216,6 +6216,11 @@ components:
           description: Optional, array of policies to attach to the workspace.
           items:
             $ref: '#/components/schemas/WorkspacePolicy'
+        addUsers:
+          type: array
+          description: Optional, array of users to add to the workspace
+          items:
+            $ref: '#/components/schemas/WorkspaceACLUpdate'
       description: ""
     WorkspaceRequestClone:
       required:

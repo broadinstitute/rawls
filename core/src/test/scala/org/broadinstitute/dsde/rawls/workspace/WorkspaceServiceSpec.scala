@@ -1409,6 +1409,71 @@ class WorkspaceServiceSpec
       .roles should contain theSameElementsAs Set(SamWorkspaceRoles.canCatalog)
   }
 
+  it should "add user policies if included" in withTestDataServices { services =>
+    val newWorkspaceName = "workspaceResourcePoliciesTest"
+    val readerOnly = WorkspaceACLUpdate("readerOnly@email.com", WorkspaceAccessLevels.Read, Some(false), Some(false))
+    val readerShare = WorkspaceACLUpdate("readerShare@email.com", WorkspaceAccessLevels.Read, Some(true), Some(false))
+    val writerOnly = WorkspaceACLUpdate("writerOnly@email.com", WorkspaceAccessLevels.Write, Some(false), Some(false))
+    val writerShare = WorkspaceACLUpdate("writerShare@email.com", WorkspaceAccessLevels.Write, Some(true), Some(false))
+    val writerCompute =
+      WorkspaceACLUpdate("writerCompute@email.com", WorkspaceAccessLevels.Write, Some(true), Some(true))
+    val owner = WorkspaceACLUpdate("owner@email.com", WorkspaceAccessLevels.Owner, Some(true), Some(true))
+    val workspaceRequest =
+      WorkspaceRequest(testData.testProject1Name.value,
+                       newWorkspaceName,
+                       Map.empty,
+                       addUsers = Some(List(readerOnly, readerShare, writerOnly, writerShare, writerCompute, owner))
+      )
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val requestedPoliciesCaptor = captor[Map[SamResourcePolicyName, SamPolicy]]
+    verify(services.samDAO).createResourceFull(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspace.workspaceId),
+      requestedPoliciesCaptor.capture,
+      any[Set[String]],
+      any[RawlsRequestContext],
+      ArgumentMatchers.eq(None)
+    )
+
+    val requestedPolicies = requestedPoliciesCaptor.getValue
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.projectOwner, fail("Missing project-owner policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("foo@bar.com"))
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.owner, fail("Missing owner policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("owner-access"),
+                                                         WorkbenchEmail("owner@email.com")
+    )
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.writer, fail("Missing writer policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("writerOnly@email.com"),
+                                                         WorkbenchEmail("writerShare@email.com"),
+                                                         WorkbenchEmail("writerCompute@email.com")
+    )
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.reader, fail("Missing reader policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("readerOnly@email.com"),
+                                                         WorkbenchEmail("readerShare@email.com")
+    )
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.shareWriter, fail("Missing share-writer policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("writerShare@email.com"),
+                                                         WorkbenchEmail("writerCompute@email.com")
+    )
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.shareReader, fail("Missing share-reader policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("readerShare@email.com"))
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.canCompute, fail("Missing can-compute policy"))
+      .memberEmails should contain theSameElementsAs Set(WorkbenchEmail("writerCompute@email.com"),
+                                                         WorkbenchEmail("owner@email.com")
+    )
+    requestedPolicies
+      .getOrElse(SamWorkspacePolicyNames.canCatalog, fail("Missing can-catalog policy"))
+      .memberEmails should contain theSameElementsAs Set.empty
+  }
+
   it should "create Sam resource for google project" in withTestDataServices { services =>
     val newWorkspaceName = "new-workspace"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
