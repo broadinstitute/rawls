@@ -548,7 +548,8 @@ trait SubmissionComponent {
         ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
         monitoringScript = submissionRec.monitoringScript,
         monitoringImage = submissionRec.monitoringImage,
-        monitoringImageScript = submissionRec.monitoringImageScript
+        monitoringImageScript = submissionRec.monitoringImageScript,
+        perWorkflowCostCap = submissionRec.perWorkflowCostCap
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,

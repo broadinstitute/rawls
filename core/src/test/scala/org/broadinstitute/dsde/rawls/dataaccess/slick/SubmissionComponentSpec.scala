@@ -177,6 +177,24 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(submissionExternalEntities))
   }
 
+  it should "save, get and list a submission with a cost threshold (aka cost cap)" in withDefaultTestDatabase {
+    val workspaceContext = testData.workspace
+    val costThreshold = BigDecimal.valueOf(12.34)
+    val testSubmission = submission3.copy(perWorkflowCostCap = Option(costThreshold))
+    // create submission with cost threshold
+    runAndWait(submissionQuery.create(workspaceContext, testSubmission))
+    // validate the .get method
+    val actualGet = runAndWait(submissionQuery.get(workspaceContext, testSubmission.submissionId))
+    actualGet should contain(testSubmission)
+    actualGet.get.perWorkflowCostCap should contain(costThreshold)
+    // validate the .list method
+    val actualList = runAndWait(submissionQuery.list(workspaceContext))
+    actualList should contain(testSubmission)
+    actualList.filter(_.submissionId == testSubmission.submissionId).head.perWorkflowCostCap should contain(
+      costThreshold
+    )
+  }
+
   it should "save, get, list, and delete two submission statuses" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
