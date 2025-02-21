@@ -439,13 +439,13 @@ class SubmissionsService(
 
     traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
-        val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
+        val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
         val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
 
         getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
           toFutureTry(
             submissionCostService.getSubmissionCosts(submissionId,
-                                                     allWorkflowIds,
+                                                     workflowIdsForCostQuery,
                                                      workspace.googleProjectId,
                                                      submission.submissionDate,
                                                      submissionDoneDate,
@@ -455,6 +455,22 @@ class SubmissionsService(
         }
       }
     }
+  }
+
+  /*
+    The desired logic:
+      - if workflow is not terminal, always show estimated cost
+      - If workflow is terminal, check its statusLastChangedDate:
+          - if within 24 hours of now, show estimated cost
+          - if older than 24 hours and actual cost is available, show actual cost, else show estimated cost
+   */
+  def filterActualCostWorkflowCandidates(workflows: Seq[Workflow]): Seq[String] = {
+    // Workflow object uses joda-time, so we also use it here
+    val dateCutoff = DateTime.now().minusHours(24)
+
+    workflows
+      .filter(wf => wf.status.isDone && wf.statusLastChangedDate.isBefore(dateCutoff))
+      .flatMap(_.workflowId)
   }
 
   def annotateSubmissionWithActualCost(submission: Submission, costMap: Try[Map[String, Float]]): Submission =

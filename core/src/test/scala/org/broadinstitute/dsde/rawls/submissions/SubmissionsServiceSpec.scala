@@ -23,6 +23,8 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, Submissio
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
+import org.broadinstitute.dsde.rawls.model.WorkflowCostTypes.WorkflowCostType
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Running, Succeeded, WorkflowStatus}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -42,6 +44,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
@@ -634,10 +637,10 @@ class SubmissionsServiceSpec
     }
   }
 
-  behavior of "estimated and actual costs"
-
-  // all tests can use the same db and services; none of these tests perform writes
+  // all following tests can use the same db and services; none of these tests perform writes
   withTestDataServices { services =>
+    behavior of "estimated and actual costs"
+
     it should "show estimated workflow costs when actual costs aren't available" in {
       val submission = testData.costedSubmission1
       val costMap = Success(Map.empty[String, Float])
@@ -738,6 +741,68 @@ class SubmissionsServiceSpec
       val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
       val expectedCost = 1.23f * submission.workflows.size // 1.23f hard-coded into testData.costedSubmission1
       actual.cost should contain(expectedCost)
+    }
+
+    behavior of "identifying which workflows should use actual costs"
+
+    // helper
+    def newWorkflow(workflowId: String = UUID.randomUUID().toString,
+                    status: WorkflowStatus = Succeeded,
+                    statusLastChangedDate: DateTime = DateTime.now()
+    ): Workflow =
+      Workflow(Option(workflowId), status, statusLastChangedDate, None, Seq())
+
+    it should "return empty given empty input" in {
+      val input = Seq.empty[Workflow]
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual shouldBe empty
+    }
+
+    it should "filter out non-terminal statuses" in {
+      val oldDate = DateTime.now().minusHours(100)
+      val input = WorkflowStatuses.allStatuses.map { status =>
+        newWorkflow(workflowId = status.toString, status = status, statusLastChangedDate = oldDate)
+      }
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual should contain theSameElementsAs WorkflowStatuses.terminalStatuses.map(_.toString)
+    }
+
+    it should "return empty if input is only non-terminal statuses" in {
+      val oldDate = DateTime.now().minusHours(100)
+      val input = WorkflowStatuses.runningStatuses.map { status =>
+        newWorkflow(workflowId = status.toString, status = status, statusLastChangedDate = oldDate)
+      }
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual shouldBe empty
+    }
+
+    it should "filter out recently updated workflows" in {
+      val input = Seq(
+        newWorkflow("recent", Succeeded, DateTime.now().minusHours(23)),
+        newWorkflow("old", Succeeded, DateTime.now().minusHours(25))
+      )
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual should contain theSameElementsAs Seq("old")
+    }
+
+    it should "return empty if input is only recently updated workflows" in {
+      val input = Seq(
+        newWorkflow("recent", Succeeded, DateTime.now().minusHours(23)),
+        newWorkflow("very-recent", Succeeded, DateTime.now().minusHours(1))
+      )
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual shouldBe empty
+    }
+
+    it should "filter on recency and status simultaneously" in {
+      val input = Seq(
+        newWorkflow("recent success", Succeeded, DateTime.now().minusHours(23)),
+        newWorkflow("old success", Succeeded, DateTime.now().minusHours(25)),
+        newWorkflow("recent running", Running, DateTime.now().minusHours(23)),
+        newWorkflow("old running", Running, DateTime.now().minusHours(25))
+      )
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual should contain theSameElementsAs Seq("old success")
     }
 
   }
