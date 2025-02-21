@@ -8,6 +8,7 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
+import com.google.cloud.storage.Storage
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
@@ -242,9 +243,17 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       allUsersRoleMapping <- getAllUsersRoleMapping(ctx)
       iamPolicyAction =
         if (enabled) {
-          googleStorageService.setIamPolicy(GcsBucketName(workspace.bucketName), allUsersRoleMapping)
+          googleStorageService.setIamPolicy(
+            GcsBucketName(workspace.bucketName),
+            allUsersRoleMapping,
+            bucketSourceOptions = List(Storage.BucketSourceOption.userProject(workspace.googleProjectId.value))
+          )
         } else {
-          googleStorageService.removeIamPolicy(GcsBucketName(workspace.bucketName), allUsersRoleMapping)
+          googleStorageService.removeIamPolicy(
+            GcsBucketName(workspace.bucketName),
+            allUsersRoleMapping,
+            bucketSourceOptions = List(Storage.BucketSourceOption.userProject(workspace.googleProjectId.value))
+          )
         }
       _ <- iamPolicyAction.compile.drain.unsafeToFuture()
     } yield ()
