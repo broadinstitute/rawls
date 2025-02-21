@@ -477,7 +477,9 @@ class SpendReportingService(
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] = {
     validateReportParameters(start, end)
-    requireProjectAction(project, SamBillingProjectActions.readSpendReport) {
+    requireProjectAction(project,
+                         SamBillingProjectActions.createWorkspace
+    ) { // read_spend_report is a subset of create_workspace and allows workspace owners to see spend data
       for {
         spendExportConf <- getSpendExportConfiguration(project)
         projectNames <- getWorkspaceGoogleProjects(project)
