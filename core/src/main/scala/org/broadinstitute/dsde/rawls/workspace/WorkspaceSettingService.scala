@@ -241,18 +241,19 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             )
         }
       allUsersRoleMapping <- getAllUsersRoleMapping(ctx)
+      requesterPays = List(Storage.BucketSourceOption.userProject(workspace.googleProjectId.value))
       iamPolicyAction =
         if (enabled) {
           googleStorageService.setIamPolicy(
             GcsBucketName(workspace.bucketName),
             allUsersRoleMapping,
-            bucketSourceOptions = List(Storage.BucketSourceOption.userProject(workspace.googleProjectId.value))
+            bucketSourceOptions = requesterPays
           )
         } else {
           googleStorageService.removeIamPolicy(
             GcsBucketName(workspace.bucketName),
             allUsersRoleMapping,
-            bucketSourceOptions = List(Storage.BucketSourceOption.userProject(workspace.googleProjectId.value))
+            bucketSourceOptions = requesterPays
           )
         }
       _ <- iamPolicyAction.compile.drain.unsafeToFuture()
