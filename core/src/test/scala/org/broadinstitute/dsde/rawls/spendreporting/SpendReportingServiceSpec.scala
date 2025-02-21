@@ -735,7 +735,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
   }
 
-  it should "throw an exception when user does not have read_spend_report" in {
+  it should "throw an exception when user does not have create_workspace" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
@@ -743,7 +743,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(
       samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject),
                            any(),
-                           mockitoEq(SamBillingProjectActions.readSpendReport),
+                           mockitoEq(SamBillingProjectActions.createWorkspace),
                            mockitoEq(testContext)
       )
     ).thenReturn(Future.successful(false))
