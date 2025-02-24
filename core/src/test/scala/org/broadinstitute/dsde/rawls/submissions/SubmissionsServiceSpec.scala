@@ -23,6 +23,8 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, Submissio
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
+import org.broadinstitute.dsde.rawls.model.WorkflowCostTypes.WorkflowCostType
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Running, Succeeded, WorkflowStatus}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -38,10 +40,11 @@ import org.broadinstitute.dsde.rawls.workspace.{
   WorkspaceService,
   WorkspaceSettingRepository
 }
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
@@ -56,6 +59,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
+import scala.util.{Failure, Success}
 
 class SubmissionsServiceSpec
     extends AnyFlatSpec
@@ -588,6 +592,7 @@ class SubmissionsServiceSpec
   }
 
   behavior of "per-workflow cost cap validation"
+
   // all tests can use the same db and services; none of these tests perform writes
   withTestDataServices { services =>
     it should "pass when no cap is specified" in {
@@ -630,6 +635,176 @@ class SubmissionsServiceSpec
       actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
       actual.errorReport.message shouldBe "per-workflow cost cap must be less than 10,000,000,000"
     }
+  }
+
+  // all following tests can use the same db and services; none of these tests perform writes
+  withTestDataServices { services =>
+    behavior of "estimated and actual costs"
+
+    it should "show estimated workflow costs when actual costs aren't available" in {
+      val submission = testData.costedSubmission1
+      val costMap = Success(Map.empty[String, Float])
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
+        wf.costType should contain(WorkflowCostTypes.Estimated)
+      }
+    }
+
+    it should "show actual workflow costs when actual costs are available" in {
+      val submission = testData.costedSubmission1
+      val workflowIds = submission.workflows.map(_.workflowId.getOrElse(fail("workflow should have an id")))
+      // testData.costedSubmission1 has 3 workflows
+      val actualCostValues = Seq(4.56f, 5.67f, 6.78f)
+      val actualCosts: Map[String, Float] = workflowIds
+        .zip(actualCostValues)
+        .toMap
+
+      val costMap = Success(actualCosts)
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        val expectedCost = actualCosts(wf.workflowId.getOrElse(fail("workflow should have an id")))
+        wf.cost should contain(expectedCost)
+        wf.costType should contain(WorkflowCostTypes.Actual)
+      }
+    }
+
+    it should "show a mix of estimated and actual workflow costs when actual costs are partially available" in {
+      val submission = testData.costedSubmission1
+      // note use of .take(1) to only provide actual costs for one workflow
+      val workflowIds = submission.workflows.take(1).map(_.workflowId.getOrElse(fail("workflow should have an id")))
+      val actualCosts = workflowIds.map(id => id -> 4.56f).toMap
+
+      val costMap = Success(actualCosts)
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        val wfid = wf.workflowId.getOrElse(fail("workflow should have an id"))
+        if (actualCosts.contains(wfid)) {
+          val expectedCost = actualCosts(wfid)
+          wf.cost should contain(expectedCost)
+          wf.costType should contain(WorkflowCostTypes.Actual)
+        } else {
+          wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
+          wf.costType should contain(WorkflowCostTypes.Estimated)
+        }
+      }
+    }
+
+    it should "show estimated workflow costs when actual cost retrieval hit an error" in {
+      val submission = testData.costedSubmission1
+      val costMap = Failure(new RawlsException("intentional unit test failure"))
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.workflows.foreach { wf =>
+        wf.cost should contain(1.23f) // this cost hard-coded into testData.costedSubmission1
+        wf.costType should contain(WorkflowCostTypes.Estimated)
+      }
+    }
+
+    it should "calculate submission cost of 0 when no workflow has a cost" in {
+      val workflows = testData.costedSubmission1.workflows.map(wf => wf.copy(cost = None, costType = None))
+      val submission = testData.costedSubmission1.copy(workflows = workflows)
+
+      val costMap = Success(Map.empty[String, Float])
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      actual.cost should contain(0f)
+    }
+
+    it should "calculate submission cost when actual workflow costs aren't available" in {
+      val submission = testData.costedSubmission1
+      val costMap = Success(Map.empty[String, Float])
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      val expectedCost = 1.23f * submission.workflows.size // 1.23f hard-coded into testData.costedSubmission1
+      actual.cost should contain(expectedCost)
+    }
+
+    it should "calculate submission cost when actual costs are partially available" in {
+      val submission = testData.costedSubmission1
+      // note use of .take(1) to only provide actual costs for one workflow
+      val workflowIds = submission.workflows.take(1).map(_.workflowId.getOrElse(fail("workflow should have an id")))
+      val actualCosts = workflowIds.map(id => id -> 4.56f).toMap
+
+      val costMap = Success(actualCosts)
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+
+      // 1.23f hard-coded into testData.costedSubmission1
+      // multiply by (size-1) to reflect the one workflow that has an actual cost
+      val expectedCost =
+        (1.23f * (submission.workflows.size - 1)) +
+          actualCosts.values.sum
+
+      actual.cost should contain(expectedCost)
+    }
+
+    it should "calculate submission cost when actual cost retrieval hit an error" in {
+      val submission = testData.costedSubmission1
+      val costMap = Failure(new RawlsException("intentional unit test failure"))
+      val actual = services.submissionsService.annotateSubmissionWithActualCost(submission, costMap)
+      val expectedCost = 1.23f * submission.workflows.size // 1.23f hard-coded into testData.costedSubmission1
+      actual.cost should contain(expectedCost)
+    }
+
+    behavior of "identifying which workflows should use actual costs"
+
+    // helper
+    def newWorkflow(workflowId: String = UUID.randomUUID().toString,
+                    status: WorkflowStatus = Succeeded,
+                    statusLastChangedDate: DateTime = DateTime.now()
+    ): Workflow =
+      Workflow(Option(workflowId), status, statusLastChangedDate, None, Seq())
+
+    it should "return empty given empty input" in {
+      val input = Seq.empty[Workflow]
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual shouldBe empty
+    }
+
+    it should "filter out non-terminal statuses" in {
+      val oldDate = DateTime.now().minusHours(100)
+      val input = WorkflowStatuses.allStatuses.map { status =>
+        newWorkflow(workflowId = status.toString, status = status, statusLastChangedDate = oldDate)
+      }
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual should contain theSameElementsAs WorkflowStatuses.terminalStatuses.map(_.toString)
+    }
+
+    it should "return empty if input is only non-terminal statuses" in {
+      val oldDate = DateTime.now().minusHours(100)
+      val input = WorkflowStatuses.runningStatuses.map { status =>
+        newWorkflow(workflowId = status.toString, status = status, statusLastChangedDate = oldDate)
+      }
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual shouldBe empty
+    }
+
+    it should "filter out recently updated workflows" in {
+      val input = Seq(
+        newWorkflow("recent", Succeeded, DateTime.now().minusHours(23)),
+        newWorkflow("old", Succeeded, DateTime.now().minusHours(25))
+      )
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual should contain theSameElementsAs Seq("old")
+    }
+
+    it should "return empty if input is only recently updated workflows" in {
+      val input = Seq(
+        newWorkflow("recent", Succeeded, DateTime.now().minusHours(23)),
+        newWorkflow("very-recent", Succeeded, DateTime.now().minusHours(1))
+      )
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual shouldBe empty
+    }
+
+    it should "filter on recency and status simultaneously" in {
+      val input = Seq(
+        newWorkflow("recent success", Succeeded, DateTime.now().minusHours(23)),
+        newWorkflow("old success", Succeeded, DateTime.now().minusHours(25)),
+        newWorkflow("recent running", Running, DateTime.now().minusHours(23)),
+        newWorkflow("old running", Running, DateTime.now().minusHours(25))
+      )
+      val actual = services.submissionsService.filterActualCostWorkflowCandidates(input)
+      actual should contain theSameElementsAs Seq("old success")
+    }
+
   }
 
 }

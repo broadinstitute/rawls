@@ -106,6 +106,7 @@ class SubmissionSpec(_system: ActorSystem)
   var subTerminalWorkflow = UUID.randomUUID().toString
   var subOneMissingWorkflow = UUID.randomUUID().toString
   var subTwoGoodWorkflows = UUID.randomUUID().toString
+  var subTwoCompletedWorkflows = UUID.randomUUID().toString
   var subToRetry = UUID.randomUUID().toString
   var subCromwellBadWorkflows = UUID.randomUUID().toString
 
@@ -282,6 +283,35 @@ class SubmissionSpec(_system: ActorSystem)
       deleteIntermediateOutputFiles = false
     )
 
+    val submissionTestTwoCompletedWorkflows = Submission(
+      subTwoCompletedWorkflows,
+      testDate.minusHours(48),
+      WorkbenchEmail(testData.userOwner.userEmail.value),
+      "std",
+      "someMethod",
+      Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+      workflows = Seq(
+        Workflow(
+          workflowId = existingWorkflowId,
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate.minusHours(48),
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = testData.inputResolutions
+        ),
+        Workflow(
+          workflowId = alreadyTerminatedWorkflowId,
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate.minusHours(48),
+          workflowEntity = Option(sample2.toReference),
+          inputResolutions = testData.inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
     val submissionToRetry = Submission(
       subToRetry,
       testDate,
@@ -396,6 +426,7 @@ class SubmissionSpec(_system: ActorSystem)
             submissionQuery.create(context, submissionTestAbortTerminalWorkflow),
             submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows),
+            submissionQuery.create(context, submissionTestTwoCompletedWorkflows),
             submissionQuery.create(context, submissionTestCromwellBadWorkflows),
             submissionQuery.create(context, submissionToRetry),
             // update exec key for all test data workflows that have been started.
@@ -1704,7 +1735,7 @@ class SubmissionSpec(_system: ActorSystem)
   it should "calculate submission cost as the sum of workflow costs" in withSubmissionTestSubmissionsService {
     submissionsService =>
       val submissionData = checkSubmissionStatus(submissionsService,
-                                                 subTestData.submissionTestAbortTwoGoodWorkflows.submissionId,
+                                                 subTestData.submissionTestTwoCompletedWorkflows.submissionId,
                                                  subTestData.wsName
       )
       assertResult(Option(mockSubmissionCostService.fixedCost * 2)) {
