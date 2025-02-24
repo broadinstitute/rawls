@@ -41,7 +41,6 @@ object Dependencies {
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleApiV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20241011-" + googleV))
-//  val googleGenomics: ModuleID =              excludeGuavaJDK5("com.google.apis"        % "google-api-services-genomics"              % ("v2alpha1-rev20220913-" + googleV)) // v2alpha1-rev20220913-2.0.0
   val googleLifeSciences: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-lifesciences"          % ("v2beta-rev20240329-" + googleV))
   val googleStorage: ModuleID =               excludeGuavaJDK5("com.google.apis"        % "google-api-services-storage"               % ("v1-rev20241206-" + googleV))
   val googleCloudResourceManager: ModuleID =  excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudresourcemanager"  % ("v1-rev20240310-" + googleV)) // has v2 and v3 versions 2.0.0, v2-rev20240310-2.0.0
@@ -186,7 +185,6 @@ object Dependencies {
     scalatest,
 
     googleCloudBilling,
-//    googleGenomics,
     googleLifeSciences,
     googleStorage,
     googleCloudResourceManager,
