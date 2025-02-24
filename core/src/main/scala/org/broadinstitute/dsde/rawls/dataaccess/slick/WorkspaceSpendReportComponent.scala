@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.time.LocalDateTime
+import java.time.ZoneId
 import org.broadinstitute.dsde.rawls.model._
+import org.joda.time.DateTime
 
 import scala.language.postfixOps
 
@@ -42,6 +44,45 @@ object WorkspaceSpendReportRecord {
       record.otherSpend,
       record.isDataAvailable
     )
+
+  def convertJodaToJava(dateTimeOpt: Option[DateTime]): LocalDateTime = {
+    dateTimeOpt match {
+      case Some(dateTime) =>
+        val instant = dateTime.toInstant
+        LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(dateTime.getMillis), ZoneId.systemDefault())
+      case None =>
+        throw new IllegalArgumentException("DateTime value is missing")
+    }
+  }
+
+  def fromSpendReportingResults(spendReportingResults: SpendReportingResults): Seq[WorkspaceSpendReport] = {
+    val summary = spendReportingResults.spendSummary
+    spendReportingResults.spendDetails.flatMap {
+      spendDetail => spendDetail.spendData.map {
+        var totalStorage: Option[Float] = None
+        var totalCompute: Option[Float] = None
+        var otherSpend: Option[Float] = None
+        spendData => spendData.subAggregation.get.spendData.foreach({
+          categorySpend => {
+            val categoryCost = Some(categorySpend.cost.toFloat)
+            categorySpend.category match {
+              case Some(TerraSpendCategories.Storage) => totalStorage = categoryCost
+              case Some(TerraSpendCategories.Compute) => totalCompute = categoryCost
+              case Some(TerraSpendCategories.Other) => otherSpend = categoryCost
+              case None => throw new IllegalArgumentException("Spend data has no category") // Does this ever happen?
+            }
+          }
+        })
+        // TODO: Store credits and currency (what about aggregation key)?
+        WorkspaceSpendReport.newWorkspaceSpendReport(
+          spendData.googleProjectId.get.value,
+          convertJodaToJava(summary.startTime),
+          convertJodaToJava(summary.endTime),
+          totalCompute,
+          totalStorage,
+          otherSpend,
+          isDataAvailable = true) // TODO: Handle N/A case
+      }}}
 }
 
 trait WorkspaceSpendReportComponent {
@@ -85,20 +126,19 @@ trait WorkspaceSpendReportComponent {
 
   object WorkspaceSpendReportQuery extends TableQuery(new WorkspaceSpendReportTable(_)) {
 
-    def getWorkspaceSpendReportByProjectIdsAndReportDate(projectIds: Seq[String],
+    def getWorkspaceSpendReportByProjectIdsAndReportDate(projectIds: Set[String],
                                                          startDate: LocalDateTime,
                                                          endDate: LocalDateTime
                                             ): ReadAction[Seq[WorkspaceSpendReport]] =
       loadWorkspaceSpendReport(filterByProjectIdsAndReportDate(projectIds, startDate, endDate))
 
 
-    def filterByProjectIdsAndReportDate(projectIds: Seq[String],
+    def filterByProjectIdsAndReportDate(projectIds: Set[String],
                                 startDate: LocalDateTime,
                                 endDate: LocalDateTime
-                               ): ReadAction[Seq[WorkspaceSpendReportRecord]] =
+                               ) =
       workspaceSpendReportQuery
         .filter(x => x.googleProjectId.inSetBind(projectIds.map(_.value)) && x.reportStartDate === startDate && x.reportEndDate === endDate)
-        .result
 
     private def loadWorkspaceSpendReport(lookup: WorkspaceSpendReportQueryType): ReadAction[Seq[WorkspaceSpendReport]] =
       for {

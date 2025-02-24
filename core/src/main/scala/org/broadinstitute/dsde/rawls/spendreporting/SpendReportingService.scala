@@ -7,11 +7,7 @@ import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
-  BillingRepository,
-  BpmAzureSpendReportApiException
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmAzureSpendReportApiException}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
@@ -29,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 
+import java.time.{LocalDateTime, ZoneId}
 import scala.util.Try
 
 object SpendReportingService {
@@ -39,7 +36,8 @@ object SpendReportingService {
     bpmDao: BillingProfileManagerDAO,
     samDAO: SamDAO,
     spendReportingServiceConfig: SpendReportingServiceConfig,
-    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+    workspaceSpendReportRepository: WorkspaceSpendReportRepository
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
     new SpendReportingService(
       ctx,
@@ -49,7 +47,8 @@ object SpendReportingService {
       bpmDao,
       samDAO,
       spendReportingServiceConfig,
-      workspaceServiceConstructor
+      workspaceServiceConstructor,
+      workspaceSpendReportRepository
     )
 
   val SpendReportingMetrics = "spendReporting"
@@ -217,7 +216,7 @@ object SpendReportingService {
         googleProjectId = Option(GoogleProject(projectId)),
         subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
       )
-
+      // save query results
       SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(workspaceTotal))
 
     }
@@ -242,7 +241,8 @@ class SpendReportingService(
   bpmDao: BillingProfileManagerDAO,
   samDAO: SamDAO,
   spendReportingServiceConfig: SpendReportingServiceConfig,
-  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+  workspaceSpendReportRepository: WorkspaceSpendReportRepository
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented {
@@ -569,6 +569,11 @@ class SpendReportingService(
           return Future.successful(None)
         }
         projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
+        projectIds = projectNames.keySet.map(x => x.value)
+
+        cacheResults = checkCachedWorkspaceSpend(projectIds, start, end)
+        cacheHit = cacheResults.map { count => count == projectIds.size }
+        // convert cacheResults to workspaceSpend
         tableToProjectIdsMap: Map[String, Seq[GoogleProjectId]] = billingMap.map { case (table, workspaces) =>
           table -> workspaces.map(_._1)
         }
@@ -579,7 +584,10 @@ class SpendReportingService(
             .map { result =>
               result.getValues.asScala.toList match {
                 case Nil  => None
-                case rows => Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames))
+                case rows =>
+                  val crossBillingResults = extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
+                  workspaceSpendReportRepository.insertSpendReportResults(crossBillingResults)
+                  Some(crossBillingResults)
               }
             }
             .recoverWith { case ex: Throwable =>
@@ -591,6 +599,14 @@ class SpendReportingService(
       } yield combinedResults
 
     }
+
+  def checkCachedWorkspaceSpend(projectIds: Set[String],
+                                start: DateTime,
+                                end: DateTime): Future[Int] = {
+    val startLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(start.getMillis), ZoneId.systemDefault())
+    val endLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(end.getMillis), ZoneId.systemDefault())
+    workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime).map(_.size)
+  }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
     traceFutureWithParent("runBigQueryJob", ctx) { childContext =>
