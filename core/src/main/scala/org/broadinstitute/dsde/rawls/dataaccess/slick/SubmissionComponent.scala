@@ -433,7 +433,11 @@ trait SubmissionComponent {
                new DateTime(wr.statusLastChangedDate.getTime),
                entityRef,
                workflowResolutions.sortBy(_.inputName), // enforce consistent sorting
-               messages
+               messages,
+               wr.cost.map(_.floatValue),
+               // when retrieving a workflow from the db, if the workflow has a value for cost,
+               // the value is an estimated value.
+               wr.cost.map(_ => WorkflowCostTypes.Estimated)
              )
             )
           }.toSeq
