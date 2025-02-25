@@ -1,11 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.time.LocalDateTime
-import java.time.ZoneId
+import java.time.{LocalDateTime, ZoneId, ZonedDateTime}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 
-import scala.language.postfixOps
+import java.util.Currency
+import scala.language.{postfixOps, reflectiveCalls}
+import scala.math.BigDecimal.RoundingMode
 
 
 case class WorkspaceSpendReportRecord (
@@ -55,6 +57,16 @@ object WorkspaceSpendReportRecord {
     }
   }
 
+  def convertLocalDateTimeToJodaDateTime(localDateTime: LocalDateTime, zoneId: ZoneId = ZoneId.systemDefault()): Option[DateTime] = {
+    Option(localDateTime).map { ldt =>
+      // Convert LocalDateTime to ZonedDateTime
+      val zonedDateTime: ZonedDateTime = ldt.atZone(zoneId)
+
+      // Convert ZonedDateTime to Joda DateTime using epoch milli
+      new DateTime(zonedDateTime.toInstant.toEpochMilli)
+    }
+  }
+
   def fromSpendReportingResults(spendReportingResults: SpendReportingResults): Seq[WorkspaceSpendReport] = {
     val summary = spendReportingResults.spendSummary
     spendReportingResults.spendDetails.flatMap {
@@ -83,6 +95,91 @@ object WorkspaceSpendReportRecord {
           otherSpend,
           isDataAvailable = true) // TODO: Handle N/A case
       }}}
+
+  def toSpendReportingResults(records: Seq[WorkspaceSpendReport]): SpendReportingResults = {
+    var start: Option[DateTime] = None
+    var end: Option[DateTime] = None
+    var total = BigDecimal(0.0)
+    var total_credits = BigDecimal(0.0)
+    val all = records.map { record =>
+      val currencyString = "$"
+      val currencyCode = Currency.getInstance(currencyString)
+      val projectId = record.googleProjectId
+      //      val workspaceName = // TODO
+
+      def formatCategoryCost(cost: Option[Float]): String = {
+        cost match {
+          case Some(cost) => toBigDecimal(cost).toString()
+          case None => "N/A"
+        }
+      }
+
+      def toBigDecimal(cost: Float): BigDecimal = {
+        BigDecimal(cost).setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      }
+
+      val credits = BigDecimal(0.0).toString() // TODO: Store credits per category
+      val subAggregation = List(
+        SpendReportingForDateRange(
+          formatCategoryCost(record.otherSpend),
+          credits,
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Other)
+        ),
+        SpendReportingForDateRange(
+          formatCategoryCost(record.totalStorage),
+          credits,
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Storage)
+        ),
+        SpendReportingForDateRange(
+          formatCategoryCost(record.totalCompute),
+          credits,
+          currencyCode.toString,
+          category = Option(TerraSpendCategories.Compute)
+        )
+      )
+
+      val totalCompute: Option[Float] = record.totalCompute
+      val totalStorage: Option[Float] = record.totalStorage
+      val otherSpend: Option[Float] = record.otherSpend
+      val total_cost: Option[Float] = for {
+        c1 <- totalCompute
+        c2 <- totalStorage
+        c3 <- otherSpend
+      } yield c1 + c2 + c3
+
+//      val credits =
+//        getRoundedNumericValue("other_credits") + getRoundedNumericValue("storage_credits") + getRoundedNumericValue(
+//          "compute_credits"
+//        )
+      total = total + toBigDecimal(total_cost.getOrElse(0.0f))
+//      total_credits = total_credits + credits
+      start = convertLocalDateTimeToJodaDateTime(record.reportStartDate)
+      end = convertLocalDateTimeToJodaDateTime(record.reportEndDate)
+      val workspaceTotal = SpendReportingForDateRange(
+        total_cost.toString,
+        credits,
+        currencyCode.toString,
+        start,
+        end,
+        workspace = Option.empty, // TODO: workspace name DB lookup -> easier to just store it?
+        googleProjectId = Option(GoogleProject(projectId)),
+        subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
+      )
+      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(workspaceTotal))
+    }
+
+    val summary = SpendReportingForDateRange(
+      total.toString,
+      total_credits.toString,
+      "USD",
+      start,
+      end,
+    )
+    SpendReportingResults(all, summary)
+  }
+
 }
 
 trait WorkspaceSpendReportComponent {

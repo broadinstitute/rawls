@@ -12,6 +12,10 @@ import scala.concurrent.Future
  */
 class WorkspaceSpendReportRepository(dataSource: SlickDataSource) {
 
+  def toSpendReportResults(workspaceSpendReports: Seq[WorkspaceSpendReport]): SpendReportingResults =
+   WorkspaceSpendReportRecord.toSpendReportingResults(workspaceSpendReports)
+
+
   def getWorkspaceSpendReports(projectIds: Set[String], startDate: LocalDateTime, endDate: LocalDateTime): Future[Seq[WorkspaceSpendReport]] =
     dataSource.inTransaction(_.WorkspaceSpendReportQuery.getWorkspaceSpendReportByProjectIdsAndReportDate(projectIds, startDate, endDate))
 

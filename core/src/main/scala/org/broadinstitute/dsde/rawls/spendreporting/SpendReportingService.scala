@@ -570,42 +570,42 @@ class SpendReportingService(
         }
         projectNames: Map[GoogleProjectId, WorkspaceName] = billingMap.values.flatten.toMap
         projectIds = projectNames.keySet.map(x => x.value)
-
-        cacheResults = checkCachedWorkspaceSpend(projectIds, start, end)
-        cacheHit = cacheResults.map { count => count == projectIds.size }
-        // convert cacheResults to workspaceSpend
         tableToProjectIdsMap: Map[String, Seq[GoogleProjectId]] = billingMap.map { case (table, workspaces) =>
           table -> workspaces.map(_._1)
         }
+
+        cacheResults <- checkCachedWorkspaceSpend(projectIds, start, end)
+        combinedResults = if (cacheResults.size == projectIds.size) {
+          return Future.successful(Some(workspaceSpendReportRepository.toSpendReportResults(cacheResults)))
+        }
         results <- Future.sequence(tableToProjectIdsMap.map { case (spendExportTable, projects) =>
-          val query = getAllUserWorkspaceQuery(spendExportTable, projects, pageSize, offset)
-          val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
-          runBigQueryJob(queryJob, childContext)
-            .map { result =>
-              result.getValues.asScala.toList match {
-                case Nil  => None
-                case rows =>
-                  val crossBillingResults = extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
-                  workspaceSpendReportRepository.insertSpendReportResults(crossBillingResults)
-                  Some(crossBillingResults)
+            val query = getAllUserWorkspaceQuery(spendExportTable, projects, pageSize, offset)
+            val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+            runBigQueryJob(queryJob, childContext)
+              .map { result =>
+                result.getValues.asScala.toList match {
+                  case Nil  => None
+                  case rows =>
+                    val crossBillingResults = extractCrossBillingProjectSpendReportingResults(rows, start, end, projectNames)
+                    workspaceSpendReportRepository.insertSpendReportResults(crossBillingResults)
+                    Some(crossBillingResults)
+                }
               }
-            }
-            .recoverWith { case ex: Throwable =>
-              logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
-              Future.successful(None)
-            }
-        })
+              .recoverWith { case ex: Throwable =>
+                logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
+                Future.successful(None)
+              }
+          })
         combinedResults = results.flatten.reduceOption((acc, res) => acc + res)
       } yield combinedResults
-
     }
 
   def checkCachedWorkspaceSpend(projectIds: Set[String],
                                 start: DateTime,
-                                end: DateTime): Future[Int] = {
+                                end: DateTime): Future[Seq[WorkspaceSpendReport]] = {
     val startLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(start.getMillis), ZoneId.systemDefault())
     val endLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(end.getMillis), ZoneId.systemDefault())
-    workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime).map(_.size)
+    workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
   }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
