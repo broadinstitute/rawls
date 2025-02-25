@@ -9,8 +9,7 @@ import java.util.Currency
 import scala.language.{postfixOps, reflectiveCalls}
 import scala.math.BigDecimal.RoundingMode
 
-
-case class WorkspaceSpendReportRecord (
+case class WorkspaceSpendReportRecord(
   id: Long,
   googleProjectId: String,
   reportStartDate: LocalDateTime,
@@ -47,7 +46,7 @@ object WorkspaceSpendReportRecord {
       record.isDataAvailable
     )
 
-  def convertJodaToJava(dateTimeOpt: Option[DateTime]): LocalDateTime = {
+  def convertJodaToJava(dateTimeOpt: Option[DateTime]): LocalDateTime =
     dateTimeOpt match {
       case Some(dateTime) =>
         val instant = dateTime.toInstant
@@ -55,9 +54,10 @@ object WorkspaceSpendReportRecord {
       case None =>
         throw new IllegalArgumentException("DateTime value is missing")
     }
-  }
 
-  def convertLocalDateTimeToJodaDateTime(localDateTime: LocalDateTime, zoneId: ZoneId = ZoneId.systemDefault()): Option[DateTime] = {
+  def convertLocalDateTimeToJodaDateTime(localDateTime: LocalDateTime,
+                                         zoneId: ZoneId = ZoneId.systemDefault()
+  ): Option[DateTime] =
     Option(localDateTime).map { ldt =>
       // Convert LocalDateTime to ZonedDateTime
       val zonedDateTime: ZonedDateTime = ldt.atZone(zoneId)
@@ -65,38 +65,41 @@ object WorkspaceSpendReportRecord {
       // Convert ZonedDateTime to Joda DateTime using epoch milli
       new DateTime(zonedDateTime.toInstant.toEpochMilli)
     }
-  }
 
   def fromSpendReportingResults(spendReportingResults: SpendReportingResults): Seq[WorkspaceSpendReport] = {
     val summary = spendReportingResults.spendSummary
-    spendReportingResults.spendDetails.flatMap {
-      spendDetail => spendDetail.spendData.map {
+    spendReportingResults.spendDetails.flatMap { spendDetail =>
+      spendDetail.spendData.map {
         var totalStorage: Option[Float] = None
         var totalCompute: Option[Float] = None
         var otherSpend: Option[Float] = None
-        spendData => spendData.subAggregation.get.spendData.foreach({
-          categorySpend => {
+        spendData =>
+          spendData.subAggregation.get.spendData.foreach { categorySpend =>
             val categoryCost = Some(categorySpend.cost.toFloat)
             categorySpend.category match {
               case Some(TerraSpendCategories.Storage) => totalStorage = categoryCost
               case Some(TerraSpendCategories.Compute) => totalCompute = categoryCost
-              case Some(TerraSpendCategories.Other) => otherSpend = categoryCost
+              case Some(TerraSpendCategories.Other)   => otherSpend = categoryCost
               case None => throw new IllegalArgumentException("Spend data has no category") // Does this ever happen?
             }
           }
-        })
-        // TODO: Store credits and currency (what about aggregation key)?
-        WorkspaceSpendReport.newWorkspaceSpendReport(
-          spendData.googleProjectId.get.value,
-          convertJodaToJava(summary.startTime),
-          convertJodaToJava(summary.endTime),
-          totalCompute,
-          totalStorage,
-          otherSpend,
-          isDataAvailable = true) // TODO: Handle N/A case
-      }}}
+          // TODO: Store credits and currency (what about aggregation key)?
+          WorkspaceSpendReport.newWorkspaceSpendReport(
+            spendData.googleProjectId.get.value,
+            convertJodaToJava(summary.startTime),
+            convertJodaToJava(summary.endTime),
+            totalCompute,
+            totalStorage,
+            otherSpend,
+            isDataAvailable = true
+          ) // TODO: Handle N/A case
+      }
+    }
+  }
 
-  def toSpendReportingResults(records: Seq[WorkspaceSpendReport], projectNames: Map[GoogleProjectId, WorkspaceName]): SpendReportingResults = {
+  def toSpendReportingResults(records: Seq[WorkspaceSpendReport],
+                              projectNames: Map[GoogleProjectId, WorkspaceName]
+  ): SpendReportingResults = {
     var start: Option[DateTime] = None
     var end: Option[DateTime] = None
     var total = BigDecimal(0.0)
@@ -106,9 +109,8 @@ object WorkspaceSpendReportRecord {
       val currencyCode = Currency.getInstance(currencyString)
       val projectId = record.googleProjectId
 
-      def toBigDecimal(cost: Option[Float]): BigDecimal = {
+      def toBigDecimal(cost: Option[Float]): BigDecimal =
         BigDecimal(cost.getOrElse(0.0f)).setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-      }
 
       val credits = BigDecimal(0.0).toString() // TODO: Store credits per category
       val subAggregation = List(
@@ -167,7 +169,7 @@ object WorkspaceSpendReportRecord {
       total_credits.toString,
       "USD",
       start,
-      end,
+      end
     )
     SpendReportingResults(all, summary)
   }
@@ -204,7 +206,7 @@ trait WorkspaceSpendReportComponent {
              totalCompute,
              totalStorage,
              otherSpend,
-             isDataAvailable,
+             isDataAvailable
     ) <> ((WorkspaceSpendReportRecord.apply _).tupled, WorkspaceSpendReportRecord.unapply)
 
   }
@@ -218,16 +220,16 @@ trait WorkspaceSpendReportComponent {
     def getWorkspaceSpendReportByProjectIdsAndReportDate(projectIds: Set[String],
                                                          startDate: LocalDateTime,
                                                          endDate: LocalDateTime
-                                            ): ReadAction[Seq[WorkspaceSpendReport]] =
+    ): ReadAction[Seq[WorkspaceSpendReport]] =
       loadWorkspaceSpendReport(filterByProjectIdsAndReportDate(projectIds, startDate, endDate))
 
-
-    def filterByProjectIdsAndReportDate(projectIds: Set[String],
-                                startDate: LocalDateTime,
-                                endDate: LocalDateTime
-                               ) =
+    def filterByProjectIdsAndReportDate(projectIds: Set[String], startDate: LocalDateTime, endDate: LocalDateTime) =
       workspaceSpendReportQuery
-        .filter(x => x.googleProjectId.inSetBind(projectIds.map(_.value)) && x.reportStartDate === startDate && x.reportEndDate === endDate)
+        .filter(x =>
+          x.googleProjectId.inSetBind(
+            projectIds.map(_.value)
+          ) && x.reportStartDate === startDate && x.reportEndDate === endDate
+        )
 
     private def loadWorkspaceSpendReport(lookup: WorkspaceSpendReportQueryType): ReadAction[Seq[WorkspaceSpendReport]] =
       for {
@@ -237,7 +239,8 @@ trait WorkspaceSpendReportComponent {
       }
 
     def insert(workspaceSpendReport: WorkspaceSpendReport): WriteAction[Long] =
-      workspaceSpendReportQuery returning workspaceSpendReportQuery.map(_.id) += WorkspaceSpendReportRecord.fromWorkspaceSpendReport(workspaceSpendReport)
+      workspaceSpendReportQuery returning workspaceSpendReportQuery.map(_.id) += WorkspaceSpendReportRecord
+        .fromWorkspaceSpendReport(workspaceSpendReport)
   }
 
 }
