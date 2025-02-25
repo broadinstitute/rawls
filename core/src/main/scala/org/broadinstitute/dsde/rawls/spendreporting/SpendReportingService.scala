@@ -311,13 +311,6 @@ class SpendReportingService(
 
       }
 
-  def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[Map[GoogleProjectId, WorkspaceName]] =
-    dataSource.inTransaction(_.workspaceQuery.listWithBillingProject(projectName)).map {
-      _.collect {
-        case w if w.workspaceVersion == WorkspaceVersions.V2 => w.googleProjectId -> w.toWorkspaceName
-      }.toMap
-    }
-
   def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = if (startDate.isAfter(endDate)) {
     throw RawlsExceptionWithErrorReport(
       StatusCodes.BadRequest,

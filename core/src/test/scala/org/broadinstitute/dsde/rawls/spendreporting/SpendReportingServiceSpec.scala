@@ -1233,32 +1233,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     result shouldBe expectedQuery
   }
 
-  "getWorkspaceGoogleProjects" should "only map v2 workspaces to project names" in {
-    val v1Workspace = TestData.workspace("v1name", GoogleProjectId("v1ProjectId"), WorkspaceVersions.V1)
-    val v2Workspace = TestData.workspace("v2name", GoogleProjectId("v2ProjectId"), WorkspaceVersions.V2)
-    val workspaces = Seq(
-      v1Workspace,
-      v2Workspace
-    )
-
-    val dataSource = mock[SlickDataSource]
-    when(dataSource.inTransaction[Seq[Workspace]](any(), any())).thenReturn(Future.successful(workspaces))
-    val service = new SpendReportingService(
-      testContext,
-      dataSource,
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
-      mock[SamDAO],
-      spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor
-    )
-
-    val result = Await.result(service.getWorkspaceGoogleProjects(RawlsBillingProjectName("")), Duration.Inf)
-
-    result shouldBe Map(GoogleProjectId("v2ProjectId") -> v2Workspace.toWorkspaceName)
-  }
-
   "getAllUserWorkspaceQuery" should "generate a query for a billingProject with its workspace projects" in {
 
     val billingProjectSpendExport =
