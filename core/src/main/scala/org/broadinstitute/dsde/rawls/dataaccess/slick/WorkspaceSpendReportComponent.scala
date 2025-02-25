@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-
 import java.time.{LocalDateTime, ZoneId, ZonedDateTime}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -109,33 +106,26 @@ object WorkspaceSpendReportRecord {
       val currencyCode = Currency.getInstance(currencyString)
       val projectId = record.googleProjectId
 
-      def formatCategoryCost(cost: Option[Float]): String = {
-        cost match {
-          case Some(cost) => toBigDecimal(cost).toString()
-          case None => "N/A"
-        }
-      }
-
-      def toBigDecimal(cost: Float): BigDecimal = {
-        BigDecimal(cost).setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      def toBigDecimal(cost: Option[Float]): BigDecimal = {
+        BigDecimal(cost.getOrElse(0.0f)).setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       }
 
       val credits = BigDecimal(0.0).toString() // TODO: Store credits per category
       val subAggregation = List(
         SpendReportingForDateRange(
-          formatCategoryCost(record.otherSpend),
+          toBigDecimal(record.otherSpend).toString(),
           credits,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Other)
         ),
         SpendReportingForDateRange(
-          formatCategoryCost(record.totalStorage),
+          toBigDecimal(record.totalStorage).toString(),
           credits,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Storage)
         ),
         SpendReportingForDateRange(
-          formatCategoryCost(record.totalCompute),
+          toBigDecimal(record.totalCompute).toString(),
           credits,
           currencyCode.toString,
           category = Option(TerraSpendCategories.Compute)
@@ -155,7 +145,7 @@ object WorkspaceSpendReportRecord {
 //        getRoundedNumericValue("other_credits") + getRoundedNumericValue("storage_credits") + getRoundedNumericValue(
 //          "compute_credits"
 //        )
-      total = total + toBigDecimal(total_cost.getOrElse(0.0f))
+      total = total + toBigDecimal(total_cost)
 //      total_credits = total_credits + credits
       start = convertLocalDateTimeToJodaDateTime(record.reportStartDate)
       end = convertLocalDateTimeToJodaDateTime(record.reportEndDate)

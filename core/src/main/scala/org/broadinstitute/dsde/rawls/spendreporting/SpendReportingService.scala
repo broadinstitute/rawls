@@ -575,8 +575,9 @@ class SpendReportingService(
         }
 
         cacheResults <- checkCachedWorkspaceSpend(projectIds, start, end)
-        combinedResults = if (cacheResults.size == projectIds.size) {
-          return Future.successful(Some(workspaceSpendReportRepository.toSpendReportResults(cacheResults, projectNames)))
+        _ = if (cacheResults.size == projectIds.size) {
+          val hasDataAvailable = cacheResults.filter(cached => cached.isDataAvailable)
+          return Future.successful(Some(workspaceSpendReportRepository.toSpendReportResults(hasDataAvailable, projectNames)))
         }
         results <- Future.sequence(tableToProjectIdsMap.map { case (spendExportTable, projects) =>
             val query = getAllUserWorkspaceQuery(spendExportTable, projects, pageSize, offset)
@@ -596,6 +597,9 @@ class SpendReportingService(
                 Future.successful(None)
               }
           })
+        _ = if (results.nonEmpty) {
+          insertRecordsWithMissingSpendData (results, projectNames, start, end)
+        }
         combinedResults = results.flatten.reduceOption((acc, res) => acc + res)
       } yield combinedResults
     }
@@ -606,6 +610,32 @@ class SpendReportingService(
     val startLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(start.getMillis), ZoneId.systemDefault())
     val endLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(end.getMillis), ZoneId.systemDefault())
     workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
+  }
+
+  def insertRecordsWithMissingSpendData(results: Iterable[Option[SpendReportingResults]],
+                                        projectNames: Map[GoogleProjectId, WorkspaceName],
+                                        start: DateTime,
+                                        end: DateTime): Unit = {
+    val reports = results.collect { case Some(report) => report }
+    val googleProjectsWithReports = reports.map { r => r.spendSummary.googleProjectId }
+      .collect { case Some(project) => project.toString() }.toSeq
+    val filteredProjectNames: Map[GoogleProjectId, WorkspaceName] = projectNames.filter {
+      case (id, _) => !googleProjectsWithReports.contains(id.toString())
+    }
+    val startLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(start.getMillis), ZoneId.systemDefault())
+    val endLocalDateTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(end.getMillis), ZoneId.systemDefault())
+    filteredProjectNames.map { case (id, _) =>
+      val spendReport = WorkspaceSpendReport.newWorkspaceSpendReport(
+        id.toString(),
+        startLocalDateTime,
+        endLocalDateTime,
+        Option.empty,
+        Option.empty,
+        Option.empty,
+        isDataAvailable = false
+      )
+      workspaceSpendReportRepository.insertWorkspaceSpendReport(spendReport)
+    }
   }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
