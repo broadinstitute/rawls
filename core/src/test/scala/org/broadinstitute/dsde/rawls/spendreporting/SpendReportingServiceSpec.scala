@@ -2,29 +2,22 @@ package org.broadinstitute.dsde.rawls.spendreporting
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
-import bio.terra.profile.model.{
-  CloudPlatform => BpmCloudPlatform,
-  ProfileModel,
-  SpendReport => SpendReportBPM,
-  SpendReportingAggregation => SpendReportingAggregationBPM,
-  SpendReportingForDateRange => SpendReportingForDateRangeBPM
-}
+import bio.terra.profile.model.{ProfileModel, CloudPlatform => BpmCloudPlatform, SpendReport => SpendReportBPM, SpendReportingAggregation => SpendReportingAggregationBPM, SpendReportingForDateRange => SpendReportingForDateRangeBPM}
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
-  BillingRepository,
-  BpmAzureSpendReportApiException
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmAzureSpendReportApiException}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeys, _}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext, model}
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
@@ -32,18 +25,15 @@ import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Mockito}
+import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 
 import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
-import org.scalatest.RecoverMethods.recoverToExceptionIf
 
 class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils with SprayJsonSupport {
 
@@ -719,7 +709,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+      .when(service)
+      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -752,9 +744,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
     when(
       samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject),
-        any(),
-        mockitoEq(SamBillingProjectActions.createWorkspace),
-        mockitoEq(testContext)
+                           any(),
+                           mockitoEq(SamBillingProjectActions.createWorkspace),
+                           mockitoEq(testContext)
       )
     ).thenReturn(Future.successful(false))
 
@@ -790,16 +782,18 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
     when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any())).thenReturn(Future.successful(None))
-    val service = spy(new SpendReportingService(
-      testContext,
-      dataSource,
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      billingRepository,
-      bpmDAO,
-      samDAO,
-      spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor
-    ))
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        dataSource,
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor
+      )
+    )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.getSpendExportConfiguration(RawlsBillingProjectName("fakeProject")), Duration.Inf)
@@ -868,7 +862,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+      .when(service)
+      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -985,7 +981,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+      .when(service)
+      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
 
     Await.result(
       service.getSpendForBillingProject(
@@ -1034,7 +1032,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+      .when(service)
+      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
 
     Await.result(
       service.getSpendForBillingProject(
@@ -1844,8 +1844,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val workspace = TestData.workspace1
 
-    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(Future.successful(List(new FilteredFlatResource().resourceId(workspace.workspaceId))))
-    when(workspaceService.getGCPWorkspacesByBillingProjects(any())).thenReturn(Future.successful(Map(RawlsBillingProjectName("test-project") -> Seq(workspace))))
+    when(samDAO.listResourcesWithActions(any(), any(), any()))
+      .thenReturn(Future.successful(List(new FilteredFlatResource().resourceId(workspace.workspaceId))))
+    when(workspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(Future.successful(Map(RawlsBillingProjectName("test-project") -> Seq(workspace))))
 
     val result = Await.result(service.getOwnedWorkspaceGoogleProjects(testContext), Duration.Inf)
     result should contain key RawlsBillingProjectName("test-project")
@@ -1869,7 +1871,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(false))
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getOwnedWorkspaceGoogleProjectsInProject(RawlsBillingProjectName("test-project"), testContext), Duration.Inf)
+      Await.result(
+        service.getOwnedWorkspaceGoogleProjectsInProject(RawlsBillingProjectName("test-project"), testContext),
+        Duration.Inf
+      )
     }
 
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
@@ -1879,22 +1884,26 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   it should "return a map of Google project IDs to workspace names when user has create_workspace action" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
-    val service = spy(new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      spendReportingServiceConfig,
-      _ => workspaceService
-    ))
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        _ => workspaceService
+      )
+    )
 
     val workspace = TestData.workspace1
 
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
-    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(Future.successful(List(new FilteredFlatResource().resourceId(workspace.workspaceId))))
-    when(workspaceService.getGCPWorkspacesByBillingProjects(any())).thenReturn(Future.successful(Map(RawlsBillingProjectName("test-project") -> Seq(workspace))))
+    when(samDAO.listResourcesWithActions(any(), any(), any()))
+      .thenReturn(Future.successful(List(new FilteredFlatResource().resourceId(workspace.workspaceId))))
+    when(workspaceService.getGCPWorkspacesByBillingProjects(any()))
+      .thenReturn(Future.successful(Map(RawlsBillingProjectName("test-project") -> Seq(workspace))))
 
     val result = Await.result(service.getOwnedWorkspaceGoogleProjects(testContext), Duration.Inf)
     result should contain key RawlsBillingProjectName("test-project")
