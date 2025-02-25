@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+
 import java.time.{LocalDateTime, ZoneId, ZonedDateTime}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -96,7 +99,7 @@ object WorkspaceSpendReportRecord {
           isDataAvailable = true) // TODO: Handle N/A case
       }}}
 
-  def toSpendReportingResults(records: Seq[WorkspaceSpendReport]): SpendReportingResults = {
+  def toSpendReportingResults(records: Seq[WorkspaceSpendReport], projectNames: Map[GoogleProjectId, WorkspaceName]): SpendReportingResults = {
     var start: Option[DateTime] = None
     var end: Option[DateTime] = None
     var total = BigDecimal(0.0)
@@ -105,7 +108,6 @@ object WorkspaceSpendReportRecord {
       val currencyString = "$"
       val currencyCode = Currency.getInstance(currencyString)
       val projectId = record.googleProjectId
-      //      val workspaceName = // TODO
 
       def formatCategoryCost(cost: Option[Float]): String = {
         cost match {
@@ -163,7 +165,7 @@ object WorkspaceSpendReportRecord {
         currencyCode.toString,
         start,
         end,
-        workspace = Option.empty, // TODO: workspace name DB lookup -> easier to just store it?
+        workspace = projectNames.get(GoogleProjectId(projectId)),
         googleProjectId = Option(GoogleProject(projectId)),
         subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
       )

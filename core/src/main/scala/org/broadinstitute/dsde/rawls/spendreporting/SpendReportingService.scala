@@ -576,7 +576,7 @@ class SpendReportingService(
 
         cacheResults <- checkCachedWorkspaceSpend(projectIds, start, end)
         combinedResults = if (cacheResults.size == projectIds.size) {
-          return Future.successful(Some(workspaceSpendReportRepository.toSpendReportResults(cacheResults)))
+          return Future.successful(Some(workspaceSpendReportRepository.toSpendReportResults(cacheResults, projectNames)))
         }
         results <- Future.sequence(tableToProjectIdsMap.map { case (spendExportTable, projects) =>
             val query = getAllUserWorkspaceQuery(spendExportTable, projects, pageSize, offset)

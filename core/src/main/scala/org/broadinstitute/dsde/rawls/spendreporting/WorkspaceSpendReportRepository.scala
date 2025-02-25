@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.spendreporting
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSpendReportRecord
-import org.broadinstitute.dsde.rawls.model.{SpendReportingResults, WorkspaceSpendReport}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, SpendReportingResults, WorkspaceName, WorkspaceSpendReport}
 
 import java.time.LocalDateTime
 import scala.concurrent.Future
@@ -12,8 +12,8 @@ import scala.concurrent.Future
  */
 class WorkspaceSpendReportRepository(dataSource: SlickDataSource) {
 
-  def toSpendReportResults(workspaceSpendReports: Seq[WorkspaceSpendReport]): SpendReportingResults =
-   WorkspaceSpendReportRecord.toSpendReportingResults(workspaceSpendReports)
+  def toSpendReportResults(workspaceSpendReports: Seq[WorkspaceSpendReport], projectNames: Map[GoogleProjectId, WorkspaceName]): SpendReportingResults =
+   WorkspaceSpendReportRecord.toSpendReportingResults(workspaceSpendReports, projectNames)
 
 
   def getWorkspaceSpendReports(projectIds: Set[String], startDate: LocalDateTime, endDate: LocalDateTime): Future[Seq[WorkspaceSpendReport]] =
