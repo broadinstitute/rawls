@@ -269,18 +269,6 @@ class SpendReportingService(
   def bytesProcessedCounter: Histogram =
     spendReportingMetrics.expand(BigQueryKey, BigQueryBytesProcessedMetric).asHistogram("bytes")
 
-  private def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
-    op: => Future[T]
-  ): Future[T] =
-    samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, ctx).flatMap {
-      case true => op
-      case false =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.Forbidden,
-          s"${ctx.userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}"
-        )
-    }
-
   private def toISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
   def getSpendExportConfiguration(project: RawlsBillingProjectName): Future[BillingProjectSpendExport] = dataSource
@@ -462,7 +450,7 @@ class SpendReportingService(
     bytesProcessedCounter += stats.getEstimatedBytesProcessed
   }
 
-  def getOwnedWorkspaceGoogleProjects(
+  def getSpendReportableWorkspaceGoogleProjects(
     childContext: RawlsRequestContext
   ): Future[Map[RawlsBillingProjectName, Seq[Workspace]]] =
     samDAO
@@ -482,23 +470,40 @@ class SpendReportingService(
           workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
-  def getOwnedWorkspaceGoogleProjectsInProject(
+  def getSpendReportableWorkspaceGoogleProjectsInBillingProject(
     projectName: RawlsBillingProjectName,
     childContext: RawlsRequestContext
-  ): Future[Map[GoogleProjectId, WorkspaceName]] =
-    requireProjectAction(projectName, SamBillingProjectActions.createWorkspace) {
-      for {
-        // Get user owned workspaces in the project
-        projectNames <- getOwnedWorkspaceGoogleProjects(childContext).map {
-          _.flatMap { case (_, value) =>
-            value.collect {
-              case workspace if workspace.namespace == projectName.value =>
-                workspace.googleProjectId -> workspace.toWorkspaceName
-            }
-          }.toMap
+  ): Future[Map[GoogleProjectId, WorkspaceName]] = {
+
+    def filterProjects(projects: Map[RawlsBillingProjectName, Seq[Workspace]]): Map[GoogleProjectId, WorkspaceName] =
+      projects.flatMap { case (_, value) =>
+        value.collect {
+          case workspace if workspace.namespace == projectName.value =>
+            workspace.googleProjectId -> workspace.toWorkspaceName
         }
-      } yield projectNames
-    }
+      }
+
+    for {
+      projects <- getSpendReportableWorkspaceGoogleProjects(childContext)
+      filteredProjects = filterProjects(projects)
+      hasAction <- samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                                        projectName.value,
+                                        SamBillingProjectActions.readSpendReport,
+                                        childContext
+      )
+      result <-
+        if (hasAction || filteredProjects.nonEmpty) {
+          Future.successful(filteredProjects)
+        } else {
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              StatusCodes.Forbidden,
+              s"${childContext.userInfo.userEmail.value} cannot perform ${SamBillingProjectActions.readSpendReport.value} on project ${projectName.value}"
+            )
+          )
+        }
+    } yield result
+  }
 
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
@@ -509,7 +514,7 @@ class SpendReportingService(
     validateReportParameters(start, end)
     for {
       spendExportConf <- getSpendExportConfiguration(project)
-      projectNames <- getOwnedWorkspaceGoogleProjectsInProject(project, childContext)
+      projectNames <- getSpendReportableWorkspaceGoogleProjectsInBillingProject(project, childContext)
 
       query = getQuery(aggregations, spendExportConf)
       queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
@@ -634,7 +639,7 @@ class SpendReportingService(
   ): Future[Map[String, Seq[(GoogleProjectId, WorkspaceName)]]] =
     traceFutureWithParent("getBillingWithSpendPermission", parentContext) { childContext =>
       for {
-        groupedWorkspaces <- getOwnedWorkspaceGoogleProjects(childContext)
+        groupedWorkspaces <- getSpendReportableWorkspaceGoogleProjects(childContext)
         // Only use the BPs we know exist in the DB and are GCP
         spendConfigs <-
           if (groupedWorkspaces.isEmpty) {

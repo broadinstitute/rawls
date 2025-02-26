@@ -721,7 +721,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
-      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -737,7 +737,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
   }
 
-  it should "throw an exception when user does not have create_workspace" in {
+  it should "throw an exception when user does not have read_spend_report" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
@@ -755,10 +755,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(
       samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject),
                            any(),
-                           mockitoEq(SamBillingProjectActions.createWorkspace),
+                           mockitoEq(SamBillingProjectActions.readSpendReport),
                            mockitoEq(testContext)
       )
     ).thenReturn(Future.successful(false))
+    when(samDAO.listResourcesWithActions(any(), any(), any()))
+      .thenReturn(Future.successful(List.empty[FilteredFlatResource]))
 
     val service = new SpendReportingService(
       testContext,
@@ -773,7 +775,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getOwnedWorkspaceGoogleProjectsInProject(
+        service.getSpendReportableWorkspaceGoogleProjectsInBillingProject(
           billingProject.projectName,
           testContext
         ),
@@ -782,7 +784,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     }
 
     e.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
-    e.errorReport.message should include("cannot perform create_workspace on project")
+    e.errorReport.message should include("cannot perform read_spend_report on project")
   }
 
   it should "throw an exception if the billing project cannot be found" in {
@@ -874,7 +876,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
-      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -993,7 +995,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
-      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
 
     Await.result(
       service.getSpendForBillingProject(
@@ -1044,7 +1046,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
-      .getOwnedWorkspaceGoogleProjectsInProject(any(), any())
+      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
 
     Await.result(
       service.getSpendForBillingProject(
@@ -1792,7 +1794,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   }
 
-  "getOwnedWorkspaceGoogleProjects" should "return an empty map when no workspaces are owned" in {
+  "getSpendReportableWorkspaceGoogleProjects" should "return an empty map when no workspaces are owned" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
     val service = new SpendReportingService(
@@ -1808,7 +1810,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(Future.successful(List()))
 
-    val result = Await.result(service.getOwnedWorkspaceGoogleProjects(testContext), Duration.Inf)
+    val result = Await.result(service.getSpendReportableWorkspaceGoogleProjects(testContext), Duration.Inf)
     result shouldBe empty
   }
 
@@ -1833,12 +1835,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(workspaceService.getGCPWorkspacesByBillingProjects(any()))
       .thenReturn(Future.successful(Map(RawlsBillingProjectName("test-project") -> Seq(workspace))))
 
-    val result = Await.result(service.getOwnedWorkspaceGoogleProjects(testContext), Duration.Inf)
+    val result = Await.result(service.getSpendReportableWorkspaceGoogleProjects(testContext), Duration.Inf)
     result should contain key RawlsBillingProjectName("test-project")
     result(RawlsBillingProjectName("test-project")) should contain(workspace)
   }
 
-  "getOwnedWorkspaceGoogleProjectsInProject" should "throw an exception when user does not have create_workspace action" in {
+  "getSpendReportableWorkspaceGoogleProjectsInBillingProject" should "throw an exception when user does not have read_spend_report action" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
     val service = new SpendReportingService(
@@ -1853,19 +1855,23 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
 
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(false))
+    when(samDAO.listResourcesWithActions(any(), any(), any()))
+      .thenReturn(Future.successful(List.empty[FilteredFlatResource]))
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getOwnedWorkspaceGoogleProjectsInProject(RawlsBillingProjectName("test-project"), testContext),
+        service.getSpendReportableWorkspaceGoogleProjectsInBillingProject(RawlsBillingProjectName("test-project"),
+                                                                          testContext
+        ),
         Duration.Inf
       )
     }
 
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
-    exception.errorReport.message should include("cannot perform create_workspace on project")
+    exception.errorReport.message should include("cannot perform read_spend_report on project")
   }
 
-  it should "return a map of Google project IDs to workspace names when user has create_workspace action" in {
+  it should "return a map of Google project IDs to workspace names when user has read_spend_report action" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
     val service = spy(
@@ -1889,7 +1895,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(workspaceService.getGCPWorkspacesByBillingProjects(any()))
       .thenReturn(Future.successful(Map(RawlsBillingProjectName("test-project") -> Seq(workspace))))
 
-    val result = Await.result(service.getOwnedWorkspaceGoogleProjects(testContext), Duration.Inf)
+    val result = Await.result(service.getSpendReportableWorkspaceGoogleProjects(testContext), Duration.Inf)
     result should contain key RawlsBillingProjectName("test-project")
     result(RawlsBillingProjectName("test-project")) should contain(workspace)
   }
