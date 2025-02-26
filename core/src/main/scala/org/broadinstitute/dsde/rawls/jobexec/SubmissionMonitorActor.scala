@@ -330,7 +330,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                   datasource
                     .inTransaction { dataAccess =>
                       dataAccess.workflowQuery.saveMessages(
-                        Seq(AttributeString("Cost limit reached. Workflow was aborted to stay on budget.")),
+                        Seq(AttributeString("Cost threshold reached. Workflow was aborted to stay on budget.")),
                         workflowRec.id
                       )
                     }
