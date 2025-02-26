@@ -2018,16 +2018,18 @@ class WorkspaceService(
       _ <- DBIO.from {
         workspaceRequest.addUsers match {
           case Some(acls) =>
-            Future.sequence(acls.map { aclUpdate =>
-              samDAO.inviteUser(aclUpdate.email, ctx).map { _ =>
-                Notifications.WorkspaceInvitedNotification(
-                  WorkbenchEmail(aclUpdate.email),
-                  WorkbenchUserId(ctx.userInfo.userSubjectId.value),
-                  NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
-                  workspaceId //TODO this should be bucketname but we don't have it yet?
-                )
-              }
-            }).map(_ => ())
+            Future
+              .sequence(acls.map { aclUpdate =>
+                samDAO.inviteUser(aclUpdate.email, ctx).map { _ =>
+                  Notifications.WorkspaceInvitedNotification(
+                    WorkbenchEmail(aclUpdate.email),
+                    WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+                    NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
+                    workspaceId // TODO this should be bucketname but we don't have it yet?
+                  )
+                }
+              })
+              .map(_ => ())
           case None => Future.successful(())
         }
       }
