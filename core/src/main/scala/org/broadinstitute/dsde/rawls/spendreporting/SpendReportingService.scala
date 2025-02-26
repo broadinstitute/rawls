@@ -467,41 +467,6 @@ class SpendReportingService(
         workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
-  def getSpendReportableWorkspaceGoogleProjectsInBillingProject(
-    projectName: RawlsBillingProjectName,
-    childContext: RawlsRequestContext
-  ): Future[Map[GoogleProjectId, WorkspaceName]] = {
-
-    def filterProjects(projects: Map[RawlsBillingProjectName, Seq[Workspace]]): Map[GoogleProjectId, WorkspaceName] =
-      projects.flatMap { case (_, value) =>
-        value.collect {
-          case workspace if workspace.namespace == projectName.value =>
-            workspace.googleProjectId -> workspace.toWorkspaceName
-        }
-      }
-
-    for {
-      projects <- getSpendReportableWorkspaceGoogleProjects(childContext)
-      filteredProjects = filterProjects(projects)
-      hasAction <- samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                                        projectName.value,
-                                        SamBillingProjectActions.readSpendReport,
-                                        childContext
-      )
-      result <-
-        if (hasAction || filteredProjects.nonEmpty) {
-          Future.successful(filteredProjects)
-        } else {
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              StatusCodes.Forbidden,
-              s"${childContext.userInfo.userEmail.value} cannot perform ${SamBillingProjectActions.readSpendReport.value} on project ${projectName.value}"
-            )
-          )
-        }
-    } yield result
-  }
-
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
     start: DateTime,
@@ -511,7 +476,14 @@ class SpendReportingService(
     validateReportParameters(start, end)
     for {
       spendExportConf <- getSpendExportConfiguration(project)
-      projectNames <- getSpendReportableWorkspaceGoogleProjectsInBillingProject(project, childContext)
+      projectNames <- getSpendReportableWorkspaceGoogleProjects(ctx).map { workspacesByProject =>
+        workspacesByProject
+          .getOrElse(project, Seq.empty)
+          .map { workspace =>
+            workspace.googleProjectId -> workspace.toWorkspaceName
+          }
+          .toMap
+      }
 
       query = getQuery(aggregations, spendExportConf)
       queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)

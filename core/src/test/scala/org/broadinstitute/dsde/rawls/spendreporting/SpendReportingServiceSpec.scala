@@ -695,99 +695,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     }
   }
 
-  "getSpendForGCPBillingProject" should "throw an exception when BQ returns zero rows" in {
-    val samDAO = mock[SamDAO]
-    val billingRepository = mock[BillingRepository]
-    val bpmDAO = mock[BillingProfileManagerDAO]
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
-    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
-
-    val bigQueryService = mockBigQuery(List[Map[String, String]]())
-
-    val service = spy(
-      new SpendReportingService(
-        testContext,
-        mock[SlickDataSource],
-        bigQueryService,
-        billingRepository,
-        bpmDAO,
-        samDAO,
-        spendReportingServiceConfig,
-        mockWorkspaceServiceConstructor
-      )
-    )
-    val billingProjectSpendExport =
-      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
-    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
-      .when(service)
-      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
-
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        service.getSpendForGCPBillingProject(
-          RawlsBillingProjectName(""),
-          DateTime.now().minusDays(1),
-          DateTime.now(),
-          Set.empty
-        ),
-        Duration.Inf
-      )
-    }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
-  }
-
-  it should "throw an exception when user does not have read_spend_report" in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    val billingRepository = mock[BillingRepository]
-    val bpmDAO = mock[BillingProfileManagerDAO]
-    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-
-    val billingProject = RawlsBillingProject(
-      RawlsBillingProjectName("test-project"),
-      CreationStatuses.Ready,
-      Option(RawlsBillingAccountName("test-account")),
-      None,
-      billingProfileId = Option.apply(UUID.randomUUID().toString)
-    )
-
-    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
-    when(
-      samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject),
-                           any(),
-                           mockitoEq(SamBillingProjectActions.readSpendReport),
-                           mockitoEq(testContext)
-      )
-    ).thenReturn(Future.successful(false))
-    when(samDAO.listResourcesWithActions(any(), any(), any()))
-      .thenReturn(Future.successful(List.empty[FilteredFlatResource]))
-
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
-      billingRepository,
-      bpmDAO,
-      samDAO,
-      spendReportingServiceConfig,
-      mockWorkspaceServiceConstructor
-    )
-
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        service.getSpendReportableWorkspaceGoogleProjectsInBillingProject(
-          billingProject.projectName,
-          testContext
-        ),
-        Duration.Inf
-      )
-    }
-
-    e.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
-    e.errorReport.message should include("cannot perform read_spend_report on project")
-  }
-
-  it should "throw an exception if the billing project cannot be found" in {
+  "getSpendForGCPBillingProject" should "throw an exception if the billing project cannot be found" in {
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
@@ -842,54 +750,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
     e.errorReport.message shouldBe s"billing account not found on billing project ${projectName.value}"
-  }
-
-  it should "throw an exception if BigQuery results include an unexpected Google project" in {
-    val samDAO = mock[SamDAO]
-    val billingRepository = mock[BillingRepository]
-    val bpmDAO = mock[BillingProfileManagerDAO]
-
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
-    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
-    val badRow = Map(
-      "cost" -> "0.10111",
-      "credits" -> "0.0",
-      "currency" -> "USD",
-      "googleProjectId" -> "fakeProject"
-    )
-
-    val bigQueryService = mockBigQuery(badRow :: TestData.Workspace.table)
-    val service = spy(
-      new SpendReportingService(
-        testContext,
-        mock[SlickDataSource],
-        bigQueryService,
-        billingRepository,
-        bpmDAO,
-        samDAO,
-        spendReportingServiceConfig,
-        mockWorkspaceServiceConstructor
-      )
-    )
-    val billingProjectSpendExport =
-      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
-    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
-      .when(service)
-      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
-
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        service.getSpendForGCPBillingProject(
-          RawlsBillingProjectName(""),
-          DateTime.now().minusDays(1),
-          DateTime.now(),
-          Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
-        ),
-        Duration.Inf
-      )
-    }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
   "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
@@ -995,7 +855,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
-      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
+      .getSpendForGCPBillingProject(any(), any(), any(), any())
 
     Await.result(
       service.getSpendForBillingProject(
@@ -1046,7 +906,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
-      .getSpendReportableWorkspaceGoogleProjectsInBillingProject(any(), any())
+      .getSpendForGCPBillingProject(any(), any(), any(), any())
 
     Await.result(
       service.getSpendForBillingProject(
@@ -1794,27 +1654,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   }
 
-  "getSpendReportableWorkspaceGoogleProjects" should "return an empty map when no workspaces are owned" in {
-    val samDAO = mock[SamDAO]
-    val workspaceService = mock[WorkspaceService]
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      spendReportingServiceConfig,
-      _ => workspaceService
-    )
-
-    when(samDAO.listResourcesWithActions(any(), any(), any())).thenReturn(Future.successful(List()))
-
-    val result = Await.result(service.getSpendReportableWorkspaceGoogleProjects(testContext), Duration.Inf)
-    result shouldBe empty
-  }
-
-  it should "return a map of workspaces grouped by billing project" in {
+  "getSpendReportableWorkspaceGoogleProjects" should "return a map of workspaces grouped by billing project" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
     val service = new SpendReportingService(
@@ -1838,37 +1678,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val result = Await.result(service.getSpendReportableWorkspaceGoogleProjects(testContext), Duration.Inf)
     result should contain key RawlsBillingProjectName("test-project")
     result(RawlsBillingProjectName("test-project")) should contain(workspace)
-  }
-
-  "getSpendReportableWorkspaceGoogleProjectsInBillingProject" should "throw an exception when user does not have read_spend_report action" in {
-    val samDAO = mock[SamDAO]
-    val workspaceService = mock[WorkspaceService]
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      spendReportingServiceConfig,
-      _ => workspaceService
-    )
-
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(false))
-    when(samDAO.listResourcesWithActions(any(), any(), any()))
-      .thenReturn(Future.successful(List.empty[FilteredFlatResource]))
-
-    val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        service.getSpendReportableWorkspaceGoogleProjectsInBillingProject(RawlsBillingProjectName("test-project"),
-                                                                          testContext
-        ),
-        Duration.Inf
-      )
-    }
-
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
-    exception.errorReport.message should include("cannot perform read_spend_report on project")
   }
 
   it should "return a map of Google project IDs to workspace names when user has read_spend_report action" in {
