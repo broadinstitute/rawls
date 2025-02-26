@@ -26,6 +26,7 @@ trait ExecutionServiceCluster extends ErrorReportable {
                       userInfo: UserInfo
   ): Future[(ExecutionServiceId, Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]])]
 
+  // currently unused
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus]
 
   def outputs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceOutputs]

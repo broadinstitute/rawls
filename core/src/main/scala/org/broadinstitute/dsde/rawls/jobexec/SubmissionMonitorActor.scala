@@ -314,12 +314,13 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   ): Future[Option[WorkflowRecord]] =
     (workflowRec.externalId, perWorkflowCostCap) match {
       // fetch cost information for the workflow if submission has a cost cap threshold defined
-      case (Some(externalId), Some(costCap)) =>
+      case (Some(externalId), _) =>
         for {
           costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
           updatedWorkflowRec <-
+            // if this submission defines a per-workflow cost cap, and the estimate is above that cap, abort the workflow.
             if (
-              costBreakdown.cost > costCap &&
+              perWorkflowCostCap.isDefined && costBreakdown.cost > perWorkflowCostCap.get &&
               WorkflowStatuses.abortableStatuses.contains(
                 WorkflowStatuses
                   .withName(costBreakdown.status)
@@ -362,12 +363,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               }
             }
         } yield updatedWorkflowRec
-      // fetch workflow status only if cost cap threshold is not defined
-      case (Some(externalId), None) =>
-        executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
-          if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
-          else None
-        }
       case _ => Future.successful(None)
     }
 

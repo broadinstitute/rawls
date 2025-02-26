@@ -100,7 +100,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             workflowsRecs.map { workflowRec =>
               scala.util.Success(
                 Option(
-                  (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString),
+                  (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString, cost = Option(BigDecimal.valueOf(0))),
                    Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> Left(AttributeString("foo")))))
                   )
                 )
@@ -129,7 +129,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     assertResult(
       ignoreStatusLastChangedDate(
         ExecutionServiceStatusResponse(
-          workflowsRecs.map(workflowRec => scala.util.Success(None))
+          workflowsRecs.map { workflowRec =>
+            scala.util.Success(
+              Option(
+                (workflowRec.copy(cost = Option(BigDecimal.valueOf(0))), None)
+              )
+            )
+          }
         )
       )
     ) {
@@ -156,7 +162,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         ignoreStatusLastChangedDate(
           ExecutionServiceStatusResponse(
             workflowsRecs.map { workflowRec =>
-              scala.util.Success(Option((workflowRec.copy(status = status.toString), None)))
+              scala.util.Success(
+                Option((workflowRec.copy(status = status.toString, cost = Option(BigDecimal.valueOf(0))), None))
+              )
             }
           )
         )
@@ -2339,7 +2347,9 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String, workflowCost:
   }
 
   override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
-    Future.successful(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, Seq.empty))
+    if (abortedMap.keySet.contains(id))
+      Future(WorkflowCostBreakdown(id, workflowCost, "USD", WorkflowStatuses.Aborted.toString, Seq.empty))
+    else Future(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, Seq.empty))
 
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 
