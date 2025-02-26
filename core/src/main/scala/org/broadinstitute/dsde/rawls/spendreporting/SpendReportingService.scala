@@ -459,15 +459,12 @@ class SpendReportingService(
         SamWorkspaceActions.readSpendReport,
         childContext
       )
-      .flatMap {
-        case ownerWorkspaces if ownerWorkspaces.isEmpty =>
-          Future.successful(Map.empty[RawlsBillingProjectName, Seq[Workspace]])
-        case ownerWorkspaces =>
-          val validWorkspaceIds = ownerWorkspaces
-            .map(_.getResourceId)
-            .filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess) // filter out non-UUIDs
-            .toList
-          workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
+      .flatMap { ownerWorkspaces =>
+        val validWorkspaceIds = ownerWorkspaces
+          .map(_.getResourceId)
+          .filter(resourceId => Try(UUID.fromString(resourceId)).isSuccess) // filter out non-UUIDs
+          .toList
+        workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
   def getSpendReportableWorkspaceGoogleProjectsInBillingProject(
