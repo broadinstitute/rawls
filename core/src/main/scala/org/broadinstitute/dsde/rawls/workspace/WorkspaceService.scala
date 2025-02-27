@@ -2015,24 +2015,25 @@ class WorkspaceService(
             .map(_.email)
         )
       )
-      _ <- DBIO.from {
+      inviteNotifications <- DBIO.from {
         workspaceRequest.addUsers match {
           case Some(acls) =>
-            Future
-              .sequence(acls.map { aclUpdate =>
-                samDAO.inviteUser(aclUpdate.email, ctx).map { _ =>
+            collectMissingUsers(acls.map(_.email).toSet, ctx).flatMap { missingUsers =>
+              Future.sequence(missingUsers.map { email =>
+                samDAO.inviteUser(email, ctx).map { _ =>
                   Notifications.WorkspaceInvitedNotification(
-                    WorkbenchEmail(aclUpdate.email),
+                    WorkbenchEmail(email),
                     WorkbenchUserId(ctx.userInfo.userSubjectId.value),
                     NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
                     workspaceId // TODO this should be bucketname but we don't have it yet?
                   )
                 }
-              })
-              .map(_ => ())
-          case None => Future.successful(())
+              }.toSeq)
+            }
+          case None => Future.successful(Seq.empty[Notifications.WorkspaceInvitedNotification])
         }
       }
+      _ <- DBIO.successful(notificationDAO.fireAndForgetNotifications(inviteNotifications))
 
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,
