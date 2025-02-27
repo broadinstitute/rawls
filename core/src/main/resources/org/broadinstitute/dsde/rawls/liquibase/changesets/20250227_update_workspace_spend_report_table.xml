@@ -7,17 +7,17 @@
             </column>
         </addColumn>
         <addColumn tableName="WORKSPACE_SPEND_REPORT">
-            <column name="COMPUTE_CREDITS" type="VARCHAR(100)">
+            <column name="COMPUTE_CREDITS" type="NUMBER(10,2)">
                 <constraints nullable="true" />
             </column>
         </addColumn>
         <addColumn tableName="WORKSPACE_SPEND_REPORT">
-            <column name="STORAGE_CREDITS" type="VARCHAR(100)">
+            <column name="STORAGE_CREDITS" type="NUMBER(10,2)">
                 <constraints nullable="true" />
             </column>
         </addColumn>
         <addColumn tableName="WORKSPACE_SPEND_REPORT">
-            <column name="OTHER_CREDITS" type="VARCHAR(100)">
+            <column name="OTHER_CREDITS" type="NUMBER(10,2)">
                 <constraints nullable="true" />
             </column>
         </addColumn>
