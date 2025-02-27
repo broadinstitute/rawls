@@ -57,7 +57,8 @@ class SubmissionSupervisorSpec
   val mockSamDAO =
     new HttpSamDAO(mockServer.mockServerBaseUrl,
                    FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
-                   1 minute
+                   1 minute,
+                   15
     )
   val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 

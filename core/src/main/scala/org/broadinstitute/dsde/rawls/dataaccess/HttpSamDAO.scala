@@ -7,7 +7,7 @@ import bio.terra.common.tracing.OkHttpClientTracingInterceptor
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.context.Context
-import okhttp3.{Interceptor, Protocol, Response}
+import okhttp3.{Dispatcher, Interceptor, Protocol, Response}
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -38,7 +38,11 @@ import scala.util.{Try, Using}
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, timeout: FiniteDuration)(implicit
+class HttpSamDAO(baseSamServiceURL: String,
+                 rawlsCredential: RawlsCredential,
+                 timeout: FiniteDuration,
+                 maxConcurrentRequests: Int
+)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -48,19 +52,27 @@ class HttpSamDAO(baseSamServiceURL: String, rawlsCredential: RawlsCredential, ti
 
   private val samServiceURL = baseSamServiceURL
 
-  private val okHttpClient = new ApiClient().getHttpClient
+  private val okHttpClient = {
+    val dispatcher = new Dispatcher()
+    dispatcher.setMaxRequests(maxConcurrentRequests)
+    dispatcher.setMaxRequestsPerHost(maxConcurrentRequests)
+    new ApiClient().getHttpClient.newBuilder
+      .readTimeout(timeout.toJava)
+      .protocols(Seq(Protocol.HTTP_1_1).asJava)
+      .dispatcher(dispatcher)
+      .build()
+  }
 
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
 
     val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
-      .readTimeout(timeout.toJava)
     ctx.otelContext.foreach(otelContext =>
       okHttpClientWithTracingBuilder
         .addInterceptor(new OtelContextSettingInterceptor(otelContext))
         .addInterceptor(new OkHttpClientTracingInterceptor(GlobalOpenTelemetry.get()))
     )
 
-    val samApiClient = new ApiClient(okHttpClientWithTracingBuilder.protocols(Seq(Protocol.HTTP_1_1).asJava).build())
+    val samApiClient = new ApiClient(okHttpClientWithTracingBuilder.build())
     samApiClient.setBasePath(samServiceURL)
     samApiClient.setAccessToken(ctx.userInfo.accessToken.token)
 

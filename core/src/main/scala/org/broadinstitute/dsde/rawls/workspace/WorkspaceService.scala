@@ -2015,6 +2015,13 @@ class WorkspaceService(
             .map(_.email)
         )
       )
+      usersToInvite <- DBIO.from(workspaceRequest.addUsers match {
+        case Some(acls) =>
+          collectMissingUsers(acls.map(_.email).toSet, ctx)
+        case None => Future.successful(Seq.empty[String])
+      })
+      _ <- DBIO.from(Future.traverse(usersToInvite)(email => samDAO.inviteUser(email, ctx)))
+
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,
                                                workspaceRequest,
@@ -2128,7 +2135,19 @@ class WorkspaceService(
           samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
         )
       )
-    } yield savedWorkspace
+    } yield {
+      val inviteNotifications = usersToInvite
+        .map(email =>
+          Notifications.WorkspaceInvitedNotification(
+            WorkbenchEmail(email),
+            WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+            NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
+            savedWorkspace.bucketName
+          )
+        )
+      notificationDAO.fireAndForgetNotifications(inviteNotifications)
+      savedWorkspace
+    }
   }
 
   def failIfWorkspaceExists(name: WorkspaceName): ReadWriteAction[Unit] =
