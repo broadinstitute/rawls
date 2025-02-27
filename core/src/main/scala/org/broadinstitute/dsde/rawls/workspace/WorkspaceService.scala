@@ -2015,25 +2015,12 @@ class WorkspaceService(
             .map(_.email)
         )
       )
-      inviteNotifications <- DBIO.from {
-        workspaceRequest.addUsers match {
-          case Some(acls) =>
-            collectMissingUsers(acls.map(_.email).toSet, ctx).flatMap { missingUsers =>
-              Future.sequence(missingUsers.map { email =>
-                samDAO.inviteUser(email, ctx).map { _ =>
-                  Notifications.WorkspaceInvitedNotification(
-                    WorkbenchEmail(email),
-                    WorkbenchUserId(ctx.userInfo.userSubjectId.value),
-                    NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
-                    workspaceId // TODO this should be bucketname but we don't have it yet?
-                  )
-                }
-              }.toSeq)
-            }
-          case None => Future.successful(Seq.empty[Notifications.WorkspaceInvitedNotification])
-        }
-      }
-      _ <- DBIO.successful(notificationDAO.fireAndForgetNotifications(inviteNotifications))
+      usersToInvite <- DBIO.from(workspaceRequest.addUsers match {
+        case Some(acls) =>
+          collectMissingUsers(acls.map(_.email).toSet, ctx)
+        case None => Future.successful(Seq.empty[String])
+      })
+      _ <- DBIO.from(Future.traverse(usersToInvite)(email => samDAO.inviteUser(email, ctx)))
 
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,
@@ -2148,7 +2135,19 @@ class WorkspaceService(
           samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
         )
       )
-    } yield savedWorkspace
+    } yield {
+      val inviteNotifications = usersToInvite
+        .map(email =>
+          Notifications.WorkspaceInvitedNotification(
+            WorkbenchEmail(email),
+            WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+            NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
+            savedWorkspace.bucketName
+          )
+        )
+      notificationDAO.fireAndForgetNotifications(inviteNotifications)
+      savedWorkspace
+    }
   }
 
   def failIfWorkspaceExists(name: WorkspaceName): ReadWriteAction[Unit] =
