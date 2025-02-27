@@ -502,14 +502,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               if (doRecordUpdate) {
                 for {
                   updateResult <-
-                    if (perWorkflowCostCap.isDefined) {
-                      dataAccess.workflowQuery.updateStatusAndCost(currentRec,
-                                                                   WorkflowStatuses.withName(workflowRec.status),
-                                                                   workflowRec.cost.getOrElse(BigDecimal(0))
-                      )
-                    } else {
-                      dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
-                    }
+                    dataAccess.workflowQuery.updateStatusAndCost(currentRec,
+                                                                 WorkflowStatuses.withName(workflowRec.status),
+                                                                 workflowRec.cost.getOrElse(BigDecimal(0))
+                    )
                   _ = logger.info(
                     s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"
                   )
