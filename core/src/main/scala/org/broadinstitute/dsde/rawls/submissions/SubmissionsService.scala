@@ -442,6 +442,8 @@ class SubmissionsService(
         val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
         val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
 
+        // TODO CORE-349: if workflowIdsForCostQuery is empty, don't bother reaching out to BQ
+
         getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
           toFutureTry(
             submissionCostService.getSubmissionCosts(submissionId,
