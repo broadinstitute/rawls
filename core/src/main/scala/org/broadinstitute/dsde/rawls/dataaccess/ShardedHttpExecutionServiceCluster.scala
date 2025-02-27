@@ -55,8 +55,6 @@ class ShardedHttpExecutionServiceCluster(readMembers: Set[ClusterMember],
   // following are called on a workflow that has already been submitted.
   // therefore, we want to use the cromwell instance that has been persisted
   // onto that workflow.
-
-  // currently unused
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus] =
     getMember(workflowRec).dao.status(workflowRec.externalId.get, userInfo)
 

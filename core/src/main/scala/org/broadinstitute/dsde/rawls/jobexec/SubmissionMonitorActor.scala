@@ -313,8 +313,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[Option[WorkflowRecord]] =
     (workflowRec.externalId, perWorkflowCostCap) match {
-      // fetch cost information for the workflow if submission has a cost cap threshold defined
-      case (Some(externalId), _) =>
+      // fetch cost information for the workflow if submission has a cost cap threshold defined or if the
+      // enableCostEstimatesForAllWorkflows config flag is set to true
+      case (Some(externalId), _) if config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined =>
         for {
           costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
           updatedWorkflowRec <-
@@ -363,6 +364,13 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               }
             }
         } yield updatedWorkflowRec
+      // if config enableCostEstimatesForAllWorkflows is set to false, and no cost cap is defined,
+      // fetch workflow status only
+      case (Some(externalId), _) =>
+        executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
+          if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
+          else None
+        }
       case _ => Future.successful(None)
     }
 
@@ -502,10 +510,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               if (doRecordUpdate) {
                 for {
                   updateResult <-
-                    dataAccess.workflowQuery.updateStatusAndCost(currentRec,
-                                                                 WorkflowStatuses.withName(workflowRec.status),
-                                                                 workflowRec.cost.getOrElse(BigDecimal(0))
-                    )
+                    if (config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined) {
+                      dataAccess.workflowQuery.updateStatusAndCost(currentRec,
+                                                                   WorkflowStatuses.withName(workflowRec.status),
+                                                                   workflowRec.cost.getOrElse(BigDecimal(0))
+                      )
+                    } else {
+                      dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
+                    }
                   _ = logger.info(
                     s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"
                   )
