@@ -69,7 +69,8 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
                                            30 days,
                                            trackDetailedSubmissionMetrics = false,
                                            10,
-                                           enableEmailNotifications = false
+                                           enableEmailNotifications = false,
+                                           enableCostEstimatesForAllWorkflows = true
       )
       val submissionMonitorActorRef = TestActorRef[SubmissionMonitorActor](
         SubmissionMonitorActor.props(

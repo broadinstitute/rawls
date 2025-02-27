@@ -945,5 +945,6 @@ final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration,
                                          submissionPollExpiration: FiniteDuration,
                                          trackDetailedSubmissionMetrics: Boolean,
                                          attributeUpdatesPerWorkflow: Int,
-                                         enableEmailNotifications: Boolean
+                                         enableEmailNotifications: Boolean,
+                                         enableCostEstimatesForAllWorkflows: Boolean
 )

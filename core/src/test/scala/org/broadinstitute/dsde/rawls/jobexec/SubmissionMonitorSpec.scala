@@ -2250,7 +2250,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                    execSvcDAO: ExecutionServiceDAO,
                                    trackDetailedSubmissionMetrics: Boolean = true
   ): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, 30 days, trackDetailedSubmissionMetrics, 10, true)
+    val config = SubmissionMonitorConfig(1 second, 30 days, trackDetailedSubmissionMetrics, 10, true, true)
     TestActorRef[SubmissionMonitorActor](
       SubmissionMonitorActor.props(
         wsName,
@@ -2276,7 +2276,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               attributesPerWorkflow: Int = 10,
                               perWorkflowCostCap: Option[BigDecimal] = None
   ): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true)
+    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true, true)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
