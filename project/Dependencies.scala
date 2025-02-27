@@ -5,7 +5,8 @@ object Dependencies {
   val akkaHttpV = "10.2.10"
   val slickV = "3.5.2"
 
-  val googleV = "2.0.0"
+  val googleV = "2.0.0" // service-specific client libraries
+  val googleApiV = "2.7.2" // the main google-api-client
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -38,21 +39,20 @@ object Dependencies {
   val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.9" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
   val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.4.2" // Needed for connection pooling with the Bard client
 
-  val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
-  val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20220908-" + googleV))
-  val googleGenomics: ModuleID =              excludeGuavaJDK5("com.google.apis"        % "google-api-services-genomics"              % ("v2alpha1-rev20220913-" + googleV))
-  val googleLifeSciences: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-lifesciences"          % ("v2beta-rev20220916-" + googleV))
-  val googleStorage: ModuleID =               excludeGuavaJDK5("com.google.apis"        % "google-api-services-storage"               % ("v1-rev20220705-" + googleV))
-  val googleCloudResourceManager: ModuleID =  excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudresourcemanager"  % ("v1-rev20220828-" + googleV))
-  val googleIam: ModuleID =                   excludeGuavaJDK5("com.google.apis"        % "google-api-services-iam"                   % ("v1-rev20230105-" + googleV))
-  val googleIamCredentials: ModuleID =        excludeGuavaJDK5("com.google.apis"        % "google-api-services-iamcredentials"        % ("v1-rev20211203-" + googleV))
+  val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleApiV)
+  val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20241011-" + googleV))
+  val googleLifeSciences: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-lifesciences"          % ("v2beta-rev20240329-" + googleV))
+  val googleStorage: ModuleID =               excludeGuavaJDK5("com.google.apis"        % "google-api-services-storage"               % ("v1-rev20241206-" + googleV))
+  val googleCloudResourceManager: ModuleID =  excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudresourcemanager"  % ("v1-rev20240310-" + googleV)) // has v2 and v3 versions 2.0.0, v2-rev20240310-2.0.0
+  val googleIam: ModuleID =                   excludeGuavaJDK5("com.google.apis"        % "google-api-services-iam"                   % ("v1-rev20250116-" + googleV)) // has a v2 version
+  val googleIamCredentials: ModuleID =        excludeGuavaJDK5("com.google.apis"        % "google-api-services-iamcredentials"        % ("v1-rev20241024-" + googleV))
 
-  val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20230119-" + googleV)
-  val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20230112-" + googleV)
-  val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20230109-" + googleV)
+  val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20250211-" + googleV)
+  val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20250208-" + googleV)
+  val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20250212-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.4.0-jre"
 
-  val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % "v3-rev540-1.25.0"
+  val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % ("v3-rev20250130-" + googleV)
 
   // metrics4-scala and metrics3-statsd are pulled in by workbench-metrics, which is pulled in by
   // workbench-google (workbenchGoogle variable in this file). Thus, anything that depends on workbench-google, such as
@@ -66,12 +66,12 @@ object Dependencies {
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.2"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.13.1"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.1.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.2.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.16"
-  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
+  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.6.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
@@ -81,7 +81,7 @@ object Dependencies {
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.2.0" exclude("com.google.protobuf", "protobuf-java")
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.31.0"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.31.1"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.10"
 
@@ -106,14 +106,14 @@ object Dependencies {
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.30" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.31" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.15.1"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.16.0"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.15.3"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.16.2"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
@@ -129,12 +129,12 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1174-SNAPSHOT")
+  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1175-SNAPSHOT")
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
-  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.604-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.605-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.355")
+  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.365")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
 
   // OpenTelemetry
@@ -185,7 +185,6 @@ object Dependencies {
     scalatest,
 
     googleCloudBilling,
-    googleGenomics,
     googleLifeSciences,
     googleStorage,
     googleCloudResourceManager,

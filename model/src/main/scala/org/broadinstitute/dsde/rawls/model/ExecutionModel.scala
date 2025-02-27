@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryStatus
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowCostTypes.WorkflowCostType
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborted, Failed, WorkflowStatus}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
@@ -133,8 +134,26 @@ case class Workflow(
   workflowEntity: Option[AttributeEntityReference],
   inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty,
-  cost: Option[Float] = None
+  cost: Option[Float] = None,
+  costType: Option[WorkflowCostType] = None
 )
+
+object WorkflowCostTypes {
+  sealed trait WorkflowCostType extends RawlsEnumeration[WorkflowCostType] {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkflowCostType = WorkflowCostTypes.withName(name)
+  }
+
+  def withName(name: String): WorkflowCostType =
+    name match {
+      case "Actual"    => Actual
+      case "Estimated" => Estimated
+      case _           => throw new RawlsException(s"invalid WorkflowCostType [${name}]")
+    }
+
+  case object Actual extends WorkflowCostType
+  case object Estimated extends WorkflowCostType
+}
 
 case class TaskOutput(
   logs: Option[Seq[ExecutionServiceCallLogs]],
@@ -512,7 +531,11 @@ trait ExecutionJsonSupport extends JsonSupport {
     SubmissionValidationReport
   )
 
-  implicit val WorkflowFormat: RootJsonFormat[Workflow] = jsonFormat7(Workflow)
+  implicit val WorkflowCostTypeFormat: RootJsonFormat[WorkflowCostType] = rawlsEnumerationFormat(
+    WorkflowCostTypes.withName
+  )
+
+  implicit val WorkflowFormat: RootJsonFormat[Workflow] = jsonFormat8(Workflow)
 
   implicit val ExternalEntityInfoFormat: RootJsonFormat[ExternalEntityInfo] = jsonFormat2(ExternalEntityInfo)
 

@@ -163,7 +163,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val workflows = workflowEntities map { ref =>
       val uuid = if (status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
-      Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = individualWorkflowCost)
+      Workflow(
+        uuid,
+        status,
+        testDate,
+        Some(ref.toReference),
+        inputResolutions(ref),
+        cost = individualWorkflowCost,
+        costType = individualWorkflowCost.map(_ => WorkflowCostTypes.Estimated)
+      )
     }
 
     val submissionId = UUID.randomUUID.toString

@@ -5020,8 +5020,14 @@ components:
             type: string
         cost:
           type: number
-          description: The run cost of this workflow
+          description: The run cost of this workflow, if available
           format: float
+        costType:
+          type: string
+          description: The method used to calculate the run cost
+          enum:
+            - Actual
+            - Estimated
       description: ""
     SubmissionRetry:
       type: object
@@ -6216,6 +6222,11 @@ components:
           description: Optional, array of policies to attach to the workspace.
           items:
             $ref: '#/components/schemas/WorkspacePolicy'
+        addUsers:
+          type: array
+          description: Optional, array of users to add to the workspace
+          items:
+            $ref: '#/components/schemas/WorkspaceACLUpdate'
       description: ""
     WorkspaceRequestClone:
       required:

@@ -60,6 +60,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserCommentUpdateOperation,
   Workflow,
   WorkflowCost,
+  WorkflowCostTypes,
   WorkflowFailureModes,
   WorkflowOutputs,
   WorkflowQueueStatusByUserResponse,
@@ -438,36 +439,61 @@ class SubmissionsService(
 
     traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
-        val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
+        val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
         val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
 
         getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
           toFutureTry(
             submissionCostService.getSubmissionCosts(submissionId,
-                                                     allWorkflowIds,
+                                                     workflowIdsForCostQuery,
                                                      workspace.googleProjectId,
                                                      submission.submissionDate,
                                                      submissionDoneDate,
                                                      tableName
             )
-          ) map {
-            case Failure(ex) =>
-              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-              submission
-            case Success(costMap) =>
-              val costedWorkflows = submission.workflows.map { workflow =>
-                workflow.workflowId match {
-                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
-                  case None       => workflow
-                }
-              }
-              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-              costedSubmission
-          }
+          ) map { costMapTry => annotateSubmissionWithActualCost(submission, costMapTry) }
         }
       }
     }
   }
+
+  /*
+    The desired logic:
+      - if workflow is not terminal, always show estimated cost
+      - If workflow is terminal, check its statusLastChangedDate:
+          - if within 24 hours of now, show estimated cost
+          - if older than 24 hours and actual cost is available, show actual cost, else show estimated cost
+   */
+  def filterActualCostWorkflowCandidates(workflows: Seq[Workflow]): Seq[String] = {
+    // Workflow object uses joda-time, so we also use it here
+    val dateCutoff = DateTime.now().minusHours(24)
+
+    workflows
+      .filter(wf => wf.status.isDone && wf.statusLastChangedDate.isBefore(dateCutoff))
+      .flatMap(_.workflowId)
+  }
+
+  def annotateSubmissionWithActualCost(submission: Submission, costMap: Try[Map[String, Float]]): Submission =
+    costMap match {
+      case Failure(ex) =>
+        logger.error(s"Unable to get workflow costs for submission ${submission.submissionId}", ex)
+        submission
+      case Success(costMap) =>
+        val costedWorkflows = submission.workflows.map { workflow =>
+          workflow.workflowId match {
+            case Some(wfId) =>
+              // prefer the actual cost from the cost map;
+              // use Cromwell-estimated cost from the workflow if not
+              if (costMap.contains(wfId))
+                workflow.copy(cost = costMap.get(wfId), costType = Option(WorkflowCostTypes.Actual))
+              else
+                workflow
+            case None => workflow
+          }
+        }
+        val submissionCost = costedWorkflows.flatMap(_.cost).sum
+        submission.copy(cost = Some(submissionCost), workflows = costedWorkflows)
+    }
 
   def retrySubmission(workspaceName: WorkspaceName,
                       submissionRetry: SubmissionRetry,

@@ -191,7 +191,8 @@ case class WorkspaceRequest(
   bucketLocation: Option[String] = None,
   enhancedBucketLogging: Option[Boolean] = Option(false),
   protectedData: Option[Boolean] = Option(false),
-  policies: Option[List[WorkspacePolicy]] = None
+  policies: Option[List[WorkspacePolicy]] = None,
+  addUsers: Option[List[WorkspaceACLUpdate]] = None
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
@@ -1227,6 +1228,7 @@ class WorkspaceJsonSupport extends JsonSupport {
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
   import UserModelJsonSupport.RawlsBillingAccountNameFormat
   import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+  import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLUpdateFormat
   import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
@@ -1361,7 +1363,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspacePolicyFormat: RootJsonFormat[WorkspacePolicy] = jsonFormat3(WorkspacePolicy.apply)
 
-  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat10(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat11(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 

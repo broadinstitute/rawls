@@ -433,7 +433,11 @@ trait SubmissionComponent {
                new DateTime(wr.statusLastChangedDate.getTime),
                entityRef,
                workflowResolutions.sortBy(_.inputName), // enforce consistent sorting
-               messages
+               messages,
+               wr.cost.map(_.floatValue),
+               // when retrieving a workflow from the db, if the workflow has a value for cost,
+               // the value is an estimated value.
+               wr.cost.map(_ => WorkflowCostTypes.Estimated)
              )
             )
           }.toSeq
@@ -544,7 +548,8 @@ trait SubmissionComponent {
         ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
         monitoringScript = submissionRec.monitoringScript,
         monitoringImage = submissionRec.monitoringImage,
-        monitoringImageScript = submissionRec.monitoringImageScript
+        monitoringImageScript = submissionRec.monitoringImageScript,
+        perWorkflowCostCap = submissionRec.perWorkflowCostCap
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,

@@ -132,4 +132,5 @@
     <include file="changesets/20241121_billing_account_changes_status.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20241218_alter_audit_workflow_status_trigger_frequency.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250211_add_workspace_spend_report_table.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250227_update_workspace_spend_report_table.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
