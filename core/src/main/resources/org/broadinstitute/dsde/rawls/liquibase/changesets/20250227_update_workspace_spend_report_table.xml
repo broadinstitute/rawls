@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
+    <changeSet logicalFilePath="dummy" author="sehsan" id="update_WORKSPACE_SPEND_REPORT_TABLE">
+        <addColumn tableName="WORKSPACE_SPEND_REPORT">
+            <column name="CURRENCY" type="VARCHAR(100)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+        <addColumn tableName="WORKSPACE_SPEND_REPORT">
+            <column name="COMPUTE_CREDITS" type="VARCHAR(100)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+        <addColumn tableName="WORKSPACE_SPEND_REPORT">
+            <column name="STORAGE_CREDITS" type="VARCHAR(100)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+        <addColumn tableName="WORKSPACE_SPEND_REPORT">
+            <column name="OTHER_CREDITS" type="VARCHAR(100)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>
