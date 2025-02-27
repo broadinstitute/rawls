@@ -1608,7 +1608,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         perWorkflowCostCap = Option(BigDecimal(2))
       )
 
-      // trigger a monitor pass, which should abort the workflow due to cost limit
+      // trigger a monitor pass, which should abort the workflow due to cost threshold
       val workflows = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
         case Success(Some(recordWithOutputs)) => recordWithOutputs._1
       }
@@ -1619,7 +1619,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           .getOrElse(fail())
           .messages
       actualMessages should have size 1
-      actualMessages.head.value shouldBe "Cost limit reached. Workflow was aborted to stay on budget."
+      actualMessages.head.value shouldBe "Cost threshold reached. Workflow was aborted to stay on budget."
   }
 
   it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase {
