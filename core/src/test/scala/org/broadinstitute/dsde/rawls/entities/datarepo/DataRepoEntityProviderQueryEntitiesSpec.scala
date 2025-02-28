@@ -236,11 +236,10 @@ class DataRepoEntityProviderQueryEntitiesSpec
     assertResult("term filtering not supported by this provider.")(ex.getMessage)
   }
 
-  ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
+  ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in
     // we haven't implemented the runtime logic for this because we don't have PO input,
     // so we don't know exactly what to unit test
     fail("not implemented in runtime code yet")
-  }
 
   it should "fail if snapshot has no tables in data repo" in {
     val provider = createTestProvider(snapshotModel = createSnapshotModel(List.empty[TableModel]))

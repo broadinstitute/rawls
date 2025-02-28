@@ -133,8 +133,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       // execute the query against BQ
       queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield
-    // translate the BQ results into a single Rawls Entity
-    queryResultsToEntity(queryResults, entityType, pk)
+      // translate the BQ results into a single Rawls Entity
+      queryResultsToEntity(queryResults, entityType, pk)
     resultIO.unsafeToFuture()
   }
 
@@ -210,8 +210,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
         // execute the query against BQ
         queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
       } yield
-      // translate the BQ results into a Rawls query result
-      queryResultsToEntities(queryResults, entityType, pk)
+        // translate the BQ results into a Rawls query result
+        queryResultsToEntities(queryResults, entityType, pk)
       resultIO.unsafeToFuture()
     }
 

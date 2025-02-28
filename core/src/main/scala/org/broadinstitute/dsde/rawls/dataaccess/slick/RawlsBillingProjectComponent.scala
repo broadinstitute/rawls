@@ -481,7 +481,7 @@ trait RawlsBillingProjectComponent {
         // - to keep an audit log of billing account changes
         _ <- DBIO.sequence(billingProjects.map { project =>
           // ignore all currently-outstanding changes for this project
-          BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen {
+          BillingAccountChanges.ignoreAllOutstanding(project.projectName) andThen
             // insert the most recent change for this project
             BillingAccountChanges.create(
               project.projectName,
@@ -489,7 +489,6 @@ trait RawlsBillingProjectComponent {
               billingAccount,
               userSubjectId
             )
-          }
         })
       } yield count
   }

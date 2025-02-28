@@ -167,7 +167,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
     `SubmissionCostService#executeWorkflowCostQuery` passes other values to `startParameterizedQuery`, so
     an exception will be thrown if a call is made to BigQuery in this case.
    */
-  it should "bypass BigQuery with no workflow IDs" in {
+  it should "bypass BigQuery with no workflow IDs" in
     assertResult(Map.empty) {
       Await.result(
         submissionCostService.getSubmissionCosts("submission-id",
@@ -179,5 +179,4 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         1 minute
       )
     }
-  }
 }

@@ -52,7 +52,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
   ) =
     system.actorOf(CloneWorkspaceFileTransferMonitor.props(dataSource, mockGcsDAO, 1 second, 1 second))
 
-  "CloneWorkspaceFileTransferMonitor" should "eventually copy files from the source bucket to the destination bucket" in {
+  "CloneWorkspaceFileTransferMonitor" should "eventually copy files from the source bucket to the destination bucket" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(defaultBillingProjectName,
                                                CreationStatuses.Ready,
@@ -148,9 +148,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
       system.stop(actor)
     }
-  }
 
-  it should "continue trying to transfer files when receiving 403s from Google while listing objects" in {
+  it should "continue trying to transfer files when receiving 403s from Google while listing objects" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(defaultBillingProjectName,
                                                CreationStatuses.Ready,
@@ -237,9 +236,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
       system.stop(actor)
     }
-  }
 
-  it should "continue trying to transfer files when receiving 403s from Google while copying objects" in {
+  it should "continue trying to transfer files when receiving 403s from Google while copying objects" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(defaultBillingProjectName,
                                                CreationStatuses.Ready,
@@ -338,7 +336,6 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
       system.stop(actor)
     }
-  }
 
   it should "continue trying to copy the files until all copies succeed" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>

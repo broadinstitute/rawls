@@ -3,7 +3,14 @@ package org.broadinstitute.dsde.rawls.provider
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.Materializer
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceMetadata, ResourceType, StewardshipType}
+import bio.terra.workspace.model.{
+  CloningInstructionsEnum,
+  DataRepoSnapshotAttributes,
+  DataRepoSnapshotResource,
+  ResourceMetadata,
+  ResourceType,
+  StewardshipType
+}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.opentelemetry.context.Context
@@ -13,13 +20,27 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, NamedDataRepoSnapshot, RawlsRequestContext, SnapshotListResponse, StatusCheckResponse, SubsystemStatus, Subsystems, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  ApplicationVersion,
+  NamedDataRepoSnapshot,
+  RawlsRequestContext,
+  SnapshotListResponse,
+  StatusCheckResponse,
+  SubsystemStatus,
+  Subsystems,
+  UserInfo
+}
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.RawlsApiServiceImpl
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceAdminService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceService,
+  WorkspaceAdminService,
+  WorkspaceService,
+  WorkspaceSettingService
+}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{reset, when}
@@ -77,7 +98,7 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   private def mockSubsystemsStatus(healthy: Boolean): OngoingStubbing[Future[(StatusCode, StatusCheckResponse)]] =
     when {
       mockStatusServiceConstructor().getStatus
-    } thenReturn {
+    } thenReturn
       Future.successful(
         StatusCodes.OK,
         StatusCheckResponse(
@@ -85,7 +106,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
           systems = subsystemsStatusMap
         )
       )
-    }
 
   val mockMultiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = {
     lazy val mockMultiCloudWorkspaceService: MultiCloudWorkspaceService = mock[MultiCloudWorkspaceService]
@@ -224,18 +244,16 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   ): OngoingStubbing[Future[SnapshotListResponse]] =
     when {
       mockSnapshotService.enumerateSnapshotsById(anyString(), anyInt(), anyInt(), any[Option[UUID]])
-    } thenReturn {
+    } thenReturn
       Future.successful(mockResponse)
-    }
 
   private def mockCreateSnapshot(mockSnapshotService: SnapshotService,
                                  mockResponse: DataRepoSnapshotResource
   ): OngoingStubbing[Future[DataRepoSnapshotResource]] =
     when {
       mockSnapshotService.createSnapshotByWorkspaceId(anyString(), any[NamedDataRepoSnapshot])
-    } thenReturn {
+    } thenReturn
       Future.successful(mockResponse)
-    }
 
   lazy val pactBrokerUrl: String =
     sys.env.getOrElse("PACT_BROKER_URL", "")

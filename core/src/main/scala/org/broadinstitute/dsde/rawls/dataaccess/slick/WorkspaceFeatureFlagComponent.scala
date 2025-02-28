@@ -53,9 +53,8 @@ trait WorkspaceFeatureFlagComponent {
     def listFlagsForWorkspace(workspaceId: UUID,
                               flags: List[WorkspaceFeatureFlag]
     ): ReadAction[Seq[WorkspaceFeatureFlag]] =
-      filter(flag => flag.workspaceId === workspaceId && flag.flagName.inSetBind(flags.map(_.name))).result.map {
-        recs =>
-          recs.map(rec => WorkspaceFeatureFlag(rec.flagName))
+      filter(flag => flag.workspaceId === workspaceId && flag.flagName.inSetBind(flags.map(_.name))).result.map { recs =>
+        recs.map(rec => WorkspaceFeatureFlag(rec.flagName))
       }
 
     def deleteAllForWorkspace(workspaceId: UUID): ReadWriteAction[Int] =

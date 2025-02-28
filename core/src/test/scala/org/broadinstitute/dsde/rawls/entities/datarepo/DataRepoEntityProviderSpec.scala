@@ -182,11 +182,10 @@ class DataRepoEntityProviderSpec
     }
   }
 
-  ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
+  ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in
     // we haven't implemented the runtime logic for this because we don't have PO input,
     // so we don't know exactly what to unit test
     fail("not implemented in runtime code yet")
-  }
 
   it should "fail if snapshot table not found in data repo's response" in {
     val provider = createTestProvider() // default behavior returns three rows

@@ -433,7 +433,11 @@ trait SubmissionComponent {
                new DateTime(wr.statusLastChangedDate.getTime),
                entityRef,
                workflowResolutions.sortBy(_.inputName), // enforce consistent sorting
-               messages
+               messages,
+               wr.cost.map(_.floatValue),
+               // when retrieving a workflow from the db, if the workflow has a value for cost,
+               // the value is an estimated value.
+               wr.cost.map(_ => WorkflowCostTypes.Estimated)
              )
             )
           }.toSeq
@@ -544,7 +548,8 @@ trait SubmissionComponent {
         ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
         monitoringScript = submissionRec.monitoringScript,
         monitoringImage = submissionRec.monitoringImage,
-        monitoringImageScript = submissionRec.monitoringImageScript
+        monitoringImageScript = submissionRec.monitoringImageScript,
+        perWorkflowCostCap = submissionRec.perWorkflowCostCap
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,
@@ -675,7 +680,7 @@ trait SubmissionComponent {
           deleteSubmissionAttributes("WORKFLOW", "workflow_id"),
           deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW", "workflow_id"),
           deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id")
-        ) andThen {
+        ) andThen
           DBIO.sequence(Seq("WORKFLOW") map { workflow_table =>
             // delete workflows
             sqlu"""delete w from #$workflow_table w
@@ -683,7 +688,6 @@ trait SubmissionComponent {
                    where s.workspace_id=$workspaceId
             """
           })
-        }
       }
     }
 

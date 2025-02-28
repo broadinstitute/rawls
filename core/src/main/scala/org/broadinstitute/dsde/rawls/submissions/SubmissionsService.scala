@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.submissions
 
 import akka.http.scaladsl.model.StatusCodes
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
@@ -59,6 +60,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserCommentUpdateOperation,
   Workflow,
   WorkflowCost,
+  WorkflowCostTypes,
   WorkflowFailureModes,
   WorkflowOutputs,
   WorkflowQueueStatusByUserResponse,
@@ -437,36 +439,69 @@ class SubmissionsService(
 
     traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
-        val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
+        // determine which workflows are eligible for actual-cost lookup
+        val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
 
-        getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
-          toFutureTry(
-            submissionCostService.getSubmissionCosts(submissionId,
-                                                     allWorkflowIds,
-                                                     workspace.googleProjectId,
-                                                     submission.submissionDate,
-                                                     submissionDoneDate,
-                                                     tableName
+        // if there are no workflows eligible for actual costs, skip the getSpendReportTableName database query
+        val costMapTryFuture: Future[Try[Map[String, Float]]] = if (workflowIdsForCostQuery.isEmpty) {
+          Future.successful(Success(Map()))
+        } else {
+          val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
+          getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
+            toFutureTry(
+              submissionCostService.getSubmissionCosts(submissionId,
+                                                       workflowIdsForCostQuery,
+                                                       workspace.googleProjectId,
+                                                       submission.submissionDate,
+                                                       submissionDoneDate,
+                                                       tableName
+              )
             )
-          ) map {
-            case Failure(ex) =>
-              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-              submission
-            case Success(costMap) =>
-              val costedWorkflows = submission.workflows.map { workflow =>
-                workflow.workflowId match {
-                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
-                  case None       => workflow
-                }
-              }
-              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-              costedSubmission
           }
         }
+
+        costMapTryFuture map { costMapTry => annotateSubmissionWithActualCost(submission, costMapTry) }
       }
     }
   }
+
+  /*
+    The desired logic:
+      - if workflow is not terminal, always show estimated cost
+      - If workflow is terminal, check its statusLastChangedDate:
+          - if within 24 hours of now, show estimated cost
+          - if older than 24 hours and actual cost is available, show actual cost, else show estimated cost
+   */
+  def filterActualCostWorkflowCandidates(workflows: Seq[Workflow]): Seq[String] = {
+    // Workflow object uses joda-time, so we also use it here
+    val dateCutoff = DateTime.now().minusHours(24)
+
+    workflows
+      .filter(wf => wf.status.isDone && wf.statusLastChangedDate.isBefore(dateCutoff))
+      .flatMap(_.workflowId)
+  }
+
+  def annotateSubmissionWithActualCost(submission: Submission, costMap: Try[Map[String, Float]]): Submission =
+    costMap match {
+      case Failure(ex) =>
+        logger.error(s"Unable to get workflow costs for submission ${submission.submissionId}", ex)
+        submission
+      case Success(costMap) =>
+        val costedWorkflows = submission.workflows.map { workflow =>
+          workflow.workflowId match {
+            case Some(wfId) =>
+              // prefer the actual cost from the cost map;
+              // use Cromwell-estimated cost from the workflow if not
+              if (costMap.contains(wfId))
+                workflow.copy(cost = costMap.get(wfId), costType = Option(WorkflowCostTypes.Actual))
+              else
+                workflow
+            case None => workflow
+          }
+        }
+        val submissionCost = costedWorkflows.flatMap(_.cost).sum
+        submission.copy(cost = Some(submissionCost), workflows = costedWorkflows)
+    }
 
   def retrySubmission(workspaceName: WorkspaceName,
                       submissionRetry: SubmissionRetry,
@@ -531,9 +566,33 @@ class SubmissionsService(
       ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
 
+  @VisibleForTesting
+  def validateCostCap(costCap: Option[BigDecimal]): Unit = {
+    // must be a positive number, no more than two decimal places, and a max of ... 10 billion?
+    val maybeErrorMessage = costCap.collectFirst {
+      case cap if cap.sign != 1 => "per-workflow cost cap must be positive"
+      case cap if cap.compare(BigDecimal.valueOf(10000000000L)) >= 0 =>
+        "per-workflow cost cap must be less than 10,000,000,000"
+      case cap if !(cap * 100).isWhole =>
+        "per-workflow cost cap must have a max of two decimal places"
+    }
+
+    maybeErrorMessage.foreach { msg =>
+      throw new RawlsExceptionWithErrorReport(
+        errorReport = ErrorReport(
+          StatusCodes.BadRequest,
+          msg
+        )
+      )
+    }
+
+  }
+
   private def prepareSubmission(workspaceName: WorkspaceName,
                                 submissionRequest: SubmissionRequest
   ): Future[PreparedSubmission] = {
+
+    validateCostCap(submissionRequest.perWorkflowCostCap)
 
     val submissionId: UUID = UUID.randomUUID()
 

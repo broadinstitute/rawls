@@ -106,6 +106,7 @@ class SubmissionSpec(_system: ActorSystem)
   var subTerminalWorkflow = UUID.randomUUID().toString
   var subOneMissingWorkflow = UUID.randomUUID().toString
   var subTwoGoodWorkflows = UUID.randomUUID().toString
+  var subTwoCompletedWorkflows = UUID.randomUUID().toString
   var subToRetry = UUID.randomUUID().toString
   var subCromwellBadWorkflows = UUID.randomUUID().toString
 
@@ -282,6 +283,35 @@ class SubmissionSpec(_system: ActorSystem)
       deleteIntermediateOutputFiles = false
     )
 
+    val submissionTestTwoCompletedWorkflows = Submission(
+      subTwoCompletedWorkflows,
+      testDate.minusHours(48),
+      WorkbenchEmail(testData.userOwner.userEmail.value),
+      "std",
+      "someMethod",
+      Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+      workflows = Seq(
+        Workflow(
+          workflowId = existingWorkflowId,
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate.minusHours(48),
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = testData.inputResolutions
+        ),
+        Workflow(
+          workflowId = alreadyTerminatedWorkflowId,
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate.minusHours(48),
+          workflowEntity = Option(sample2.toReference),
+          inputResolutions = testData.inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
     val submissionToRetry = Submission(
       subToRetry,
       testDate,
@@ -396,6 +426,7 @@ class SubmissionSpec(_system: ActorSystem)
             submissionQuery.create(context, submissionTestAbortTerminalWorkflow),
             submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows),
+            submissionQuery.create(context, submissionTestTwoCompletedWorkflows),
             submissionQuery.create(context, submissionTestCromwellBadWorkflows),
             submissionQuery.create(context, submissionToRetry),
             // update exec key for all test data workflows that have been started.
@@ -421,7 +452,7 @@ class SubmissionSpec(_system: ActorSystem)
         MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
       val config =
-        SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false)
+        SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false, true)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
@@ -1100,7 +1131,7 @@ class SubmissionSpec(_system: ActorSystem)
     )
   }
 
-  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is true" in {
+  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is true" in
     workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = true) { submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1119,9 +1150,8 @@ class SubmissionSpec(_system: ActorSystem)
 
       submissionData.submissionRoot should include("intermediates")
     }
-  }
 
-  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is false" in {
+  it should "set the correct root path for a submission given the SeparateSubmissionFinalOutputsSetting is false" in
     workspaceSettingSubmissionTest(SeparateSubmissionFinalOutputs = false) { submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1140,7 +1170,6 @@ class SubmissionSpec(_system: ActorSystem)
 
       submissionData.submissionRoot should not include "intermediates"
     }
-  }
 
   it should "create data repo submission" in {
     val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> s"value $rowId").toMap
@@ -1539,7 +1568,7 @@ class SubmissionSpec(_system: ActorSystem)
     }
   }
 
-  it should "report error when data reference exists with entity name" in {
+  it should "report error when data reference exists with entity name" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = methodConfig.namespace,
@@ -1558,9 +1587,8 @@ class SubmissionSpec(_system: ActorSystem)
       ex.errorReport.causes should have length 1
       ex.errorReport.causes.head.message shouldBe "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
     }
-  }
 
-  it should "report error when data reference points to unknown snapshot" in {
+  it should "report error when data reference points to unknown snapshot" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
       runAndWait(
         methodConfigurationQuery.upsert(minimalTestData.workspace,
@@ -1584,9 +1612,8 @@ class SubmissionSpec(_system: ActorSystem)
       ex.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
       ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
     }
-  }
 
-  it should "report error when root entity type does not refer to a table in the snapshot" in {
+  it should "report error when root entity type does not refer to a table in the snapshot" in
     dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
       runAndWait(
         methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(rootEntityType = Some("unknown")))
@@ -1608,7 +1635,6 @@ class SubmissionSpec(_system: ActorSystem)
       ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
       ex.errorReport.message shouldBe "Validation errors: Invalid inputs: three_step.cgrep.pattern -> Table `unknown` does not exist in snapshot"
     }
-  }
 
   "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestSubmissionsService {
     submissionsService =>
@@ -1709,7 +1735,7 @@ class SubmissionSpec(_system: ActorSystem)
   it should "calculate submission cost as the sum of workflow costs" in withSubmissionTestSubmissionsService {
     submissionsService =>
       val submissionData = checkSubmissionStatus(submissionsService,
-                                                 subTestData.submissionTestAbortTwoGoodWorkflows.submissionId,
+                                                 subTestData.submissionTestTwoCompletedWorkflows.submissionId,
                                                  subTestData.wsName
       )
       assertResult(Option(mockSubmissionCostService.fixedCost * 2)) {

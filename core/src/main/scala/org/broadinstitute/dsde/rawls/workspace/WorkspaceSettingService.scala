@@ -1,9 +1,14 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
+import cats.data.NonEmptyList
+import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import cats.implicits._
+import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
+import com.google.cloud.storage.Storage
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
@@ -13,8 +18,11 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
+  PubliclyReadableSetting,
   RawlsRequestContext,
+  SamResourceTypeNames,
   SamWorkspaceActions,
+  SamWorkspacePolicyNames,
   SeparateSubmissionFinalOutputsSetting,
   UseCromwellGcpBatchBackendSetting,
   Workspace,
@@ -24,6 +32,9 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import java.time.Duration
 import scala.concurrent.duration.DurationInt
@@ -34,10 +45,20 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                               workspaceSettingRepository: WorkspaceSettingRepository,
                               val workspaceRepository: WorkspaceRepository,
                               gcsDAO: GoogleServicesDAO,
-                              val samDAO: SamDAO
-)(implicit protected val executionContext: ExecutionContext)
+                              val samDAO: SamDAO,
+                              googleStorageService: GoogleStorageService[IO]
+)(implicit protected val executionContext: ExecutionContext, ioRuntime: IORuntime)
     extends WorkspaceSupport
     with LazyLogging {
+
+  private def getAllUsersRoleMapping(ctx: RawlsRequestContext) =
+    samDAO.getAllUsersGroup(ctx).map { allUsersGroup =>
+      Map[StorageRole, NonEmptyList[Identity]](
+        StorageRole.CustomStorageRole(gcsDAO.terraBucketReaderRole) -> NonEmptyList.one(
+          Identity.group(allUsersGroup.value)
+        )
+      )
+    }
 
   // Returns applied settings on a workspace.
   def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] =
@@ -96,6 +117,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
+          case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
         }
       }
 
@@ -124,9 +146,13 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           s"Failed to apply settings. [workspaceId=${workspace.workspaceIdAsUUID},settingType=${setting.settingType}]",
           e
         )
+        val statusCode = e match {
+          case re: RawlsExceptionWithErrorReport => re.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError)
+          case _                                 => StatusCodes.InternalServerError
+        }
         workspaceSettingRepository
           .removePendingSetting(workspace.workspaceIdAsUUID, setting.settingType)
-          .map(_ => Some((setting.settingType, ErrorReport(StatusCodes.InternalServerError, e.getMessage))))
+          .map(_ => Some((setting.settingType, ErrorReport(statusCode, e.getMessage))))
       }
 
     def applySettingToBucket(workspace: Workspace, workspaceSetting: WorkspaceSetting): Future[Unit] =
@@ -160,6 +186,9 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
           gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
 
+        case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
+          applyPublicReadableSetting(workspace, enabled)
+
         // SeparateSubmissionFinalOutputsSetting and UseCromwellGcpBatchBackendSetting are not bucket settings,
         // so we do not need to apply anything here
 
@@ -189,4 +218,44 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       WorkspaceSettingResponse(successes, applyFailures.flatten.toMap)
     }
   }
+
+  /**
+   * Calls sam to update the reader policy then update the buckets IAM to add or remove the allUsers group
+   */
+  private def applyPublicReadableSetting(workspace: Workspace, enabled: Boolean): Future[Unit] =
+    for {
+      // setPolicyPublic will only work if the caller has the appropriate permissions in Sam
+      _ <- samDAO
+        .setPolicyPublic(SamResourceTypeNames.workspace,
+                         workspace.workspaceId,
+                         SamWorkspacePolicyNames.reader,
+                         enabled,
+                         ctx
+        )
+        .recover {
+          case e: RawlsExceptionWithErrorReport
+              if e.errorReport.statusCode
+                .contains(StatusCodes.NotFound) || e.errorReport.statusCode.contains(StatusCodes.Forbidden) =>
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Forbidden, "User does not have permission to update publicly readable setting")
+            )
+        }
+      allUsersRoleMapping <- getAllUsersRoleMapping(ctx)
+      requesterPays = List(Storage.BucketSourceOption.userProject(workspace.googleProjectId.value))
+      iamPolicyAction =
+        if (enabled) {
+          googleStorageService.setIamPolicy(
+            GcsBucketName(workspace.bucketName),
+            allUsersRoleMapping,
+            bucketSourceOptions = requesterPays
+          )
+        } else {
+          googleStorageService.removeIamPolicy(
+            GcsBucketName(workspace.bucketName),
+            allUsersRoleMapping,
+            bucketSourceOptions = requesterPays
+          )
+        }
+      _ <- iamPolicyAction.compile.drain.unsafeToFuture()
+    } yield ()
 }

@@ -101,7 +101,7 @@ class HttpGooglePubSubDAOSpec
     ) {}
   }
 
-  it should "gracefully handle there being no messages in the queue" in {
+  it should "gracefully handle there being no messages in the queue" in
     Await.result(gpsDAO.withMessage(defaultSubscriptionName) { msg =>
                    assertResult(None) {
                      msg
@@ -110,7 +110,6 @@ class HttpGooglePubSubDAOSpec
                  },
                  Duration.Inf
     )
-  }
 
   it should "do all of the things with multiple messages" in {
     // publish a few messages to the topic

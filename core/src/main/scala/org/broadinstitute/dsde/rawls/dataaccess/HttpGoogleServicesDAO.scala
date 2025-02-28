@@ -3,9 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
-import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
 import cats.data.NonEmptyList
 import cats.effect.unsafe.implicits.global
@@ -17,6 +16,7 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
+import com.google.api.gax.core.FixedCredentialsProvider
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{
   BillingAccount,
@@ -38,10 +38,17 @@ import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
+import com.google.cloud.monitoring.v3.{MetricServiceClient, MetricServiceSettings}
+import com.google.monitoring.v3.{Aggregation, ListTimeSeriesRequest, TimeInterval}
+import com.google.api.services.monitoring.v3.MonitoringScopes
+import com.google.protobuf.util.Timestamps
 import com.google.auth.oauth2.ServiceAccountCredentials
+import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.{BucketSourceOption, BucketTargetOption}
 import com.google.cloud.storage.{BucketInfo, Cors, HttpMethod, StorageClass, StorageException}
+import com.google.monitoring.v3.Aggregation.Aligner
+import com.google.protobuf.Duration
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -88,11 +95,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             billingPemFile: String,
                             val billingEmail: String,
                             val billingGroupEmail: String,
+                            credentialsJson: String,
                             maxPageSize: Int = 200,
                             googleStorageService: GoogleStorageService[IO],
                             override val workbenchMetricBaseName: String,
                             proxyNamePrefix: String,
-                            terraBucketReaderRole: String,
+                            override val terraBucketReaderRole: String,
                             terraBucketWriterRole: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO,
                             resourceBufferJsonFile: String
@@ -117,6 +125,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
+  val monitoringScopes = Seq(MonitoringScopes.MONITORING_READ)
   val genomicsScopes = Seq(
     GenomicsScopes.GENOMICS
   ) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
@@ -589,8 +598,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       firecloudHasAccess <- testTerraBillingAccountAccess(billingAccount)
       userHasAccess <- cred.traverse(c => testBillingAccountAccess(billingAccount, c))
     } yield
-    // Return false if the user does not have a Google token
-    firecloudHasAccess && userHasAccess.getOrElse(false)
+      // Return false if the user does not have a Google token
+      firecloudHasAccess && userHasAccess.getOrElse(false)
   }
 
   protected def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, credential: Credential)(implicit
@@ -909,19 +918,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     handleByOperationIdType(opId, papiv1Handler, papiv2Alpha1Handler, lifeSciencesBetaHandler, noMatchHandler)
   }
 
-  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
-    implicit val service = GoogleInstrumentedService.Genomics
-    val opId = s"projects/$serviceProject/operations"
-    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential)
-      .setApplicationName(appName)
-      .build()
-    val operationRequest = genomicsApi.projects().operations().list(opId).setPageSize(1)
-    retryWhen500orGoogleError { () =>
-      executeGoogleRequest(operationRequest)
-      true
-    }
-  }
-
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
@@ -1138,6 +1134,54 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   def getStorage(credential: Credential) =
     new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
 
+  override def getBucketMetrics(
+    projectId: GoogleProjectId
+  ): BucketMetricsResponse = {
+    val metricServiceClient = MetricServiceClient.create(
+      MetricServiceSettings
+        .newBuilder()
+        .setCredentialsProvider(FixedCredentialsProvider.create(getBucketServiceAccountCredentials))
+        .build()
+    )
+    val projectName = projectId.value
+    val now = System.currentTimeMillis
+    val fiveMinutesAgo = now - 5 * 60 * 1000
+    val interval =
+      TimeInterval
+        .newBuilder()
+        .setEndTime(Timestamps.fromMillis(now))
+        .setStartTime(Timestamps.fromMillis(fiveMinutesAgo))
+        .build()
+    val request = ListTimeSeriesRequest
+      .newBuilder()
+      .setName("projects/" + projectName)
+      .setFilter("metric.type=\"storage.googleapis.com/storage/v2/total_bytes\"")
+      .setInterval(interval)
+      .setAggregation(
+        Aggregation
+          .newBuilder()
+          .setAlignmentPeriod(Duration.newBuilder().setSeconds(86400).build())
+          .setCrossSeriesReducer(Aggregation.Reducer.REDUCE_NONE)
+          .setPerSeriesAligner(Aligner.ALIGN_MEAN)
+          .build()
+      )
+      .build()
+    val response = metricServiceClient.listTimeSeries(request)
+    metricServiceClient.close()
+    listTimeSeriesPagedResponseToBucketMetricsResponse(response)
+  }
+
+  def listTimeSeriesPagedResponseToBucketMetricsResponse(
+    ltspResponse: MetricServiceClient.ListTimeSeriesPagedResponse
+  ): BucketMetricsResponse = {
+    val metrics = ltspResponse.iterateAll().asScala.toSeq.flatMap { timeSeries =>
+      timeSeries.getPointsList.asScala.map { point =>
+        BucketMetric(timeSeries.getMetric.getLabelsMap.get("storage_class"), point.getValue.getDoubleValue)
+      }
+    }
+    BucketMetricsResponse(metrics)
+  }
+
   def getGroupDirectory =
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential)
       .setApplicationName(appName)
@@ -1166,6 +1210,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(storageScopes.asJava) // grant bucket-creation powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+
+  def getBucketServiceAccountCredentials: GoogleCredentials =
+    ServiceAccountCredentials
+      .fromStream(new FileInputStream(credentialsJson))
+      .toBuilder()
+      .setScopes(monitoringScopes.asJava)
       .build()
 
   def getGenomicsServiceAccountCredential: Credential =

@@ -24,7 +24,6 @@ object Subsystems {
         Database,
         GoogleBilling,
         GoogleBuckets,
-        GoogleGenomics,
         GooglePubSub,
         Sam,
         BillingProfileManager,
@@ -32,7 +31,7 @@ object Subsystems {
     )
   // CriticalSubsystems are those that will trigger rawls to report down
   val CriticalSubsystems = Set(Database, Sam)
-  val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GooglePubSub)
+  val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GooglePubSub)
 
   sealed trait Subsystem extends RawlsEnumeration[Subsystem] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
@@ -47,7 +46,6 @@ object Subsystems {
       case "Database"              => Database
       case "GoogleBilling"         => GoogleBilling
       case "GoogleBuckets"         => GoogleBuckets
-      case "GoogleGenomics"        => GoogleGenomics
       case "GooglePubSub"          => GooglePubSub
       case "Mongo"                 => Mongo
       case "Sam"                   => Sam
@@ -61,7 +59,6 @@ object Subsystems {
   case object Database extends Subsystem
   case object GoogleBilling extends Subsystem
   case object GoogleBuckets extends Subsystem
-  case object GoogleGenomics extends Subsystem
   case object GooglePubSub extends Subsystem
   case object Mongo extends Subsystem
   case object Sam extends Subsystem

@@ -512,9 +512,11 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
             } else {
               val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
 
-              dataAccess.entityQuery
-                .save(workspaceContext, t)
-                .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
+              traceDBIOWithParent("saveAction", localContext) { subContext =>
+                dataAccess.entityQuery
+                  .save(workspaceContext, t, subContext.toTracingContext)
+                  .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
+              }
             }
           }
 

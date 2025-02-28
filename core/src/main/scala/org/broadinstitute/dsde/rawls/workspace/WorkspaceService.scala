@@ -243,8 +243,8 @@ class WorkspaceService(
           getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(options.attrSpecs))
         workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
-      // post-process JSON to remove calculated-but-undesired keys
-      deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
+        // post-process JSON to remove calculated-but-undesired keys
+        deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
@@ -259,8 +259,8 @@ class WorkspaceService(
           getV2WorkspaceContextAndPermissionsById(workspaceId, SamWorkspaceActions.read, Option(options.attrSpecs))
         workspaceResponse <- getWorkspaceDetails(workspace, options, userProject)
       } yield
-      // post-process JSON to remove calculated-but-undesired keys
-      deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
+        // post-process JSON to remove calculated-but-undesired keys
+        deepFilterJsObject(workspaceResponse.toJson.asJsObject, options.options)
     )
   }
 
@@ -1503,6 +1503,17 @@ class WorkspaceService(
       throw new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString))
   }
 
+  def getBucketUsageV2(workspaceName: WorkspaceName): Future[BucketMetricsResponse] = (for {
+    workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+    bucketUsage = gcsDAO.getBucketMetrics(workspaceContext.googleProjectId)
+  } yield bucketUsage).recover {
+    // Throw with the status code of the google exception (for example 403 for invalid billing, 404 for inactive project)
+    // instead of a 500 to avoid Sentry notifications.
+    case t: GoogleJsonResponseException =>
+      val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+      throw new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString))
+  }
+
   def getAccessInstructions(workspaceName: WorkspaceName): Future[Seq[ManagedGroupAccessInstructions]] =
     for {
       workspaceId <- loadV2WorkspaceId(workspaceName)
@@ -1778,16 +1789,71 @@ class WorkspaceService(
     } else {
       Set(WorkbenchEmail(ctx.userInfo.userEmail.value))
     }
+
+    val groupedAclUpdates: Map[WorkspaceAccessLevel, List[WorkspaceACLUpdate]] = workspaceRequest.addUsers
+      .map { aclUpdates =>
+        aclUpdates.groupBy(_.accessLevel)
+      }
+      .getOrElse(Map.empty)
+
+    def getEmailsByAccessLevel(access: WorkspaceAccessLevel): Set[WorkbenchEmail] =
+      groupedAclUpdates
+        .getOrElse(access, Set.empty)
+        .map(update => WorkbenchEmail(update.email))
+        .toSet
+
+    def getShareEmailsByAccessLevel(access: WorkspaceAccessLevel): Set[WorkbenchEmail] =
+      groupedAclUpdates
+        .getOrElse(access, Set.empty)
+        .filter(_.canShare.get)
+        .map(update => WorkbenchEmail(update.email))
+        .toSet
+
     val ownerPolicy =
-      SamWorkspacePolicyNames.owner -> SamPolicy(ownerPolicyMembership, Set.empty, Set(SamWorkspaceRoles.owner))
-    val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.writer))
-    val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.reader))
+      SamWorkspacePolicyNames.owner -> SamPolicy(
+        ownerPolicyMembership ++ getEmailsByAccessLevel(WorkspaceAccessLevels.Owner),
+        Set.empty,
+        Set(SamWorkspaceRoles.owner)
+      )
+    val writerPolicy =
+      SamWorkspacePolicyNames.writer -> SamPolicy(
+        getEmailsByAccessLevel(WorkspaceAccessLevels.Write),
+        Set.empty,
+        Set(SamWorkspaceRoles.writer)
+      )
+    val readerPolicy =
+      SamWorkspacePolicyNames.reader -> SamPolicy(
+        getEmailsByAccessLevel(WorkspaceAccessLevels.Read),
+        Set.empty,
+        Set(SamWorkspaceRoles.reader)
+      )
+
     val shareReaderPolicy =
-      SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.shareReader))
+      SamWorkspacePolicyNames.shareReader -> SamPolicy(
+        getShareEmailsByAccessLevel(WorkspaceAccessLevels.Read),
+        Set.empty,
+        Set(SamWorkspaceRoles.shareReader)
+      )
     val shareWriterPolicy =
-      SamWorkspacePolicyNames.shareWriter -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.shareWriter))
+      SamWorkspacePolicyNames.shareWriter -> SamPolicy(
+        getShareEmailsByAccessLevel(WorkspaceAccessLevels.Write),
+        Set.empty,
+        Set(SamWorkspaceRoles.shareWriter)
+      )
+
     val canComputePolicy =
-      SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.canCompute))
+      SamWorkspacePolicyNames.canCompute -> SamPolicy(
+        workspaceRequest.addUsers
+          .map { aclUpdates =>
+            aclUpdates
+              .filter(_.canCompute.get)
+              .map(update => WorkbenchEmail(update.email))
+              .toSet
+          }
+          .getOrElse(Set.empty),
+        Set.empty,
+        Set(SamWorkspaceRoles.canCompute)
+      )
     val canCatalogPolicy =
       SamWorkspacePolicyNames.canCatalog -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.canCatalog))
 
@@ -1949,6 +2015,13 @@ class WorkspaceService(
             .map(_.email)
         )
       )
+      usersToInvite <- DBIO.from(workspaceRequest.addUsers match {
+        case Some(acls) =>
+          collectMissingUsers(acls.map(_.email).toSet, ctx)
+        case None => Future.successful(Seq.empty[String])
+      })
+      _ <- DBIO.from(Future.traverse(usersToInvite)(email => samDAO.inviteUser(email, ctx)))
+
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,
                                                workspaceRequest,
@@ -2062,7 +2135,19 @@ class WorkspaceService(
           samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
         )
       )
-    } yield savedWorkspace
+    } yield {
+      val inviteNotifications = usersToInvite
+        .map(email =>
+          Notifications.WorkspaceInvitedNotification(
+            WorkbenchEmail(email),
+            WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+            NotificationWorkspaceName(workspaceRequest.namespace, workspaceRequest.name),
+            savedWorkspace.bucketName
+          )
+        )
+      notificationDAO.fireAndForgetNotifications(inviteNotifications)
+      savedWorkspace
+    }
   }
 
   def failIfWorkspaceExists(name: WorkspaceName): ReadWriteAction[Unit] =

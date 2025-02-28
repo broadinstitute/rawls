@@ -295,7 +295,7 @@ class WorkspaceApiSpec
               eventually {
                 workspaceResponse(
                   Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)
-                ).bucketOptions should contain(WorkspaceBucketOptions(true))
+                ).bucketOptions.get should matchPattern { case WorkspaceBucketOptions(true, _) => }
               }
 
               // The user clones the workspace into their project
@@ -319,7 +319,7 @@ class WorkspaceApiSpec
         "workspaceName" -> Map("namespace" -> projectName, "name" -> destWorkspaceName)
       )
 
-      "to import method configs from another workspace" in {
+      "to import method configs from another workspace" in
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName,
                         prependUUID("reader-import-config-dest-workspace"),
@@ -358,9 +358,8 @@ class WorkspaceApiSpec
             }(ownerAuthToken)
           }(ownerAuthToken)
         }(owner.makeAuthToken(billingScopes))
-      }
 
-      "to import method configs from the method repo" in {
+      "to import method configs from the method repo" in
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName,
                         prependUUID("reader-import-config-dest-workspace"),
@@ -394,7 +393,6 @@ class WorkspaceApiSpec
             }(ownerAuthToken)
           }(ownerAuthToken)
         }(owner.makeAuthToken(billingScopes))
-      }
     }
   }
 

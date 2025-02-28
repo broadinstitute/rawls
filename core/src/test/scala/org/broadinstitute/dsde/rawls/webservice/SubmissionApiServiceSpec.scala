@@ -115,6 +115,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         false,
         CromwellBackend("PAPIv2"),
         CromwellBackend("PAPIv2-CloudNAT"),
+        CromwellBackend("GCPBatch"),
         methodConfigResolver,
         new MockBardService(),
         new WorkspaceSettingRepository(slickDataSource)
@@ -622,6 +623,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       sealRoute(services.submissionRoutes()) ~>
       check {
         assertResult(StatusCodes.OK)(status)
+
+        // N.B. even though withTestDataApiServices includes a mock that returns $1.23 actual cost for each workflow,
+        // the workflows don't pass the criteria in SubmissionsService.filterActualCostWorkflowCandidates(),
+        // so we won't get actual cost in the response
+
         assertResult(testData.costedSubmission1)(responseAs[Submission])
       }
   }
@@ -1126,7 +1132,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   forAll(passingDeleteIntermediateOutputFilesCases) {
     (description, deleteIntermediateOutputFilesOption, deleteIntermediateOutputFilesResult) =>
-      it should description in {
+      it should description in
         withTestDataApiServices { services =>
           val workspaceName = testData.wsName
           val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1152,7 +1158,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               )
             }
         }
-      }
 
   }
 
@@ -1164,7 +1169,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   )
 
   forAll(useReferenceDisksCases) { (description, useReferenceDisksOption, useReferenceDisksResult) =>
-    it should description in {
+    it should description in
       withTestDataApiServices { services =>
         val workspaceName = testData.wsName
         val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1187,7 +1192,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             requestUseReferenceDisksOption should be(Option(JsBoolean(useReferenceDisksResult)))
           }
       }
-    }
   }
 
   private val validMemoryRetryMultiplierCases = Table(
@@ -1198,7 +1202,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   )
 
   forAll(validMemoryRetryMultiplierCases) { (description, memoryRetryMultiplierOption, memoryRetryMultiplierResult) =>
-    it should description in {
+    it should description in
       withTestDataApiServices { services =>
         val workspaceName = testData.wsName
         val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1221,10 +1225,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             requestMemoryRetryMultiplier should be(Option(JsNumber(memoryRetryMultiplierResult)))
           }
       }
-    }
   }
 
-  it should "return a parameter error if the memoryRetryMultiplier is invalid" in {
+  it should "return a parameter error if the memoryRetryMultiplier is invalid" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1246,9 +1249,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           )
         }
     }
-  }
 
-  it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in {
+  it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1270,7 +1272,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           response should be("The request content was malformed:\nExpected JsBoolean, but got 415")
         }
     }
-  }
 
   private val userComment1000character = RandomStringUtils.randomGraph(1000)
   private val validUserCommentCases = Table(
@@ -1304,7 +1305,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   )
 
   forAll(validUserCommentCases) { (description, userCommentInput, userCommentResult) =>
-    it should description in {
+    it should description in
       withTestDataApiServices { services =>
         val workspaceName = testData.wsName
         val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1327,10 +1328,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             requestUserComment.get shouldBe userCommentResult
           }
       }
-    }
   }
 
-  it should "return a parameter error if the userComment is invalid" in {
+  it should "return a parameter error if the userComment is invalid" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1352,9 +1352,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           response should include("Invalid input userComment. Input may be a max of 1000 characters.")
         }
     }
-  }
 
-  it should "successfully update userComment after submission creation" in {
+  it should "successfully update userComment after submission creation" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1397,9 +1396,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
         }
     }
-  }
 
-  it should "return the submission root when getting an individual submission" in {
+  it should "return the submission root when getting an individual submission" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1427,9 +1425,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
         }
     }
-  }
 
-  it should "fail to update comment if submission doesn't exist" in {
+  it should "fail to update comment if submission doesn't exist" in
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
 
@@ -1448,7 +1445,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           )
         }
     }
-  }
 
   it should "return a 201 when a comment is updated" in {
     val wsName = testData.wsName

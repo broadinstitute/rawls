@@ -54,6 +54,8 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import spray.json._
 
+import scala.math.BigDecimal.RoundingMode
+
 /**
  * Created by dvoet on 6/26/15.
  */
@@ -311,30 +313,60 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[Option[WorkflowRecord]] =
     (workflowRec.externalId, perWorkflowCostCap) match {
-      // fetch cost information for the workflow if submission has a cost cap threshold defined
-      case (Some(externalId), Some(costCap)) =>
+      // fetch cost information for the workflow if submission has a cost cap threshold defined or if the
+      // enableCostEstimatesForAllWorkflows config flag is set to true
+      case (Some(externalId), _) if config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined =>
         for {
           costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
           updatedWorkflowRec <-
-            if (costBreakdown.cost > costCap) {
-              executionServiceCluster.abort(workflowRec, petUser).map {
+            // if this submission defines a per-workflow cost cap, and the estimate is above that cap, abort the workflow.
+            if (
+              perWorkflowCostCap.isDefined && costBreakdown.cost > perWorkflowCostCap.get &&
+              WorkflowStatuses.abortableStatuses.contains(
+                WorkflowStatuses
+                  .withName(costBreakdown.status)
+              )
+            ) {
+              executionServiceCluster.abort(workflowRec, petUser).flatMap {
                 case Success(abortedWfRec) =>
-                  logger.info(
-                    s"Aborted workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap."
-                  )
-                  Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
+                  datasource
+                    .inTransaction { dataAccess =>
+                      dataAccess.workflowQuery.saveMessages(
+                        Seq(AttributeString("Cost threshold reached. Workflow was aborted to stay on budget.")),
+                        workflowRec.id
+                      )
+                    }
+                    .map { _ =>
+                      logger.info(
+                        s"Aborted workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap."
+                      )
+                      Option(workflowRec.copy(status = abortedWfRec.status, cost = costBreakdown.cost.some))
+                    }
                 case Failure(t) =>
                   logger.error(
                     s"Failed to abort workflow ${workflowRec.externalId} in submission $submissionId that exceeded per-workflow cost cap. Error: ${t.getMessage}"
                   )
-                  Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+                  Future.successful(
+                    Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+                  )
               }
             } else {
-              Future.successful(Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some)))
+              // don't update unless status or cost has actually changed
+              // round the Cromwell cost estimate to 2 decimal places before comparing.
+              // the existing workflow cost will already be 2 decimal places due to Rawls db precision.
+              val roundedEstimate = costBreakdown.cost.setScale(2, RoundingMode.HALF_UP)
+              if (costBreakdown.status != workflowRec.status || Option(roundedEstimate) != workflowRec.cost) {
+                Future.successful(
+                  Option(workflowRec.copy(status = costBreakdown.status, cost = costBreakdown.cost.some))
+                )
+              } else {
+                Future.successful(None)
+              }
             }
         } yield updatedWorkflowRec
-      // fetch workflow status only if cost cap threshold is not defined
-      case (Some(externalId), None) =>
+      // if config enableCostEstimatesForAllWorkflows is set to false, and no cost cap is defined,
+      // fetch workflow status only
+      case (Some(externalId), _) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
           if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
           else None
@@ -478,7 +510,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               if (doRecordUpdate) {
                 for {
                   updateResult <-
-                    if (perWorkflowCostCap.isDefined) {
+                    if (config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined) {
                       dataAccess.workflowQuery.updateStatusAndCost(currentRec,
                                                                    WorkflowStatuses.withName(workflowRec.status),
                                                                    workflowRec.cost.getOrElse(BigDecimal(0))
@@ -510,7 +542,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     val dataEntity = submission.submissionEntity.fold("N/A")(entity =>
       s"${entity.entityName} (${entity.entityType})"
     ) // Format: my_sample (sample)
-    val hasFailedWorkflows = submission.workflows.exists(_.status.equals(WorkflowStatuses.Failed))
+    val hasFailedOrAbortedWorkflows = submission.workflows.exists(wf =>
+      wf.status.equals(WorkflowStatuses.Failed) || wf.status.equals(WorkflowStatuses.Aborted)
+    )
     val notificationWorkspaceName = Notifications.WorkspaceName(workspaceName.namespace, workspaceName.name)
     val userComment = submission.userComment.getOrElse("N/A")
 
@@ -528,7 +562,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             userComment
           )
         )
-      case SubmissionStatuses.Done if hasFailedWorkflows =>
+      case SubmissionStatuses.Done if hasFailedOrAbortedWorkflows =>
         Some(
           FailedSubmissionNotification(
             recipientUserId,
@@ -541,7 +575,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             userComment
           )
         )
-      case SubmissionStatuses.Done if !hasFailedWorkflows =>
+      case SubmissionStatuses.Done if !hasFailedOrAbortedWorkflows =>
         Some(
           SuccessfulSubmissionNotification(
             recipientUserId,
@@ -556,7 +590,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         )
       case _ =>
         logger.info(
-          s"Unable to send terminal submission notification for ${submissionId}. State was unexpected: status: ${finalStatus}, hasFailedWorkflows: ${hasFailedWorkflows}"
+          s"Unable to send terminal submission notification for ${submissionId}. State was unexpected: status: ${finalStatus}, hasFailedOrAbortedWorkflows: ${hasFailedOrAbortedWorkflows}"
         )
         None
     }
@@ -923,5 +957,6 @@ final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration,
                                          submissionPollExpiration: FiniteDuration,
                                          trackDetailedSubmissionMetrics: Boolean,
                                          attributeUpdatesPerWorkflow: Int,
-                                         enableEmailNotifications: Boolean
+                                         enableEmailNotifications: Boolean,
+                                         enableCostEstimatesForAllWorkflows: Boolean
 )

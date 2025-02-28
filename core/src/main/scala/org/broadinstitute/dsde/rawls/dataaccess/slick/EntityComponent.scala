@@ -1026,25 +1026,35 @@ trait EntityComponent {
     def save(workspaceContext: Workspace, entity: Entity): ReadWriteAction[Entity] =
       save(workspaceContext, Seq(entity)).map(_.head)
 
-    def save(workspaceContext: Workspace, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
+    def save(workspaceContext: Workspace,
+             entities: Traversable[Entity],
+             parentContext: RawlsTracingContext = RawlsTracingContext()
+    ): ReadWriteAction[Traversable[Entity]] = {
       entities.foreach(validateEntity)
 
       for {
-        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
-        preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
-        savingEntityRecs <- entityQueryWithInlineAttributes
-          .insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference))
-          .map(_ ++ preExistingEntityRecs)
-        referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext,
-                                                                      entities,
-                                                                      savingEntityRecs.map(_.toReference)
-        ).map(_ ++ savingEntityRecs)
+        _ <- traceDBIOWithParent("updateLastModified", parentContext)(_ =>
+          workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+        )
+        preExistingEntityRecs <- traceDBIOWithParent("getEntityRecords", parentContext)(_ =>
+          getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
+        )
+        savingEntityRecs <- traceDBIOWithParent("insertNewEntities", parentContext)(_ =>
+          entityQueryWithInlineAttributes
+            .insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference))
+            .map(_ ++ preExistingEntityRecs)
+        )
+        referencedAndSavingEntityRecs <- traceDBIOWithParent("lookupNotYetLoadedReferences", parentContext)(_ =>
+          lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs.map(_.toReference))
+            .map(_ ++ savingEntityRecs)
+        )
 
         actuallyUpdatedEntityIds <- rewriteAttributes(
           workspaceContext.workspaceIdAsUUID,
           entities,
           savingEntityRecs.map(_.id),
-          referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap
+          referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap,
+          parentContext
         )
         // find the pre-existing records that we updated
         actuallyUpdatedPreExistingEntityRecs = preExistingEntityRecs.filter(e =>
@@ -1064,7 +1074,9 @@ trait EntityComponent {
         //  2) were repeated in the input payload, causing one insert and subsequent update(s)
         recsToUpdate = (actuallyUpdatedPreExistingEntityRecs ++ insertedRepeats).distinct
 
-        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
+        _ <- traceDBIOWithParent("optimisticLockUpdate", parentContext)(_ =>
+          entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
+        )
       } yield entities
     }
 
@@ -1112,7 +1124,8 @@ trait EntityComponent {
     private def rewriteAttributes(workspaceId: UUID,
                                   entitiesToSave: Traversable[Entity],
                                   entityIds: Seq[Long],
-                                  entityIdsByRef: Map[AttributeEntityReference, Long]
+                                  entityIdsByRef: Map[AttributeEntityReference, Long],
+                                  parentContext: RawlsTracingContext = RawlsTracingContext()
     ) = {
       val attributesToSave = for {
         entity <- entitiesToSave
@@ -1127,7 +1140,8 @@ trait EntityComponent {
       entityAttributeShardQuery(workspaceId).findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
         entityAttributeShardQuery(workspaceId).rewriteAttrsAction(attributesToSave,
                                                                   existingAttributes,
-                                                                  entityAttributeTempQuery.insertScratchAttributes
+                                                                  entityAttributeTempQuery.insertScratchAttributes,
+                                                                  parentContext
         )
       }
     }
@@ -1154,9 +1168,8 @@ trait EntityComponent {
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] =
-      EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
+      EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
-      }
 
     def countReferringEntitiesForType(workspaceContext: Workspace, entityType: String): ReadAction[Int] =
       EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)

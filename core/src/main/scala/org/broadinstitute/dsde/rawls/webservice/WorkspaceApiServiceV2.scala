@@ -49,6 +49,13 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
               }
             }
           } ~
+            pathPrefix("bucketUsage") {
+              get {
+                complete {
+                  workspaceServiceConstructor(ctx).getBucketUsageV2(workspaceName)
+                }
+              }
+            } ~
             pathEndOrSingleSlash {
               delete {
                 complete {

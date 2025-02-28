@@ -201,6 +201,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                      maxResults: Option[Long]
   ): Future[BucketUsageResponse] = Future.successful(BucketUsageResponse(42, Option(new DateTime(0))))
 
+  override def getBucketMetrics(googleProject: GoogleProjectId): BucketMetricsResponse =
+    BucketMetricsResponse(Seq(BucketMetric("REGIONAL", 12345), BucketMetric("MULTI_REGIONAL", 54321)))
+
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     googleGroups(groupEmail) += emailToAdd
     Future.successful(())
@@ -227,9 +230,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
       None
     }
   }
-
-  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] =
-    Future.successful(true)
 
   override def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] =
     Future.successful(WorkspaceBucketOptions(false, bucketLocation))
@@ -318,4 +318,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = Future.successful(permissions)
+
+  override val terraBucketReaderRole: String = "terraBucketReaderRole"
 }

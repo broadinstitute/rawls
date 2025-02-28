@@ -1120,11 +1120,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
   private val errorCases = List("CREATED", "QUEUED", "CANCELLED", "UNKNOWN", "something-else")
   errorCases foreach { input =>
-    it should s"throw error trying to translate $input" in {
+    it should s"throw error trying to translate $input" in
       intercept[RawlsException] {
         ImportStatuses.fromCwdsStatus(input)
       }
-    }
   }
 
 }

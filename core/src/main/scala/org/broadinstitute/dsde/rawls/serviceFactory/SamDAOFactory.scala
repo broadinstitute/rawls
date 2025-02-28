@@ -17,7 +17,8 @@ object SamDAOFactory {
     new HttpSamDAO(
       samConfig.getString("server"),
       RawlsCredential.getCredential(appConfigManager),
-      toScalaDuration(samConfig.getDuration("timeout"))
+      toScalaDuration(samConfig.getDuration("timeout")),
+      samConfig.getInt("maxConcurrentRequests")
     )
   }
 }

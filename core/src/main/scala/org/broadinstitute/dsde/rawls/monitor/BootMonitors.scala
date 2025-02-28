@@ -94,6 +94,7 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
+                   gcpBatchBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver,
                    bardService: BardService,
                    workspaceSettingRepository: WorkspaceSettingRepository
@@ -115,7 +116,8 @@ object BootMonitors extends LazyLogging {
         util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollExpiration")),
         submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
         submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
-        submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
+        submissionmonitorConfigRoot.getBoolean("enableEmailNotifications"),
+        submissionmonitorConfigRoot.getBoolean("enableCostEstimatesForAllWorkflows")
       )
       startSubmissionMonitorSupervisor(
         system,
@@ -147,6 +149,7 @@ object BootMonitors extends LazyLogging {
         useWorkflowCollectionLabel,
         defaultNetworkCromwellBackend,
         highSecurityNetworkCromwellBackend,
+        gcpBatchBackend,
         methodConfigResolver,
         bardService,
         workspaceSettingRepository
@@ -338,6 +341,7 @@ object BootMonitors extends LazyLogging {
                                             useWorkflowCollectionLabel: Boolean,
                                             defaultNetworkCromwellBackend: CromwellBackend,
                                             highSecurityNetworkCromwellBackend: CromwellBackend,
+                                            gcpBatchBackend: CromwellBackend,
                                             methodConfigResolver: MethodConfigResolver,
                                             bardService: BardService,
                                             workspaceSettingRepository: WorkspaceSettingRepository
@@ -366,6 +370,7 @@ object BootMonitors extends LazyLogging {
           useWorkflowCollectionLabel,
           defaultNetworkCromwellBackend,
           highSecurityNetworkCromwellBackend,
+          gcpBatchBackend,
           methodConfigResolver,
           bardService,
           workspaceSettingRepository

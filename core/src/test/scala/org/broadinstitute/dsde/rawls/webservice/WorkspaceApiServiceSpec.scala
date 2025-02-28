@@ -138,7 +138,7 @@ class WorkspaceApiServiceSpec
     ("", None, None)
   )
 
-  it should "call the workspace service to get tags with user query and limit" in {
+  it should "call the workspace service to get tags with user query and limit" in
     forAll(tagsTestParameters) { (queryString: String, userQuery: Option[String], limit: Option[Int]) =>
       val workspaceService = mock[WorkspaceService]
       val mcWorkspaceService = mock[MultiCloudWorkspaceService]
@@ -158,7 +158,6 @@ class WorkspaceApiServiceSpec
         }
       verify(workspaceService).getTags(userQuery, limit)
     }
-  }
 
   it should "get a workspace by id from the workspace service" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
@@ -300,7 +299,7 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).updateWorkspace(workspaceName, update)
   }
 
-  it should "delete the workspace by name and namespace" in {
+  it should "delete the workspace by name and namespace" in
     forAll(
       Table(
         ("bucketResult", "message"),
@@ -326,7 +325,6 @@ class WorkspaceApiServiceSpec
         }
       verify(mcWorkspaceService).deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService)
     }
-  }
 
   it should "get accessInstructions by name and namespace" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
@@ -448,7 +446,7 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).getACL(workspaceName)
   }
 
-  it should "update the workspace ACL for the patch operation" in {
+  it should "update the workspace ACL for the patch operation" in
     forAll(
       Table(
         ("queryString", "inviteMissingUsersValue"),
@@ -488,7 +486,6 @@ class WorkspaceApiServiceSpec
 
       verify(workspaceService).updateACL(workspaceName, update, inviteMissingUsersValue)
     }
-  }
 
   it should "update the workspace library attributes" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
@@ -566,7 +563,7 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).updateCatalog(workspaceName, update)
   }
 
-  it should "check the bucket read access" in {
+  it should "check the bucket read access" in
     forAll(
       Table[Option[RawlsException], StatusCode](
         ("exception", "statusCode"),
@@ -593,9 +590,8 @@ class WorkspaceApiServiceSpec
         }
       verify(workspaceService).checkWorkspaceCloudPermissions(workspaceName)
     }
-  }
 
-  it should "check the permission with checkIamActionWithLock on the workspace" in {
+  it should "check the permission with checkIamActionWithLock on the workspace" in
     forAll(
       Table(
         ("accessResult", "statusCode"),
@@ -623,7 +619,6 @@ class WorkspaceApiServiceSpec
 
       verify(workspaceService).checkSamActionWithLock(workspaceName, SamWorkspaceActions.read)
     }
-  }
 
   it should "get the file transfers for the workspace" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]

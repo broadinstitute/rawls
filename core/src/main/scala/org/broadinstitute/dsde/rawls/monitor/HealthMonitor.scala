@@ -68,7 +68,6 @@ object HealthMonitor {
           (Database, checkDB(slickDataSource)),
           (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
           (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
-          (GoogleGenomics, checkGoogleGenomics(googleServicesDAO)),
           (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
           (Sam, checkSam(samDAO)),
           (BillingProfileManager, checkBPM(billingProfileManagerDAO)),
@@ -318,20 +317,6 @@ object SystemChecks extends LazyLogging {
     googleServicesDAO.listBillingAccountsUsingServiceCredential.map { accts =>
       if (accts.isEmpty) failedStatus("Could not find any Rawls billing accounts")
       else OkStatus
-    }
-  }
-
-  /**
-   * Checks Google genomics status by doing a list() using the genomics service account.
-   * Does not validate the results; only that the API call succeeds.
-   */
-  def checkGoogleGenomics(
-    googleServicesDAO: GoogleServicesDAO
-  )(executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    implicit val ec = executionContext
-    logger.debug("Checking Google Genomics...")
-    googleServicesDAO.checkGenomicsOperationsHealth.map { _ =>
-      OkStatus
     }
   }
 

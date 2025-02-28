@@ -2354,44 +2354,43 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Map.empty
   )
 
-  it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices {
-    services =>
-      Post("/workspaces", httpJson(workspace2Request)) ~>
-        sealRoute(services.workspaceRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-          assertResult(workspace2Request) {
-            val ws = runAndWait(workspaceQuery.findByName(workspace2Request.toWorkspaceName)).get
-            WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
-          }
-
-          Post(s"${workspace2Request.path}/entities", httpJson(z1)) ~>
-            sealRoute(services.entityRoutes()) ~>
-            check {
-              assertResult(StatusCodes.Created) {
-                status
-              }
-              assertResult(z1) {
-                val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
-                runAndWait(entityQuery.get(ws2, z1.entityType, z1.name)).get
-              }
-
-              val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
-              val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
-              Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
-                sealRoute(services.entityRoutes()) ~>
-                check {
-                  assertResult(StatusCodes.Created) {
-                    status
-                  }
-                  assertResult(z1) {
-                    runAndWait(entityQuery.get(testData.workspace, z1.entityType, z1.name)).get
-                  }
-                }
-            }
+  it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices { services =>
+    Post("/workspaces", httpJson(workspace2Request)) ~>
+      sealRoute(services.workspaceRoutes()) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
         }
+        assertResult(workspace2Request) {
+          val ws = runAndWait(workspaceQuery.findByName(workspace2Request.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
+        }
+
+        Post(s"${workspace2Request.path}/entities", httpJson(z1)) ~>
+          sealRoute(services.entityRoutes()) ~>
+          check {
+            assertResult(StatusCodes.Created) {
+              status
+            }
+            assertResult(z1) {
+              val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
+              runAndWait(entityQuery.get(ws2, z1.entityType, z1.name)).get
+            }
+
+            val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
+            val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
+            Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
+              sealRoute(services.entityRoutes()) ~>
+              check {
+                assertResult(StatusCodes.Created) {
+                  status
+                }
+                assertResult(z1) {
+                  runAndWait(entityQuery.get(testData.workspace, z1.entityType, z1.name)).get
+                }
+              }
+          }
+      }
   }
 
   it should "return 409 for copying entities into a workspace with conflicts" in withTestDataApiServices { services =>
@@ -2871,15 +2870,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  it should "return 400 bad request on entity query when page is <= 0" in withPaginationTestDataApiServices {
-    services =>
-      Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=-1") ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
+  it should "return 400 bad request on entity query when page is <= 0" in withPaginationTestDataApiServices { services =>
+    Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=-1") ~>
+      sealRoute(services.entityRoutes()) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
+      }
   }
 
   it should "return 400 bad request on entity query when page size is <= 0" in withPaginationTestDataApiServices {
@@ -3450,17 +3448,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // filter-by-name and filter-by-column tests. All of these tests are read-only and use the same set of exemplar data,
   // so we only create that data once:
   withPaginationTestDataApiServices { services =>
-    it should "return 400 when specifying both filterTerms and columnFilter" in {
+    it should "return 400 when specifying both filterTerms and columnFilter" in
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&columnFilter=bar%3Dbaz"
       ) ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
+      sealRoute(services.entityRoutes()) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
-    }
+      }
 
     it should "return correct result when filtering by name on entity query" in {
       val entityNameFilter = "entity_99"
@@ -3816,29 +3813,27 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
     }
 
-    it should "return 400 when column filter is incomplete" in {
+    it should "return 400 when column filter is incomplete" in
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=incorrectFilter"
       ) ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
+      sealRoute(services.entityRoutes()) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
-    }
+      }
 
-    it should "return 400 when column filter is invalid" in {
+    it should "return 400 when column filter is invalid" in
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=not:delimited:correctly%3D99"
       ) ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
+      sealRoute(services.entityRoutes()) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
-    }
+      }
 
   }
 

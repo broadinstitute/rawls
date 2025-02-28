@@ -348,8 +348,7 @@ class ServicePerimeterServiceSpec
     }
   }
 
-  it should "return a successful result when no service perimeter name is provided" in {
+  it should "return a successful result when no service perimeter name is provided" in
     Await.result(ServicePerimeterServiceImpl.checkServicePerimeterAccess(mock[SamDAO], None, testContext), Duration.Inf)
-  }
 
 }

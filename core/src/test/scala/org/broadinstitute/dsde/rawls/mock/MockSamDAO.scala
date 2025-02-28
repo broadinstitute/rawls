@@ -95,7 +95,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                     ctx: RawlsRequestContext
   ): Future[Unit] = Future.successful(())
 
-  override def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit] = ???
+  override def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
 
   override def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo] =
     Future.successful(UserIdInfo("111111111111111", "user@email.example", None))
@@ -289,6 +289,15 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                                     ctx: RawlsRequestContext
     ): Future[Boolean] = ???
   }
+
+  override def setPolicyPublic(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               public: Boolean,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] = ???
+
+  override def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail] = ???
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext)

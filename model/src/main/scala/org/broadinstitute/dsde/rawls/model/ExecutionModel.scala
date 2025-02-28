@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryStatus
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowCostTypes.WorkflowCostType
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborted, Failed, WorkflowStatus}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
@@ -87,8 +88,14 @@ case class ExecutionServiceCallLogs(
 )
 
 // https://cromwell.readthedocs.io/en/stable/wf_options/Google/
+// We provide both the key jes_gcs_root and the key gcp_batch_gcs_root
+// to accommodate the PAPI and GCP Batch Cromwell backends. Each backend
+// ignores the key that does not correspond to it. This is a temporary
+// measure, and jes_gcs_root can be removed when we complete the full
+// transition to GCP Batch.
 case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
+  gcp_batch_gcs_root: String,
   final_workflow_outputs_dir: Option[String],
   final_workflow_outputs_dir_metadata: Option[String],
   google_project: String,
@@ -110,7 +117,8 @@ case class ExecutionServiceWorkflowOptions(
   monitoring_image_script: Option[String] = None
 )
 
-// current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
+// Current possible backends are "PAPIv2-beta" (not in current use),
+// "PAPIv2-CloudNAT", and "GCPBatch".
 final case class CromwellBackend(value: String) extends ValueObject
 
 case class ExecutionServiceLabelResponse(
@@ -126,8 +134,26 @@ case class Workflow(
   workflowEntity: Option[AttributeEntityReference],
   inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty,
-  cost: Option[Float] = None
+  cost: Option[Float] = None,
+  costType: Option[WorkflowCostType] = None
 )
+
+object WorkflowCostTypes {
+  sealed trait WorkflowCostType extends RawlsEnumeration[WorkflowCostType] {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkflowCostType = WorkflowCostTypes.withName(name)
+  }
+
+  def withName(name: String): WorkflowCostType =
+    name match {
+      case "Actual"    => Actual
+      case "Estimated" => Estimated
+      case _           => throw new RawlsException(s"invalid WorkflowCostType [${name}]")
+    }
+
+  case object Actual extends WorkflowCostType
+  case object Estimated extends WorkflowCostType
+}
 
 case class TaskOutput(
   logs: Option[Seq[ExecutionServiceCallLogs]],
@@ -469,7 +495,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat: RootJsonFormat[ExecutionServiceLogs] = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat20(
+  implicit val ExecutionServiceWorkflowOptionsFormat: RootJsonFormat[ExecutionServiceWorkflowOptions] = jsonFormat21(
     ExecutionServiceWorkflowOptions
   )
 
@@ -505,7 +531,11 @@ trait ExecutionJsonSupport extends JsonSupport {
     SubmissionValidationReport
   )
 
-  implicit val WorkflowFormat: RootJsonFormat[Workflow] = jsonFormat7(Workflow)
+  implicit val WorkflowCostTypeFormat: RootJsonFormat[WorkflowCostType] = rawlsEnumerationFormat(
+    WorkflowCostTypes.withName
+  )
+
+  implicit val WorkflowFormat: RootJsonFormat[Workflow] = jsonFormat8(Workflow)
 
   implicit val ExternalEntityInfoFormat: RootJsonFormat[ExternalEntityInfo] = jsonFormat2(ExternalEntityInfo)
 

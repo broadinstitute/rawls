@@ -29,7 +29,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
                       |"ignoreEmptyOutputs": false
                       |}""".stripMargin.parseJson.asJsObject
 
-    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+    SubmissionRequestFormat.read(inputJSON) shouldEqual
       SubmissionRequest(
         methodConfigurationNamespace = "asdf",
         methodConfigurationName = "echo",
@@ -43,7 +43,6 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         memoryRetryMultiplier = 3.141,
         ignoreEmptyOutputs = false
       )
-    }
   }
 
   "SubmissionRequest deserialization" should "translate missing fields to None" in {
@@ -55,7 +54,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
                       |"useCallCache": true
                       |}""".stripMargin.parseJson.asJsObject
 
-    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+    SubmissionRequestFormat.read(inputJSON) shouldEqual
       SubmissionRequest(
         methodConfigurationNamespace = "asdf",
         methodConfigurationName = "echo",
@@ -67,7 +66,6 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         deleteIntermediateOutputFiles = false,
         ignoreEmptyOutputs = false
       )
-    }
   }
 
   "WorkflowQueueStatusByUserResponse" should "serialize/deserialize to/from JSON" in {
@@ -126,6 +124,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
   "ExecutionServiceWorkflowOptions" should "serialize/deserialize to/from JSON" in {
     val test = ExecutionServiceWorkflowOptions(
       jes_gcs_root = "jes_gcs_root",
+      gcp_batch_gcs_root = "example_gcp_batch_gcs_root",
       final_workflow_outputs_dir = None,
       final_workflow_outputs_dir_metadata = None,
       google_project = "google_project",
@@ -162,6 +161,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       """
         |{
         |  "jes_gcs_root": "jes_gcs_root",
+        |  "gcp_batch_gcs_root": "example_gcp_batch_gcs_root",
         |  "google_project": "google_project",
         |  "account_name": "account_name",
         |  "google_compute_service_account": "account@foo.com",
@@ -192,6 +192,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       """
         |{
         |  "jes_gcs_root": "jes_gcs_root",
+        |  "gcp_batch_gcs_root": "example_gcp_batch_gcs_root",
         |  "google_project": "google_project",
         |  "account_name": "account_name",
         |  "google_compute_service_account": "account@foo.com",

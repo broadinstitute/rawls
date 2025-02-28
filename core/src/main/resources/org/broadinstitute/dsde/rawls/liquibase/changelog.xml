@@ -131,4 +131,7 @@
     <include file="changesets/20241106_streamline_workspace_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20241120_rename_submission_cost_cap_threshold.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20241121_billing_account_changes_status.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20241218_alter_audit_workflow_status_trigger_frequency.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250211_add_workspace_spend_report_table.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250227_update_workspace_spend_report_table.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

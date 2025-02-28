@@ -23,6 +23,8 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, never, spy, verify}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -98,7 +100,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             workflowsRecs.map { workflowRec =>
               scala.util.Success(
                 Option(
-                  (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString),
+                  (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString, cost = Option(BigDecimal.valueOf(0))),
                    Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> Left(AttributeString("foo")))))
                   )
                 )
@@ -127,7 +129,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     assertResult(
       ignoreStatusLastChangedDate(
         ExecutionServiceStatusResponse(
-          workflowsRecs.map(workflowRec => scala.util.Success(None))
+          workflowsRecs.map { workflowRec =>
+            scala.util.Success(
+              Option(
+                (workflowRec.copy(cost = Option(BigDecimal.valueOf(0))), None)
+              )
+            )
+          }
         )
       )
     ) {
@@ -154,7 +162,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         ignoreStatusLastChangedDate(
           ExecutionServiceStatusResponse(
             workflowsRecs.map { workflowRec =>
-              scala.util.Success(Option((workflowRec.copy(status = status.toString), None)))
+              scala.util.Success(
+                Option((workflowRec.copy(status = status.toString, cost = Option(BigDecimal.valueOf(0))), None))
+              )
             }
           )
         )
@@ -812,9 +822,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Failed))
 
       submission.workflows.foreach { workflow =>
-        assertResult(Seq(AttributeString("a"), AttributeString("b"))) {
-          workflow.messages
-        }
+        workflow.messages should contain theSameElementsAs Seq(AttributeString("a"), AttributeString("b"))
       }
     } { capturedMetrics =>
       capturedMetrics should contain(
@@ -1347,6 +1355,199 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     ).foreach(rec => rec.cost shouldEqual (Option(BigDecimal(5))))
   }
 
+  it should "save updated workflow costs to the database for non-capped submissions with enableCostEstimatesForAllWorkflows:true" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        testData.submissionUpdateEntity,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString, BigDecimal(5)),
+        perWorkflowCostCap = None,
+        enableCostEstimatesForAllWorkflows = true
+      )
+      val workflowsRecs = runAndWait(
+        workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+      )
+
+      assertResult(StatusCheckComplete(false)) {
+        await(
+          monitor.handleStatusResponses(
+            ExecutionServiceStatusResponse(
+              workflowsRecs.map(r =>
+                scala.util.Success(
+                  Option((r.copy(status = WorkflowStatuses.Running.toString, cost = Option(BigDecimal(5))), None))
+                )
+              )
+            )
+          )
+        )
+      }
+      runAndWait(
+        workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
+      ).foreach(rec => rec.cost shouldEqual (Option(BigDecimal(5))))
+  }
+
+  it should "skip updates to workflow costs for non-capped submissions with enableCostEstimatesForAllWorkflows:false" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission =
+        testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(expensiveWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(3), "USD", status, Seq.empty))
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
+        perWorkflowCostCap = None,
+        enableCostEstimatesForAllWorkflows = false
+      )
+
+      // Trigger a monitor pass. This first pass will update the workflow to Running but ignore the cost update
+      val executionServiceStatusResponse = await(monitor.queryExecutionServiceForStatus())
+      val workflowsFirstPass = executionServiceStatusResponse.statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsFirstPass should have size 1
+      workflowsFirstPass.head.status shouldBe "Running"
+      workflowsFirstPass.head.cost shouldBe empty
+  }
+
+  it should "skip updates to workflow costs if the cost or status hasn't changed" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission =
+        testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(expensiveWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(3), "USD", status, Seq.empty))
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
+        perWorkflowCostCap = Option(BigDecimal(99))
+      )
+
+      // Trigger a monitor pass. This first pass will update the workflow to Running/cost=3
+      // due to our CostCapTestExecutionServiceDAO.getCost override
+      val executionServiceStatusResponse = await(monitor.queryExecutionServiceForStatus())
+      val workflowsFirstPass = executionServiceStatusResponse.statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsFirstPass should have size 1
+      workflowsFirstPass.head.status shouldBe "Running"
+      workflowsFirstPass.head.cost should contain(BigDecimal(3))
+
+      // make sure the monitor processes the response of the first pass
+      await(monitor.handleStatusResponses(executionServiceStatusResponse))
+
+      // Trigger another monitor pass. This second pass will notice that nothing has changed about
+      // the workflow and will not return it.
+      val workflowsSecondPass = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsSecondPass should have size 0
+  }
+
+  it should "skip updates to workflow costs if the cost has only changed by fractions of a penny" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission =
+        testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        // this mock DAO uses a var. The first time the test calls getCost it will return $0.09;
+        // the second time it is called it will return $0.0901.
+        var statefulCost = BigDecimal(0.09)
+        val increment = BigDecimal(0.0001)
+
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(expensiveWorkflowId)) {
+            val resp = Future.successful(WorkflowCostBreakdown(id, statefulCost, "USD", status, Seq.empty))
+            statefulCost += increment
+            resp
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
+        perWorkflowCostCap = Option(BigDecimal(99))
+      )
+
+      // Trigger a monitor pass. This first pass will update the workflow to Running/cost=$0.09
+      // due to our CostCapTestExecutionServiceDAO.getCost override
+      val executionServiceStatusResponse = await(monitor.queryExecutionServiceForStatus())
+      val workflowsFirstPass = executionServiceStatusResponse.statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsFirstPass should have size 1
+      workflowsFirstPass.head.status shouldBe "Running"
+      workflowsFirstPass.head.cost should contain(BigDecimal(0.09))
+
+      // make sure the monitor processes the response of the first pass
+      await(monitor.handleStatusResponses(executionServiceStatusResponse))
+
+      // Trigger another monitor pass. This second pass will receive a Cromwell cost of $0.0901,
+      // which it should round, notice that the rounded value hasn't changed, and not return the workflow.
+      val workflowsSecondPass = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflowsSecondPass should have size 0
+  }
+
   it should "abort a workflow that has exceeded the per-workflow cost cap but not abort the entire submission" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val cheapWorkflowId = UUID.randomUUID().toString
@@ -1403,6 +1604,110 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ).getOrElse(fail()).status shouldBe SubmissionStatuses.Submitted
   }
 
+  it should "not re-abort a workflow that has exceeded the per-workflow cost cap but is already aborting" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val cheapWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val cheapWorkflow = Workflow(Some(cheapWorkflowId),
+                                   WorkflowStatuses.Submitted,
+                                   new DateTime(),
+                                   Some(testData.sample1.toReference),
+                                   Seq.empty
+      )
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission = testData.submission1.copy(submissionId = UUID.randomUUID().toString,
+                                                 workflows = Seq(cheapWorkflow, expensiveWorkflow)
+      )
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(cheapWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(1), "USD", status, Seq.empty))
+          } else if (id.equals(expensiveWorkflowId)) {
+            Future.successful(
+              WorkflowCostBreakdown(id, BigDecimal(11), "USD", WorkflowStatuses.Aborting.toString, Seq.empty)
+            )
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val executionServiceDAO = new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString)
+
+      val spyExecutionServiceDAO = spy(executionServiceDAO)
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        spyExecutionServiceDAO,
+        perWorkflowCostCap = Option(BigDecimal(2))
+      )
+
+      val workflowCosts = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) =>
+          recordWithOutputs._1.externalId.get -> (recordWithOutputs._1.status, recordWithOutputs._1.cost)
+      }.toMap
+
+      verify(spyExecutionServiceDAO, never()).abort(any[String], any[UserInfo])
+  }
+
+  it should "persist a message when aborting a workflow due to cost cap" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val expensiveWorkflowId = UUID.randomUUID().toString
+      val expensiveWorkflow = Workflow(Some(expensiveWorkflowId),
+                                       WorkflowStatuses.Submitted,
+                                       new DateTime(),
+                                       Some(testData.sample2.toReference),
+                                       Seq.empty
+      )
+      val submission =
+        testData.submission1.copy(submissionId = UUID.randomUUID().toString, workflows = Seq(expensiveWorkflow))
+      runAndWait(submissionQuery.create(testData.workspace, submission))
+      runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
+
+      class CostCapTestExecutionServiceDAO(status: String) extends SubmissionTestExecutionServiceDAO(status) {
+        override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
+          if (id.equals(expensiveWorkflowId)) {
+            Future.successful(WorkflowCostBreakdown(id, BigDecimal(11), "USD", status, Seq.empty))
+          } else {
+            Future.failed(new Exception("Unexpected workflow ID"))
+          }
+      }
+
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        submission,
+        testData.wsName,
+        new CostCapTestExecutionServiceDAO(WorkflowStatuses.Running.toString),
+        perWorkflowCostCap = Option(BigDecimal(2))
+      )
+
+      // trigger a monitor pass, which should abort the workflow due to cost threshold
+      val workflows = await(monitor.queryExecutionServiceForStatus()).statusResponse.collect {
+        case Success(Some(recordWithOutputs)) => recordWithOutputs._1
+      }
+      workflows should have size 1
+      // check the messages for the workflow
+      val actualMessages =
+        runAndWait(workflowQuery.get(workflows.head.id))
+          .getOrElse(fail())
+          .messages
+      actualMessages should have size 1
+      actualMessages.head.value shouldBe "Cost threshold reached. Workflow was aborted to stay on budget."
+  }
+
   it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val unboundExprStr = AttributeString("")
@@ -1443,12 +1748,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         runAndWait(submissionQuery.create(context, subUnboundExpr))
       }
 
-      val monitor = createSubmissionMonitor(dataSource,
-                                            mockSamDAO,
-                                            mockGoogleServicesDAO,
-                                            subUnboundExpr,
-                                            testData.wsName,
-                                            new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+      val monitor = createSubmissionMonitor(
+        dataSource,
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        subUnboundExpr,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
       )
       val workflowRec =
         runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUnboundExpr.submissionId))).head
@@ -1574,7 +1880,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     }
   }
 
-  it should "handleStatusResponses and fail workflows that have invalid output expressions" in {
+  it should "handleStatusResponses and fail workflows that have invalid output expressions" in
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       runAndWait {
         withWorkspaceContext(testData.workspace) { context =>
@@ -1636,7 +1942,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         ).get.status
       }
     }
-  }
 
   it should "fail workflows that exceed the configured workspace attribute maximum" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
@@ -2023,7 +2328,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                    execSvcDAO: ExecutionServiceDAO,
                                    trackDetailedSubmissionMetrics: Boolean = true
   ): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, 30 days, trackDetailedSubmissionMetrics, 10, true)
+    val config = SubmissionMonitorConfig(1 second, 30 days, trackDetailedSubmissionMetrics, 10, true, true)
     TestActorRef[SubmissionMonitorActor](
       SubmissionMonitorActor.props(
         wsName,
@@ -2047,9 +2352,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               wsName: WorkspaceName,
                               execSvcDAO: ExecutionServiceDAO,
                               attributesPerWorkflow: Int = 10,
-                              perWorkflowCostCap: Option[BigDecimal] = None
+                              perWorkflowCostCap: Option[BigDecimal] = None,
+                              enableCostEstimatesForAllWorkflows: Boolean = true
   ): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true)
+    val config =
+      SubmissionMonitorConfig(1 minutes, 30 days, true, attributesPerWorkflow, true, enableCostEstimatesForAllWorkflows)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -2120,7 +2427,9 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String, workflowCost:
   }
 
   override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] =
-    Future.successful(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, Seq.empty))
+    if (abortedMap.keySet.contains(id))
+      Future(WorkflowCostBreakdown(id, workflowCost, "USD", WorkflowStatuses.Aborted.toString, Seq.empty))
+    else Future(WorkflowCostBreakdown(id, workflowCost, "USD", workflowStatus, Seq.empty))
 
   override def version() = Future.successful(ExecutionServiceVersion("25"))
 

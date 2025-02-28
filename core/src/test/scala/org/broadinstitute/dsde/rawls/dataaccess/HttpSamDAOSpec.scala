@@ -57,7 +57,8 @@ class HttpSamDAOSpec
     val dao =
       new HttpSamDAO(mockServer.mockServerBaseUrl,
                      FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
-                     1 minute
+                     1 minute,
+                     15
       )
     assertResult(None) {
       Await.result(
@@ -74,14 +75,16 @@ class HttpSamDAOSpec
     val dao =
       new HttpSamDAO(mockServer.mockServerBaseUrl,
                      FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
-                     1 minute
+                     1 minute,
+                     15
       )
     assertResult(SamDAO.NotUser) {
-      Await.result(dao.getUserIdInfo(
-                     "group@example.com",
-                     RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
-                   ),
-                   Duration.Inf
+      Await.result(
+        dao.getUserIdInfo(
+          "group@example.com",
+          RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
+        ),
+        Duration.Inf
       )
     }
   }
@@ -90,7 +93,8 @@ class HttpSamDAOSpec
     val dao =
       new HttpSamDAO(mockServer.mockServerBaseUrl,
                      FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
-                     1 minute
+                     1 minute,
+                     15
       )
     assertResult(SamDAO.NotFound) {
       Await.result(dao.getUserIdInfo(
@@ -131,7 +135,8 @@ class HttpSamDAOSpec
     val dao =
       new HttpSamDAO(mockServer.mockServerBaseUrl,
                      FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
-                     1 minute
+                     1 minute,
+                     15
       )
 
     val errorReportResponse = intercept[RawlsExceptionWithErrorReport] {
@@ -166,7 +171,8 @@ class HttpSamDAOSpec
     val dao =
       new HttpSamDAO(mockServer.mockServerBaseUrl,
                      FakeRawlsCredentials(UUID.randomUUID().toString, Instant.now()),
-                     1 minute
+                     1 minute,
+                     15
       )
 
     val junkResponseError = intercept[RawlsExceptionWithErrorReport] {
