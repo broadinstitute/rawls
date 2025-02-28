@@ -313,13 +313,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[Option[WorkflowRecord]] =
     (workflowRec.externalId, perWorkflowCostCap) match {
-      // fetch cost information for the workflow if submission has a cost cap threshold defined
-      case (Some(externalId), Some(costCap)) =>
+      // fetch cost information for the workflow if submission has a cost cap threshold defined or if the
+      // enableCostEstimatesForAllWorkflows config flag is set to true
+      case (Some(externalId), _) if config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined =>
         for {
           costBreakdown <- executionServiceCluster.getCost(workflowRec, petUser)
           updatedWorkflowRec <-
+            // if this submission defines a per-workflow cost cap, and the estimate is above that cap, abort the workflow.
             if (
-              costBreakdown.cost > costCap &&
+              perWorkflowCostCap.isDefined && costBreakdown.cost > perWorkflowCostCap.get &&
               WorkflowStatuses.abortableStatuses.contains(
                 WorkflowStatuses
                   .withName(costBreakdown.status)
@@ -362,8 +364,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               }
             }
         } yield updatedWorkflowRec
-      // fetch workflow status only if cost cap threshold is not defined
-      case (Some(externalId), None) =>
+      // if config enableCostEstimatesForAllWorkflows is set to false, and no cost cap is defined,
+      // fetch workflow status only
+      case (Some(externalId), _) =>
         executionServiceCluster.status(workflowRec, petUser).map { newStatus =>
           if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
           else None
@@ -507,7 +510,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
               if (doRecordUpdate) {
                 for {
                   updateResult <-
-                    if (perWorkflowCostCap.isDefined) {
+                    if (config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined) {
                       dataAccess.workflowQuery.updateStatusAndCost(currentRec,
                                                                    WorkflowStatuses.withName(workflowRec.status),
                                                                    workflowRec.cost.getOrElse(BigDecimal(0))
@@ -954,5 +957,6 @@ final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration,
                                          submissionPollExpiration: FiniteDuration,
                                          trackDetailedSubmissionMetrics: Boolean,
                                          attributeUpdatesPerWorkflow: Int,
-                                         enableEmailNotifications: Boolean
+                                         enableEmailNotifications: Boolean,
+                                         enableCostEstimatesForAllWorkflows: Boolean
 )

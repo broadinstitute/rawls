@@ -201,7 +201,7 @@ trait ApiServiceSpec
       slickDataSource
     )
 
-    val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
+    val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true, true)
     val testConf = ConfigFactory.load()
 
     // if a test doesn't need the Cromwell monitor actors, it can override submissionMonitorsEnabled to false,
