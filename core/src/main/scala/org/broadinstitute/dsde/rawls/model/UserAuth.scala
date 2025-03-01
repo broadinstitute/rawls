@@ -67,6 +67,7 @@ case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) exten
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(
+  id: UUID,
   projectName: RawlsBillingProjectName,
   status: CreationStatuses.CreationStatus,
   billingAccount: Option[RawlsBillingAccountName],
@@ -94,6 +95,7 @@ case class WorkspaceBillingAccount(
 case class RawlsBillingProjectOrganization(enterprise: Boolean, limits: Map[String, String])
 
 case class RawlsBillingProjectResponse(
+  id: String,
   projectName: RawlsBillingProjectName,
   billingAccount: Option[RawlsBillingAccountName],
   servicePerimeter: Option[ServicePerimeterName],
@@ -118,6 +120,7 @@ object RawlsBillingProjectResponse {
     region: Option[String] = None,
     organization: Option[RawlsBillingProjectOrganization] = None
   ): RawlsBillingProjectResponse = this(
+    project.id.toString,
     project.projectName,
     project.billingAccount,
     project.servicePerimeter,
@@ -279,7 +282,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat: RootJsonFormat[RawlsGroupMemberList] = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat14(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat15(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat: RootJsonFormat[RawlsBillingAccount] = jsonFormat3(RawlsBillingAccount)
 
@@ -339,7 +342,7 @@ class UserAuthJsonSupport extends JsonSupport {
   )
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
-    jsonFormat13(RawlsBillingProjectResponse.apply)
+    jsonFormat14(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
