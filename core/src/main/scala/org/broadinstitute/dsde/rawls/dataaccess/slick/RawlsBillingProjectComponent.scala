@@ -21,7 +21,8 @@ import java.time.Instant
 import java.util.UUID
 import scala.util.Try
 
-final case class RawlsBillingProjectRecord(projectName: String,
+final case class RawlsBillingProjectRecord(id: UUID,
+                                           projectName: String,
                                            creationStatus: String,
                                            billingAccount: Option[String],
                                            message: Option[String],
@@ -39,6 +40,7 @@ final case class RawlsBillingProjectRecord(projectName: String,
 object RawlsBillingProjectRecord {
   def fromBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord =
     RawlsBillingProjectRecord(
+      billingProject.id,
       billingProject.projectName.value,
       billingProject.status.toString,
       billingProject.billingAccount.map(_.value),
@@ -56,6 +58,7 @@ object RawlsBillingProjectRecord {
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
     RawlsBillingProject(
+      projectRecord.id,
       RawlsBillingProjectName(projectRecord.projectName),
       CreationStatuses.withName(projectRecord.creationStatus),
       projectRecord.billingAccount.map(RawlsBillingAccountName),
@@ -128,6 +131,8 @@ trait RawlsBillingProjectComponent {
   import driver.api._
 
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
+    def id = column[UUID]("ID")
+
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
 
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
@@ -154,7 +159,8 @@ trait RawlsBillingProjectComponent {
 
     def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
 
-    def * = (projectName,
+    def * = (id,
+             projectName,
              creationStatus,
              billingAccount,
              message,
