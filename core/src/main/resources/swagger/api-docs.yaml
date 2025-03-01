@@ -6955,11 +6955,16 @@ components:
           description: the name of the Google Project where the BigQuery dataset resides (cloudPlatform GCP only)
     RawlsBillingProjectResponse:
       required:
+        - id
         - projectName
         - invalidBillingAccount
         - roles
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+          description: the uuid of the project
         projectName:
           type: string
           description: the name of the project
