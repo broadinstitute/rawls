@@ -1682,7 +1682,8 @@ class WorkspaceServiceSpec
       val newWorkspaceNamespace = "short_-NS1"
       val newWorkspaceName =
         "plus Long_ name to get past 30 chars since the google-project name is truncated at 30 chars and formatted as namespace--name"
-      val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace),
+      val billingProject = RawlsBillingProject(UUID.randomUUID(),
+                                               RawlsBillingProjectName(newWorkspaceNamespace),
                                                CreationStatuses.Ready,
                                                Option(RawlsBillingAccountName("fakeBillingAcct")),
                                                None
@@ -1709,7 +1710,8 @@ class WorkspaceServiceSpec
     services =>
       val newWorkspaceNamespace = "Long_Namespace---30-char-limit"
       val newWorkspaceName = "Plus Long_ name to get past 63 chars since the labels are truncated at 63 chars"
-      val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace),
+      val billingProject = RawlsBillingProject(UUID.randomUUID(),
+                                               RawlsBillingProjectName(newWorkspaceNamespace),
                                                CreationStatuses.Ready,
                                                Option(RawlsBillingAccountName("fakeBillingAcct")),
                                                None

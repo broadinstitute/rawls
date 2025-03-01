@@ -499,6 +499,7 @@ class SubmissionsServiceSpec
     services =>
       val billingProjectName = RawlsBillingProjectName("test-project")
       val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
         billingProjectName,
         CreationStatuses.Ready,
         None,
@@ -520,7 +521,8 @@ class SubmissionsServiceSpec
 
   it should "return None if the spend report config is not set" in withTestDataServices { services =>
     val billingProjectName = RawlsBillingProjectName("test-project")
-    val billingProject = RawlsBillingProject(billingProjectName,
+    val billingProject = RawlsBillingProject(UUID.randomUUID(),
+                                             billingProjectName,
                                              CreationStatuses.Ready,
                                              None,
                                              None,

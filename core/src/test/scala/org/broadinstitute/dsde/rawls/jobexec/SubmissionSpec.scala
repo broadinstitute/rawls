@@ -114,7 +114,12 @@ class SubmissionSpec(_system: ActorSystem)
 
   class SubmissionTestData() extends TestData {
     val billingProject =
-      RawlsBillingProject(RawlsBillingProjectName("myNamespacexxx"), CreationStatuses.Ready, None, None)
+      RawlsBillingProject(UUID.randomUUID(),
+                          RawlsBillingProjectName("myNamespacexxx"),
+                          CreationStatuses.Ready,
+                          None,
+                          None
+      )
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))

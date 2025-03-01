@@ -57,6 +57,7 @@ class BillingProjectDeletionSpec extends AnyFlatSpec {
       Future.successful(
         Seq(
           RawlsBillingProject(
+            UUID.randomUUID(),
             billingProjectName,
             CreationStatuses.Ready,
             None,
@@ -88,17 +89,20 @@ class BillingProjectDeletionSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(billingProjectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              billingProjectName,
                               CreationStatuses.Ready,
                               None,
                               None,
                               billingProfileId = Some(profileModel.getId.toString)
           ),
-          RawlsBillingProject(RawlsBillingProjectName("other_billing_project"),
-                              CreationStatuses.Ready,
-                              None,
-                              None,
-                              billingProfileId = Some(profileModel.getId.toString)
+          RawlsBillingProject(
+            UUID.randomUUID(),
+            RawlsBillingProjectName("other_billing_project"),
+            CreationStatuses.Ready,
+            None,
+            None,
+            billingProfileId = Some(profileModel.getId.toString)
           )
         )
       )

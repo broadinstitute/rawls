@@ -58,7 +58,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   val billingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("fakeBillingAcct")
 
-  val billingProject: RawlsBillingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace),
+  val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                RawlsBillingProjectName(wsName.namespace),
                                                                 CreationStatuses.Ready,
                                                                 Option(billingAccountName),
                                                                 None
@@ -857,6 +858,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
     val azureBillingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       Option(billingAccountName),
@@ -1036,6 +1038,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
     val azureBillingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       Option(billingAccountName),
@@ -1436,6 +1439,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName1 = RawlsBillingProjectName("billingProject1")
     val billingAccount1 = RawlsBillingAccountName("billingAcct1")
     val billingProject1 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName1,
       CreationStatuses.Ready,
       Option(billingAccount1),
@@ -1446,6 +1450,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName2 = RawlsBillingProjectName("billingProject2")
     val billingAccount2 = RawlsBillingAccountName("billingAcct2")
     val billingProject2 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName2,
       CreationStatuses.Ready,
       Option(billingAccount2),
@@ -1603,6 +1608,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName1 = RawlsBillingProjectName("billingProject1")
     val billingAccount1 = RawlsBillingAccountName("billingAcct1")
     val billingProject1 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName1,
       CreationStatuses.Ready,
       Option(billingAccount1),
@@ -1613,6 +1619,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName2 = RawlsBillingProjectName("billingProject2")
     val billingAccount2 = RawlsBillingAccountName("billingAcct2")
     val billingProject2 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName2,
       CreationStatuses.Ready,
       Option(billingAccount2),

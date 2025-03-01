@@ -175,7 +175,8 @@ class WorkspaceComponentSpec
     val billingProjectNameInOtherPerimeter = RawlsBillingProjectName("projectInOtherPerimeter")
 
     // 3 Billing Projects with same Perimeter
-    val billingProject1 = RawlsBillingProject(billingProject1Name,
+    val billingProject1 = RawlsBillingProject(UUID.randomUUID(),
+                                              billingProject1Name,
                                               CreationStatuses.Ready,
                                               Option(billingAccountName),
                                               None,

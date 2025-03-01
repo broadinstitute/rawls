@@ -27,6 +27,7 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "createBillingProject"
 
   def makeBillingProject() = RawlsBillingProject(
+    UUID.randomUUID(),
     RawlsBillingProjectName(UUID.randomUUID().toString),
     CreationStatuses.Ready,
     Some(RawlsBillingAccountName("fake_account")),
