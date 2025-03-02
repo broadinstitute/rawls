@@ -13,7 +13,7 @@ class RawlsBillingProjectComponentSpec
     with OptionValues
     with RawSqlQuery {
 
-  "RawlsBillingProjectComponent" should "save, load and delete" in withDefaultTestDatabase {
+  "RawlsBillingProjectComponent" should "save, load, loadById and delete" in withDefaultTestDatabase {
     // note that create is called in test data save
     val project = testData.testProject1
     assertResult(Some(project)) {
@@ -30,6 +30,10 @@ class RawlsBillingProjectComponentSpec
 
     assertResult(None) {
       runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+    }
+
+    assertResult(None) {
+      runAndWait(rawlsBillingProjectQuery.loadById(project.id))
     }
   }
 
