@@ -1230,6 +1230,7 @@ class UserServiceSpec
     val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
     when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(Some(project)))
+    when(repository.getBillingProject(projectName)).thenReturn(Future.successful(Some(project)))
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
@@ -1237,20 +1238,22 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
 
-    Await.result(userService.getBillingProjectById(projectId), Duration.Inf) shouldEqual Some(project)
+    Await.result(userService.getBillingProjectById(projectId), Duration.Inf) shouldEqual Some(
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.Owner),
+        project,
+        CloudPlatform.GCP,
+        protectedData = None
+      )
+    )
   }
 
   it should "return None when project does not exist" in {
     val projectId = UUID.randomUUID()
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
-    when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(Some(project)))
+    when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(None))
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
-      .thenReturn(Future.successful(Set.empty))
-
     val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
 
     Await.result(userService.getBillingProjectById(projectId), Duration.Inf) shouldEqual None
