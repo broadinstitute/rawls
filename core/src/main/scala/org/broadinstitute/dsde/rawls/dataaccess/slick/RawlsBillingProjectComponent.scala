@@ -339,6 +339,12 @@ trait RawlsBillingProjectComponent {
         .read
         .map(_.headOption)
 
+    def loadById(id: UUID): ReadWriteAction[Option[RawlsBillingProject]] =
+      rawlsBillingProjectQuery
+        .withId(id)
+        .read
+        .map(_.headOption)
+
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] =
       rawlsBillingProjectQuery.withProjectName(billingProjectName).delete.map(_ > 0)
 
@@ -417,6 +423,9 @@ trait RawlsBillingProjectComponent {
       } yield projectRecords.map(RawlsBillingProjectRecord.toBillingProject)
 
     // filters
+    def withId(projectId: UUID): RawlsBillingProjectQuery =
+      query.filter(_.id === projectId)
+
     def withProjectName(projectName: RawlsBillingProjectName): RawlsBillingProjectQuery =
       query.filter(_.projectName === projectName.value)
 

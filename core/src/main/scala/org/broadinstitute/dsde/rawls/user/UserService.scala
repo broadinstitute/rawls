@@ -281,6 +281,12 @@ class UserService(
     if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDAO)) else None
   )
 
+  def getBillingProjectById(id: UUID): Future[Option[RawlsBillingProjectResponse]] =
+    billingRepository.getBillingProjectById(id).flatMap {
+      case Some(billingProject) => getBillingProject(billingProject.projectName)
+      case None                 => Future.successful(None)
+    }
+
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
     rolesByResourceId: Map[String, Set[ProjectRole]] = samUserResources

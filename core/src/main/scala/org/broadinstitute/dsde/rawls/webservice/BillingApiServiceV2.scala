@@ -14,7 +14,9 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.joda.time.DateTime
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
 
 /**
   * Created by dvoet on 11/2/2020.
@@ -85,7 +87,14 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               get {
                 complete {
                   import spray.json._
-                  userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId)).map {
+
+                  // Check if the projectId is a UUID or a billingProjectName
+                  val billingProjects = Try(UUID.fromString(projectId)) match {
+                    case Success(id) => userServiceConstructor(ctx).getBillingProjectById(id)
+                    case Failure(_) => userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId))
+                  }
+
+                  billingProjects.map {
                     case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
                     case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
                   }
