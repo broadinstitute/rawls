@@ -439,20 +439,28 @@ class SubmissionsService(
 
     traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
+        // determine which workflows are eligible for actual-cost lookup
         val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
-        val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
 
-        getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
-          toFutureTry(
-            submissionCostService.getSubmissionCosts(submissionId,
-                                                     workflowIdsForCostQuery,
-                                                     workspace.googleProjectId,
-                                                     submission.submissionDate,
-                                                     submissionDoneDate,
-                                                     tableName
+        // if there are no workflows eligible for actual costs, skip the getSpendReportTableName database query
+        val costMapTryFuture: Future[Try[Map[String, Float]]] = if (workflowIdsForCostQuery.isEmpty) {
+          Future.successful(Success(Map()))
+        } else {
+          val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
+          getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
+            toFutureTry(
+              submissionCostService.getSubmissionCosts(submissionId,
+                                                       workflowIdsForCostQuery,
+                                                       workspace.googleProjectId,
+                                                       submission.submissionDate,
+                                                       submissionDoneDate,
+                                                       tableName
+              )
             )
-          ) map { costMapTry => annotateSubmissionWithActualCost(submission, costMapTry) }
+          }
         }
+
+        costMapTryFuture map { costMapTry => annotateSubmissionWithActualCost(submission, costMapTry) }
       }
     }
   }
