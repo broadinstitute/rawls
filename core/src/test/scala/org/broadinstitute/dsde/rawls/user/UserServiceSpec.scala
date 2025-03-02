@@ -1229,7 +1229,7 @@ class UserServiceSpec
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
-    when(repository.getBillingProjectById(ArgumentMatchers.eq(projectId))).thenReturn(Future.successful(Some(project)))
+    when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(Some(project)))
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
@@ -1245,7 +1245,7 @@ class UserServiceSpec
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
-    when(repository.getBillingProjectById(ArgumentMatchers.eq(projectId))).thenReturn(Future.successful(Some(project)))
+    when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(Some(project)))
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
