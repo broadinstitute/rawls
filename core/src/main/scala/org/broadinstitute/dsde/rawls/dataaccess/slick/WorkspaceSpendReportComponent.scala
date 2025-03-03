@@ -105,6 +105,7 @@ object WorkspaceSpendReportRecord {
               case Some(TerraSpendCategories.Other) =>
                 otherSpend = categoryCost
                 otherCredits = categoryCredits
+              case None =>
             }
           }
           WorkspaceSpendReport.newWorkspaceSpendReport(
