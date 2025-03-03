@@ -643,10 +643,14 @@ class SpendReportingService(
         id.toString(),
         startLocalDateTime,
         endLocalDateTime,
+        "USD",
+        isDataAvailable = false,
         Option.empty,
         Option.empty,
         Option.empty,
-        isDataAvailable = false
+        Option.empty,
+        Option.empty,
+        Option.empty,
       )
       workspaceSpendReportRepository.insertWorkspaceSpendReport(spendReport)
     }
