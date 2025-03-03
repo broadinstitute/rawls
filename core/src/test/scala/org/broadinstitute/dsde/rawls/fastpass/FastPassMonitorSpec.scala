@@ -145,7 +145,7 @@ class FastPassMonitorSpec
           samDAO,
           gcsDAO,
           mockNotificationDAO,
-          SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
+          SubmissionMonitorConfig(1 second, 30 days, true, 20000, true, true),
           testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
         )
