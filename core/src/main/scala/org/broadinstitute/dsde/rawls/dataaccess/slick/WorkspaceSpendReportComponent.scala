@@ -105,6 +105,8 @@ object WorkspaceSpendReportRecord {
               case Some(TerraSpendCategories.Other) =>
                 otherSpend = categoryCost
                 otherCredits = categoryCredits
+              // This is not included in the consolidated spend report
+              case Some(TerraSpendCategories.WorkspaceInfrastructure) =>
               case None =>
             }
           }
