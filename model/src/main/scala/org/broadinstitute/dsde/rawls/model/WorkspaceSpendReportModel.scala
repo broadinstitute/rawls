@@ -13,8 +13,9 @@ object WorkspaceSpendReport {
                               otherSpend: Option[Float],
                               computeCredits: Option[Float],
                               storageCredits: Option[Float],
-                              otherCredits: Option[Float],
-  ) = WorkspaceSpendReport(-1L,
+                              otherCredits: Option[Float]
+  ) = WorkspaceSpendReport(
+    -1L,
     googleProjectId,
     reportStartDate,
     reportEndDate,
@@ -40,5 +41,5 @@ case class WorkspaceSpendReport(id: Long,
                                 otherSpend: Option[Float],
                                 computeCredits: Option[Float],
                                 storageCredits: Option[Float],
-                                otherCredits: Option[Float])
-
+                                otherCredits: Option[Float]
+)
