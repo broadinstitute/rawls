@@ -107,7 +107,7 @@ object WorkspaceSpendReportRecord {
                 otherCredits = categoryCredits
               // This is not included in the consolidated spend report
               case Some(TerraSpendCategories.WorkspaceInfrastructure) =>
-              case None =>
+              case None                                               =>
             }
           }
           WorkspaceSpendReport.newWorkspaceSpendReport(
