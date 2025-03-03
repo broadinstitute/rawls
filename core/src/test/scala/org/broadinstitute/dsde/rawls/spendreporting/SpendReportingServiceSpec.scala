@@ -69,10 +69,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     _ => mockWorkspaceService
   }
 
-  val mockWorkspaceSpendReportRepositoryConstructor: WorkspaceSpendReportRepository = {
-    lazy val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository = mock[WorkspaceSpendReportRepository]
-    _ => mockWorkspaceSpendReportRepository
-  }
+  val mockWorkspaceSpendReportRepositoryConstructor: WorkspaceSpendReportRepository = mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
 
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
