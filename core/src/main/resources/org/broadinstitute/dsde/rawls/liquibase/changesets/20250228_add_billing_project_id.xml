@@ -2,14 +2,9 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
     <changeSet id="add_billing_project_id" author="kmarete" logicalFilePath="dummy">
         <addColumn tableName="BILLING_PROJECT">
-            <column name="ID" type="BINARY(16)">
+            <column name="ID" type="BINARY(16)" valueComputed="UNHEX(MD5(NAME))">
                 <constraints nullable="false" />
             </column>
         </addColumn>
-
-        <!-- Populate ID column with UUID derived from NAME (Unique PK) -->
-        <update tableName="BILLING_PROJECT">
-            <column name="ID" valueComputed="UNHEX(MD5(NAME))"/>
-        </update>
     </changeSet>
 </databaseChangeLog>
