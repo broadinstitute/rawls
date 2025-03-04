@@ -1378,8 +1378,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         (workspace1Billing1.googleProjectId, workspace1Billing1.toWorkspaceName),
         (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName),
         (workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)
-      ),
-      "fakeTable" -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
+      )
     )
 
   }
@@ -1579,12 +1578,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       Duration.Inf
     )
 
-    result.get.spendDetails.length shouldBe 2
+    result.get.spendDetails.length shouldBe 1
 
     val spendSummary = result.get.spendSummary
 
     spendSummary.credits shouldBe zero.toString()
-    spendSummary.cost shouldBe (total + price2).toString()
+    spendSummary.cost shouldBe total.toString()
     spendSummary.currency shouldBe "USD"
     spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
       ISODateTimeFormat.date()

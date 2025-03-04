@@ -616,9 +616,12 @@ class SpendReportingService(
           } else {
             getSpendExportConfigurations(groupedWorkspaces.keys.toList)
           }
-        groupedByTable = spendConfigs.groupBy(
-          _.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-        )
+        // filter out configs where spend reporting is not set up
+        groupedByTable = spendConfigs
+          .filter(_.spendExportTable.isDefined)
+          .groupBy(
+            _.spendExportTable.get
+          )
         combinedResults = groupedByTable.map { case (table, configs) =>
           val combinedWorkspaces = configs.flatMap { config =>
             groupedWorkspaces
