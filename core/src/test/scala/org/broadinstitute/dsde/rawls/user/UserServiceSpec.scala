@@ -54,7 +54,8 @@ class UserServiceSpec
   val urlEncodedDefaultServicePerimeterName: String = URLEncoder.encode(defaultServicePerimeterName.value, UTF_8.name)
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
-  val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName,
+  val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                       defaultBillingProjectName,
                                                                        CreationStatuses.Ready,
                                                                        None,
                                                                        None,
@@ -632,7 +633,12 @@ class UserServiceSpec
   it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject =
-        RawlsBillingProject(RawlsBillingProjectName("project_without_table"), CreationStatuses.Ready, None, None)
+        RawlsBillingProject(UUID.randomUUID(),
+                            RawlsBillingProjectName("project_without_table"),
+                            CreationStatuses.Ready,
+                            None,
+                            None
+        )
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
       val spendReportDatasetName = BigQueryDatasetName("some_dataset")
@@ -662,7 +668,8 @@ class UserServiceSpec
 
   it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the billing project does not have a billing account associated with it" in
     withMinimalTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(RawlsBillingProjectName("project_without_billing_account"),
+      val billingProject = RawlsBillingProject(UUID.randomUUID(),
+                                               RawlsBillingProjectName("project_without_billing_account"),
                                                CreationStatuses.Ready,
                                                None,
                                                None
@@ -1215,11 +1222,81 @@ class UserServiceSpec
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
     }
 
+  behavior of "getBillingProjectById"
+
+  it should "return the project when it exists" in {
+    val projectId = UUID.randomUUID()
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
+
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProjectById(projectId), Duration.Inf) shouldEqual Some(
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.Owner),
+        project,
+        CloudPlatform.GCP,
+        protectedData = None
+      )
+    )
+  }
+
+  it should "return None when project does not exist" in {
+    val projectId = UUID.randomUUID()
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(None))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProjectById(projectId), Duration.Inf) shouldEqual None
+  }
+
   behavior of "getBillingProject"
+
+  it should "return the project when it exists" in {
+    val projectId = UUID.randomUUID()
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(projectName)).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
+
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual Some(
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.Owner),
+        project,
+        CloudPlatform.GCP,
+        protectedData = None
+      )
+    )
+  }
+
+  it should "return None when project does not exist" in {
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(projectName)).thenReturn(Future.successful(None))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual None
+  }
 
   it should "return None if the user doesn't have any roles on a billing project" in {
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val project = RawlsBillingProject(projectName, CreationStatuses.Ready, None, None)
+    val project = RawlsBillingProject(UUID.randomUUID(), projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
     when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
 
@@ -1234,7 +1311,7 @@ class UserServiceSpec
 
   it should "set the project as GCP if there is no billing profile set" in {
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val project = RawlsBillingProject(projectName, CreationStatuses.Ready, None, None)
+    val project = RawlsBillingProject(UUID.randomUUID(), projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
     when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
 
@@ -1258,6 +1335,7 @@ class UserServiceSpec
     val landingZoneId = UUID.randomUUID()
     val lzRegion = "dummy-region"
     val project = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       None,
@@ -1301,6 +1379,7 @@ class UserServiceSpec
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val project = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       None,
@@ -1336,6 +1415,7 @@ class UserServiceSpec
     val landingZoneId = UUID.randomUUID()
     val lzRegion = "dummy-region"
     val project = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       None,
@@ -1384,6 +1464,7 @@ class UserServiceSpec
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val landingZoneId = UUID.randomUUID()
     val project = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       None,
@@ -1431,6 +1512,7 @@ class UserServiceSpec
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val project = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       None,
@@ -1458,11 +1540,17 @@ class UserServiceSpec
   it should "return the list of billing projects including azure data when enabled" in {
     // GCP, Rawls-only project
     val ownerProject =
-      RawlsBillingProject(RawlsBillingProjectName(UUID.randomUUID().toString), CreationStatuses.Ready, None, None)
+      RawlsBillingProject(UUID.randomUUID(),
+                          RawlsBillingProjectName(UUID.randomUUID().toString),
+                          CreationStatuses.Ready,
+                          None,
+                          None
+      )
 
     // Azure, BPM-backed project
     val bpmBillingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val billingProfileBackedProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(UUID.randomUUID().toString),
       CreationStatuses.Ready,
       None,
@@ -1478,6 +1566,7 @@ class UserServiceSpec
     val bpmProtectedDataBillingProfile =
       new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE).policies(policies)
     val protectedDataBillingProfileBackedProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(UUID.randomUUID().toString),
       CreationStatuses.Ready,
       None,

@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -129,11 +129,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, billingProjectDeletion, testContext))
       .thenReturn(Future.successful(bpCreatorReturnedStatus))
     val billingRepository = mock[BillingRepository]
+
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
     when(billingRepository.createBillingProject(any[RawlsBillingProject])).thenReturn(
       Future.successful(
-        RawlsBillingProject(RawlsBillingProjectName(createRequest.projectName.value),
+        RawlsBillingProject(UUID.randomUUID(),
+                            RawlsBillingProjectName(createRequest.projectName.value),
                             CreationStatuses.Creating,
                             None,
                             None
@@ -198,7 +200,11 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(
-      Future.successful(Some(RawlsBillingProject(RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)))
+      Future.successful(
+        Some(
+          RawlsBillingProject(UUID.randomUUID(), RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)
+        )
+      )
     )
     val bpCreator = mock[GoogleBillingProjectLifecycle]
     when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
@@ -281,7 +287,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful(None))
     when(repo.createBillingProject(any[RawlsBillingProject])).thenReturn(
       Future.successful(
-        RawlsBillingProject(RawlsBillingProjectName(createRequest.projectName.value),
+        RawlsBillingProject(UUID.randomUUID(),
+                            RawlsBillingProjectName(createRequest.projectName.value),
                             CreationStatuses.Ready,
                             None,
                             None

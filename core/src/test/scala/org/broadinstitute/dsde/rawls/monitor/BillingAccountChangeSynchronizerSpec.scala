@@ -56,11 +56,13 @@ class BillingAccountChangeSynchronizerSpec
   "BillingAccountChangeSynchronizer" should "update the billing account on workspaces in a billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingAccountName = defaultBillingAccountName
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(billingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(billingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
 
       val v2Workspace = Workspace(
@@ -130,11 +132,13 @@ class BillingAccountChangeSynchronizerSpec
   it should "not endlessly retry when it fails to get billing info for google projects" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(defaultBillingAccountName)
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               originalBillingAccount,
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        originalBillingAccount,
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val workspace = Workspace(
         billingProject.projectName.value,
@@ -196,11 +200,13 @@ class BillingAccountChangeSynchronizerSpec
   it should "not endlessly retry when it fails to set billing info for the google project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(defaultBillingAccountName)
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               originalBillingAccount,
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        originalBillingAccount,
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val workspace = Workspace(
         billingProject.projectName.value,
@@ -264,11 +270,13 @@ class BillingAccountChangeSynchronizerSpec
   it should "not try to update the billing account if the new value is the same as the old value" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Some(defaultBillingAccountName)
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               originalBillingAccount,
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        originalBillingAccount,
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val workspace = Workspace(
         billingProject.projectName.value,
@@ -334,11 +342,13 @@ class BillingAccountChangeSynchronizerSpec
   it should "continue to update other workspace google projects even if one fails to update" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(defaultBillingAccountName)
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               originalBillingAccount,
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        originalBillingAccount,
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val workspace1 = Workspace(
         billingProject.projectName.value,
@@ -778,7 +788,8 @@ class BillingAccountChangeSynchronizerSpec
   it should "not try to update the (non-existent) google project of a v2 billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(RawlsBillingAccountName("original-ba"))
-      val billingProject = RawlsBillingProject(RawlsBillingProjectName("v2-Billing-Project"),
+      val billingProject = RawlsBillingProject(UUID.randomUUID(),
+                                               RawlsBillingProjectName("v2-Billing-Project"),
                                                CreationStatuses.Ready,
                                                originalBillingAccount,
                                                None,
@@ -851,11 +862,13 @@ class BillingAccountChangeSynchronizerSpec
   it should "work with v2 workspaces that use the billing project's old Google project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingAccountName = defaultBillingAccountName
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(billingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(billingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
 
       val workspaceWithBillingProjectGoogleProject = Workspace(

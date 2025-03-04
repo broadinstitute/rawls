@@ -94,6 +94,7 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   it should "return forbidden if the user does not have the createWorkspace action for the billing project" in {
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName("azure-billing-project"),
       CreationStatuses.Ready,
       None,
@@ -143,6 +144,7 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   it should "throw an exception if the billing profile is not found in BPM" in {
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName("azure-billing-project"),
       CreationStatuses.Ready,
       None,

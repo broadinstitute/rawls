@@ -27,6 +27,7 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "createBillingProject"
 
   def makeBillingProject() = RawlsBillingProject(
+    UUID.randomUUID(),
     RawlsBillingProjectName(UUID.randomUUID().toString),
     CreationStatuses.Ready,
     Some(RawlsBillingAccountName("fake_account")),
@@ -67,11 +68,36 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     }
   }
 
+  it should "retrieve a previously created record by Id" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+    val result = Await.result(repo.getBillingProjectById(billingProject.id), Duration.Inf)
+
+    assertResult(billingProject) {
+      result.get
+    }
+  }
+
   it should "give back none for a missing project" in withDefaultTestDatabase {
     val repo = new BillingRepository(slickDataSource)
 
     val result = Await.result(
       repo.getBillingProject(RawlsBillingProjectName(UUID.randomUUID().toString)),
+      Duration.Inf
+    )
+
+    assertResult(result) {
+      None
+    }
+  }
+
+  it should "give back none for a missing project by Id" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+
+    val result = Await.result(
+      repo.getBillingProjectById(UUID.randomUUID()),
       Duration.Inf
     )
 

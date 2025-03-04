@@ -218,7 +218,8 @@ class PetSASpec extends ApiServiceSpec {
     )
     val userSAProjectOwner = RawlsUser(userSAProjectOwnerUserInfo)
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), CreationStatuses.Ready, None, None)
+    val billingProject =
+      RawlsBillingProject(UUID.randomUUID(), RawlsBillingProjectName("ns"), CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 

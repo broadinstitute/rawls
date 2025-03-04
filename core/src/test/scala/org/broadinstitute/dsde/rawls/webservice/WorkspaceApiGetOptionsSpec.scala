@@ -104,7 +104,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       )
     )
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), CreationStatuses.Ready, None, None)
+    val billingProject =
+      RawlsBillingProject(UUID.randomUUID(), RawlsBillingProjectName("ns"), CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
     val workspace2Name = WorkspaceName(billingProject.projectName.value, "emptyattrs")
