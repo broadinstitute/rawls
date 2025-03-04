@@ -3,11 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 
-import java.time.{LocalDateTime, ZoneId, ZonedDateTime}
+import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset, ZonedDateTime}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 
+import java.sql.Timestamp
 import java.util.Currency
 import scala.language.{postfixOps, reflectiveCalls}
 import scala.math.BigDecimal.RoundingMode
@@ -15,8 +16,8 @@ import scala.math.BigDecimal.RoundingMode
 case class WorkspaceSpendReportRecord(
   id: Long,
   googleProjectId: String,
-  reportStartDate: LocalDateTime,
-  reportEndDate: LocalDateTime,
+  reportStartDate: Timestamp,
+  reportEndDate: Timestamp,
   currency: String,
   isDataAvailable: Boolean,
   totalCompute: Option[Float],
@@ -33,8 +34,8 @@ object WorkspaceSpendReportRecord {
     WorkspaceSpendReportRecord(
       workspaceSpendReport.id,
       workspaceSpendReport.googleProjectId,
-      workspaceSpendReport.reportStartDate,
-      workspaceSpendReport.reportEndDate,
+      new Timestamp(workspaceSpendReport.reportStartDate.toInstant(ZoneOffset.UTC).toEpochMilli),
+      new Timestamp(workspaceSpendReport.reportEndDate.toInstant(ZoneOffset.UTC).toEpochMilli),
       workspaceSpendReport.currency,
       workspaceSpendReport.isDataAvailable,
       workspaceSpendReport.totalCompute,
@@ -49,8 +50,8 @@ object WorkspaceSpendReportRecord {
     WorkspaceSpendReport(
       record.id,
       record.googleProjectId,
-      record.reportStartDate,
-      record.reportEndDate,
+      LocalDateTime.ofInstant(record.reportStartDate.toInstant, ZoneOffset.UTC),
+      LocalDateTime.ofInstant(record.reportEndDate.toInstant, ZoneOffset.UTC),
       record.currency,
       record.isDataAvailable,
       record.totalCompute,
@@ -231,9 +232,9 @@ trait WorkspaceSpendReportComponent {
 
     def googleProjectId = column[String]("GOOGLE_PROJECT_ID", O.Length(254))
 
-    def reportStartDate = column[LocalDateTime]("REPORT_START_DATE", O.SqlType("DATETIME"))
+    def reportStartDate = column[Timestamp]("REPORT_START_DATE", O.SqlType("DATETIME"))
 
-    def reportEndDate = column[LocalDateTime]("REPORT_END_DATE", O.SqlType("DATETIME"))
+    def reportEndDate = column[Timestamp]("REPORT_END_DATE", O.SqlType("DATETIME"))
 
     def currency = column[String]("CURRENCY", O.Length(100))
 
@@ -284,7 +285,8 @@ trait WorkspaceSpendReportComponent {
         .filter(x =>
           x.googleProjectId.inSetBind(
             projectIds.map(_.value)
-          ) && x.reportStartDate === startDate && x.reportEndDate === endDate
+          ) && x.reportStartDate === new Timestamp(startDate.toInstant(ZoneOffset.UTC).toEpochMilli)
+            && x.reportEndDate === new Timestamp(endDate.toInstant(ZoneOffset.UTC).toEpochMilli)
         )
 
     private def loadWorkspaceSpendReport(lookup: WorkspaceSpendReportQueryType): ReadAction[Seq[WorkspaceSpendReport]] =

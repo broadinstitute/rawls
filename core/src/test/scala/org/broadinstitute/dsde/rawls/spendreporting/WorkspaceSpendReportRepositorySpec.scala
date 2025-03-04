@@ -9,6 +9,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.time.LocalDateTime
+import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -23,8 +24,8 @@ class WorkspaceSpendReportRepositorySpec
 
   val projectId = "fake-google-project"
   val projectIds: Set[String] = Set(projectId)
-  val startDate: LocalDateTime = LocalDateTime.now().minusDays(30)
-  val endDate: LocalDateTime = LocalDateTime.now()
+  val endDate: LocalDateTime = LocalDateTime.of(2025, 3, 4, 0, 0, 0)
+  val startDate: LocalDateTime = endDate.minusDays(30)
   def makeWorkspaceSpendReport(projectId: String): WorkspaceSpendReport = WorkspaceSpendReport.newWorkspaceSpendReport(
     projectId,
     startDate,
@@ -41,6 +42,9 @@ class WorkspaceSpendReportRepositorySpec
 
   it should "get workspace spend reports for given report date if present" in {
     val repo = new WorkspaceSpendReportRepository(slickDataSource)
+    val noResults = Await.result(repo.getWorkspaceSpendReports(projectIds, startDate, endDate), Duration.Inf)
+    assertResult(0)(noResults.size)
+
     val report: WorkspaceSpendReport = makeWorkspaceSpendReport(projectId)
     Await.result(repo.insertWorkspaceSpendReport(report), Duration.Inf)
 
@@ -48,24 +52,19 @@ class WorkspaceSpendReportRepositorySpec
     assertResult(1)(results.size)
     results.map { result =>
       assertResult(projectId)(result.googleProjectId)
+      assertResult(startDate)(result.reportStartDate)
+      assertResult(endDate)(result.reportEndDate)
     }
-  }
-
-  it should "return none if no workspace spend reports present" in {
-    val repo = new WorkspaceSpendReportRepository(slickDataSource)
-    val result = Await.result(repo.getWorkspaceSpendReports(projectIds, startDate, endDate), Duration.Inf)
-    assertResult(Seq())(result)
   }
 
   behavior of "insertSpendReport"
 
   it should "error if insert violates unique constraint on google project id, start and end date" in {
     val repo = new WorkspaceSpendReportRepository(slickDataSource)
-    val report: WorkspaceSpendReport = makeWorkspaceSpendReport(projectId)
-    val success = Await.result(repo.insertWorkspaceSpendReport(report), Duration.Inf)
-    val thrown = intercept[java.sql.SQLIntegrityConstraintViolationException] {
+    val report: WorkspaceSpendReport = makeWorkspaceSpendReport(UUID.randomUUID().toString)
+    Await.result(repo.insertWorkspaceSpendReport(report), Duration.Inf)
+    intercept[java.sql.SQLIntegrityConstraintViolationException] {
       Await.result(repo.insertWorkspaceSpendReport(report), Duration.Inf)
     }
-    thrown.getErrorCode shouldBe Some(StatusCodes.Conflict)
   }
 }
