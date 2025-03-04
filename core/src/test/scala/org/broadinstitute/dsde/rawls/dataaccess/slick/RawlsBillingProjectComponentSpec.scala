@@ -20,6 +20,10 @@ class RawlsBillingProjectComponentSpec
       runAndWait(rawlsBillingProjectQuery.load(project.projectName))
     }
 
+    assertResult(Some(project)) {
+      runAndWait(rawlsBillingProjectQuery.loadById(project.id))
+    }
+
     assertResult(true) {
       runAndWait(rawlsBillingProjectQuery.delete(project.projectName))
     }
