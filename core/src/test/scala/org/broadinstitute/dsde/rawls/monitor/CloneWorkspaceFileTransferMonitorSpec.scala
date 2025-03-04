@@ -54,11 +54,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
   "CloneWorkspaceFileTransferMonitor" should "eventually copy files from the source bucket to the destination bucket" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(defaultBillingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(defaultBillingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"
@@ -151,11 +153,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
   it should "continue trying to transfer files when receiving 403s from Google while listing objects" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(defaultBillingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(defaultBillingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"
@@ -239,11 +243,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
   it should "continue trying to transfer files when receiving 403s from Google while copying objects" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(defaultBillingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(defaultBillingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"
@@ -339,11 +345,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
   it should "continue trying to copy the files until all copies succeed" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(defaultBillingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(defaultBillingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"
@@ -456,11 +464,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
   it should "copy files for good workspaces even when problematic workspaces are failing" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(defaultBillingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(defaultBillingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val sourceBucketName = "sourceBucket"
       val badDestinationBucketName = "badBucket"
@@ -615,11 +625,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
 
   it should "eventually stop trying to copy files" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(defaultBillingAccountName),
-                                               None,
-                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      val billingProject = RawlsBillingProject(
+        UUID.randomUUID(),
+        defaultBillingProjectName,
+        CreationStatuses.Ready,
+        Option(defaultBillingAccountName),
+        None,
+        googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"

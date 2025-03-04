@@ -269,17 +269,32 @@ class UserService(
     statusFuture
   }
 
-  def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
-    roles <- samDAO
-      .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
-      .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-    billingProject <- billingRepository.getBillingProject(projectName)
-    billingProfile = billingProject.flatMap {
-      _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
+  private def getBillingProjectResponse(
+    billingProjectFuture: Future[Option[RawlsBillingProject]]
+  ): Future[Option[RawlsBillingProjectResponse]] =
+    billingProjectFuture.flatMap {
+      case Some(project) =>
+        samDAO
+          .listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, ctx)
+          .map(samRolesToProjectRoles) map { roles =>
+          if (roles.nonEmpty) {
+            val billingProfile =
+              project.billingProfileId.flatMap(id =>
+                billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx)
+              )
+            Some(mapCloudPlatformAndPolicies(project, billingProfile, roles, workspaceManagerDAO))
+          } else {
+            None
+          }
+        }
+      case None => Future.successful(None)
     }
-  } yield billingProject.flatMap(p =>
-    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDAO)) else None
-  )
+
+  def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
+    getBillingProjectResponse(billingRepository.getBillingProject(projectName))
+
+  def getBillingProjectById(id: UUID): Future[Option[RawlsBillingProjectResponse]] =
+    getBillingProjectResponse(billingRepository.getBillingProjectById(id))
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
@@ -495,7 +510,7 @@ class UserService(
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _, _)) =>
+            case Some(RawlsBillingProject(_, _, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _, _)) =>
               billingAccountName.withoutPrefix()
             case _ =>
               throw new RawlsExceptionWithErrorReport(
@@ -547,6 +562,7 @@ class UserService(
         dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
           case Some(
                 RawlsBillingProject(_,
+                                    _,
                                     _,
                                     _,
                                     _,

@@ -34,6 +34,11 @@ class BillingRepository(dataSource: SlickDataSource) {
       dataAccess.rawlsBillingProjectQuery.load(projectName)
     }
 
+  def getBillingProjectById(id: UUID): Future[Option[RawlsBillingProject]] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.loadById(id)
+    }
+
   def getBillingProjects(projectNames: Set[RawlsBillingProjectName]): Future[Seq[RawlsBillingProject]] =
     dataSource.inTransaction(_.rawlsBillingProjectQuery.getBillingProjects(projectNames))
 

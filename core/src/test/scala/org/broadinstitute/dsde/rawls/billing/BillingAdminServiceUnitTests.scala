@@ -57,7 +57,8 @@ class BillingAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     )
 
   "getBillingProject" should "return the billing project with a list of its workspaces" in {
-    val billingProject: RawlsBillingProject = RawlsBillingProject(RawlsBillingProjectName("project"),
+    val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                  RawlsBillingProjectName("project"),
                                                                   CreationStatuses.Ready,
                                                                   Option(RawlsBillingAccountName("account")),
                                                                   None

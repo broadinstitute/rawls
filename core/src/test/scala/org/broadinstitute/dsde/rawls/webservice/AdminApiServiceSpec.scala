@@ -349,7 +349,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     when(billingAdminService.getBillingProjectSupportSummary(billingProjectName)).thenReturn(
       Future.successful(
         BillingProjectAdminResponse(
-          RawlsBillingProject(billingProjectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              billingProjectName,
                               CreationStatuses.Ready,
                               Option(RawlsBillingAccountName("account")),
                               None

@@ -7,13 +7,14 @@ import akka.http.scaladsl.unmarshalling.Unmarshaller
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.joda.time.DateTime
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 /**
@@ -59,27 +60,39 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / "v2") {
-        pathPrefix("spendReport") {
-          pathEndOrSingleSlash {
+        pathPrefix("id") {
+          path(Segment) { id =>
             get {
-              parameters(
-                "startDate".as[DateTime],
-                "endDate".as[DateTime],
-                "pageSize".as[Int],
-                "offset".as[Int]
-              ) { (startDate, endDate, pageSize, offset) =>
-                complete {
-                  spendReportingConstructor(ctx).getSpendForAllWorkspaces(
-                    startDate,
-                    endDate.plusDays(1).minusMillis(1),
-                    pageSize,
-                    offset
-                  )
+              complete {
+                userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
+                  case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
+                  case None                  => StatusCodes.NotFound -> None
                 }
               }
             }
           }
         } ~
+          pathPrefix("spendReport") {
+            pathEndOrSingleSlash {
+              get {
+                parameters(
+                  "startDate".as[DateTime],
+                  "endDate".as[DateTime],
+                  "pageSize".as[Int],
+                  "offset".as[Int]
+                ) { (startDate, endDate, pageSize, offset) =>
+                  complete {
+                    spendReportingConstructor(ctx).getSpendForAllWorkspaces(
+                      startDate,
+                      endDate.plusDays(1).minusMillis(1),
+                      pageSize,
+                      offset
+                    )
+                  }
+                }
+              }
+            }
+          } ~
           pathPrefix(Segment) { projectId =>
             pathEnd {
               get {
