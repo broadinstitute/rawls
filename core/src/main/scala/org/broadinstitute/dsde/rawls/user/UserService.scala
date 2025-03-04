@@ -274,21 +274,19 @@ class UserService(
   ): Future[Option[RawlsBillingProjectResponse]] =
     billingProjectFuture.flatMap {
       case Some(project) =>
-        val rolesFuture = samDAO
+        samDAO
           .listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, ctx)
-          .map(samRolesToProjectRoles)
-
-        val billingProfileFuture = Future.successful {
-          project.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
+          .map(samRolesToProjectRoles) map { roles =>
+          if (roles.nonEmpty) {
+            val billingProfile =
+              project.billingProfileId.flatMap(id =>
+                billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx)
+              )
+            Some(mapCloudPlatformAndPolicies(project, billingProfile, roles, workspaceManagerDAO))
+          } else {
+            None
+          }
         }
-
-        for {
-          roles <- rolesFuture
-          billingProfile <- billingProfileFuture
-        } yield
-          if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(project, billingProfile, roles, workspaceManagerDAO))
-          else None
-
       case None => Future.successful(None)
     }
 
