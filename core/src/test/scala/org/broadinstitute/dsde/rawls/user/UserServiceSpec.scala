@@ -1222,7 +1222,7 @@ class UserServiceSpec
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
     }
 
-  behavior of "getBillingProject"
+  behavior of "getBillingProjectById"
 
   it should "return the project when it exists" in {
     val projectId = UUID.randomUUID()
@@ -1230,7 +1230,6 @@ class UserServiceSpec
     val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
     val repository = mock[BillingRepository]
     when(repository.getBillingProjectById(projectId)).thenReturn(Future.successful(Some(project)))
-    when(repository.getBillingProject(projectName)).thenReturn(Future.successful(Some(project)))
 
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
@@ -1257,6 +1256,42 @@ class UserServiceSpec
     val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
 
     Await.result(userService.getBillingProjectById(projectId), Duration.Inf) shouldEqual None
+  }
+
+  behavior of "getBillingProject"
+
+  it should "return the project when it exists" in {
+    val projectId = UUID.randomUUID()
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(projectId, projectName, CreationStatuses.Ready, None, None)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(projectName)).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
+
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual Some(
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.Owner),
+        project,
+        CloudPlatform.GCP,
+        protectedData = None
+      )
+    )
+  }
+
+  it should "return None when project does not exist" in {
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(projectName)).thenReturn(Future.successful(None))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual None
   }
 
   it should "return None if the user doesn't have any roles on a billing project" in {
