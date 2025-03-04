@@ -1575,6 +1575,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(job2.waitFor()).thenReturn(job2)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job1), IO(job2))
 
+    val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(Seq.empty))
+
     val service = spy(
       new SpendReportingService(
         testContext,
@@ -1585,7 +1590,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
     doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport)))
@@ -1727,6 +1732,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       .thenReturn(IO(job))
       .thenAnswer(_ => IO.raiseError(new RuntimeException("BigQuery has errored")))
 
+    val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(Seq.empty))
+
     val service = spy(
       new SpendReportingService(
         testContext,
@@ -1737,7 +1747,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
     doReturn(Future.successful(Seq(billingProject1SpendExport, billingProject2SpendExport)))
