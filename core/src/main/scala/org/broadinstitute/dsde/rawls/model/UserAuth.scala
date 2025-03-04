@@ -95,7 +95,7 @@ case class WorkspaceBillingAccount(
 case class RawlsBillingProjectOrganization(enterprise: Boolean, limits: Map[String, String])
 
 case class RawlsBillingProjectResponse(
-  id: String,
+  id: UUID,
   projectName: RawlsBillingProjectName,
   billingAccount: Option[RawlsBillingAccountName],
   servicePerimeter: Option[ServicePerimeterName],
@@ -120,7 +120,7 @@ object RawlsBillingProjectResponse {
     region: Option[String] = None,
     organization: Option[RawlsBillingProjectOrganization] = None
   ): RawlsBillingProjectResponse = this(
-    project.id.toString,
+    project.id,
     project.projectName,
     project.billingAccount,
     project.servicePerimeter,
