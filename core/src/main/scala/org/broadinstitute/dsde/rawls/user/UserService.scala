@@ -269,23 +269,34 @@ class UserService(
     statusFuture
   }
 
-  def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
-    roles <- samDAO
-      .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
-      .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-    billingProject <- billingRepository.getBillingProject(projectName)
-    billingProfile = billingProject.flatMap {
-      _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
+  private def getBillingProjectResponse(
+    billingProjectFuture: Future[Option[RawlsBillingProject]]
+  ): Future[Option[RawlsBillingProjectResponse]] =
+    billingProjectFuture.flatMap {
+      case Some(project) =>
+        val rolesFuture = samDAO
+          .listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, ctx)
+          .map(samRolesToProjectRoles)
+
+        val billingProfileFuture = Future.successful {
+          project.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
+        }
+
+        for {
+          roles <- rolesFuture
+          billingProfile <- billingProfileFuture
+        } yield
+          if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(project, billingProfile, roles, workspaceManagerDAO))
+          else None
+
+      case None => Future.successful(None)
     }
-  } yield billingProject.flatMap(p =>
-    if (roles.nonEmpty) Some(mapCloudPlatformAndPolicies(p, billingProfile, roles, workspaceManagerDAO)) else None
-  )
+
+  def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
+    getBillingProjectResponse(billingRepository.getBillingProject(projectName))
 
   def getBillingProjectById(id: UUID): Future[Option[RawlsBillingProjectResponse]] =
-    billingRepository.getBillingProjectById(id).flatMap {
-      case Some(billingProject) => getBillingProject(billingProject.projectName)
-      case None                 => Future.successful(None)
-    }
+    getBillingProjectResponse(billingRepository.getBillingProjectById(id))
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
