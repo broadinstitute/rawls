@@ -6707,10 +6707,6 @@ components:
         - projectName
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          description: the id of the project to create
         projectName:
           type: string
           description: the name of the project to create

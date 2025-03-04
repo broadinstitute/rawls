@@ -42,7 +42,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
 
   val billingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("fake_name")
   val createRequest: CreateRawlsV2BillingProjectFullRequest = CreateRawlsV2BillingProjectFullRequest(
-    None,
     billingProjectName,
     Some(RawlsBillingAccountName("fake_billing_account_name")),
     None,
@@ -57,7 +56,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
   it should "fail when creating a billing project against an billing account with no access" in {
     val samDAO = mock[SamDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      None,
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -96,7 +94,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(false))
 
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      None,
       RawlsBillingProjectName("fake_billing_project"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       Some(servicePerimeterName),
@@ -127,7 +124,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     val samDAO = mock[SamDAO]
     val bpm = mock[BillingProfileManagerDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      None,
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -183,7 +179,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bp = new GoogleBillingProjectLifecycle(repo, bpm, samDAO, mock[GoogleServicesDAO])
 
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      None,
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,

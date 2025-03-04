@@ -47,7 +47,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
   val coords: AzureManagedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID, UUID.randomUUID, "fake")
   val billingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("fake_name")
   val createRequest: CreateRawlsV2BillingProjectFullRequest = CreateRawlsV2BillingProjectFullRequest(
-    None,
     billingProjectName,
     None,
     None,
@@ -56,7 +55,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     None
   )
   val createProtectedRequest: CreateRawlsV2BillingProjectFullRequest = CreateRawlsV2BillingProjectFullRequest(
-    None,
     billingProjectName,
     None,
     None,
@@ -97,7 +95,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
       mock[WorkspaceManagerResourceMonitorRecordDao]
     )
     val gcpCreateRequest = CreateRawlsV2BillingProjectFullRequest(
-      None,
       billingProjectName,
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -175,7 +172,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val createRequestWithExistingLz = CreateRawlsV2BillingProjectFullRequest(
-      None,
       billingProjectName,
       None,
       None,
@@ -231,7 +227,6 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
         landingZoneAllowAttach = true
       )
     val createRequestWithExistingLz = CreateRawlsV2BillingProjectFullRequest(
-      None,
       billingProjectName,
       None,
       None,

@@ -32,7 +32,6 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValid
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
-import java.security.MessageDigest
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -161,11 +160,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       )
       _ <- billingRepository.createBillingProject(
         RawlsBillingProject(
-          createProjectRequest.id.getOrElse { // if no id is provided, generate one from the project name
-            UUID.nameUUIDFromBytes(
-              MessageDigest.getInstance("MD5").digest(createProjectRequest.projectName.value.getBytes)
-            )
-          },
+          UUID.randomUUID(), // New ID[UUID] not PK of the billing project
           createProjectRequest.projectName,
           CreationStatuses.Creating,
           createProjectRequest.billingAccount,

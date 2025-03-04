@@ -36,7 +36,6 @@ class BillingProjectDeletionSpec extends AnyFlatSpec {
 
   val billingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("fake_name")
   val createRequest: CreateRawlsV2BillingProjectFullRequest = CreateRawlsV2BillingProjectFullRequest(
-    None,
     billingProjectName,
     Some(RawlsBillingAccountName("fake_billing_account_name")),
     None,
