@@ -7,7 +7,7 @@ import akka.http.scaladsl.unmarshalling.Unmarshaller
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -16,7 +16,6 @@ import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success, Try}
 
 /**
   * Created by dvoet on 11/2/2020.
@@ -61,40 +60,48 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / "v2") {
-        pathPrefix("spendReport") {
-          pathEndOrSingleSlash {
-            get {
-              parameters(
-                "startDate".as[DateTime],
-                "endDate".as[DateTime],
-                "pageSize".as[Int],
-                "offset".as[Int]
-              ) { (startDate, endDate, pageSize, offset) =>
+        pathPrefix("id") {
+          pathPrefix(Segment) { id =>
+            pathEnd {
+              get {
                 complete {
-                  spendReportingConstructor(ctx).getSpendForAllWorkspaces(
-                    startDate,
-                    endDate.plusDays(1).minusMillis(1),
-                    pageSize,
-                    offset
-                  )
+                  import spray.json._
+                  userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
+                    case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
+                    case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+                  }
                 }
               }
             }
           }
         } ~
+          pathPrefix("spendReport") {
+            pathEndOrSingleSlash {
+              get {
+                parameters(
+                  "startDate".as[DateTime],
+                  "endDate".as[DateTime],
+                  "pageSize".as[Int],
+                  "offset".as[Int]
+                ) { (startDate, endDate, pageSize, offset) =>
+                  complete {
+                    spendReportingConstructor(ctx).getSpendForAllWorkspaces(
+                      startDate,
+                      endDate.plusDays(1).minusMillis(1),
+                      pageSize,
+                      offset
+                    )
+                  }
+                }
+              }
+            }
+          } ~
           pathPrefix(Segment) { projectId =>
             pathEnd {
               get {
                 complete {
                   import spray.json._
-
-                  // Check if the projectId is a UUID or a billingProjectName
-                  val billingProjects = Try(UUID.fromString(projectId)) match {
-                    case Success(id) => userServiceConstructor(ctx).getBillingProjectById(id)
-                    case Failure(_) => userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId))
-                  }
-
-                  billingProjects.map {
+                  userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId)).map {
                     case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
                     case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
                   }

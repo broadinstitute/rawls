@@ -865,36 +865,37 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "GET /billing/v2/{projectId}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices { services =>
-    val project = createProject("project")
-    when(
-      services.samDAO.listUserRolesForResource(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(project.projectName.value),
-        ArgumentMatchers.argThat(userInfoEq(testContext))
-      )
-    ).thenReturn(
-      Future.successful(
-        Set(
-          SamBillingProjectRoles.workspaceCreator,
-          SamBillingProjectRoles.owner
+  "GET /billing/v2/id/{projectUuid}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("project")
+      when(
+        services.samDAO.listUserRolesForResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(
+        Future.successful(
+          Set(
+            SamBillingProjectRoles.workspaceCreator,
+            SamBillingProjectRoles.owner
+          )
         )
       )
-    )
 
-    Get(s"/billing/v2/${project.id}") ~>
-      sealRoute(services.billingRoutesV2()) ~>
-      check {
-        assertResult(StatusCodes.OK, responseAs[String]) {
-          status
+      Get(s"/billing/v2/id/${project.id}") ~>
+        sealRoute(services.billingRoutesV2()) ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+          responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
+            Set(ProjectRoles.Owner, ProjectRoles.User),
+            project,
+            CloudPlatform.GCP
+          )
+
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
-          Set(ProjectRoles.Owner, ProjectRoles.User),
-          project,
-          CloudPlatform.GCP
-        )
-
-      }
   }
 
   it should "return 200 with user role" in withEmptyDatabaseAndApiServices { services =>
@@ -913,7 +914,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       )
     )
 
-    Get(s"/billing/v2/${project.id}") ~>
+    Get(s"/billing/v2/id/${project.id}") ~>
       sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -939,7 +940,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     )
       .thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
-    Get(s"/billing/v2/$projectId") ~>
+    Get(s"/billing/v2/id/$projectId") ~>
       sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {
@@ -958,7 +959,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       )
     ).thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
-    Get(s"/billing/v2/${project.id}") ~>
+    Get(s"/billing/v2/id/${project.id}") ~>
       sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {

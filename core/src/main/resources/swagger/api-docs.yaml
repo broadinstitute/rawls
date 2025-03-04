@@ -225,6 +225,31 @@ paths:
       security:
         - oidc_google_billing_scope: []
       x-codegen-request-body-name: createProjectRequest
+
+  /api/billing/v2/id/{projectUuid}:
+    get:
+      tags:
+        - billing_v2
+      summary: get billing project by Id
+      description: get billing project by Id
+      operationId: getBillingProjectById
+      parameters:
+        - $ref: '#/components/parameters/billingProjectUuidPathParam'
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}:
     get:
       tags:
@@ -7260,6 +7285,14 @@ components:
           description: objects that this job has transferred so far
           type: integer
   parameters:
+    billingProjectUuidPathParam:
+        name: projectUuid
+        in: path
+        description: Billing Project UUID
+        required: true
+        schema:
+            type: string
+            format: uuid
     billingProjectIdPathParam:
       name: projectId
       in: path
