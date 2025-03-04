@@ -201,6 +201,7 @@ object CreationStatuses {
 // and prone to false positives, but for users who are making use of a service
 // perimeter, we found that they needed the extra security.
 case class CreateRawlsV2BillingProjectFullRequest(
+  id: Option[UUID] = None,
   projectName: RawlsBillingProjectName,
   billingAccount: Option[RawlsBillingAccountName],
   servicePerimeter: Option[ServicePerimeterName],
@@ -309,7 +310,7 @@ class UserAuthJsonSupport extends JsonSupport {
   )
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsV2BillingProjectFullRequest] =
-    jsonFormat8(CreateRawlsV2BillingProjectFullRequest)
+    jsonFormat9(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat: RootJsonFormat[UpdateRawlsBillingAccountRequest] = jsonFormat1(
     UpdateRawlsBillingAccountRequest

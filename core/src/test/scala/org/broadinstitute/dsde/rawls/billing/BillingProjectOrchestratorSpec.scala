@@ -29,12 +29,13 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
+import java.security.MessageDigest
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -74,6 +75,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   it should "fail when the billing project fails validation" in {
     val samDAO = mock[SamDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      None,
       RawlsBillingProjectName("!@B#$"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -107,12 +109,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   behavior of "billing project creation"
 
-  it should "create a billing project record when provided a valid request and set the correct creation status" in {
+  it should "create a billing project record when provided a valid request [No Id] and set the correct creation status" in {
     val samDAO = mock[SamDAO]
     val gcsDAO = mock[GoogleServicesDAO]
     when(gcsDAO.testTerraAndUserBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
       .thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      None,
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -129,6 +132,9 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, billingProjectDeletion, testContext))
       .thenReturn(Future.successful(bpCreatorReturnedStatus))
     val billingRepository = mock[BillingRepository]
+    val expectedUUID =
+      UUID.nameUUIDFromBytes(MessageDigest.getInstance("MD5").digest(createRequest.projectName.value.getBytes))
+
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
     when(billingRepository.createBillingProject(any[RawlsBillingProject])).thenReturn(
@@ -182,6 +188,92 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
                                                                      ArgumentMatchers.eq(bpCreatorReturnedStatus),
                                                                      ArgumentMatchers.eq(None)
     )
+    verify(billingRepository).createBillingProject(argThat { project: RawlsBillingProject =>
+      project.projectName == createRequest.projectName && project.id == createRequest.id.getOrElse(expectedUUID)
+    }) // If `id` is not set, it is derived from the project name as a UUID
+  }
+
+  it should "create a billing project record when provided a valid request [With Id] and set the correct creation status" in {
+    val samDAO = mock[SamDAO]
+    val gcsDAO = mock[GoogleServicesDAO]
+    when(gcsDAO.testTerraAndUserBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
+      .thenReturn(Future.successful(true))
+    val projectId = UUID.randomUUID()
+    val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      Some(projectId),
+      RawlsBillingProjectName("fake_project_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
+      None,
+      None
+    )
+    val billingProjectDeletion = mock[BillingProjectDeletion]
+
+    val bpCreator = mock[GoogleBillingProjectLifecycle]
+    val bpCreatorReturnedStatus = CreationStatuses.CreatingLandingZone
+
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
+    when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, billingProjectDeletion, testContext))
+      .thenReturn(Future.successful(bpCreatorReturnedStatus))
+    val billingRepository = mock[BillingRepository]
+
+    when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
+      .thenReturn(Future.successful(None))
+    when(billingRepository.createBillingProject(any[RawlsBillingProject])).thenReturn(
+      Future.successful(
+        RawlsBillingProject(UUID.randomUUID(),
+                            RawlsBillingProjectName(createRequest.projectName.value),
+                            CreationStatuses.Creating,
+                            None,
+                            None
+        )
+      )
+    )
+    when(
+      billingRepository.updateCreationStatus(ArgumentMatchers.eq(createRequest.projectName),
+                                             ArgumentMatchers.eq(bpCreatorReturnedStatus),
+                                             any()
+      )
+    ).thenReturn(Future.successful(1))
+    when(
+      samDAO.createResourceFull(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.buildBillingProjectPolicies(Set.empty, testContext)),
+        ArgumentMatchers.eq(Set.empty),
+        any[RawlsRequestContext],
+        ArgumentMatchers.eq(None)
+      )
+    ).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
+    when(
+      samDAO.syncPolicyToGoogle(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+      )
+    ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      samDAO,
+      mock[NotificationDAO],
+      billingRepository,
+      bpCreator,
+      mock[AzureBillingProjectLifecycle],
+      billingProjectDeletion,
+      multiCloudWorkspaceConfig,
+      mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
+
+    Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
+
+    verify(billingRepository, Mockito.times(1)).updateCreationStatus(ArgumentMatchers.eq(createRequest.projectName),
+                                                                     ArgumentMatchers.eq(bpCreatorReturnedStatus),
+                                                                     ArgumentMatchers.eq(None)
+    )
+    verify(billingRepository).createBillingProject(argThat { project: RawlsBillingProject =>
+      project.projectName == createRequest.projectName && project.id == createRequest.id.getOrElse(projectId)
+    }) // If `id` is set, then it is used as the project ID
   }
 
   it should "fail when a duplicate project already exists" in {
@@ -190,6 +282,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(gcsDAO.testTerraAndUserBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
       .thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      None,
       RawlsBillingProjectName("fake_project"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -231,6 +324,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   it should "fail when provided an invalid billing project name" in {
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      None,
       RawlsBillingProjectName("!@B#$"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
@@ -261,6 +355,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   it should "delete the billing project and throw an exception if post creation steps fail" in {
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      None,
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,

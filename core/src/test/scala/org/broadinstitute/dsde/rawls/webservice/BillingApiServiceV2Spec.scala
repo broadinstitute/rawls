@@ -307,7 +307,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       mockPositiveBillingProjectCreation(services, projectName)
 
       Post("/billing/v2",
-           CreateRawlsV2BillingProjectFullRequest(projectName,
+           CreateRawlsV2BillingProjectFullRequest(None,
+                                                  projectName,
                                                   Some(services.gcsDAO.accessibleBillingAccountName),
                                                   None,
                                                   None,
@@ -346,6 +347,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       Post(
         "/billing/v2",
         CreateRawlsV2BillingProjectFullRequest(
+          None,
           projectName,
           Some(services.gcsDAO.accessibleBillingAccountName),
           None,
@@ -376,6 +378,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       Post(
         "/billing/v2",
         CreateRawlsV2BillingProjectFullRequest(
+          None,
           projectName,
           Some(services.gcsDAO.accessibleBillingAccountName),
           None,
@@ -394,7 +397,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices {
     services =>
-      val request = CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"),
+      val request = CreateRawlsV2BillingProjectFullRequest(None,
+                                                           RawlsBillingProjectName("test_bad1"),
                                                            Some(services.gcsDAO.inaccessibleBillingAccountName),
                                                            None,
                                                            None,
@@ -424,7 +428,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       Post(
         "/billing/v2",
-        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("short"),
+        CreateRawlsV2BillingProjectFullRequest(None,
+                                               RawlsBillingProjectName("short"),
                                                Option(services.gcsDAO.accessibleBillingAccountName),
                                                None,
                                                None,
@@ -444,7 +449,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       Post(
         "/billing/v2",
-        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"),
+        CreateRawlsV2BillingProjectFullRequest(None,
+                                               RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"),
                                                Option(services.gcsDAO.accessibleBillingAccountName),
                                                None,
                                                None,
@@ -464,7 +470,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       Post(
         "/billing/v2",
-        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "),
+        CreateRawlsV2BillingProjectFullRequest(None,
+                                               RawlsBillingProjectName("!@#$%^&*()=+,. "),
                                                Option(services.gcsDAO.accessibleBillingAccountName),
                                                None,
                                                None,
