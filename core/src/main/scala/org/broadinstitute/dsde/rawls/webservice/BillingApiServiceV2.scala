@@ -65,10 +65,9 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             pathEnd {
               get {
                 complete {
-                  import spray.json._
                   userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
-                    case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
-                    case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+                    case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
+                    case None                  => StatusCodes.NotFound -> None
                   }
                 }
               }
