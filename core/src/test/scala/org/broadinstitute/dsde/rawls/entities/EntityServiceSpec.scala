@@ -347,13 +347,13 @@ class EntityServiceSpec
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameEntityType(testData.wsName,
-        testData.pair1.entityType,
-        EntityTypeRename("invalid/table/name")
-      ),
-        waitDuration
+                                                           testData.pair1.entityType,
+                                                           EntityTypeRename("invalid/table/name")
+                   ),
+                   waitDuration
       )
     }
-    ex.errorReport.message should include ("Invalid entity name")
+    ex.errorReport.message should include("Invalid entity name")
   }
 
   it should "rename an entity type as long as the selected name is not in use" in withTestDataServices { services =>
