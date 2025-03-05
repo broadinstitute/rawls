@@ -12,18 +12,18 @@ import scala.concurrent.Future
  */
 class WorkspaceSpendReportRepository(dataSource: SlickDataSource) {
 
-  def toSpendReportResults(workspaceSpendReports: Seq[WorkspaceSpendReport], projectNames: Map[GoogleProjectId, WorkspaceName]): SpendReportingResults =
-   WorkspaceSpendReportRecord.toSpendReportingResults(workspaceSpendReports, projectNames)
-
-
-  def getWorkspaceSpendReports(projectIds: Set[String], startDate: LocalDateTime, endDate: LocalDateTime): Future[Seq[WorkspaceSpendReport]] =
-    dataSource.inTransaction(_.WorkspaceSpendReportQuery.getWorkspaceSpendReportByProjectIdsAndReportDate(projectIds, startDate, endDate))
-
-  def insertSpendReportResults(spendReportingResults: SpendReportingResults): Seq[Future[Long]] = {
-    WorkspaceSpendReportRecord.fromSpendReportingResults(spendReportingResults).map(
-      workspaceSpendReport => insertWorkspaceSpendReport(workspaceSpendReport)
+  def getWorkspaceSpendReports(projectIds: Set[String],
+                               startDate: LocalDateTime,
+                               endDate: LocalDateTime
+  ): Future[Seq[WorkspaceSpendReport]] =
+    dataSource.inTransaction(
+      _.WorkspaceSpendReportQuery.getWorkspaceSpendReportByProjectIdsAndReportDate(projectIds, startDate, endDate)
     )
-  }
+
+  def insertSpendReportResults(spendReportingResults: SpendReportingResults): Seq[Future[Long]] =
+    WorkspaceSpendReportRecord
+      .fromSpendReportingResults(spendReportingResults)
+      .map(workspaceSpendReport => insertWorkspaceSpendReport(workspaceSpendReport))
 
   def insertWorkspaceSpendReport(workspaceSpendReport: WorkspaceSpendReport): Future[Long] =
     dataSource.inTransaction { dataAccess =>
