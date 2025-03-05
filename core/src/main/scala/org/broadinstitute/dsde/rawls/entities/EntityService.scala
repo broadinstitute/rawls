@@ -8,25 +8,14 @@ import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityAndAttributesResult, ReadAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException,
-  EntityNotFoundException
-}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  EntitySupport,
-  JsonFilterUtils,
-  WorkspaceSupport
-}
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, AttributeUpdateOperationException, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
 import java.sql.SQLException
@@ -55,9 +44,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with AttributeSupport
     with LazyLogging
     with RawlsInstrumented
-    with JsonFilterUtils {
+    with JsonFilterUtils
+    with StringValidationUtils {
 
   import dataSource.dataAccess.driver.api._
+  implicit override val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
+
 
   // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
   val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
@@ -243,6 +235,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
+
+    validateEntityName(renameInfo.newName)
     def validateExistingType(dataAccess: DataAccess,
                              workspaceContext: Workspace,
                              oldName: String
