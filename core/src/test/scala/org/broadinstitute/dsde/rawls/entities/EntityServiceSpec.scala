@@ -353,7 +353,7 @@ class EntityServiceSpec
                    waitDuration
       )
     }
-    ex.errorReport.message should include("Invalid entity name")
+    ex.errorReport.message should include("Invalid input")
   }
 
   it should "rename an entity type as long as the selected name is not in use" in withTestDataServices { services =>
