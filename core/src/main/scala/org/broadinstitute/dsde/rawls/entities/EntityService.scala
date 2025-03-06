@@ -245,7 +245,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
-    validateEntityName(renameInfo.newName)
+    validateEntityType(renameInfo.newName)
     def validateExistingType(dataAccess: DataAccess,
                              workspaceContext: Workspace,
                              oldName: String

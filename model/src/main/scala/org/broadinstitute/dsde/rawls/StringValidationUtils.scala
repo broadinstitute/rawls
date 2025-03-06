@@ -24,6 +24,18 @@ trait StringValidationUtils {
       )
     }
 
+  def validateEntityType(entityType: String): Unit = {
+    if (entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
+      throw new RawlsFatalExceptionWithErrorReport(
+        errorReport = ErrorReport(
+          message = s"Entity type ${Attributable.workspaceEntityType} is reserved and cannot be overwritten",
+          statusCode = StatusCodes.BadRequest
+        )
+      )
+    }
+    validateUserDefinedString(entityType)
+  }
+
   private lazy val entityNameRegex = "[A-z0-9\\._-]+".r
   def validateEntityName(s: String): Unit =
     if (!entityNameRegex.pattern.matcher(s).matches) {
