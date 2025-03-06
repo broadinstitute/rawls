@@ -34,7 +34,7 @@ trait HttpClientUtils extends LazyLogging {
     executeRequest(http, httpRequest) recover { case t: Throwable =>
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.InternalServerError,
-                    s"HTTP call failed: ${httpRequest.uri}. Response: ${t.getMessage}",
+                    s"HTTP call failed: ${filterPrivate(httpRequest.uri)}. Response: ${t.getMessage}",
                     t
         )
       )
@@ -44,15 +44,15 @@ trait HttpClientUtils extends LazyLogging {
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
           logger.debug(
-            s"HTTP error status ${response.status} calling URI ${httpRequest.uri}. Response: $entityAsString"
+            s"HTTP error status ${response.status} calling URI ${filterPrivate(httpRequest.uri)}. Response: $entityAsString"
           )
           val message =
             if (response.status == StatusCodes.Unauthorized)
               s"The service indicated that this call was unauthorized. " +
                 s"If you believe this is a mistake, please try your request again. " +
-                s"Error occurred calling uri ${httpRequest.uri}"
+                s"Error occurred calling uri ${filterPrivate(httpRequest.uri)}"
             else
-              s"HTTP error calling URI ${httpRequest.uri}. Response: ${entityAsString.take(1000)}"
+              s"HTTP error calling URI ${filterPrivate(httpRequest.uri)}. Response: ${entityAsString.take(1000)}"
           throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, message))
         }
       }
@@ -64,7 +64,7 @@ trait HttpClientUtils extends LazyLogging {
     executeRequest(http, httpRequest) recover { case t: Throwable =>
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.InternalServerError,
-                    s"HTTP call failed: ${httpRequest.uri}. Response: ${t.getMessage}",
+                    s"HTTP call failed: ${filterPrivate(httpRequest.uri)}. Response: ${t.getMessage}",
                     t
         )
       )
@@ -80,16 +80,22 @@ trait HttpClientUtils extends LazyLogging {
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
           logger.debug(
-            s"HTTP error status ${response.status} calling URI ${httpRequest.uri}. Response: $entityAsString"
+            s"HTTP error status ${response.status} calling URI ${filterPrivate(httpRequest.uri)}. Response: $entityAsString"
           )
           throw new RawlsExceptionWithErrorReport(
-            ErrorReport(response.status,
-                        s"HTTP error calling URI ${httpRequest.uri}. Response: ${entityAsString.take(1000)}"
+            ErrorReport(
+              response.status,
+              s"HTTP error calling URI ${filterPrivate(httpRequest.uri)}. Response: ${entityAsString.take(1000)}"
             )
           )
         }
       }
     }
+
+  // don't display private Uris to end users
+  private def filterPrivate(uri: Uri): String =
+    if (uri.authority.toString().contains("-priv")) "" else uri.toString()
+
 }
 
 case class HttpClientUtilsStandard()(implicit val materializer: Materializer, val executionContext: ExecutionContext)

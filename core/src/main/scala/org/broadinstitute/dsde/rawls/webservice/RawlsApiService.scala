@@ -57,7 +57,7 @@ object RawlsApiService extends LazyLogging {
         complete(
           withErrorReport.errorReport.statusCode.getOrElse(
             StatusCodes.InternalServerError
-          ) -> withErrorReport.errorReport
+          ) -> withErrorReport.errorReport.copy(stackTrace = Seq())
         )
       case rollback: SQLTransactionRollbackException =>
         logger.error(
@@ -65,7 +65,7 @@ object RawlsApiService extends LazyLogging {
           rollback
         )
         Sentry.captureException(rollback)
-        complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
+        complete(StatusCodes.InternalServerError -> ErrorReport(rollback).copy(stackTrace = Seq()))
       case sql: SQLException =>
         val sentryId = Sentry.captureException(sql)
         logger.error(
@@ -90,7 +90,7 @@ object RawlsApiService extends LazyLogging {
           logger.error(e.getMessage)
         }
         Sentry.captureException(e)
-        complete(StatusCodes.InternalServerError -> ErrorReport(e))
+        complete(StatusCodes.InternalServerError -> ErrorReport(e).copy(stackTrace = Seq()))
     }
   }
 
