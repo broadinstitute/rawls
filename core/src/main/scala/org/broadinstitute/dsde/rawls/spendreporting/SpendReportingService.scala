@@ -155,16 +155,7 @@ object SpendReportingService {
     var total_credits = BigDecimal(0.0)
 
     // TODO: We may want to allow multiple currencies someday
-    val currency = allRows.map(_.get("currency").getStringValue).distinct match {
-      case head :: List() => Currency.getInstance(head)
-      case head :: tail =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
-        )
-      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
-    }
-
+    val currency = SpendReportUtils.getCurrency(allRows.map(_.get("currency").getStringValue))
     val all = allRows.map { row =>
       val currencyString = row.get("currency").getStringValue
       val currencyCode = Currency.getInstance(currencyString)

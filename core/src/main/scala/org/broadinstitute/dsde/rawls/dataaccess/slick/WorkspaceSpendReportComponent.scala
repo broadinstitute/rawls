@@ -1,17 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-
-import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset, ZonedDateTime}
+import java.time.{LocalDateTime, ZoneOffset}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportUtils
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 
 import java.sql.Timestamp
 import java.util.Currency
 import scala.language.{postfixOps, reflectiveCalls}
-import scala.math.BigDecimal.RoundingMode
 
 case class WorkspaceSpendReportRecord(
   id: Long,
@@ -62,68 +59,43 @@ object WorkspaceSpendReportRecord {
       record.otherCredits
     )
 
-  def convertJodaToJava(dateTimeOpt: Option[DateTime]): LocalDateTime =
-    dateTimeOpt match {
-      case Some(dateTime) =>
-        val instant = dateTime.toInstant
-        LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(dateTime.getMillis), ZoneId.systemDefault())
-      case None =>
-        throw new IllegalArgumentException("DateTime value is missing")
-    }
-
-  def convertLocalDateTimeToJodaDateTime(localDateTime: LocalDateTime,
-                                         zoneId: ZoneId = ZoneId.systemDefault()
-  ): Option[DateTime] =
-    Option(localDateTime).map { ldt =>
-      // Convert LocalDateTime to ZonedDateTime
-      val zonedDateTime: ZonedDateTime = ldt.atZone(zoneId)
-
-      // Convert ZonedDateTime to Joda DateTime using epoch milli
-      new DateTime(zonedDateTime.toInstant.toEpochMilli)
-    }
-
   def fromSpendReportingResults(spendReportingResults: SpendReportingResults): Seq[WorkspaceSpendReport] = {
     val summary = spendReportingResults.spendSummary
     spendReportingResults.spendDetails.flatMap { spendDetail =>
-      spendDetail.spendData.map {
-        var totalStorage: Option[Float] = None
-        var totalCompute: Option[Float] = None
-        var otherSpend: Option[Float] = None
-        var storageCredits: Option[Float] = None
-        var computeCredits: Option[Float] = None
-        var otherCredits: Option[Float] = None
-        spendData =>
-          spendData.subAggregation.get.spendData.foreach { categorySpend =>
-            val categoryCost = Some(categorySpend.cost.toFloat)
-            val categoryCredits = Some(categorySpend.credits.toFloat)
-            categorySpend.category match {
-              case Some(TerraSpendCategories.Storage) =>
-                totalStorage = categoryCost
-                storageCredits = categoryCredits
-              case Some(TerraSpendCategories.Compute) =>
-                totalCompute = categoryCost
-                computeCredits = categoryCredits
-              case Some(TerraSpendCategories.Other) =>
-                otherSpend = categoryCost
-                otherCredits = categoryCredits
-              // This is not included in the consolidated spend report
-              case Some(TerraSpendCategories.WorkspaceInfrastructure) =>
-              case None                                               =>
+      spendDetail.spendData.map { spendData =>
+        val spendCategoryMap: Map[Option[TerraSpendCategories.TerraSpendCategory], SpendReportingForDateRange] =
+          spendData.subAggregation
+            .flatMap(_.spendData)
+            .map(datedReport => datedReport.category -> datedReport)
+            .toMap
+
+        // helper to look up the cost and credits for a given category
+        def getCategoryCost(category: TerraSpendCategories.TerraSpendCategory): (Option[Float], Option[Float]) =
+          spendCategoryMap
+            .get(Some(category))
+            .map { categorySpend =>
+              (Option(categorySpend.cost.toFloat), Option(categorySpend.credits.toFloat))
             }
-          }
-          WorkspaceSpendReport.newWorkspaceSpendReport(
-            spendData.googleProjectId.get.value,
-            convertJodaToJava(summary.startTime),
-            convertJodaToJava(summary.endTime),
-            summary.currency,
-            isDataAvailable = true,
-            totalCompute,
-            totalStorage,
-            otherSpend,
-            computeCredits,
-            storageCredits,
-            otherCredits
-          )
+            .getOrElse((None, None))
+
+        // get cost and credits for the categories we care about
+        val (totalStorage, storageCredits) = getCategoryCost(TerraSpendCategories.Storage)
+        val (totalCompute, computeCredits) = getCategoryCost(TerraSpendCategories.Compute)
+        val (otherSpend, otherCredits) = getCategoryCost(TerraSpendCategories.Other)
+
+        WorkspaceSpendReport.newWorkspaceSpendReport(
+          spendData.googleProjectId.get.value,
+          SpendReportUtils.convertJodaToJava(summary.startTime),
+          SpendReportUtils.convertJodaToJava(summary.endTime),
+          summary.currency,
+          isDataAvailable = true,
+          totalCompute,
+          totalStorage,
+          otherSpend,
+          computeCredits,
+          storageCredits,
+          otherCredits
+        )
       }
     }
   }
@@ -135,67 +107,40 @@ object WorkspaceSpendReportRecord {
     var end: Option[DateTime] = None
     var total_spend = BigDecimal(0.0)
     var total_credits = BigDecimal(0.0)
-    val currency = records.map(_.currency).distinct match {
-      case head :: List() => Currency.getInstance(head)
-      case head :: tail =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
-        )
-      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
-    }
-
+    val currency: Currency = SpendReportUtils.getCurrency(records.map(_.currency))
     val all = records.map { record =>
       val currencyString = record.currency
       val currencyCode = Currency.getInstance(currencyString)
       val projectId = record.googleProjectId
 
-      def toBigDecimal(cost: Option[Float]): BigDecimal =
-        BigDecimal(cost.getOrElse(0.0f)).setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-
       val subAggregation = List(
         SpendReportingForDateRange(
-          toBigDecimal(record.otherSpend).toString(),
-          toBigDecimal(record.otherCredits).toString(),
+          SpendReportUtils.toBigDecimal(record.otherSpend, currencyCode).toString(),
+          SpendReportUtils.toBigDecimal(record.otherCredits, currencyCode).toString(),
           currencyCode.toString,
           category = Option(TerraSpendCategories.Other)
         ),
         SpendReportingForDateRange(
-          toBigDecimal(record.totalStorage).toString(),
-          toBigDecimal(record.storageCredits).toString(),
+          SpendReportUtils.toBigDecimal(record.totalStorage, currencyCode).toString(),
+          SpendReportUtils.toBigDecimal(record.storageCredits, currencyCode).toString(),
           currencyCode.toString,
           category = Option(TerraSpendCategories.Storage)
         ),
         SpendReportingForDateRange(
-          toBigDecimal(record.totalCompute).toString(),
-          toBigDecimal(record.computeCredits).toString(),
+          SpendReportUtils.toBigDecimal(record.totalCompute, currencyCode).toString(),
+          SpendReportUtils.toBigDecimal(record.computeCredits, currencyCode).toString(),
           currencyCode.toString,
           category = Option(TerraSpendCategories.Compute)
         )
       )
 
-      val totalCompute: Option[Float] = record.totalCompute
-      val totalStorage: Option[Float] = record.totalStorage
-      val otherSpend: Option[Float] = record.otherSpend
-      val cost: Option[Float] = for {
-        cost1 <- totalCompute
-        cost2 <- totalStorage
-        cost3 <- otherSpend
-      } yield cost1 + cost2 + cost3
-
-      val computeCredits: Option[Float] = record.computeCredits
-      val storageCredits: Option[Float] = record.storageCredits
-      val otherCredits: Option[Float] = record.otherCredits
-      val credits: Option[Float] = for {
-        credit1 <- computeCredits
-        credit2 <- storageCredits
-        credit3 <- otherCredits
-      } yield credit1 + credit2 + credit3
-
-      total_spend = total_spend + toBigDecimal(cost)
-      total_credits = total_credits + toBigDecimal(credits)
-      start = convertLocalDateTimeToJodaDateTime(record.reportStartDate)
-      end = convertLocalDateTimeToJodaDateTime(record.reportEndDate)
+      val cost: Option[Float] = Option(Seq(record.totalCompute, record.totalStorage, record.otherSpend).flatten.sum)
+      val credits: Option[Float] =
+        Option(Seq(record.computeCredits, record.storageCredits, record.otherCredits).flatten.sum)
+      total_spend = total_spend + SpendReportUtils.toBigDecimal(cost, currencyCode)
+      total_credits = total_credits + SpendReportUtils.toBigDecimal(credits, currencyCode)
+      start = SpendReportUtils.convertLocalDateTimeToJodaDateTime(record.reportStartDate)
+      end = SpendReportUtils.convertLocalDateTimeToJodaDateTime(record.reportEndDate)
       val workspaceTotal = SpendReportingForDateRange(
         total_spend.toString,
         total_credits.toString,
@@ -280,7 +225,10 @@ trait WorkspaceSpendReportComponent {
     ): ReadAction[Seq[WorkspaceSpendReport]] =
       loadWorkspaceSpendReport(filterByProjectIdsAndReportDate(projectIds, startDate, endDate))
 
-    def filterByProjectIdsAndReportDate(projectIds: Set[String], startDate: LocalDateTime, endDate: LocalDateTime) =
+    def filterByProjectIdsAndReportDate(projectIds: Set[String],
+                                        startDate: LocalDateTime,
+                                        endDate: LocalDateTime
+    ): Query[WorkspaceSpendReportTable, WorkspaceSpendReportRecord, Seq] =
       workspaceSpendReportQuery
         .filter(x =>
           x.googleProjectId.inSetBind(
