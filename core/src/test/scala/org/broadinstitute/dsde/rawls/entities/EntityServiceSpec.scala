@@ -343,6 +343,19 @@ class EntityServiceSpec
     ex.errorReport.message shouldBe "Pair already exists as an entity type"
   }
 
+  it should "fail to rename an entity type to a name with invalid characters" in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameEntityType(testData.wsName,
+                                                           testData.pair1.entityType,
+                                                           EntityTypeRename("invalid/table/name")
+                   ),
+                   waitDuration
+      )
+    }
+    ex.errorReport.message should include("Invalid input")
+  }
+
   it should "rename an entity type as long as the selected name is not in use" in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
     assertResult(2) {
