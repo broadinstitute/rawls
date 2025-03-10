@@ -311,7 +311,7 @@ class SpendReportingService(
     )
   }
 
-  // TODO CORE-350: single-project report: query
+  // single-project report: query
   def getQuery(aggregations: Set[SpendReportingAggregationKeyWithSub], config: BillingProjectSpendExport): String = {
     // Unbox potentially many SpendReportingAggregationKeyWithSubs for query,
     // all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
@@ -338,7 +338,7 @@ class SpendReportingService(
     if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
   }
 
-  // TODO CORE-350: consolidated report: query
+  // consolidated report: query
   def getAllUserWorkspaceQuery(
     spendExportTable: String,
     billingProjectsByAccount: Map[RawlsBillingAccountName, Seq[GoogleProjectId]],
@@ -360,7 +360,7 @@ class SpendReportingService(
                        |    _BILLING_ACCOUNT_TABLE
                        |  where
                        |    _PARTITIONTIME BETWEEN @startDate AND @endDate and
-                       |    _PROJECT_CLAUSE
+                       |    (_PROJECT_CLAUSE)
                        |  GROUP BY
                        |    project_id,
                        |    spend_category,
@@ -407,7 +407,7 @@ class SpendReportingService(
       }
       .mkString(" or ")
 
-  // TODO CORE-350: single-project report: query parameters
+  // single-project report: query parameters
   def setUpQuery(
     query: String,
     exportConf: BillingProjectSpendExport,
@@ -459,7 +459,7 @@ class SpendReportingService(
     bytesProcessedCounter += stats.getEstimatedBytesProcessed
   }
 
-  // TODO CORE-350: *** shared between single-project and consolidated reports
+  // shared between single-project and consolidated reports
   def getSpendReportableWorkspaceGoogleProjects(
     childContext: RawlsRequestContext
   ): Future[Map[RawlsBillingProjectName, Seq[Workspace]]] =
@@ -477,7 +477,7 @@ class SpendReportingService(
         workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
-  // TODO CORE-350: single-project report: step 3
+  // single-project report: step 3
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
     start: DateTime,
@@ -512,7 +512,7 @@ class SpendReportingService(
     }
   }
 
-  // TODO CORE-350: single-project report: entry point
+  // single-project report: entry point
   def getSpendForBillingProject(
     project: RawlsBillingProjectName,
     start: DateTime,
@@ -525,7 +525,7 @@ class SpendReportingService(
       report <- getReportData(billingProject.get, project, start, end, aggregations)
     } yield report
 
-  // TODO CORE-350: single-project report: step 2
+  // single-project report: step 2
   private def getReportData(billingProject: RawlsBillingProject,
                             project: RawlsBillingProjectName,
                             start: DateTime,
@@ -570,7 +570,7 @@ class SpendReportingService(
           Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
       }
 
-  // TODO CORE-350: consolidated report: entry point
+  // consolidated report: entry point
   def getSpendForAllWorkspaces(
     start: DateTime,
     end: DateTime,

@@ -1195,11 +1195,20 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                                 RawlsBillingAccountName("billingAccount1"),
                                 Some("billing1_bq_project.billing1_dataset.billing1_table")
       )
+    val billingProjectSpendExport2 =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                Some("billing1_bq_project.billing1_dataset.billing2_table")
+      )
 
     val workspaces = Map(
       RawlsBillingAccountName("billingAccount1") -> Seq(
         GoogleProjectId("workspace2ProjectId"),
         GoogleProjectId("workspace1ProjectId")
+      ),
+      RawlsBillingAccountName("billingAccount2") -> Seq(
+        GoogleProjectId("workspace3ProjectId"),
+        GoogleProjectId("workspace4ProjectId")
       )
     )
 
@@ -1219,7 +1228,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    billing1_bq_project.billing1_dataset.billing1_table
           |  where
           |    _PARTITIONTIME BETWEEN @startDate AND @endDate
-          |    and (billing_account_id = 'billingAccount1' and project.id in ('workspace2ProjectId', 'workspace1ProjectId'))
+          |    and ( (billing_account_id = 'billingAccount1' and project.id in ('workspace2ProjectId', 'workspace1ProjectId'))
+          |    or (billing_account_id = 'billingAccount2' and project.id in ('workspace3ProjectId', 'workspace4ProjectId')) )
           |  GROUP BY
           |    project_id,
           |    spend_category,
