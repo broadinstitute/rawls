@@ -496,6 +496,13 @@ class SpendReportingService(
           .toMap
       }
 
+      _ = if (projectNames.isEmpty) {
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.NotFound,
+          s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+        )
+      }
+
       query = getQuery(aggregations, spendExportConf)
       queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
 
@@ -584,7 +591,9 @@ class SpendReportingService(
         // Map[BillingProjectSpendExport, Seq[Workspace]]
         billingMap <- getBillingWithSpendPermission(childContext)
         _ = if (billingMap.isEmpty) {
-          return Future.successful(None)
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.NotFound, "No workspaces eligible for spend report")
+          )
         }
 
         // find the distinct export table names in our billingMap
@@ -610,7 +619,6 @@ class SpendReportingService(
             .toMap
 
           val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
-          logger.warn(query)
           val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
           runBigQueryJob(queryJob, childContext)
             .map { result =>
@@ -665,9 +673,6 @@ class SpendReportingService(
           .toMap
           .filter(_._2.nonEmpty)
 
-//        groupedByTable = spendConfigs.groupBy(
-//          _.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
-//        )
       } yield workspacesBySpendConfig
     }
 }
