@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+   <changeSet logicalFilePath="dummy" author="bmorgan" id="create_GOOGLE_PROJECT">
+        <createTable tableName="GOOGLE_PROJECT"
+                     remarks="Tracks standalone Google projects for TDR">
+            <column name="google_project_id" type="VARCHAR(254)" >
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="billing_account"
+                    type="VARCHAR(254)">
+            </column>
+            <column name="message"
+                    type="VARCHAR(254)">
+            </column>
+            <column name="billing_project"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseColumnNames="billing_project"
+                                 baseTableName="GOOGLE_PROJECT"
+                                 constraintName="FK_BP_GP"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onDelete="CASCADE"
+                                 onUpdate="NO ACTION"
+                                 referencedColumnNames="name"
+                                 referencedTableName="BILLING_PROJECT"/>
+    </changeSet>
+</databaseChangeLog>

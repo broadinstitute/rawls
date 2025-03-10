@@ -28,7 +28,8 @@ trait DataAccess
     with WorkspaceManagerResourceMonitorRecordComponent
     with FastPassGrantComponent
     with MultiregionalBucketMigrationHistory
-    with WorkspaceSettingComponent {
+    with WorkspaceSettingComponent
+    with RawlsGoogleProjectComponent {
 
   this: DriverComponent =>
 

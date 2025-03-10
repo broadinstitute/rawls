@@ -25,6 +25,7 @@ tags:
   - name: workflows
   - name: workspaces
   - name: workspaces_v2
+  - name: googleProjects
 
 paths:
   /version:
@@ -4647,6 +4648,36 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects:
+    post:
+      tags:
+        - googleProjects
+      summary: create google project in rawls
+      description: Adds a google project in rawls linked to a billing account
+      operationId: createGoogleProject
+      requestBody:
+        description: create google project request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/CreateGoogleProjectRequest'
+        required: true
+      responses: #TODO make these correct
+        201:
+          description: Successfully added Google Project in Rawls
+        400:
+          description: both you and firecloud billing user must be a user of the billing account
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: project already exists in rawls
+          content: { }
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      security:
+        - oidc_google_billing_scope: [ ]
 components:
   schemas:
     BillingAccount:
@@ -7284,6 +7315,18 @@ components:
         objectsTransferred:
           description: objects that this job has transferred so far
           type: integer
+    CreateGoogleProjectRequest:
+      required:
+        - googleProjectId
+        - billingProjectId
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
   parameters:
     billingProjectUuidPathParam:
         name: projectUuid
