@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
-import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.WorkspaceSpendReport
 import org.scalatest.concurrent.ScalaFutures

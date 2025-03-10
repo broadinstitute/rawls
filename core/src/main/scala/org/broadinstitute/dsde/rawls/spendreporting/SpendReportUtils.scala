@@ -22,9 +22,8 @@ object SpendReportUtils {
       case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
     }
 
-  def toBigDecimal(cost: Option[Float], currencyCode: Currency): BigDecimal = {
+  def toBigDecimal(cost: Option[Float], currencyCode: Currency): BigDecimal =
     BigDecimal(cost.getOrElse(0.00f)).setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-  }
 
   def convertJodaToJava(dateTimeOpt: Option[DateTime]): LocalDateTime =
     dateTimeOpt match {

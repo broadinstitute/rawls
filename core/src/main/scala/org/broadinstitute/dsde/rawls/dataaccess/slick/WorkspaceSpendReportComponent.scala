@@ -65,7 +65,8 @@ object WorkspaceSpendReportRecord {
       spendDetail.spendData.map { spendData =>
         val spendCategoryMap: Map[Option[TerraSpendCategories.TerraSpendCategory], SpendReportingForDateRange] =
           spendData.subAggregation
-            .flatMap(_.spendData)
+            .map(_.spendData)
+            .getOrElse(Seq())
             .map(datedReport => datedReport.category -> datedReport)
             .toMap
 
