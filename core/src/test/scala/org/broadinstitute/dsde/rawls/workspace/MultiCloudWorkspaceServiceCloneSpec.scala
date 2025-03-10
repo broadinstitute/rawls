@@ -146,6 +146,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
       .thenReturn(Future(Some(sourceWorkspace)))
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
@@ -209,6 +210,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       .thenReturn(Future(Some(sourceWorkspace)))
 
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
@@ -273,6 +275,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
       .thenReturn(Future(Some(sourceWorkspace)))
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
@@ -343,6 +346,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       .thenReturn(Future(Some(sourceWorkspace)))
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(CloudPlatform.GCP)
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
@@ -416,6 +420,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       .thenReturn(Future(Some(sourceWorkspace)))
     val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(CloudPlatform.AZURE)
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
@@ -485,6 +490,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
       .thenReturn(Future(Some(sourceWorkspace)))
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
@@ -1051,6 +1057,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
     val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceRequest.namespace),
       CreationStatuses.Ready,
       None,
@@ -1127,6 +1134,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map(), authorizationDomain = authDomain)
     val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceRequest.namespace),
       CreationStatuses.Ready,
       None,

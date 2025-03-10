@@ -198,10 +198,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   def billingProjectFromName(name: String) =
-    RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Ready, None, None)
+    RawlsBillingProject(UUID.randomUUID(), RawlsBillingProjectName(name), CreationStatuses.Ready, None, None)
 
   def billingProjectFromName(name: String, billingProfileId: UUID) =
-    RawlsBillingProject(RawlsBillingProjectName(name),
+    RawlsBillingProject(UUID.randomUUID(),
+                        RawlsBillingProjectName(name),
                         CreationStatuses.Ready,
                         None,
                         None,
@@ -465,20 +466,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val billingAccountName = RawlsBillingAccountName("fakeBillingAcct")
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace),
+    val billingProject = RawlsBillingProject(UUID.randomUUID(),
+                                             RawlsBillingProjectName(wsName.namespace),
                                              CreationStatuses.Ready,
                                              Option(billingAccountName),
                                              None
     )
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
+    val testProject1 =
+      RawlsBillingProject(UUID.randomUUID(), testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
+    val testProject2 =
+      RawlsBillingProject(UUID.randomUUID(), testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
+    val testProject3 =
+      RawlsBillingProject(UUID.randomUUID(), testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val azureBillingProfile = new ProfileModel()
       .id(UUID.randomUUID())
@@ -490,6 +495,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
     val azureBillingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       azureBillingProjectName,
       CreationStatuses.Ready,
       Option(billingAccountName),
@@ -506,6 +512,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       .managedResourceGroupId("fake-mrg")
       .createdDate("2023-09-11T22:20:48.949Z")
     val oldAzureBillingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName("old-azure-billing-project"),
       CreationStatuses.Ready,
       Option(billingAccountName),
@@ -2034,6 +2041,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   class MinimalTestData() extends TestData {
     val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       RawlsBillingProjectName("myNamespace"),
       CreationStatuses.Ready,
       Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
@@ -2085,10 +2093,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   class ProtectedWorkspaceTestData() extends TestData {
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"),
-                                             CreationStatuses.Ready,
-                                             Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
-                                             None
+    val billingProject = RawlsBillingProject(
+      UUID.randomUUID(),
+      RawlsBillingProjectName("myNamespace"),
+      CreationStatuses.Ready,
+      Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
+      None
     )
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val protectedWsName = WorkspaceName(billingProject.projectName.value, "myProtectedWorkspace")
@@ -2212,7 +2222,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val billingProject =
-      RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, None, None)
+      RawlsBillingProject(UUID.randomUUID(),
+                          RawlsBillingProjectName(wsName.namespace),
+                          CreationStatuses.Ready,
+                          None,
+                          None
+      )
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),

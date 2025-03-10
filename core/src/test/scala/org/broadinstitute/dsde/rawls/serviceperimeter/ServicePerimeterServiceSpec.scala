@@ -231,9 +231,15 @@ class ServicePerimeterServiceSpec
       val service = new ServicePerimeterServiceImpl(dataSource, gcsDAO, defaultConfig)
 
       val billingProject1 =
-        testData.testProject1.copy(RawlsBillingProjectName("bp1"), servicePerimeter = servicePerimeterName.some)
+        testData.testProject1.copy(UUID.randomUUID(),
+                                   RawlsBillingProjectName("bp1"),
+                                   servicePerimeter = servicePerimeterName.some
+        )
       val billingProject2 =
-        testData.testProject1.copy(RawlsBillingProjectName("bp2"), servicePerimeter = servicePerimeterName.some)
+        testData.testProject1.copy(UUID.randomUUID(),
+                                   RawlsBillingProjectName("bp2"),
+                                   servicePerimeter = servicePerimeterName.some
+        )
 
       runAndWait {
         for {

@@ -63,6 +63,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
       Future.successful(
         Option(
           RawlsBillingProject(
+            UUID.randomUUID(),
             RawlsBillingProjectName(defaultWorkspaceName.namespace),
             CreationStatuses.Ready,
             None,
@@ -124,6 +125,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
       Future.successful(
         Option(
           RawlsBillingProject(
+            UUID.randomUUID(),
             RawlsBillingProjectName(defaultWorkspaceName.namespace),
             CreationStatuses.Ready,
             None,

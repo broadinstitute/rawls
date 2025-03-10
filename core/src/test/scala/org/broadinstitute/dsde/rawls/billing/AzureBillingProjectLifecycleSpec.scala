@@ -564,7 +564,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(createRequest.projectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              createRequest.projectName,
                               CreationStatuses.Ready,
                               None,
                               None,
@@ -623,7 +624,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(createRequest.projectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              createRequest.projectName,
                               CreationStatuses.Ready,
                               None,
                               None,
@@ -677,7 +679,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(createRequest.projectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              createRequest.projectName,
                               CreationStatuses.Ready,
                               None,
                               None,
@@ -740,7 +743,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(createRequest.projectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              createRequest.projectName,
                               CreationStatuses.Ready,
                               None,
                               None,
@@ -810,7 +814,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(createRequest.projectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              createRequest.projectName,
                               CreationStatuses.Ready,
                               None,
                               None,
@@ -901,7 +906,8 @@ class AzureBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.getBillingProjectsWithProfile(Some(billingProfileId))).thenReturn(
       Future.successful(
         Seq(
-          RawlsBillingProject(billingProjectName,
+          RawlsBillingProject(UUID.randomUUID(),
+                              billingProjectName,
                               CreationStatuses.Ready,
                               None,
                               None,

@@ -159,12 +159,14 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         None
       )
       _ <- billingRepository.createBillingProject(
-        RawlsBillingProject(createProjectRequest.projectName,
-                            CreationStatuses.Creating,
-                            createProjectRequest.billingAccount,
-                            None,
-                            None,
-                            createProjectRequest.servicePerimeter
+        RawlsBillingProject(
+          UUID.randomUUID(), // New ID[UUID] not PK of the billing project
+          createProjectRequest.projectName,
+          CreationStatuses.Creating,
+          createProjectRequest.billingAccount,
+          None,
+          None,
+          createProjectRequest.servicePerimeter
         )
       )
     } yield notificationDAO.fireAndForgetNotifications(invites)

@@ -59,7 +59,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   val billingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("fakeBillingAcct")
 
-  val billingProject: RawlsBillingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace),
+  val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                RawlsBillingProjectName(wsName.namespace),
                                                                 CreationStatuses.Ready,
                                                                 Option(billingAccountName),
                                                                 None
@@ -847,7 +848,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         Duration.Inf
       )
     }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
   }
 
   "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
@@ -865,6 +866,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
     val azureBillingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       Option(billingAccountName),
@@ -1047,6 +1049,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
     val azureBillingProject = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName,
       CreationStatuses.Ready,
       Option(billingAccountName),
@@ -1209,10 +1212,21 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                                 RawlsBillingAccountName("billingAccount1"),
                                 Some("billing1_bq_project.billing1_dataset.billing1_table")
       )
+    val billingProjectSpendExport2 =
+      BillingProjectSpendExport(RawlsBillingProjectName("billingProject2"),
+                                RawlsBillingAccountName("billingAccount2"),
+                                Some("billing1_bq_project.billing1_dataset.billing2_table")
+      )
 
-    val workspaces = Seq(
-      GoogleProjectId("workspace2ProjectId"),
-      GoogleProjectId("workspace1ProjectId")
+    val workspaces = Map(
+      RawlsBillingAccountName("billingAccount1") -> Seq(
+        GoogleProjectId("workspace2ProjectId"),
+        GoogleProjectId("workspace1ProjectId")
+      ),
+      RawlsBillingAccountName("billingAccount2") -> Seq(
+        GoogleProjectId("workspace3ProjectId"),
+        GoogleProjectId("workspace4ProjectId")
+      )
     )
 
     val expectedQuery =
@@ -1230,8 +1244,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  FROM
           |    billing1_bq_project.billing1_dataset.billing1_table
           |  where
-          |    project.id in ("workspace2ProjectId", "workspace1ProjectId") AND
           |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |    and ( (billing_account_id = 'billingAccount1' and project.id in ('workspace2ProjectId', 'workspace1ProjectId'))
+          |    or (billing_account_id = 'billingAccount2' and project.id in ('workspace3ProjectId', 'workspace4ProjectId')) )
           |  GROUP BY
           |    project_id,
           |    spend_category,
@@ -1393,12 +1408,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
 
     result shouldBe Map(
-      "billing_bq_project.billing_dataset.billing_table" -> Seq(
-        (workspace1Billing1.googleProjectId, workspace1Billing1.toWorkspaceName),
-        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName),
-        (workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)
-      ),
-      "fakeTable" -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
+      billingProject1SpendExport -> Seq(workspace1Billing1, workspace2Billing1),
+      billingProject2SpendExport -> Seq(workspace1Billing2),
+      billingProject3SpendExport -> Seq(workspace1Billing3)
     )
 
   }
@@ -1437,16 +1449,17 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     )
 
-    val exceptionFuture = recoverToExceptionIf[RawlsExceptionWithErrorReport] {
-      service.getSpendForAllWorkspaces(from, to, 100, 0)
-    }
-    exceptionFuture.map { e =>
-      e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
-      e.errorReport.message.contains("no workspaces") shouldBe true
-    }
+    val exception = Await.result(recoverToExceptionIf[RawlsExceptionWithErrorReport] {
+                                   service.getSpendForAllWorkspaces(from, to, 100, 0)
+                                 },
+                                 Duration.Inf
+    )
+
+    exception.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+    exception.errorReport.message.contains("No workspaces eligible for spend report") shouldBe true
   }
 
-  "getSpendForAllWorkspaces" should "get the spend report from multiple billing projects" in {
+  it should "get the spend report from multiple billing projects" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
@@ -1456,6 +1469,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName1 = RawlsBillingProjectName("billingProject1")
     val billingAccount1 = RawlsBillingAccountName("billingAcct1")
     val billingProject1 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName1,
       CreationStatuses.Ready,
       Option(billingAccount1),
@@ -1466,6 +1480,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName2 = RawlsBillingProjectName("billingProject2")
     val billingAccount2 = RawlsBillingAccountName("billingAcct2")
     val billingProject2 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName2,
       CreationStatuses.Ready,
       Option(billingAccount2),
@@ -1619,7 +1634,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verify(mockWorkspaceSpendReportRepository, times(2)).insertSpendReportResults(any())
   }
 
-  "getSpendForAllWorkspaces" should "handle errors from bigquery gracefully" in {
+  it should "handle errors from bigquery gracefully" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
@@ -1629,6 +1644,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName1 = RawlsBillingProjectName("billingProject1")
     val billingAccount1 = RawlsBillingAccountName("billingAcct1")
     val billingProject1 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName1,
       CreationStatuses.Ready,
       Option(billingAccount1),
@@ -1639,6 +1655,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val projectName2 = RawlsBillingProjectName("billingProject2")
     val billingAccount2 = RawlsBillingAccountName("billingAcct2")
     val billingProject2 = RawlsBillingProject(
+      UUID.randomUUID(),
       projectName2,
       CreationStatuses.Ready,
       Option(billingAccount2),
@@ -2016,22 +2033,25 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
       mock[BillingRepository],
       mock[BillingProfileManagerDAO],
-      mock[SamDAO],
+      mockSamDAO,
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
       mockWorkspaceSpendReportRepositoryConstructor
     )
 
-    recoverToExceptionIf[RawlsExceptionWithErrorReport] {
-      spendReportingService.getSpendForGCPBillingProject(RawlsBillingProjectName("test-project"),
-                                                         DateTime.now().minusDays(7),
-                                                         DateTime.now(),
-                                                         Set.empty[SpendReportingAggregationKeyWithSub]
-      )
-    } map { ex =>
-      ex.errorReport.statusCode shouldBe StatusCodes.NotFound
-      ex.errorReport.message should include("no spend data found for billing project")
-    }
+    val exception = Await.result(
+      recoverToExceptionIf[RawlsExceptionWithErrorReport] {
+        spendReportingService.getSpendForGCPBillingProject(RawlsBillingProjectName("test-project"),
+                                                           DateTime.now().minusDays(7),
+                                                           DateTime.now(),
+                                                           Set.empty[SpendReportingAggregationKeyWithSub]
+        )
+      },
+      Duration.Inf
+    )
+
+    exception.errorReport.statusCode should contain(StatusCodes.NotFound)
+    exception.errorReport.message should include("no spend data found for billing project")
   }
 
   it should "return a map of workspaces grouped by billing project" in {

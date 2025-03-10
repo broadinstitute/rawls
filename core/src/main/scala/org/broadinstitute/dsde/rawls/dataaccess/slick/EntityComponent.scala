@@ -1404,17 +1404,8 @@ trait EntityComponent {
     }
 
     // Utility methods
-
     private def validateEntity(entity: Entity): Unit = {
-      if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
-        throw new RawlsFatalExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            message = s"Entity type ${Attributable.workspaceEntityType} is reserved and cannot be overwritten",
-            statusCode = StatusCodes.BadRequest
-          )
-        )
-      }
-      validateUserDefinedString(entity.entityType)
+      validateEntityType(entity.entityType)
       validateEntityName(entity.name)
       entity.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)

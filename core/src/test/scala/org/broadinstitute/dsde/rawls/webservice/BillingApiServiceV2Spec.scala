@@ -41,7 +41,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
 
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
-      new GoogleBillingProjectLifecycle(billingRepository, mock[BillingProfileManagerDAO], samDAO, gcsDAO)
+      new GoogleBillingProjectLifecycle(billingRepository, mock[BillingProfileManagerDAO], samDAO, gcsDAO)(
+        executionContext
+      )
     )
     when(
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -855,6 +857,109 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     ).thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2()) ~>
+      check {
+        assertResult(StatusCodes.NotFound, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "GET /billing/v2/id/{projectUuid}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("project")
+      when(
+        services.samDAO.listUserRolesForResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(
+        Future.successful(
+          Set(
+            SamBillingProjectRoles.workspaceCreator,
+            SamBillingProjectRoles.owner
+          )
+        )
+      )
+
+      Get(s"/billing/v2/id/${project.id}") ~>
+        sealRoute(services.billingRoutesV2()) ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+          responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
+            Set(ProjectRoles.Owner, ProjectRoles.User),
+            project,
+            CloudPlatform.GCP
+          )
+
+        }
+  }
+
+  it should "return 200 with user role" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(
+      services.samDAO.listUserRolesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    ).thenReturn(
+      Future.successful(
+        Set(
+          SamBillingProjectRoles.workspaceCreator
+        )
+      )
+    )
+
+    Get(s"/billing/v2/id/${project.id}") ~>
+      sealRoute(services.billingRoutesV2()) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
+          Set(ProjectRoles.User),
+          project,
+          CloudPlatform.GCP
+        )
+
+      }
+  }
+
+  it should "return 404 if project does not exist" in withEmptyDatabaseAndApiServices { services =>
+    val projectId = UUID.randomUUID()
+    val projectName = "does_not_exist"
+    when(
+      services.samDAO.listUserRolesForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                               ArgumentMatchers.eq(projectName),
+                                               ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    )
+      .thenReturn(Future.successful(Set.empty[SamResourceRole]))
+
+    Get(s"/billing/v2/id/$projectId") ~>
+      sealRoute(services.billingRoutesV2()) ~>
+      check {
+        assertResult(StatusCodes.NotFound, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 if user has no access" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(
+      services.samDAO.listUserRolesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    ).thenReturn(Future.successful(Set.empty[SamResourceRole]))
+
+    Get(s"/billing/v2/id/${project.id}") ~>
       sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {

@@ -8,5 +8,8 @@ Added:
 - Support 2.13
 - ExecutionModel classes moved from core to model
 - getBucketUsageV2 API
+- Added `ID` to `BILLING_PROJECT` table
+- Added `id` field to `RawlsBillingProjectResponse` response
+- Added `getBillingProjectById` API
 
-SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.287-SNAP"`
+SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.314-SNAP"`

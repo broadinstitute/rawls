@@ -972,7 +972,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
     val billingProject =
-      RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, None, None)
+      RawlsBillingProject(UUID.randomUUID(),
+                          RawlsBillingProjectName(wsName.namespace),
+                          CreationStatuses.Ready,
+                          None,
+                          None
+      )
 
     val workspace = Workspace(wsName.namespace,
                               wsName.name,
