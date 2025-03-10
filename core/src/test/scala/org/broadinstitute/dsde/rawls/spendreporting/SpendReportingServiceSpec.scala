@@ -1196,9 +1196,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                                 Some("billing1_bq_project.billing1_dataset.billing1_table")
       )
 
-    val workspaces = Seq(
-      GoogleProjectId("workspace2ProjectId"),
-      GoogleProjectId("workspace1ProjectId")
+    val workspaces = Map(
+      RawlsBillingAccountName("billingAccount1") -> Seq(
+        GoogleProjectId("workspace2ProjectId"),
+        GoogleProjectId("workspace1ProjectId")
+      )
     )
 
     val expectedQuery =
@@ -1216,8 +1218,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  FROM
           |    billing1_bq_project.billing1_dataset.billing1_table
           |  where
-          |    project.id in ("workspace2ProjectId", "workspace1ProjectId") AND
           |    _PARTITIONTIME BETWEEN @startDate AND @endDate
+          |    and (billing_account_id = 'billingAccount1' and project.id in ('workspace2ProjectId', 'workspace1ProjectId'))
           |  GROUP BY
           |    project_id,
           |    spend_category,
@@ -1377,12 +1379,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
 
     result shouldBe Map(
-      "billing_bq_project.billing_dataset.billing_table" -> Seq(
-        (workspace1Billing1.googleProjectId, workspace1Billing1.toWorkspaceName),
-        (workspace2Billing1.googleProjectId, workspace2Billing1.toWorkspaceName),
-        (workspace1Billing2.googleProjectId, workspace1Billing2.toWorkspaceName)
-      ),
-      "fakeTable" -> Seq((workspace1Billing3.googleProjectId, workspace1Billing3.toWorkspaceName))
+      billingProject1SpendExport -> Seq(workspace1Billing1, workspace2Billing1),
+      billingProject2SpendExport -> Seq(workspace1Billing2),
+      billingProject3SpendExport -> Seq(workspace1Billing3)
     )
 
   }
