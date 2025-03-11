@@ -1927,8 +1927,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       Option.empty
     )
 
-    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(any(), any(), any()))
-      .thenReturn(Future.successful(Seq(spendReport1, spendReport2)))
+    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(Set(projectId1), startDate, endDate))
+      .thenReturn(Future.successful(Seq(spendReport1)))
+
+    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(Set(projectId2), startDate, endDate))
+      .thenReturn(Future.successful(Seq(spendReport2)))
 
     val service = spy(
       new SpendReportingService(

@@ -624,9 +624,13 @@ class SpendReportingService(
           val spendResults = cachedResults.flatMap { cachedResult =>
             if (cachedResult.size == projectIds.size) {
               val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
-              Future.successful(
-                Some(WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable, workspaceNamesByProjectId))
-              )
+              if (hasDataAvailable.nonEmpty) {
+                Future.successful(
+                  Some(WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable, workspaceNamesByProjectId))
+                )
+              } else {
+                Future.successful(None)
+              }
             } else {
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
               val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
