@@ -203,79 +203,29 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
     )
 
-  // TODO CORE-360: move to EntityProviders
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.write,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
-            case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
-            case Some(_) =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
-              )
-          }
-        }
-      }
-    }).recover(
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.write,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.renameEntity(entityType, entityName, newName)
+    } yield result).recover(
       sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
     )
 
-  // TODO CORE-360: move to EntityProviders
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
-    import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
-
     validateEntityType(renameInfo.newName)
-    def validateExistingType(dataAccess: DataAccess,
-                             workspaceContext: Workspace,
-                             oldName: String
-    ): ReadAction[Boolean] =
-      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
-        case Some(true) => true
-        case Some(false) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type ${oldName}")
-          )
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unexpected error; could not determine existence of entity type ${oldName}"
-            )
-          )
-      }
-
-    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] =
-      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
-        case Some(true) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type")
-          )
-        case Some(false) => false
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unexpected error; could not determine existence of entity type ${newName}"
-            )
-          )
-      }
-
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.write,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        for {
-          _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
-          _ <- validateExistingType(dataAccess, workspaceContext, oldName)
-          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
-        } yield renameResult
-      }
-    }).recover(
-      sqlLoggingRecover(s"renameEntityType: $workspaceName $oldName")
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.write,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.renameEntityType(oldName, renameInfo)
+    } yield result).recover(
+      sqlLoggingRecover(s"renameEntityType: $workspaceName $workspaceName $oldName")
     )
   }
 

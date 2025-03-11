@@ -612,9 +612,62 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
-  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] = ???
+  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] =
+    dataSource.inTransaction { dataAccess =>
+      withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+        dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
+          case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
+          case Some(_) =>
+            throw new RawlsExceptionWithErrorReport(
+              errorReport =
+                ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
+            )
+        }
+      }
+    }
 
-  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] = ???
+  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] = {
+    def validateExistingType(dataAccess: DataAccess,
+                             workspaceContext: Workspace,
+                             oldName: String
+    ): ReadAction[Boolean] =
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
+        case Some(true) => true
+        case Some(false) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type ${oldName}")
+          )
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                      s"Unexpected error; could not determine existence of entity type ${oldName}"
+            )
+          )
+      }
+
+    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] =
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
+        case Some(true) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type")
+          )
+        case Some(false) => false
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                      s"Unexpected error; could not determine existence of entity type ${newName}"
+            )
+          )
+      }
+
+    dataSource.inTransaction { dataAccess =>
+      for {
+        _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
+        _ <- validateExistingType(dataAccess, workspaceContext, oldName)
+        renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
+      } yield renameResult
+    }
+  }
 
   override def updateEntity(entityType: EntityName,
                             entityName: EntityName,
