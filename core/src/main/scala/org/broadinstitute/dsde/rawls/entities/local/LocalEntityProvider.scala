@@ -5,7 +5,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
@@ -40,7 +39,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeUpdateOperations,
   AttributeValue,
   Entity,
-  EntityCopyDefinition,
   EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
@@ -49,12 +47,9 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityTypeRename,
   ErrorReport,
   RawlsRequestContext,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
   SubmissionValidationEntityInputs,
   SubmissionValidationValue,
-  Workspace,
-  WorkspaceAttributeSpecs
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
@@ -522,8 +517,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
-                              upsert: Boolean
+  private def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
+                                      upsert: Boolean
   ): Future[Traversable[Entity]] = {
     val namesToCheck = for {
       update <- entityUpdates

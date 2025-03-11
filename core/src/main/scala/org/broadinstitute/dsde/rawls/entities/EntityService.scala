@@ -6,32 +6,22 @@ import akka.stream.scaladsl.Source
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityAndAttributesResult, ReadAction}
-import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException
 }
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  EntitySupport,
-  JsonFilterUtils,
-  WorkspaceSupport
-}
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource,
@@ -58,7 +48,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with JsonFilterUtils
     with StringValidationUtils {
 
-  import dataSource.dataAccess.driver.api._
   implicit override val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
@@ -97,7 +86,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover { case _: EntityNotFoundException =>
           // could move this error message into EntityNotFoundException and allow it to bubble up
           throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
+            ErrorReport(StatusCodes.NotFound, s"$entityType $entityName does not exist in $workspaceName")
           )
         }
         .recover(sqlLoggingRecover(s"getEntity: $workspaceName $entityType/$entityName"))
@@ -153,7 +142,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                            entityType: String,
                            dataReference: Option[DataReferenceName],
                            billingProject: Option[GoogleProjectId]
-  ) =
+  ): Future[Int] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
