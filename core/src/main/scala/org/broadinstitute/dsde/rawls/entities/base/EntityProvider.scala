@@ -3,12 +3,11 @@ package org.broadinstitute.dsde.rawls.entities.base
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeValue,
   Entity,
-  EntityCopyDefinition,
   EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
@@ -92,4 +91,5 @@ trait EntityProvider {
                           parentContext: RawlsRequestContext
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
 
+  def updateEntity(entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[Entity]
 }

@@ -104,40 +104,20 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
-  // TODO CORE-360: move to EntityProviders
   def updateEntity(workspaceName: WorkspaceName,
                    entityType: String,
                    entityName: String,
                    operations: Seq[AttributeUpdateOperation]
   ): Future[Entity] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
-      getV2WorkspaceContextAndPermissions(workspaceName,
-                                          SamWorkspaceActions.write,
-                                          Some(WorkspaceAttributeSpecs(all = false))
-      ) flatMap { workspaceContext =>
-        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-          withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-            val updateAction = Try {
-              val updatedEntity = applyOperationsToEntity(entity, operations)
-              dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-            } match {
-              case Success(result) => result
-              case Failure(e: AttributeUpdateOperationException) =>
-                DBIO.failed(
-                  new RawlsExceptionWithErrorReport(
-                    errorReport =
-                      ErrorReport(StatusCodes.BadRequest,
-                                  s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}",
-                                  ErrorReport(e)
-                      )
-                  )
-                )
-              case Failure(regrets) => DBIO.failed(regrets)
-            }
-            updateAction
-          }
-        }
-      }
+      for {
+        workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                                SamWorkspaceActions.write,
+                                                                Some(WorkspaceAttributeSpecs(all = false))
+        )
+        entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+        result <- entityProvider.updateEntity(entityType, entityName, operations)
+      } yield result
     }.recover(sqlLoggingRecover(s"updateEntity: $workspaceName $entityType/$entityName ${operations.size} operations"))
 
   def deleteEntities(workspaceName: WorkspaceName,
