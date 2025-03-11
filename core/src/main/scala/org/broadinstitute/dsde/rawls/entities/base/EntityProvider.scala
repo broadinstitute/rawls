@@ -51,6 +51,8 @@ trait EntityProvider {
 
   def deleteEntitiesOfType(entityType: String): Future[Int]
 
+  def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit]
+
   def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
 
   /**

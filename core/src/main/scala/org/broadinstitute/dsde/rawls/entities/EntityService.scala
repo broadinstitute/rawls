@@ -179,29 +179,21 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
-  // TODO CORE-360: move to EntityProviders
   def deleteEntityAttributes(workspaceName: WorkspaceName,
                              entityType: String,
                              attributeNames: Set[AttributeName]
   ): Future[Unit] =
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.write,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess
-          .entityAttributeShardQuery(workspaceContext)
-          .deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
-          case Vector(0) =>
-            throw new RawlsExceptionWithErrorReport(
-              errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names.")
-            )
-          case _ => DBIO.successful(())
-        }
-      }
-    }).recover(
-      sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
-    )
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.write,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.deleteEntityAttributes(entityType, attributeNames)
+    } yield result)
+      .recover(
+        sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
+      )
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
     (for {

@@ -112,6 +112,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   override def deleteEntitiesOfType(entityType: String): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities of type not supported by this provider.")
 
+  override def deleteEntityAttributes(entityType: EntityName, attributeNames: Set[AttributeName]): Future[Unit] =
+    throw new UnsupportedEntityOperationException("delete entity attributes not supported by this provider.")
+
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)

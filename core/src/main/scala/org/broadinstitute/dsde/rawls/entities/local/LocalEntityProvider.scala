@@ -234,6 +234,19 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
+  override def deleteEntityAttributes(entityType: EntityName, attributeNames: Set[AttributeName]): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess
+        .entityAttributeShardQuery(workspaceContext)
+        .deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+        case Vector(0) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names.")
+          )
+        case _ => DBIO.successful(())
+      }
+    }
+
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
