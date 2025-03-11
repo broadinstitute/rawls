@@ -110,33 +110,14 @@ class EntityService(protected val ctx: RawlsRequestContext,
                    operations: Seq[AttributeUpdateOperation]
   ): Future[Entity] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
-      getV2WorkspaceContextAndPermissions(workspaceName,
-                                          SamWorkspaceActions.write,
-                                          Some(WorkspaceAttributeSpecs(all = false))
-      ) flatMap { workspaceContext =>
-        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-          withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-            val updateAction = Try {
-              val updatedEntity = applyOperationsToEntity(entity, operations)
-              dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-            } match {
-              case Success(result) => result
-              case Failure(e: AttributeUpdateOperationException) =>
-                DBIO.failed(
-                  new RawlsExceptionWithErrorReport(
-                    errorReport =
-                      ErrorReport(StatusCodes.BadRequest,
-                                  s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}",
-                                  ErrorReport(e)
-                      )
-                  )
-                )
-              case Failure(regrets) => DBIO.failed(regrets)
-            }
-            updateAction
-          }
-        }
-      }
+      for {
+        workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                                SamWorkspaceActions.write,
+                                                                Some(WorkspaceAttributeSpecs(all = false))
+        )
+        entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+        result <- entityProvider.updateEntity(entityType, entityName, operations)
+      } yield result
     }.recover(sqlLoggingRecover(s"updateEntity: $workspaceName $entityType/$entityName ${operations.size} operations"))
 
   def deleteEntities(workspaceName: WorkspaceName,
@@ -198,6 +179,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO CORE-360: move to EntityProviders
   def deleteEntityAttributes(workspaceName: WorkspaceName,
                              entityType: String,
                              attributeNames: Set[AttributeName]
@@ -221,6 +203,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
     )
 
+  // TODO CORE-360: move to EntityProviders
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
     (getV2WorkspaceContextAndPermissions(workspaceName,
                                          SamWorkspaceActions.write,
@@ -242,6 +225,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
     )
 
+  // TODO CORE-360: move to EntityProviders
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
@@ -295,6 +279,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     )
   }
 
+  // TODO CORE-360: move to EntityProviders
   def evaluateExpression(workspaceName: WorkspaceName,
                          entityType: String,
                          entityName: String,
@@ -384,6 +369,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     Source.fromPublisher(dataSource.database.stream(allAttrsStream))
   }
 
+  // TODO CORE-360: move to EntityProviders
   def listEntities(workspaceName: WorkspaceName, entityType: String) =
     (getWorkspaceContextAndPermissions(workspaceName,
                                        SamWorkspaceActions.read,
@@ -493,6 +479,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
       )
 
+  // TODO CORE-360: move to EntityProviders
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       oldAttributeName: AttributeName,

@@ -35,6 +35,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeNull,
   AttributeNumber,
   AttributeString,
+  AttributeUpdateOperations,
   AttributeValue,
   AttributeValueList,
   AttributeValueRawJson,
@@ -547,4 +548,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] =
     throw new UnsupportedEntityOperationException("copy entities not supported by this provider.")
+
+  override def updateEntity(entityType: EntityName,
+                            entityName: EntityName,
+                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation]
+  ): Future[Entity] = throw new UnsupportedEntityOperationException("update entity not supported by this provider.")
 }

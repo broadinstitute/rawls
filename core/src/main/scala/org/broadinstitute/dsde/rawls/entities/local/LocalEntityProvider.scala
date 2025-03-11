@@ -35,6 +35,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
   AttributeName,
+  AttributeUpdateOperations,
   AttributeValue,
   Entity,
   EntityCopyDefinition,
@@ -53,7 +54,12 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceAttributeSpecs
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  CollectionUtils,
+  EntitySupport
+}
 import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 
 import java.time.Duration
@@ -550,4 +556,32 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         )
       }
     )
+
+  override def updateEntity(entityType: EntityName,
+                            entityName: EntityName,
+                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation]
+  ): Future[Entity] =
+    dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
+      withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+        val updateAction = Try {
+          val updatedEntity = applyOperationsToEntity(entity, operations)
+          dataAccess.entityQuery.save(workspaceContext, updatedEntity)
+        } match {
+          case Success(result) => result
+          case Failure(e: AttributeUpdateOperationException) =>
+            DBIO.failed(
+              new RawlsExceptionWithErrorReport(
+                errorReport = ErrorReport(
+                  StatusCodes.BadRequest,
+                  s"Unable to update entity ${entityType}/${entityName} in ${workspaceContext.toWorkspaceName}",
+                  ErrorReport(e)
+                )
+              )
+            )
+          case Failure(regrets) => DBIO.failed(regrets)
+        }
+        updateAction
+      }
+    }
+
 }
