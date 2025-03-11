@@ -32,8 +32,10 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdat
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeEntityReference,
+  AttributeName,
   AttributeNull,
   AttributeNumber,
+  AttributeRename,
   AttributeString,
   AttributeUpdateOperations,
   AttributeValue,
@@ -46,6 +48,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   ErrorReport,
   GoogleProjectId,
   RawlsRequestContext,
@@ -549,8 +552,21 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   ): Future[EntityCopyResponse] =
     throw new UnsupportedEntityOperationException("copy entities not supported by this provider.")
 
+  override def renameAttribute(entityType: EntityName,
+                               oldAttributeName: AttributeName,
+                               attributeRenameRequest: AttributeRename
+  ): Future[Int] =
+    throw new UnsupportedEntityOperationException("rename attribute not supported by this provider.")
+
+  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] =
+    throw new UnsupportedEntityOperationException("rename entity not supported by this provider.")
+
+  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] =
+    throw new UnsupportedEntityOperationException("rename entity type not supported by this provider.")
+
   override def updateEntity(entityType: EntityName,
                             entityName: EntityName,
                             operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation]
   ): Future[Entity] = throw new UnsupportedEntityOperationException("update entity not supported by this provider.")
+
 }

@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
   EntityAndAttributesResult,
   EntityRecord,
+  ReadAction,
   ReadWriteAction
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
@@ -35,6 +36,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
   AttributeName,
+  AttributeRename,
   AttributeUpdateOperations,
   AttributeValue,
   Entity,
@@ -44,6 +46,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   ErrorReport,
   RawlsRequestContext,
   SamResourceTypeNames,
@@ -556,6 +559,62 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         )
       }
     )
+
+  override def renameAttribute(entityType: EntityName,
+                               oldAttributeName: AttributeName,
+                               attributeRenameRequest: AttributeRename
+  ): Future[Int] = {
+    def validateNewAttributeName(dataAccess: DataAccess,
+                                 workspaceContext: Workspace,
+                                 entityType: String,
+                                 attributeName: AttributeName
+    ): ReadAction[Boolean] =
+      dataAccess
+        .entityAttributeShardQuery(workspaceContext)
+        .doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
+        case Some(false) => false
+        case Some(true) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport =
+              ErrorReport(StatusCodes.Conflict,
+                          s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"
+              )
+          )
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.InternalServerError,
+              s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"
+            )
+          )
+      }
+
+    def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean =
+      rowsUpdated match {
+        case 0 =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound,
+                                      s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"
+            )
+          )
+        case _ => true
+      }
+
+    dataSource.inTransaction { dataAccess =>
+      val newAttributeName = attributeRenameRequest.newAttributeName
+      for {
+        _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
+        rowsUpdated <- dataAccess
+          .entityAttributeShardQuery(workspaceContext)
+          .renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+        _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
+      } yield rowsUpdated
+    }
+  }
+
+  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] = ???
+
+  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] = ???
 
   override def updateEntity(entityType: EntityName,
                             entityName: EntityName,

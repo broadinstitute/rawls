@@ -6,6 +6,8 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
+  AttributeName,
+  AttributeRename,
   AttributeValue,
   Entity,
   EntityCopyResponse,
@@ -13,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
   Workspace
@@ -90,6 +93,15 @@ trait EntityProvider {
                           query: EntityQuery,
                           parentContext: RawlsRequestContext
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
+
+  def renameAttribute(entityType: String,
+                      oldAttributeName: AttributeName,
+                      attributeRenameRequest: AttributeRename
+  ): Future[Int]
+
+  def renameEntity(entityType: String, entityName: String, newName: String): Future[Int]
+
+  def renameEntityType(oldName: String, renameInfo: EntityTypeRename): Future[Int]
 
   def updateEntity(entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[Entity]
 }
