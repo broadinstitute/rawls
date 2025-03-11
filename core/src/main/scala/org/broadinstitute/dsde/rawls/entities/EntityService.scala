@@ -291,35 +291,15 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"entityTypeMetadata: $workspaceName")
     )
 
-  /*
-   * Queries the db for a stream of entity attributes.
-   */
-  private def listEntitiesDbSource(workspaceContext: Workspace,
-                                   entityType: String
-  ): Source[EntityAndAttributesResult, NotUsed] = {
-    // note: ReadCommitted transaction isolation level; forward-only/read-only stream.
-    val allAttrsStream = dataSource.dataAccess.entityQuery
-      .streamActiveEntityAttributesOfType(workspaceContext, entityType)
-      .transactionally
-      .withTransactionIsolation(TransactionIsolation.ReadCommitted)
-      .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                               rsConcurrency = ResultSetConcurrency.ReadOnly,
-                               fetchSize = dataSource.dataAccess.fetchSize
+  def listEntities(workspaceName: WorkspaceName, entityType: String): Future[Source[Entity, NotUsed]] =
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.read,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
       )
-
-    // translate the Slick stream to a Source
-    Source.fromPublisher(dataSource.database.stream(allAttrsStream))
-  }
-
-  // TODO CORE-360: move to EntityProviders
-  def listEntities(workspaceName: WorkspaceName, entityType: String) =
-    (getWorkspaceContextAndPermissions(workspaceName,
-                                       SamWorkspaceActions.read,
-                                       Some(WorkspaceAttributeSpecs(all = false))
-    ) map { workspaceContext =>
-      val dbSource = listEntitiesDbSource(workspaceContext, entityType)
-      EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-    }).recover(
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result = entityProvider.listEntities(entityType)
+    } yield result).recover(
       sqlLoggingRecover(s"listEntities: $workspaceName $entityType")
     )
 

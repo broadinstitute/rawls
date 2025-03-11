@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import akka.NotUsed
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
@@ -144,6 +145,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       queryResultsToEntity(queryResults, entityType, pk)
     resultIO.unsafeToFuture()
   }
+
+  override def listEntities(entityType: EntityName): Source[Entity, NotUsed] =
+    throw new UnsupportedEntityOperationException("list all entities not supported by this provider.")
 
   override def queryEntitiesSource(entityType: EntityName,
                                    query: EntityQuery,

@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import akka.NotUsed
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
@@ -85,6 +86,8 @@ trait EntityProvider {
   def expressionValidator: ExpressionValidator
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
+
+  def listEntities(entityType: String): Source[Entity, NotUsed]
 
   def queryEntities(entityType: String,
                     query: EntityQuery,

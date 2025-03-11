@@ -317,6 +317,31 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                              TransactionIsolation.ReadCommitted
     )
 
+  /*
+   * Queries the db for a stream of entity attributes.
+   */
+  private def listEntitiesDbSource(workspaceContext: Workspace,
+                                   entityType: String
+  ): Source[EntityAndAttributesResult, NotUsed] = {
+    // note: ReadCommitted transaction isolation level; forward-only/read-only stream.
+    val allAttrsStream = dataSource.dataAccess.entityQuery
+      .streamActiveEntityAttributesOfType(workspaceContext, entityType)
+      .transactionally
+      .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+      .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                               rsConcurrency = ResultSetConcurrency.ReadOnly,
+                               fetchSize = dataSource.dataAccess.fetchSize
+      )
+
+    // translate the Slick stream to a Source
+    Source.fromPublisher(dataSource.database.stream(allAttrsStream))
+  }
+
+  override def listEntities(entityType: EntityName): Source[Entity, NotUsed] = {
+    val dbSource = listEntitiesDbSource(workspaceContext, entityType)
+    EntityStreamingUtils.gatherEntities(dataSource, dbSource)
+  }
+
   /**
     * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
     * This method returns fully materialized metadata (row counts, page size, etc) as EntityQueryResultMetadata, and
