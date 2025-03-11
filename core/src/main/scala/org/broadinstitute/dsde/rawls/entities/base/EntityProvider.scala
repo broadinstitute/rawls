@@ -29,7 +29,7 @@ trait EntityProvider {
   // entityStoreId is used by subclasses to identify themselves
   def entityStoreId: Option[String]
 
-  // -----
+  // ----- implementation methods follow:
 
   def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
 
