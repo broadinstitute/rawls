@@ -26,15 +26,30 @@ import scala.util.Try
  * trait definition for entity providers.
  */
 trait EntityProvider {
+  // entityStoreId is used by subclasses to identify themselves
   def entityStoreId: Option[String]
 
-  def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
+  // -----
+
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+
+  def copyEntities(sourceWorkspaceContext: Workspace,
+                   destWorkspaceContext: Workspace,
+                   entityType: String,
+                   entityNames: Seq[String],
+                   linkExistingEntities: Boolean,
+                   parentContext: RawlsRequestContext
+  ): Future[EntityCopyResponse]
 
   def createEntity(entity: Entity): Future[Entity]
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
   def deleteEntitiesOfType(entityType: String): Future[Int]
+
+  def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
 
   /**
   The overall approach is:
@@ -67,25 +82,14 @@ trait EntityProvider {
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
 
-  def queryEntitiesSource(entityType: String,
-                          query: EntityQuery,
-                          parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
-
   def queryEntities(entityType: String,
                     query: EntityQuery,
                     parentContext: RawlsRequestContext
   ): Future[EntityQueryResponse]
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def queryEntitiesSource(entityType: String,
+                          query: EntityQuery,
+                          parentContext: RawlsRequestContext
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
-
-  def copyEntities(sourceWorkspaceContext: Workspace,
-                   destWorkspaceContext: Workspace,
-                   entityType: String,
-                   entityNames: Seq[String],
-                   linkExistingEntities: Boolean,
-                   parentContext: RawlsRequestContext
-  ): Future[EntityCopyResponse]
 }
