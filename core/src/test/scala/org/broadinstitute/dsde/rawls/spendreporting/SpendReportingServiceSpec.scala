@@ -71,8 +71,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     _ => mockWorkspaceService
   }
 
-  val mockWorkspaceSpendReportRepositoryConstructor: WorkspaceSpendReportRepository =
-    mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+  val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository = mock[WorkspaceSpendReportRepository]
 
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
@@ -719,7 +718,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
     val billingProjectSpendExport =
@@ -760,7 +759,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
 
@@ -790,7 +789,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       samDAO,
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val projectName = RawlsBillingProjectName("fakeProject")
 
@@ -827,7 +826,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
     val billingProjectSpendExport =
@@ -895,7 +894,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       samDAO,
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
 
     val result = Await.result(
@@ -949,7 +948,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
     val billingProjectSpendExport =
@@ -1001,7 +1000,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
     val billingProjectSpendExport =
@@ -1068,7 +1067,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       samDAO,
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -1092,7 +1091,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[SamDAO],
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange)
     val endDate = DateTime.now()
@@ -1109,7 +1108,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[SamDAO],
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val startDate = DateTime.now()
     val endDate = DateTime.now().minusDays(1)
@@ -1127,7 +1126,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[SamDAO],
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange + 1)
     val endDate = DateTime.now()
@@ -1158,7 +1157,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[SamDAO],
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val result = service.getQuery(
       Set(
@@ -1193,7 +1192,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[SamDAO],
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val result = service.getQuery(
       Set(
@@ -1281,7 +1280,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mock[SamDAO],
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
     val result = service.getAllUserWorkspaceQuery(
       billingProjectSpendExport.spendExportTable.get,
@@ -1392,7 +1391,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
 
@@ -1445,7 +1444,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         mockWorkspaceServiceConstructor,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
 
@@ -1989,7 +1988,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mockSamDAO,
       mock[SpendReportingServiceConfig],
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
 
     when(mockSamDAO.listResourcesWithActions(any(), any(), any()))
@@ -2043,7 +2042,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       mockSamDAO,
       spendReportingServiceConfig,
       mockWorkspaceServiceConstructor,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
 
     val exception = Await.result(
@@ -2073,7 +2072,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       samDAO,
       spendReportingServiceConfig,
       _ => workspaceService,
-      mockWorkspaceSpendReportRepositoryConstructor
+      mockWorkspaceSpendReportRepository
     )
 
     val workspace = TestData.workspace1
@@ -2101,7 +2100,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         samDAO,
         spendReportingServiceConfig,
         _ => workspaceService,
-        mockWorkspaceSpendReportRepositoryConstructor
+        mockWorkspaceSpendReportRepository
       )
     )
 
