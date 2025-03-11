@@ -7,7 +7,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
   EntityAndAttributesResult,
@@ -246,6 +246,44 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         case _ => DBIO.successful(())
       }
     }
+
+  override def evaluateExpression(entityType: EntityName,
+                                  entityName: EntityName,
+                                  expression: EntityName
+  ): Future[Seq[AttributeValue]] =
+    dataSource.inTransaction(
+      dataAccess =>
+        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
+            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
+              // parsing failure
+              case Failure(regret) =>
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
+              case Success(valuesByEntity) =>
+                if (valuesByEntity.size != 1) {
+                  // wrong number of entities?!
+                  throw new RawlsException(
+                    s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
+                  )
+                } else {
+                  assert(valuesByEntity.head._1 == entityName)
+                  valuesByEntity.head match {
+                    case (_, Success(result)) => result.toSeq
+                    case (_, Failure(regret)) =>
+                      throw new RawlsExceptionWithErrorReport(
+                        errorReport = ErrorReport(
+                          StatusCodes.BadRequest,
+                          "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
+                          ErrorReport(regret)
+                        )
+                      )
+                  }
+                }
+            }
+          }
+        },
+      TransactionIsolation.ReadCommitted
+    )
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,

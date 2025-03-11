@@ -56,6 +56,8 @@ trait EntityProvider {
 
   def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
 
+  def evaluateExpression(entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]]
+
   /**
   The overall approach is:
         - Parse the input expression using ANTLR Extended JSON parser

@@ -289,6 +289,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     buffer.toList
   }
 
+  override def evaluateExpression(entityType: EntityName,
+                                  entityName: EntityName,
+                                  expression: EntityName
+  ): Future[Seq[AttributeValue]] =
+    throw new UnsupportedEntityOperationException("evaluate expression not supported by this provider.")
+
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
