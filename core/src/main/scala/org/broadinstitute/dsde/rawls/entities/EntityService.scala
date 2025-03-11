@@ -104,6 +104,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO CORE-360: move to EntityProviders
   def updateEntity(workspaceName: WorkspaceName,
                    entityType: String,
                    entityName: String,
@@ -198,6 +199,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
+  // TODO CORE-360: move to EntityProviders
   def deleteEntityAttributes(workspaceName: WorkspaceName,
                              entityType: String,
                              attributeNames: Set[AttributeName]
@@ -221,6 +223,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
     )
 
+  // TODO CORE-360: move to EntityProviders
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
     (getV2WorkspaceContextAndPermissions(workspaceName,
                                          SamWorkspaceActions.write,
@@ -242,6 +245,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
     )
 
+  // TODO CORE-360: move to EntityProviders
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
@@ -295,6 +299,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     )
   }
 
+  // TODO CORE-360: move to EntityProviders
   def evaluateExpression(workspaceName: WorkspaceName,
                          entityType: String,
                          entityName: String,
@@ -384,6 +389,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     Source.fromPublisher(dataSource.database.stream(allAttrsStream))
   }
 
+  // TODO CORE-360: move to EntityProviders
   def listEntities(workspaceName: WorkspaceName, entityType: String) =
     (getWorkspaceContextAndPermissions(workspaceName,
                                        SamWorkspaceActions.read,
@@ -493,6 +499,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
       )
 
+  // TODO CORE-360: move to EntityProviders
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       oldAttributeName: AttributeName,
