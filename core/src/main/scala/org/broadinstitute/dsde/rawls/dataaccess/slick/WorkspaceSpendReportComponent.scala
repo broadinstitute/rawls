@@ -31,8 +31,8 @@ object WorkspaceSpendReportRecord {
     WorkspaceSpendReportRecord(
       workspaceSpendReport.id,
       workspaceSpendReport.googleProjectId,
-      new Timestamp(workspaceSpendReport.reportStartDate.toInstant(ZoneOffset.UTC).toEpochMilli),
-      new Timestamp(workspaceSpendReport.reportEndDate.toInstant(ZoneOffset.UTC).toEpochMilli),
+      Timestamp.valueOf(workspaceSpendReport.reportStartDate),
+      Timestamp.valueOf(workspaceSpendReport.reportEndDate),
       workspaceSpendReport.currency,
       workspaceSpendReport.isDataAvailable,
       workspaceSpendReport.totalCompute,
@@ -47,8 +47,8 @@ object WorkspaceSpendReportRecord {
     WorkspaceSpendReport(
       record.id,
       record.googleProjectId,
-      LocalDateTime.ofInstant(record.reportStartDate.toInstant, ZoneOffset.UTC),
-      LocalDateTime.ofInstant(record.reportEndDate.toInstant, ZoneOffset.UTC),
+      record.reportStartDate.toLocalDateTime,
+      record.reportEndDate.toLocalDateTime,
       record.currency,
       record.isDataAvailable,
       record.totalCompute,
@@ -234,8 +234,8 @@ trait WorkspaceSpendReportComponent {
         .filter(x =>
           x.googleProjectId.inSetBind(
             projectIds.map(_.value)
-          ) && x.reportStartDate === new Timestamp(startDate.toInstant(ZoneOffset.UTC).toEpochMilli)
-            && x.reportEndDate === new Timestamp(endDate.toInstant(ZoneOffset.UTC).toEpochMilli)
+          ) && x.reportStartDate === Timestamp.valueOf(startDate)
+            && x.reportEndDate === Timestamp.valueOf(endDate)
         )
 
     private def loadWorkspaceSpendReport(lookup: WorkspaceSpendReportQueryType): ReadAction[Seq[WorkspaceSpendReport]] =
