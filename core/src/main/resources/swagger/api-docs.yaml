@@ -4676,8 +4676,6 @@ paths:
           content: { }
         500:
           $ref: '#/components/responses/RawlsInternalError'
-      security:
-        - oidc_google_billing_scope: [ ]
 components:
   schemas:
     BillingAccount:

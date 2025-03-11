@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext}
@@ -120,7 +121,8 @@ trait RawlsApiService
     with StatusApiService
     with InstrumentationDirectives
     with VersionApiService
-    with ServicePerimeterApiService {
+    with ServicePerimeterApiService
+    with GoogleProjectApiService {
 
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService
   val submissionTimeout: FiniteDuration
@@ -143,7 +145,8 @@ trait RawlsApiService
       billingRoutes(otelContext) ~
       notificationsRoutes ~
       servicePerimeterRoutes(otelContext) ~
-      snapshotRoutes(otelContext)
+      snapshotRoutes(otelContext) ~
+      googleProjectRoutes(otelContext)
 
   def apiRoutes =
     options(complete(OK)) ~
@@ -238,7 +241,8 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val batchUpsertMaxBytes: Long,
                           override val workbenchMetricBaseName: String,
                           val samDAO: SamDAO,
-                          val openIDConnectConfiguration: OpenIDConnectConfiguration
+                          val openIDConnectConfiguration: OpenIDConnectConfiguration,
+                          val googleProjectServiceConstructor: RawlsRequestContext => GoogleProjectService
 )(implicit val executionContext: ExecutionContext, val materializer: Materializer)
     extends RawlsApiService
     with StandardUserInfoDirectives

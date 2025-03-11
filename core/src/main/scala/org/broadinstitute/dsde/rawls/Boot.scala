@@ -42,6 +42,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.googleProject.{GoogleProjectRepository, GoogleProjectService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
@@ -494,6 +495,7 @@ object Boot extends IOApp with LazyLogging {
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
       val workspaceRepository = new WorkspaceRepository(slickDataSource)
+      val googleProjectRepository = new GoogleProjectRepository(slickDataSource)
       val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
@@ -539,6 +541,9 @@ object Boot extends IOApp with LazyLogging {
                                     appDependencies.googleStorageService
         )(implicitly, IORuntime.global)
 
+      val googleProjectServiceConstructor: RawlsRequestContext => GoogleProjectService =
+        new GoogleProjectService(_, slickDataSource, samDAO, googleProjectRepository)
+
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
@@ -565,7 +570,8 @@ object Boot extends IOApp with LazyLogging {
         appConfigManager.conf.getLong("entityUpsert.maxContentSizeBytes"),
         metricsPrefix,
         samDAO,
-        appDependencies.oidcConfiguration
+        appDependencies.oidcConfiguration,
+        googleProjectServiceConstructor
       )
 
       if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
