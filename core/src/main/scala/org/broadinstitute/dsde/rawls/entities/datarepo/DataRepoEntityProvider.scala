@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import akka.NotUsed
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
@@ -32,9 +33,12 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdat
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeEntityReference,
+  AttributeName,
   AttributeNull,
   AttributeNumber,
+  AttributeRename,
   AttributeString,
+  AttributeUpdateOperations,
   AttributeValue,
   AttributeValueList,
   AttributeValueRawJson,
@@ -45,6 +49,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   ErrorReport,
   GoogleProjectId,
   RawlsRequestContext,
@@ -108,6 +113,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   override def deleteEntitiesOfType(entityType: String): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities of type not supported by this provider.")
 
+  override def deleteEntityAttributes(entityType: EntityName, attributeNames: Set[AttributeName]): Future[Unit] =
+    throw new UnsupportedEntityOperationException("delete entity attributes not supported by this provider.")
+
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
@@ -137,6 +145,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       queryResultsToEntity(queryResults, entityType, pk)
     resultIO.unsafeToFuture()
   }
+
+  override def listEntities(entityType: EntityName): Source[Entity, NotUsed] =
+    throw new UnsupportedEntityOperationException("list all entities not supported by this provider.")
 
   override def queryEntitiesSource(entityType: EntityName,
                                    query: EntityQuery,
@@ -277,6 +288,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
     buffer.toList
   }
+
+  override def evaluateExpression(entityType: EntityName,
+                                  entityName: EntityName,
+                                  expression: EntityName
+  ): Future[Seq[AttributeValue]] =
+    throw new UnsupportedEntityOperationException("evaluate expression not supported by this provider.")
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
@@ -547,4 +564,22 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] =
     throw new UnsupportedEntityOperationException("copy entities not supported by this provider.")
+
+  override def renameAttribute(entityType: EntityName,
+                               oldAttributeName: AttributeName,
+                               attributeRenameRequest: AttributeRename
+  ): Future[Int] =
+    throw new UnsupportedEntityOperationException("rename attribute not supported by this provider.")
+
+  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] =
+    throw new UnsupportedEntityOperationException("rename entity not supported by this provider.")
+
+  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] =
+    throw new UnsupportedEntityOperationException("rename entity type not supported by this provider.")
+
+  override def updateEntity(entityType: EntityName,
+                            entityName: EntityName,
+                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation]
+  ): Future[Entity] = throw new UnsupportedEntityOperationException("update entity not supported by this provider.")
+
 }
