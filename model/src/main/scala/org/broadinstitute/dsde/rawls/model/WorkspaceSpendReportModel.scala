@@ -28,6 +28,25 @@ object WorkspaceSpendReport {
     storageCredits,
     otherCredits
   )
+
+  def newEmptySpendReport(googleProjectId: String,
+                          reportStartDate: LocalDateTime,
+                          reportEndDate: LocalDateTime,
+                          currency: String
+  ) = WorkspaceSpendReport(
+    -1L,
+    googleProjectId,
+    reportStartDate,
+    reportEndDate,
+    currency,
+    isDataAvailable = false,
+    Option.empty,
+    Option.empty,
+    Option.empty,
+    Option.empty,
+    Option.empty,
+    Option.empty
+  )
 }
 
 case class WorkspaceSpendReport(id: Long,

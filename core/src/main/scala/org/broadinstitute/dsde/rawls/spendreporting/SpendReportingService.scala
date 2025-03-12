@@ -69,15 +69,7 @@ object SpendReportingService {
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): SpendReportingResults = {
 
-    val currency = allRows.map(_.get("currency").getStringValue).distinct match {
-      case head :: List() => Currency.getInstance(head)
-      case head :: tail =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
-        )
-      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
-    }
+    val currency = SpendReportUtils.getCurrency(allRows.map(_.get("currency").getStringValue))
 
     def sum(rows: List[FieldValueList], field: String): String = rows
       .map(row => BigDecimal(row.get(field).getDoubleValue))
@@ -648,8 +640,8 @@ class SpendReportingService(
                   logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
                   Future.successful(None)
                 }
-              queryResults.flatMap { res =>
-                Future.successful(insertRecordsWithMissingSpendData(res, workspaceNamesByProjectId, start, end))
+              queryResults.map { res =>
+                insertRecordsWithMissingSpendData(res, workspaceNamesByProjectId, start, end)
               }
               queryResults
             }
@@ -680,20 +672,16 @@ class SpendReportingService(
     val startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
     val endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
     val insertedRecords = missingProjectIds.map { id =>
-      val spendReport = WorkspaceSpendReport.newWorkspaceSpendReport(
+      val spendReport = WorkspaceSpendReport.newEmptySpendReport(
         id.toString(),
         startLocalDateTime,
         endLocalDateTime,
-        "USD",
-        isDataAvailable = false,
-        Option.empty,
-        Option.empty,
-        Option.empty,
-        Option.empty,
-        Option.empty,
-        Option.empty
+        "USD"
       )
-      workspaceSpendReportRepository.insertWorkspaceSpendReport(spendReport)
+      workspaceSpendReportRepository.insertWorkspaceSpendReport(spendReport).recoverWith { case ex: Throwable =>
+        logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
+        Future.successful(0L)
+      }
     }
     insertedRecords
   }
