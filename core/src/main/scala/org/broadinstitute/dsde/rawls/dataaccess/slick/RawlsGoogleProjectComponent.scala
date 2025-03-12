@@ -52,8 +52,6 @@ trait RawlsGoogleProjectComponent {
   object rawlsGoogleProjectQuery extends TableQuery(new RawlsGoogleProjectTable(_)) {
 
     def create(googleProject: RawlsGoogleProject): ReadWriteAction[RawlsGoogleProject] =
-      // TODO validation
-//      validateUserDefinedString(billingProject.projectName.value)
       rawlsGoogleProjectQuery.result
         .flatMap {
           case Seq() => rawlsGoogleProjectQuery += RawlsGoogleProjectRecord.fromGoogleProject(googleProject)
