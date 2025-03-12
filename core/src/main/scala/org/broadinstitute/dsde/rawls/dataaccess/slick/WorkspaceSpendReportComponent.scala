@@ -108,7 +108,7 @@ object WorkspaceSpendReportRecord {
     var end: Option[DateTime] = None
     var total_spend = BigDecimal(0.0)
     var total_credits = BigDecimal(0.0)
-    val currency: Currency = SpendReportUtils.getCurrency(records.map(_.currency))
+    val currency: Currency = SpendReportUtils.getCurrency(records.map(_.currency).toList)
     val all = records.map { record =>
       val currencyString = record.currency
       val currencyCode = Currency.getInstance(currencyString)
@@ -138,13 +138,15 @@ object WorkspaceSpendReportRecord {
       val cost: Option[Float] = Option(Seq(record.totalCompute, record.totalStorage, record.otherSpend).flatten.sum)
       val credits: Option[Float] =
         Option(Seq(record.computeCredits, record.storageCredits, record.otherCredits).flatten.sum)
-      total_spend = total_spend + SpendReportUtils.toBigDecimal(cost, currencyCode)
-      total_credits = total_credits + SpendReportUtils.toBigDecimal(credits, currencyCode)
+      val workspace_spend: BigDecimal = SpendReportUtils.toBigDecimal(cost, currencyCode)
+      val workspace_credits: BigDecimal = SpendReportUtils.toBigDecimal(credits, currencyCode)
+      total_spend = total_spend + workspace_spend
+      total_credits = total_credits + workspace_credits
       start = SpendReportUtils.convertLocalDateTimeToJodaDateTime(record.reportStartDate)
       end = SpendReportUtils.convertLocalDateTimeToJodaDateTime(record.reportEndDate)
       val workspaceTotal = SpendReportingForDateRange(
-        total_spend.toString,
-        total_credits.toString,
+        workspace_spend.toString,
+        workspace_credits.toString,
         currency.toString,
         start,
         end,

@@ -25,11 +25,12 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
+import java.sql.Timestamp
 import java.util.{Currency, UUID}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
-import java.time.{LocalDateTime, ZoneId}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import scala.util.Try
 
 object SpendReportingService {
@@ -591,11 +592,8 @@ class SpendReportingService(
           )
         }
 
-        startLocalDateTime =
-          LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(start.getMillis), ZoneId.systemDefault())
-        endLocalDateTime =
-          LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(end.getMillis), ZoneId.systemDefault())
-
+        startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
+        endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
         // find the distinct export table names in our billingMap
         distinctTableNames: Set[Option[String]] = billingMap.keys.map(_.spendExportTable).toSet
 
@@ -617,7 +615,6 @@ class SpendReportingService(
           val workspaceNamesByProjectId: Map[GoogleProjectId, WorkspaceName] = billingMapForQuery.values.flatten
             .map(ws => ws.googleProjectId -> ws.toWorkspaceName)
             .toMap
-
           val projectIds = workspaceNamesByProjectId.keySet.map(_.value)
           val cachedResults =
             workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
@@ -625,8 +622,10 @@ class SpendReportingService(
             if (cachedResult.size == projectIds.size) {
               val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
               if (hasDataAvailable.nonEmpty) {
+                val spendReportingResults =
+                  WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable, workspaceNamesByProjectId)
                 Future.successful(
-                  Some(WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable, workspaceNamesByProjectId))
+                  Some(spendReportingResults)
                 )
               } else {
                 Future.successful(None)
@@ -634,7 +633,7 @@ class SpendReportingService(
             } else {
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
               val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
-              runBigQueryJob(queryJob, childContext)
+              val queryResults = runBigQueryJob(queryJob, childContext)
                 .map { result =>
                   result.getValues.asScala.toList match {
                     case Nil => None
@@ -649,10 +648,11 @@ class SpendReportingService(
                   logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
                   Future.successful(None)
                 }
+              queryResults.flatMap { res =>
+                Future.successful(insertRecordsWithMissingSpendData(res, workspaceNamesByProjectId, start, end))
+              }
+              queryResults
             }
-          }
-          spendResults.flatMap { res =>
-            Future.successful(insertRecordsWithMissingSpendData(res, workspaceNamesByProjectId, start, end))
           }
           spendResults
         })
@@ -666,16 +666,19 @@ class SpendReportingService(
                                         end: DateTime
   ): Set[Future[Long]] = {
     val googleProjectsWithReports: Set[GoogleProjectId] =
-      result
-        .flatMap(_.spendSummary.googleProjectId)
-        .map(p => GoogleProjectId(p.value))
-        .toSet
+      if (result.nonEmpty) {
+        result.get.spendDetails
+          .flatMap(_.spendData)
+          .flatMap(_.googleProjectId)
+          .map(p => GoogleProjectId(p.value))
+          .toSet
+      } else {
+        Set.empty
+      }
     // find all supplied project names which are not in the SpendReportingResults projects
     val missingProjectIds: Set[GoogleProjectId] = projectNames.keySet diff googleProjectsWithReports
-    val startLocalDateTime =
-      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(start.getMillis), ZoneId.systemDefault())
-    val endLocalDateTime =
-      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(end.getMillis), ZoneId.systemDefault())
+    val startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
+    val endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
     val insertedRecords = missingProjectIds.map { id =>
       val spendReport = WorkspaceSpendReport.newWorkspaceSpendReport(
         id.toString(),
