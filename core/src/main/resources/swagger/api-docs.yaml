@@ -4653,7 +4653,7 @@ paths:
       tags:
         - googleProjects
       summary: create google project in rawls
-      description: Adds a google project in rawls linked to a billing account
+      description: Adds a google project in rawls linked to a billing project
       operationId: createGoogleProject
       requestBody:
         description: create google project request
@@ -4662,18 +4662,15 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateGoogleProjectRequest'
         required: true
-      responses: #TODO make these correct
+      responses:
         201:
           description: Successfully added Google Project in Rawls
-        400:
-          description: both you and firecloud billing user must be a user of the billing account
+        403:
+          description: lacking permission for billing and/or google project
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-        409:
-          description: project already exists in rawls
-          content: { }
         500:
           $ref: '#/components/responses/RawlsInternalError'
 components:
@@ -7325,6 +7322,10 @@ components:
         billingProjectId:
           type: string
           description: the id of the billing project
+        message:
+          type: string
+        billingAccount:
+          type: string
   parameters:
     billingProjectUuidPathParam:
         name: projectUuid
