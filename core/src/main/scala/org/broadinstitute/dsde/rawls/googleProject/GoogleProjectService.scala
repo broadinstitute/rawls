@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  RawlsBillingAccountName,
   RawlsGoogleProject,
   RawlsRequestContext,
   SamBillingProjectActions,
@@ -41,8 +42,8 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
 
   def createGoogleProject(googleProject: RawlsGoogleProject): Future[RawlsGoogleProject] =
     for {
-      doesBillingProjectExist <- billingRepository.getBillingProject(googleProject.billingProjectId)
-      _ <- doesBillingProjectExist match {
+      maybeBillingProject <- billingRepository.getBillingProject(googleProject.billingProjectId)
+      _ <- maybeBillingProject match {
         case Some(project) =>
           samDAO
             .listUserActionsForResource(SamResourceTypeNames.billingProject, project.projectName.value, ctx)
@@ -91,7 +92,10 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
               errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
             )
           )
-      result <- googleProjectRepository.createGoogleProject(googleProject)
+      updatedGoogleProject = googleProject.copy(billingAccount =
+        maybeBillingProject.flatMap(_.billingAccount).map(_.value)
+      )
+      result <- googleProjectRepository.createGoogleProject(updatedGoogleProject)
     } yield result
 
 }

@@ -7322,10 +7322,6 @@ components:
         billingProjectId:
           type: string
           description: the id of the billing project
-        message:
-          type: string
-        billingAccount:
-          type: string
   parameters:
     billingProjectUuidPathParam:
         name: projectUuid

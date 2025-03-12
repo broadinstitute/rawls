@@ -20,9 +20,10 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeName,
   SamResourceTypeNames
 }
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.mockito.ArgumentCaptor
 import org.scalatest.matchers.should.Matchers
 import org.mockito.ArgumentMatchers.{eq => mockitoEq, _}
 
@@ -89,6 +90,59 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
 
     val result = Await.result(googleProjectService.createGoogleProject(testProject), Duration.Inf)
     assertResult(testProject) {
+      result
+    }
+  }
+
+  it should "set the billing account" in {
+    val mockDataSource = mock[SlickDataSource]
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRepository = mock[GoogleProjectRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+
+    val billingProjectId = RawlsBillingProjectName("billing-project-id")
+
+    val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                  billingProjectId,
+                                                                  CreationStatuses.Ready,
+                                                                  Option(RawlsBillingAccountName("billing-account")),
+                                                                  None
+    )
+
+    when(mockBillingRepository.getBillingProject(mockitoEq(billingProjectId)))
+      .thenReturn(Future.successful(Some(billingProject)))
+
+    when(
+      mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
+    ).thenReturn(Future.successful(true))
+
+    when(
+      mockSamDAO.listUserActionsForResource(mockitoEq(SamResourceTypeNames.billingProject),
+                                            any[String],
+                                            any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      Future.successful(Set(SamBillingProjectActions.link, SamBillingProjectActions.own))
+    )
+
+    val googleProjectService =
+      GoogleProjectService.constructor(mockDataSource, mockSamDAO, mockGoogleProjectRepository, mockBillingRepository)(
+        mockContext
+      )
+
+    val testProject = RawlsGoogleProject("test-project", None, Some("message"), billingProjectId)
+    val expectedProject = testProject.copy(billingAccount = Some("billing-account"))
+    when(mockGoogleProjectRepository.createGoogleProject(any[RawlsGoogleProject]))
+      .thenReturn(Future.successful(expectedProject))
+
+    val result = Await.result(googleProjectService.createGoogleProject(testProject), Duration.Inf)
+    val captor: ArgumentCaptor[RawlsGoogleProject] = ArgumentCaptor.forClass(classOf[RawlsGoogleProject])
+    verify(mockGoogleProjectRepository).createGoogleProject(captor.capture())
+    val capturedProject = captor.getValue
+    assert(capturedProject.billingAccount.get.equals("billing-account"))
+
+    assertResult(expectedProject) {
       result
     }
   }
