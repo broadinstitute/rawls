@@ -63,6 +63,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.FiniteDuration
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -165,6 +166,10 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockStatusService: StatusService = mock[StatusService]
     () => mockStatusService
   }
+  val mockGoogleProjectServiceConstructor: RawlsRequestContext => GoogleProjectService = {
+    lazy val mockGoogleProjectService: GoogleProjectService = mock[GoogleProjectService]
+    _ => mockGoogleProjectService
+  }
   val mockExecutionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster]
   val mockAppVersion: ApplicationVersion = mock[ApplicationVersion]
   val mockSamDAO: SamDAO = mock[SamDAO]
@@ -194,7 +199,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     1000000L,
     "test",
     mockSamDAO,
-    mockOpenIDConnectConfiguration
+    mockOpenIDConnectConfiguration,
+    mockGoogleProjectServiceConstructor
   ) with MockUserInfoDirectives
 
   // Create ResourceMetadata
