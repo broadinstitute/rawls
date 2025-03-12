@@ -1,11 +1,14 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import akka.NotUsed
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
+  AttributeName,
+  AttributeRename,
   AttributeValue,
   Entity,
   EntityCopyResponse,
@@ -13,6 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
   Workspace
@@ -48,7 +52,11 @@ trait EntityProvider {
 
   def deleteEntitiesOfType(entityType: String): Future[Int]
 
+  def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit]
+
   def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
+
+  def evaluateExpression(entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]]
 
   /**
   The overall approach is:
@@ -81,6 +89,8 @@ trait EntityProvider {
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
 
+  def listEntities(entityType: String): Source[Entity, NotUsed]
+
   def queryEntities(entityType: String,
                     query: EntityQuery,
                     parentContext: RawlsRequestContext
@@ -90,6 +100,15 @@ trait EntityProvider {
                           query: EntityQuery,
                           parentContext: RawlsRequestContext
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
+
+  def renameAttribute(entityType: String,
+                      oldAttributeName: AttributeName,
+                      attributeRenameRequest: AttributeRename
+  ): Future[Int]
+
+  def renameEntity(entityType: String, entityName: String, newName: String): Future[Int]
+
+  def renameEntityType(oldName: String, renameInfo: EntityTypeRename): Future[Int]
 
   def updateEntity(entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[Entity]
 }

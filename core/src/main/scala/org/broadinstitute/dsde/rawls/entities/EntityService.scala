@@ -6,32 +6,22 @@ import akka.stream.scaladsl.Source
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityAndAttributesResult, ReadAction}
-import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException
 }
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  EntitySupport,
-  JsonFilterUtils,
-  WorkspaceSupport
-}
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource,
@@ -58,7 +48,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with JsonFilterUtils
     with StringValidationUtils {
 
-  import dataSource.dataAccess.driver.api._
   implicit override val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
@@ -97,7 +86,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover { case _: EntityNotFoundException =>
           // could move this error message into EntityNotFoundException and allow it to bubble up
           throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
+            ErrorReport(StatusCodes.NotFound, s"$entityType $entityName does not exist in $workspaceName")
           )
         }
         .recover(sqlLoggingRecover(s"getEntity: $workspaceName $entityType/$entityName"))
@@ -153,7 +142,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                            entityType: String,
                            dataReference: Option[DataReferenceName],
                            billingProject: Option[GoogleProjectId]
-  ) =
+  ): Future[Int] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
@@ -179,152 +168,61 @@ class EntityService(protected val ctx: RawlsRequestContext,
         .recover(bigQueryRecover)
     }
 
-  // TODO CORE-360: move to EntityProviders
   def deleteEntityAttributes(workspaceName: WorkspaceName,
                              entityType: String,
                              attributeNames: Set[AttributeName]
   ): Future[Unit] =
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.write,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess
-          .entityAttributeShardQuery(workspaceContext)
-          .deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
-          case Vector(0) =>
-            throw new RawlsExceptionWithErrorReport(
-              errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names.")
-            )
-          case _ => DBIO.successful(())
-        }
-      }
-    }).recover(
-      sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
-    )
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.write,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.deleteEntityAttributes(entityType, attributeNames)
+    } yield result)
+      .recover(
+        sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
+      )
 
-  // TODO CORE-360: move to EntityProviders
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.write,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
-            case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
-            case Some(_) =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
-              )
-          }
-        }
-      }
-    }).recover(
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.write,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.renameEntity(entityType, entityName, newName)
+    } yield result).recover(
       sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
     )
 
-  // TODO CORE-360: move to EntityProviders
   def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
-    import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
-
     validateEntityType(renameInfo.newName)
-    def validateExistingType(dataAccess: DataAccess,
-                             workspaceContext: Workspace,
-                             oldName: String
-    ): ReadAction[Boolean] =
-      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
-        case Some(true) => true
-        case Some(false) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type ${oldName}")
-          )
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unexpected error; could not determine existence of entity type ${oldName}"
-            )
-          )
-      }
-
-    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] =
-      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
-        case Some(true) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type")
-          )
-        case Some(false) => false
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unexpected error; could not determine existence of entity type ${newName}"
-            )
-          )
-      }
-
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.write,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        for {
-          _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
-          _ <- validateExistingType(dataAccess, workspaceContext, oldName)
-          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
-        } yield renameResult
-      }
-    }).recover(
-      sqlLoggingRecover(s"renameEntityType: $workspaceName $oldName")
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.write,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.renameEntityType(oldName, renameInfo)
+    } yield result).recover(
+      sqlLoggingRecover(s"renameEntityType: $workspaceName $workspaceName $oldName")
     )
   }
 
-  // TODO CORE-360: move to EntityProviders
   def evaluateExpression(workspaceName: WorkspaceName,
                          entityType: String,
                          entityName: String,
                          expression: String
   ): Future[Seq[AttributeValue]] =
-    (getV2WorkspaceContextAndPermissions(workspaceName,
-                                         SamWorkspaceActions.read,
-                                         Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { workspaceContext =>
-      dataSource.inTransaction(
-        dataAccess =>
-          withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-              evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity =>
-                tryValuesByEntity match {
-                  // parsing failure
-                  case Failure(regret) =>
-                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                  case Success(valuesByEntity) =>
-                    if (valuesByEntity.size != 1) {
-                      // wrong number of entities?!
-                      throw new RawlsException(
-                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                      )
-                    } else {
-                      assert(valuesByEntity.head._1 == entityName)
-                      valuesByEntity.head match {
-                        case (_, Success(result)) => result.toSeq
-                        case (_, Failure(regret)) =>
-                          throw new RawlsExceptionWithErrorReport(
-                            errorReport = ErrorReport(
-                              StatusCodes.BadRequest,
-                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                              ErrorReport(regret)
-                            )
-                          )
-                      }
-                    }
-                }
-              }
-            }
-          },
-        TransactionIsolation.ReadCommitted
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.read,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
       )
-    }).recover(
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result <- entityProvider.evaluateExpression(entityType, entityName, expression)
+    } yield result).recover(
       sqlLoggingRecover(s"evaluateExpression: $workspaceName $entityType $entityName $expression")
     )
 
@@ -349,35 +247,15 @@ class EntityService(protected val ctx: RawlsRequestContext,
       sqlLoggingRecover(s"entityTypeMetadata: $workspaceName")
     )
 
-  /*
-   * Queries the db for a stream of entity attributes.
-   */
-  private def listEntitiesDbSource(workspaceContext: Workspace,
-                                   entityType: String
-  ): Source[EntityAndAttributesResult, NotUsed] = {
-    // note: ReadCommitted transaction isolation level; forward-only/read-only stream.
-    val allAttrsStream = dataSource.dataAccess.entityQuery
-      .streamActiveEntityAttributesOfType(workspaceContext, entityType)
-      .transactionally
-      .withTransactionIsolation(TransactionIsolation.ReadCommitted)
-      .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                               rsConcurrency = ResultSetConcurrency.ReadOnly,
-                               fetchSize = dataSource.dataAccess.fetchSize
+  def listEntities(workspaceName: WorkspaceName, entityType: String): Future[Source[Entity, NotUsed]] =
+    (for {
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.read,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
       )
-
-    // translate the Slick stream to a Source
-    Source.fromPublisher(dataSource.database.stream(allAttrsStream))
-  }
-
-  // TODO CORE-360: move to EntityProviders
-  def listEntities(workspaceName: WorkspaceName, entityType: String) =
-    (getWorkspaceContextAndPermissions(workspaceName,
-                                       SamWorkspaceActions.read,
-                                       Some(WorkspaceAttributeSpecs(all = false))
-    ) map { workspaceContext =>
-      val dbSource = listEntitiesDbSource(workspaceContext, entityType)
-      EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-    }).recover(
+      entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+      result = entityProvider.listEntities(entityType)
+    } yield result).recover(
       sqlLoggingRecover(s"listEntities: $workspaceName $entityType")
     )
 
@@ -479,65 +357,20 @@ class EntityService(protected val ctx: RawlsRequestContext,
         sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
       )
 
-  // TODO CORE-360: move to EntityProviders
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       oldAttributeName: AttributeName,
                       attributeRenameRequest: AttributeRename
   ): Future[Int] =
     withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
-      getV2WorkspaceContextAndPermissions(workspaceName,
-                                          SamWorkspaceActions.write,
-                                          Some(WorkspaceAttributeSpecs(all = false))
-      ) flatMap { workspaceContext =>
-        def validateNewAttributeName(dataAccess: DataAccess,
-                                     workspaceContext: Workspace,
-                                     entityType: String,
-                                     attributeName: AttributeName
-        ): ReadAction[Boolean] =
-          dataAccess
-            .entityAttributeShardQuery(workspaceContext)
-            .doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
-            case Some(false) => false
-            case Some(true) =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.Conflict,
-                              s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"
-                  )
-              )
-            case None =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport = ErrorReport(
-                  StatusCodes.InternalServerError,
-                  s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"
-                )
-              )
-          }
-
-        def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean =
-          rowsUpdated match {
-            case 0 =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.NotFound,
-                              s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"
-                  )
-              )
-            case _ => true
-          }
-
-        dataSource.inTransaction { dataAccess =>
-          val newAttributeName = attributeRenameRequest.newAttributeName
-          for {
-            _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
-            rowsUpdated <- dataAccess
-              .entityAttributeShardQuery(workspaceContext)
-              .renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
-            _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
-          } yield rowsUpdated
-        }
-      }
+      for {
+        workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                                SamWorkspaceActions.write,
+                                                                Some(WorkspaceAttributeSpecs(all = false))
+        )
+        entityProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+        result <- entityProvider.renameAttribute(entityType, oldAttributeName, attributeRenameRequest)
+      } yield result
     }.recover(
       sqlLoggingRecover(s"renameAttribute: $workspaceName $oldAttributeName $attributeRenameRequest")
     )

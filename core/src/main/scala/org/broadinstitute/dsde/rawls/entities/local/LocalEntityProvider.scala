@@ -5,13 +5,13 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
   EntityAndAttributesResult,
   EntityRecord,
+  ReadAction,
   ReadWriteAction
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
@@ -35,23 +35,21 @@ import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
   AttributeName,
+  AttributeRename,
   AttributeUpdateOperations,
   AttributeValue,
   Entity,
-  EntityCopyDefinition,
   EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   ErrorReport,
   RawlsRequestContext,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
   SubmissionValidationEntityInputs,
   SubmissionValidationValue,
-  Workspace,
-  WorkspaceAttributeSpecs
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
@@ -231,6 +229,57 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
+  override def deleteEntityAttributes(entityType: EntityName, attributeNames: Set[AttributeName]): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess
+        .entityAttributeShardQuery(workspaceContext)
+        .deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+        case Vector(0) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names.")
+          )
+        case _ => DBIO.successful(())
+      }
+    }
+
+  override def evaluateExpression(entityType: EntityName,
+                                  entityName: EntityName,
+                                  expression: EntityName
+  ): Future[Seq[AttributeValue]] =
+    dataSource.inTransaction(
+      dataAccess =>
+        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
+            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
+              // parsing failure
+              case Failure(regret) =>
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
+              case Success(valuesByEntity) =>
+                if (valuesByEntity.size != 1) {
+                  // wrong number of entities?!
+                  throw new RawlsException(
+                    s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
+                  )
+                } else {
+                  assert(valuesByEntity.head._1 == entityName)
+                  valuesByEntity.head match {
+                    case (_, Success(result)) => result.toSeq
+                    case (_, Failure(regret)) =>
+                      throw new RawlsExceptionWithErrorReport(
+                        errorReport = ErrorReport(
+                          StatusCodes.BadRequest,
+                          "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
+                          ErrorReport(regret)
+                        )
+                      )
+                  }
+                }
+            }
+          }
+        },
+      TransactionIsolation.ReadCommitted
+    )
+
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
@@ -300,6 +349,31 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                },
                              TransactionIsolation.ReadCommitted
     )
+
+  /*
+   * Queries the db for a stream of entity attributes.
+   */
+  private def listEntitiesDbSource(workspaceContext: Workspace,
+                                   entityType: String
+  ): Source[EntityAndAttributesResult, NotUsed] = {
+    // note: ReadCommitted transaction isolation level; forward-only/read-only stream.
+    val allAttrsStream = dataSource.dataAccess.entityQuery
+      .streamActiveEntityAttributesOfType(workspaceContext, entityType)
+      .transactionally
+      .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+      .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                               rsConcurrency = ResultSetConcurrency.ReadOnly,
+                               fetchSize = dataSource.dataAccess.fetchSize
+      )
+
+    // translate the Slick stream to a Source
+    Source.fromPublisher(dataSource.database.stream(allAttrsStream))
+  }
+
+  override def listEntities(entityType: EntityName): Source[Entity, NotUsed] = {
+    val dbSource = listEntitiesDbSource(workspaceContext, entityType)
+    EntityStreamingUtils.gatherEntities(dataSource, dbSource)
+  }
 
   /**
     * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
@@ -443,8 +517,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
-                              upsert: Boolean
+  private def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
+                                      upsert: Boolean
   ): Future[Traversable[Entity]] = {
     val namesToCheck = for {
       update <- entityUpdates
@@ -556,6 +630,115 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         )
       }
     )
+
+  override def renameAttribute(entityType: EntityName,
+                               oldAttributeName: AttributeName,
+                               attributeRenameRequest: AttributeRename
+  ): Future[Int] = {
+    def validateNewAttributeName(dataAccess: DataAccess,
+                                 workspaceContext: Workspace,
+                                 entityType: String,
+                                 attributeName: AttributeName
+    ): ReadAction[Boolean] =
+      dataAccess
+        .entityAttributeShardQuery(workspaceContext)
+        .doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
+        case Some(false) => false
+        case Some(true) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport =
+              ErrorReport(StatusCodes.Conflict,
+                          s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"
+              )
+          )
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.InternalServerError,
+              s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"
+            )
+          )
+      }
+
+    def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean =
+      rowsUpdated match {
+        case 0 =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound,
+                                      s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"
+            )
+          )
+        case _ => true
+      }
+
+    dataSource.inTransaction { dataAccess =>
+      val newAttributeName = attributeRenameRequest.newAttributeName
+      for {
+        _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
+        rowsUpdated <- dataAccess
+          .entityAttributeShardQuery(workspaceContext)
+          .renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+        _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
+      } yield rowsUpdated
+    }
+  }
+
+  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] =
+    dataSource.inTransaction { dataAccess =>
+      withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+        dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
+          case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
+          case Some(_) =>
+            throw new RawlsExceptionWithErrorReport(
+              errorReport =
+                ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
+            )
+        }
+      }
+    }
+
+  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] = {
+    def validateExistingType(dataAccess: DataAccess,
+                             workspaceContext: Workspace,
+                             oldName: String
+    ): ReadAction[Boolean] =
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
+        case Some(true) => true
+        case Some(false) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type ${oldName}")
+          )
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                      s"Unexpected error; could not determine existence of entity type ${oldName}"
+            )
+          )
+      }
+
+    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] =
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
+        case Some(true) =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type")
+          )
+        case Some(false) => false
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                      s"Unexpected error; could not determine existence of entity type ${newName}"
+            )
+          )
+      }
+
+    dataSource.inTransaction { dataAccess =>
+      for {
+        _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
+        _ <- validateExistingType(dataAccess, workspaceContext, oldName)
+        renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
+      } yield renameResult
+    }
+  }
 
   override def updateEntity(entityType: EntityName,
                             entityName: EntityName,
