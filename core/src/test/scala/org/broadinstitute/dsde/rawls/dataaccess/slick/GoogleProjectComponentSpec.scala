@@ -15,7 +15,7 @@ class GoogleProjectComponentSpec
     val googleProject = RawlsGoogleProject("google_project_id",
                                            billingProject.billingAccount.map(_.toString),
                                            Some("message"),
-                                           billingProject.projectName.value
+                                           billingProject.projectName
     )
     assertResult(googleProject) {
       runAndWait(rawlsGoogleProjectQuery.create(googleProject))

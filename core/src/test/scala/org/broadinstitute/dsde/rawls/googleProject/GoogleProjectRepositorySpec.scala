@@ -16,7 +16,7 @@ class GoogleProjectRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     UUID.randomUUID().toString,
     billingProject.billingAccount.map(_.toString),
     Some("fake message"),
-    billingProject.projectName.value
+    billingProject.projectName
   )
 
   it should "create a google project record" in withDefaultTestDatabase {

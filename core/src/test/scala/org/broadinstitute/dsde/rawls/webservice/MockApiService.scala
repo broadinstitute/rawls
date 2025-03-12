@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.{
   ApplicationVersion,
@@ -77,7 +78,9 @@ class MockApiService(
     mock[BucketMigrationService](RETURNS_SMART_NULLS),
   override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
   override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService = _ =>
-    mock[BillingAdminService](RETURNS_SMART_NULLS)
+    mock[BillingAdminService](RETURNS_SMART_NULLS),
+  override val googleProjectServiceConstructor: RawlsRequestContext => GoogleProjectService = _ =>
+    mock[GoogleProjectService](RETURNS_SMART_NULLS)
 )(implicit val executionContext: ExecutionContext)
     extends RawlsApiService
     with AdminApiService
@@ -90,7 +93,8 @@ class MockApiService(
     with UserApiService
     with MethodConfigApiService
     with WorkspaceApiService
-    with SubmissionApiService {
+    with SubmissionApiService
+    with GoogleProjectApiService {
 
   implicit val system: ActorSystem = ActorSystem("rawls")
 
