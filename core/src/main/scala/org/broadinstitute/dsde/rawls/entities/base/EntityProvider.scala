@@ -1,19 +1,22 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import akka.NotUsed
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
+  AttributeName,
+  AttributeRename,
   AttributeValue,
   Entity,
-  EntityCopyDefinition,
   EntityCopyResponse,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
+  EntityTypeRename,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
   Workspace
@@ -26,15 +29,34 @@ import scala.util.Try
  * trait definition for entity providers.
  */
 trait EntityProvider {
+  // entityStoreId is used by subclasses to identify themselves
   def entityStoreId: Option[String]
 
-  def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
+  // ----- implementation methods follow:
+
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+
+  def copyEntities(sourceWorkspaceContext: Workspace,
+                   destWorkspaceContext: Workspace,
+                   entityType: String,
+                   entityNames: Seq[String],
+                   linkExistingEntities: Boolean,
+                   parentContext: RawlsRequestContext
+  ): Future[EntityCopyResponse]
 
   def createEntity(entity: Entity): Future[Entity]
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
   def deleteEntitiesOfType(entityType: String): Future[Int]
+
+  def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit]
+
+  def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
+
+  def evaluateExpression(entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]]
 
   /**
   The overall approach is:
@@ -67,25 +89,26 @@ trait EntityProvider {
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
 
-  def queryEntitiesSource(entityType: String,
-                          query: EntityQuery,
-                          parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
+  def listEntities(entityType: String): Source[Entity, NotUsed]
 
   def queryEntities(entityType: String,
                     query: EntityQuery,
                     parentContext: RawlsRequestContext
   ): Future[EntityQueryResponse]
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def queryEntitiesSource(entityType: String,
+                          query: EntityQuery,
+                          parentContext: RawlsRequestContext
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def renameAttribute(entityType: String,
+                      oldAttributeName: AttributeName,
+                      attributeRenameRequest: AttributeRename
+  ): Future[Int]
 
-  def copyEntities(sourceWorkspaceContext: Workspace,
-                   destWorkspaceContext: Workspace,
-                   entityType: String,
-                   entityNames: Seq[String],
-                   linkExistingEntities: Boolean,
-                   parentContext: RawlsRequestContext
-  ): Future[EntityCopyResponse]
+  def renameEntity(entityType: String, entityName: String, newName: String): Future[Int]
+
+  def renameEntityType(oldName: String, renameInfo: EntityTypeRename): Future[Int]
+
+  def updateEntity(entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[Entity]
 }
