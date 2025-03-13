@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.googleProject
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsGoogleProject}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, RawlsGoogleProject}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.util.UUID
@@ -13,8 +13,8 @@ class GoogleProjectRepositorySpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "createGoogleProject"
 
   def makeGoogleProject(billingProject: RawlsBillingProject) = RawlsGoogleProject(
-    UUID.randomUUID().toString,
-    billingProject.billingAccount.map(_.toString),
+    GoogleProjectId(UUID.randomUUID().toString),
+    billingProject.billingAccount,
     Some("fake message"),
     billingProject.projectName
   )

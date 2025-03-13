@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.model
 
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
 object GoogleProjectModel {
-  def newGoogleProject(googleProjectId: String,
-                       billingAccount: Option[String],
+  def newGoogleProject(googleProjectId: GoogleProjectId,
+                       billingAccount: Option[RawlsBillingAccountName],
                        message: Option[String],
                        billingProjectId: String
   ) = RawlsGoogleProject(googleProjectId, billingAccount, message, RawlsBillingProjectName(billingProjectId))
@@ -13,8 +14,8 @@ object GoogleProjectModel {
 }
 
 //TODO should any other fields be objects instead of strings?
-case class RawlsGoogleProject(googleProjectId: String,
-                              billingAccount: Option[String],
+case class RawlsGoogleProject(googleProjectId: GoogleProjectId,
+                              billingAccount: Option[RawlsBillingAccountName],
                               message: Option[String],
                               billingProjectId: RawlsBillingProjectName
 )

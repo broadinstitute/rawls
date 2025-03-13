@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.RawlsGoogleProject
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsGoogleProject}
 import org.scalatest.OptionValues
 
 class GoogleProjectComponentSpec
@@ -12,8 +12,8 @@ class GoogleProjectComponentSpec
 
   "RawlsGoogleProjectComponent" should "create" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
-    val googleProject = RawlsGoogleProject("google_project_id",
-                                           billingProject.billingAccount.map(_.toString),
+    val googleProject = RawlsGoogleProject(GoogleProjectId("google_project_id"),
+                                           billingProject.billingAccount,
                                            Some("message"),
                                            billingProject.projectName
     )

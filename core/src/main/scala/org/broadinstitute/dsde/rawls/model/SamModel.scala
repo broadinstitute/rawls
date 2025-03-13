@@ -88,7 +88,7 @@ object SamBillingProjectActions {
   val own = SamResourceAction("own")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
   def readPolicy(policy: SamResourcePolicyName) = SamResourceAction(s"read_policy::${policy.value}")
-  def link = SamResourceAction("link")
+  val link = SamResourceAction("link")
 }
 
 object SamServicePerimeterActions {
@@ -100,7 +100,7 @@ object SamResourceTypeAdminActions {
 }
 
 object SamGoogleProjectActions {
-  def link = SamResourceAction("link")
+  val link = SamResourceAction("link")
 }
 
 /*

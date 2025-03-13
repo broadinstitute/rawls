@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
+  GoogleProjectId,
   RawlsBillingAccountName,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -84,7 +85,11 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
         mockContext
       )
 
-    val testProject = RawlsGoogleProject("test-project", Some("billing-account"), Some("message"), billingProjectId)
+    val testProject = RawlsGoogleProject(GoogleProjectId("test-project"),
+                                         Some(RawlsBillingAccountName("billing-account")),
+                                         Some("message"),
+                                         billingProjectId
+    )
     when(mockGoogleProjectRepository.createGoogleProject(any[RawlsGoogleProject]))
       .thenReturn(Future.successful(testProject))
 
@@ -131,8 +136,8 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
         mockContext
       )
 
-    val testProject = RawlsGoogleProject("test-project", None, Some("message"), billingProjectId)
-    val expectedProject = testProject.copy(billingAccount = Some("billing-account"))
+    val testProject = RawlsGoogleProject(GoogleProjectId("test-project"), None, Some("message"), billingProjectId)
+    val expectedProject = testProject.copy(billingAccount = Some(RawlsBillingAccountName("billing-account")))
     when(mockGoogleProjectRepository.createGoogleProject(any[RawlsGoogleProject]))
       .thenReturn(Future.successful(expectedProject))
 
@@ -140,7 +145,7 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
     val captor: ArgumentCaptor[RawlsGoogleProject] = ArgumentCaptor.forClass(classOf[RawlsGoogleProject])
     verify(mockGoogleProjectRepository).createGoogleProject(captor.capture())
     val capturedProject = captor.getValue
-    assert(capturedProject.billingAccount.get.equals("billing-account"))
+    assert(capturedProject.billingAccount.get.equals(RawlsBillingAccountName("billing-account")))
 
     assertResult(expectedProject) {
       result
@@ -188,7 +193,12 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
       GoogleProjectService.constructor(mockDataSource, mockSamDAO, mockGoogleProjectRepository, mockBillingRepository)(
         mockContext
       )
-    val testProject = RawlsGoogleProject("test-project", Some("billing-account"), Some("message"), billingProjectId)
+    val testProject =
+      RawlsGoogleProject(GoogleProjectId("test-project"),
+                         Some(RawlsBillingAccountName("billing-account")),
+                         Some("message"),
+                         billingProjectId
+      )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -241,7 +251,11 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
       GoogleProjectService.constructor(mockDataSource, mockSamDAO, mockGoogleProjectRepository, mockBillingRepository)(
         mockContext
       )
-    val testProject = RawlsGoogleProject("test-project", Some("billing-account"), Some("message"), billingProjectId)
+    val testProject = RawlsGoogleProject(GoogleProjectId("test-project"),
+                                         Some(RawlsBillingAccountName("billing-account")),
+                                         Some("message"),
+                                         billingProjectId
+    )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -287,7 +301,11 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
       GoogleProjectService.constructor(mockDataSource, mockSamDAO, mockGoogleProjectRepository, mockBillingRepository)(
         mockContext
       )
-    val testProject = RawlsGoogleProject("test-project", Some("billing-account"), Some("message"), billingProjectId)
+    val testProject = RawlsGoogleProject(GoogleProjectId("test-project"),
+                                         Some(RawlsBillingAccountName("billing-account")),
+                                         Some("message"),
+                                         billingProjectId
+    )
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(

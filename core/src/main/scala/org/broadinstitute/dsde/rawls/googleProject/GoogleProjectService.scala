@@ -42,59 +42,42 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
 
   def createGoogleProject(googleProject: RawlsGoogleProject): Future[RawlsGoogleProject] =
     for {
-      maybeBillingProject <- billingRepository.getBillingProject(googleProject.billingProjectId)
-      _ <- maybeBillingProject match {
-        case Some(project) =>
-          samDAO
-            .listUserActionsForResource(SamResourceTypeNames.billingProject, project.projectName.value, ctx)
-            .flatMap { actions =>
-              if (actions.nonEmpty) {
-                if (actions.contains(SamBillingProjectActions.link)) Future.successful(())
-                else
-                  Future.failed(
-                    new RawlsExceptionWithErrorReport(
-                      errorReport =
-                        ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
-                    )
-                  )
-              } else {
-                Future.failed(
-                  new RawlsExceptionWithErrorReport(
-                    errorReport =
-                      ErrorReport(StatusCodes.Forbidden,
-                                  "Billing project does not exist or you do not have permission to perform this action."
-                      )
-                  )
-                )
-              }
-            }
-        case None =>
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
+      billingProject <- billingRepository.getBillingProject(googleProject.billingProjectId).map { maybeBillingProject =>
+        maybeBillingProject.getOrElse(
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Forbidden,
+              "Billing project does not exist or you do not have permission to perform this action."
+            )
+          )
+        )
+      }
+      _ <- samDAO
+        .listUserActionsForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, ctx)
+        .map { actions =>
+          if (actions.isEmpty)
+            throw new RawlsExceptionWithErrorReport(
               errorReport =
                 ErrorReport(StatusCodes.Forbidden,
                             "Billing project does not exist or you do not have permission to perform this action."
                 )
             )
-          )
-      }
+          else if (!actions.contains(SamBillingProjectActions.link))
+            throw new RawlsExceptionWithErrorReport(
+              errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
+            )
+        }
       canLinkGoogleProject <- samDAO
         .userHasAction(SamResourceTypeNames.googleProject,
-                       googleProject.googleProjectId,
+                       googleProject.googleProjectId.value,
                        SamGoogleProjectActions.link,
                        ctx
         )
-      _ <-
-        if (canLinkGoogleProject) Future.successful(())
-        else
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
-            )
-          )
-      updatedGoogleProject = googleProject.copy(billingAccount =
-        maybeBillingProject.flatMap(_.billingAccount).map(_.value)
-      )
+      _ = if (!canLinkGoogleProject)
+        throw new RawlsExceptionWithErrorReport(
+          errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
+        )
+      updatedGoogleProject = googleProject.copy(billingAccount = billingProject.billingAccount)
       result <- googleProjectRepository.createGoogleProject(updatedGoogleProject)
     } yield result
 

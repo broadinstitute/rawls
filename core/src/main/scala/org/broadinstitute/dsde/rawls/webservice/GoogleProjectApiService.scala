@@ -20,7 +20,7 @@ trait GoogleProjectApiService extends UserInfoDirectives {
   def googleProjectRoutes(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      pathPrefix("googleProjects") {
+      path("googleProjects") {
         post {
           entity(as[RawlsGoogleProject]) { entity =>
             complete {

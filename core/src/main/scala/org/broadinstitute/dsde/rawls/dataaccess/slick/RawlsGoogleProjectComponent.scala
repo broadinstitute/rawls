@@ -1,7 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsGoogleProject}
+import org.broadinstitute.dsde.rawls.model.{
+  GoogleProjectId,
+  RawlsBillingAccountName,
+  RawlsBillingProjectName,
+  RawlsGoogleProject
+}
 
 final case class RawlsGoogleProjectRecord(googleProjectId: String,
                                           billingAccount: Option[String],
@@ -12,16 +17,16 @@ final case class RawlsGoogleProjectRecord(googleProjectId: String,
 object RawlsGoogleProjectRecord {
   def fromGoogleProject(googleProject: RawlsGoogleProject): RawlsGoogleProjectRecord =
     RawlsGoogleProjectRecord(
-      googleProject.googleProjectId,
-      googleProject.billingAccount,
+      googleProject.googleProjectId.value,
+      googleProject.billingAccount.map(_.value),
       googleProject.message,
       googleProject.billingProjectId.value
     )
 
   def toGoogleProject(projectRecord: RawlsGoogleProjectRecord): RawlsGoogleProject =
     RawlsGoogleProject(
-      projectRecord.googleProjectId,
-      projectRecord.billingAccount,
+      GoogleProjectId(projectRecord.googleProjectId),
+      projectRecord.billingAccount.map(RawlsBillingAccountName(_)),
       projectRecord.message,
       RawlsBillingProjectName(projectRecord.billingProjectId)
     )

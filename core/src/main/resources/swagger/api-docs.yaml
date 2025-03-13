@@ -4652,8 +4652,8 @@ paths:
     post:
       tags:
         - googleProjects
-      summary: create google project in rawls
-      description: Adds a google project in rawls linked to a billing project
+      summary: register google project in rawls
+      description: Adds a link between a billing project and a google project
       operationId: createGoogleProject
       requestBody:
         description: create google project request
