@@ -56,6 +56,9 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
     val mockBillingRepository = mock[BillingRepository]
     val mockGoogleServicesDAO = mock[GoogleServicesDAO]
 
+    when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
+      .thenReturn(Future.successful(new ProjectBillingInfo()))
+
     when(mockGoogleProjectRepository.getGoogleProject(any[GoogleProjectId]))
       .thenReturn(Future.successful(None))
 
@@ -378,7 +381,7 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
 
   }
 
-  it should "return a 409 if the google project is already registered" in {
+  it should "do nothing if the google project is already registered with this billing project" in {
     val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRepository = mock[GoogleProjectRepository]
@@ -386,8 +389,10 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
     val mockBillingRepository = mock[BillingRepository]
     val mockGoogleServicesDAO = mock[GoogleServicesDAO]
 
+    when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
+      .thenReturn(Future.successful(new ProjectBillingInfo()))
+
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
-    val googleProjectId = GoogleProjectId("test-project")
 
     val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
                                                                   billingProjectId,
@@ -396,24 +401,20 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
                                                                   None
     )
 
-    val googleProject: RawlsGoogleProject = RawlsGoogleProject(googleProjectId,
-                                                               Some(RawlsBillingAccountName("some-billing-account")),
-                                                               None,
-                                                               RawlsBillingProjectName("another-billing-project")
-    )
-
     when(mockBillingRepository.getBillingProject(mockitoEq(billingProjectId)))
       .thenReturn(Future.successful(Some(billingProject)))
 
-    when(mockGoogleProjectRepository.getGoogleProject(mockitoEq(googleProjectId)))
-      .thenReturn(Future.successful(Some(googleProject)))
+    val testProject = RawlsGoogleProject(GoogleProjectId("test-project"),
+                                         Some(RawlsBillingAccountName("billing-account")),
+                                         None,
+                                         billingProjectId
+    )
+
+    when(mockGoogleProjectRepository.getGoogleProject(any[GoogleProjectId]))
+      .thenReturn(Future.successful(Some(testProject)))
 
     when(
-      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
-                               any[String],
-                               mockitoEq(SamGoogleProjectActions.link),
-                               any[RawlsRequestContext]
-      )
+      mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
     ).thenReturn(Future.successful(true))
 
     when(
@@ -434,17 +435,92 @@ class GoogleProjectServiceSpec extends AnyFlatSpec with ScalatestRouteTest with 
       )(
         mockContext
       )
-    val testProject =
-      RawlsGoogleProject(googleProjectId, Some(RawlsBillingAccountName("billing-account")), None, billingProjectId)
 
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        googleProjectService.createGoogleProject(testProject),
-        Duration.Inf
+    when(mockGoogleProjectRepository.createGoogleProject(any[RawlsGoogleProject]))
+      .thenReturn(Future.successful(testProject))
+
+    val result = Await.result(googleProjectService.createGoogleProject(testProject), Duration.Inf)
+    assertResult(testProject) {
+      result
+    }
+  }
+
+  it should "update the google project if it is already registered with a different billing project" in {
+    val mockDataSource = mock[SlickDataSource]
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRepository = mock[GoogleProjectRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+
+    when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
+      .thenReturn(Future.successful(new ProjectBillingInfo()))
+
+    val billingProjectId1 = RawlsBillingProjectName("billing-project-id1")
+
+    val billingProjectId2 = RawlsBillingProjectName("billing-project-id2")
+
+    val billingProject1: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                   billingProjectId1,
+                                                                   CreationStatuses.Ready,
+                                                                   Option(RawlsBillingAccountName("billing-account")),
+                                                                   None
+    )
+
+    when(mockBillingRepository.getBillingProject(mockitoEq(billingProjectId1)))
+      .thenReturn(Future.successful(Some(billingProject1)))
+
+    val existingProject = RawlsGoogleProject(GoogleProjectId("test-project"),
+                                             Some(RawlsBillingAccountName("billing-account")),
+                                             None,
+                                             billingProjectId2
+    )
+
+    when(mockGoogleProjectRepository.getGoogleProject(any[GoogleProjectId]))
+      .thenReturn(Future.successful(Some(existingProject)))
+
+    when(
+      mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
+    ).thenReturn(Future.successful(true))
+
+    when(
+      mockSamDAO.listUserActionsForResource(mockitoEq(SamResourceTypeNames.billingProject),
+                                            any[String],
+                                            any[RawlsRequestContext]
       )
+    ).thenReturn(
+      Future.successful(Set(SamBillingProjectActions.link, SamBillingProjectActions.own))
+    )
+
+    val googleProjectService =
+      GoogleProjectService.constructor(mockDataSource,
+                                       mockSamDAO,
+                                       mockGoogleProjectRepository,
+                                       mockBillingRepository,
+                                       mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    val newProject = RawlsGoogleProject(GoogleProjectId("test-project"),
+                                        Some(RawlsBillingAccountName("billing-account")),
+                                        None,
+                                        billingProjectId1
+    )
+
+    when(mockGoogleProjectRepository.createGoogleProject(any[RawlsGoogleProject]))
+      .thenReturn(Future.successful(newProject))
+
+    val result = Await.result(googleProjectService.createGoogleProject(newProject), Duration.Inf)
+    assertResult(newProject) {
+      result
     }
 
-    e.errorReport.statusCode shouldBe Option(StatusCodes.Conflict)
+    val captor: ArgumentCaptor[RawlsGoogleProject] = ArgumentCaptor.forClass(classOf[RawlsGoogleProject])
+    verify(mockGoogleProjectRepository).createGoogleProject(captor.capture())
+    val capturedProject = captor.getValue
+    assert(capturedProject.billingProjectId.equals(billingProjectId1))
+
   }
 
 }

@@ -44,13 +44,7 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
 
   def createGoogleProject(googleProject: RawlsGoogleProject): Future[RawlsGoogleProject] =
     for {
-      _ <- googleProjectRepository.getGoogleProject(googleProject.googleProjectId).map {
-        case Some(_) =>
-          throw new RawlsExceptionWithErrorReport(errorReport =
-            ErrorReport(StatusCodes.Conflict, "Google project is already registered.")
-          )
-        case None =>
-      }
+      existingGoogleProject <- googleProjectRepository.getGoogleProject(googleProject.googleProjectId)
       billingProject <- billingRepository.getBillingProject(googleProject.billingProjectId).map { maybeBillingProject =>
         maybeBillingProject.getOrElse(
           throw new RawlsExceptionWithErrorReport(
@@ -86,12 +80,19 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
         throw new RawlsExceptionWithErrorReport(
           errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
         )
-      updatedGoogleProject = googleProject.copy(billingAccount = billingProject.billingAccount)
-      _ <- googleServicesDAO.setBillingAccountName(googleProject.googleProjectId,
-                                                   billingProject.billingAccount.get,
-                                                   ctx.toTracingContext
-      )
-      result <- googleProjectRepository.createGoogleProject(updatedGoogleProject)
+      result <- existingGoogleProject match {
+        case Some(existing) if existing.billingProjectId == googleProject.billingProjectId =>
+          Future.successful(existing)
+        case _ =>
+          val updatedGoogleProject = googleProject.copy(billingAccount = billingProject.billingAccount)
+          for {
+            _ <- googleServicesDAO.setBillingAccountName(googleProject.googleProjectId,
+                                                         billingProject.billingAccount.get,
+                                                         ctx.toTracingContext
+            )
+            createdGoogleProject <- googleProjectRepository.createGoogleProject(updatedGoogleProject)
+          } yield createdGoogleProject
+      }
     } yield result
 
 }
