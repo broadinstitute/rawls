@@ -2108,4 +2108,221 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     result should contain key RawlsBillingProjectName("test-project")
     result(RawlsBillingProjectName("test-project")) should contain(workspace)
   }
+
+  "insertRecordsWithMissingSpendData" should "insert empty records for missing spend data" in {
+    val samDAO = mock[SamDAO]
+    val workspaceService = mock[WorkspaceService]
+
+    val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+    when(mockWorkspaceSpendReportRepository.insertWorkspaceSpendReport(any())).thenReturn(Future.successful(1L))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        _ => workspaceService,
+        mockWorkspaceSpendReportRepository
+      )
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val price1 = 10.22f
+    val price2 = 50.74f
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+    val spendReport1 = WorkspaceSpendReport(
+      1L,
+      projectId1.toString(),
+      startDate,
+      endDate,
+      "USD",
+      isDataAvailable = true,
+      Option.empty,
+      Option(price1),
+      Option(price2),
+      Option.empty,
+      Option.empty,
+      Option.empty
+    )
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val spendReportingResults = WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1), projectNames)
+    service.insertRecordsWithMissingSpendData(
+      Some(spendReportingResults),
+      projectNames,
+      from,
+      to
+    )
+    val spendReport2 = WorkspaceSpendReport.newEmptySpendReport(
+      projectId2.toString(),
+      startDate,
+      endDate,
+      "USD"
+    )
+    verify(mockWorkspaceSpendReportRepository, times(1)).insertWorkspaceSpendReport(spendReport2)
+  }
+
+  "insertRecordsWithMissingSpendData" should "not insert additional records when all spend data is available" in {
+    val samDAO = mock[SamDAO]
+    val workspaceService = mock[WorkspaceService]
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        _ => workspaceService,
+        mockWorkspaceSpendReportRepository
+      )
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val price1 = 10.22f
+    val price2 = 50.74f
+
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+    val spendReport1 = WorkspaceSpendReport(
+      1L,
+      projectId1.toString(),
+      startDate,
+      endDate,
+      "USD",
+      isDataAvailable = true,
+      Option.empty,
+      Option(price1),
+      Option(price2),
+      Option.empty,
+      Option.empty,
+      Option.empty
+    )
+    val spendReport2 = WorkspaceSpendReport(
+      2L,
+      projectId2.toString(),
+      startDate,
+      endDate,
+      "USD",
+      isDataAvailable = false,
+      Option.empty,
+      Option.empty,
+      Option.empty,
+      Option.empty,
+      Option.empty,
+      Option.empty
+    )
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+    val spendReportingResults =
+      WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1, spendReport2), projectNames)
+    service.insertRecordsWithMissingSpendData(
+      Some(spendReportingResults),
+      projectNames,
+      from,
+      to
+    )
+    verifyNoInteractions(mockWorkspaceSpendReportRepository)
+  }
+
+  "insertRecordsWithMissingSpendData" should "handle errors when inserting a record" in {
+    val samDAO = mock[SamDAO]
+    val workspaceService = mock[WorkspaceService]
+
+    val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+    when(mockWorkspaceSpendReportRepository.insertWorkspaceSpendReport(any()))
+      .thenReturn(Future.failed(new RuntimeException("Error inserting workspace spend report")))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        _ => workspaceService,
+        mockWorkspaceSpendReportRepository
+      )
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val price1 = 10.22f
+    val price2 = 50.74f
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+    val spendReport1 = WorkspaceSpendReport(
+      1L,
+      projectId1.toString(),
+      startDate,
+      endDate,
+      "USD",
+      isDataAvailable = true,
+      Option.empty,
+      Option(price1),
+      Option(price2),
+      Option.empty,
+      Option.empty,
+      Option.empty
+    )
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val spendReportingResults = WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1), projectNames)
+    val records = service.insertRecordsWithMissingSpendData(
+      Some(spendReportingResults),
+      projectNames,
+      from,
+      to
+    )
+    val spendReport2 = WorkspaceSpendReport.newEmptySpendReport(
+      projectId2.toString(),
+      startDate,
+      endDate,
+      "USD"
+    )
+    verify(mockWorkspaceSpendReportRepository, times(1)).insertWorkspaceSpendReport(spendReport2)
+    records.size shouldBe 1
+    records.map { record =>
+      record.map { result =>
+        result shouldBe Future.successful(0L)
+      }
+    }
+  }
+
 }

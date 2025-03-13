@@ -679,7 +679,7 @@ class SpendReportingService(
         "USD"
       )
       workspaceSpendReportRepository.insertWorkspaceSpendReport(spendReport).recoverWith { case ex: Throwable =>
-        logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
+        logger.warn(s"Error inserting workspace spend report: ${ex.getMessage}")
         Future.successful(0L)
       }
     }
