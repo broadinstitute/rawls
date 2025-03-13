@@ -42,6 +42,13 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
 
   def createGoogleProject(googleProject: RawlsGoogleProject): Future[RawlsGoogleProject] =
     for {
+      _ <- googleProjectRepository.getGoogleProject(googleProject.googleProjectId).map {
+        case Some(_) =>
+          throw new RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.Conflict, "Google project is already registered.")
+          )
+        case None =>
+      }
       billingProject <- billingRepository.getBillingProject(googleProject.billingProjectId).map { maybeBillingProject =>
         maybeBillingProject.getOrElse(
           throw new RawlsExceptionWithErrorReport(

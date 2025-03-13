@@ -67,5 +67,15 @@ trait RawlsGoogleProjectComponent {
         }
         .map(_ => googleProject)
 
+    def withId(projectId: String): RawlsGoogleProjectQuery =
+      filter(_.googleProjectId === projectId)
+
+    def findById(id: GoogleProjectId): ReadAction[Option[RawlsGoogleProject]] =
+      uniqueResult[RawlsGoogleProjectRecord](withId(id.value)) flatMap {
+        case None => DBIO.successful(None)
+        case Some(rawlsGoogleProject) =>
+          DBIO.successful(Option(RawlsGoogleProjectRecord.toGoogleProject(rawlsGoogleProject)))
+      }
+
   }
 }

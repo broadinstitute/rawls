@@ -4671,6 +4671,12 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: google project is already linked to a billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
 components:
