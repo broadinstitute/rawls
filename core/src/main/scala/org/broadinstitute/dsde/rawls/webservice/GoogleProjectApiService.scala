@@ -21,7 +21,7 @@ trait GoogleProjectApiService extends UserInfoDirectives {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       path("googleProjects") {
-        post {
+        put {
           entity(as[RawlsGoogleProject]) { entity =>
             complete {
               googleProjectServiceConstructor(ctx)
