@@ -1887,6 +1887,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
     val spendReportingResults = WorkspaceSpendReportRecord.toSpendReportingResults(
       Seq(spendReport2),
+      from,
+      to,
       Map(projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2"))
     )
     verify(mockWorkspaceSpendReportRepository, times(1)).insertSpendReportResults(spendReportingResults)
@@ -2162,7 +2164,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                            projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
     )
 
-    val spendReportingResults = WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1), projectNames)
+    val spendReportingResults =
+      WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1), from, to, projectNames)
     service.insertRecordsWithMissingSpendData(
       Some(spendReportingResults),
       projectNames,
@@ -2181,6 +2184,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   "insertRecordsWithMissingSpendData" should "not insert additional records when all spend data is available" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
+    val mockWorkspaceSpendReportRepository = mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
     val service = spy(
       new SpendReportingService(
         testContext,
@@ -2239,7 +2243,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                            projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
     )
     val spendReportingResults =
-      WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1, spendReport2), projectNames)
+      WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1, spendReport2), from, to, projectNames)
     service.insertRecordsWithMissingSpendData(
       Some(spendReportingResults),
       projectNames,
@@ -2303,7 +2307,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                            projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
     )
 
-    val spendReportingResults = WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1), projectNames)
+    val spendReportingResults =
+      WorkspaceSpendReportRecord.toSpendReportingResults(Seq(spendReport1), from, to, projectNames)
     val records = service.insertRecordsWithMissingSpendData(
       Some(spendReportingResults),
       projectNames,

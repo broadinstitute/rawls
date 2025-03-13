@@ -151,61 +151,25 @@ object SpendReportingService {
     val currency = SpendReportUtils.getCurrency(allRows.map(_.get("currency").getStringValue))
     val all = allRows.map { row =>
       val currencyString = row.get("currency").getStringValue
-      val currencyCode = Currency.getInstance(currencyString)
       val projectId = row.get("project_id").getStringValue
-      val workspaceName = names.getOrElse(
-        GoogleProjectId(projectId),
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"unexpected project $projectId returned by BigQuery"
-        )
+      val spendReportingForDateRange = WorkspaceSpendReportRecord.toSpendReportAggregation(
+        currencyString,
+        projectId,
+        Some(start),
+        Some(end),
+        row.get("storage_cost").getDoubleValue.toFloat,
+        row.get("storage_credits").getDoubleValue.toFloat,
+        row.get("compute_cost").getDoubleValue.toFloat,
+        row.get("compute_credits").getDoubleValue.toFloat,
+        row.get("other_cost").getDoubleValue.toFloat,
+        row.get("other_credits").getDoubleValue.toFloat,
+        names
       )
-
-      def getRoundedNumericValue(field: String): BigDecimal =
-        BigDecimal(row.get(field).getDoubleValue)
-          .setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-
-      val subAggregation = List(
-        SpendReportingForDateRange(
-          getRoundedNumericValue("other_cost").toString,
-          getRoundedNumericValue("other_credits").toString,
-          currencyCode.toString,
-          category = Option(TerraSpendCategories.Other)
-        ),
-        SpendReportingForDateRange(
-          getRoundedNumericValue("storage_cost").toString,
-          getRoundedNumericValue("storage_credits").toString,
-          currencyCode.toString,
-          category = Option(TerraSpendCategories.Storage)
-        ),
-        SpendReportingForDateRange(
-          getRoundedNumericValue("compute_cost").toString,
-          getRoundedNumericValue("compute_credits").toString,
-          currencyCode.toString,
-          category = Option(TerraSpendCategories.Compute)
-        )
-      )
-
-      val total_cost = getRoundedNumericValue("total_cost")
-      val credits =
-        getRoundedNumericValue("other_credits") + getRoundedNumericValue("storage_credits") + getRoundedNumericValue(
-          "compute_credits"
-        )
+      val total_cost = BigDecimal(spendReportingForDateRange.cost)
+      val credits = BigDecimal(spendReportingForDateRange.credits)
       total = total + total_cost
       total_credits = total_credits + credits
-
-      val workspaceTotal = SpendReportingForDateRange(
-        total_cost.toString,
-        credits.toString,
-        currencyCode.toString,
-        Option(start),
-        Option(end),
-        workspace = Option(workspaceName),
-        googleProjectId = Option(GoogleProject(projectId)),
-        subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
-      )
-      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(workspaceTotal))
-
+      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(spendReportingForDateRange))
     }
 
     val summary = SpendReportingForDateRange(
@@ -615,7 +579,11 @@ class SpendReportingService(
               val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
               if (hasDataAvailable.nonEmpty) {
                 val spendReportingResults =
-                  WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable, workspaceNamesByProjectId)
+                  WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable,
+                                                                     start,
+                                                                     end,
+                                                                     workspaceNamesByProjectId
+                  )
                 Future.successful(
                   Some(spendReportingResults)
                 )
