@@ -464,7 +464,7 @@ trait ApiServiceSpec
     ) _
 
     override val googleProjectServiceConstructor =
-      GoogleProjectService.constructor(slickDataSource, samDAO, googleProjectRepository, billingRepository)
+      GoogleProjectService.constructor(slickDataSource, samDAO, googleProjectRepository, billingRepository, gcsDAO)
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill

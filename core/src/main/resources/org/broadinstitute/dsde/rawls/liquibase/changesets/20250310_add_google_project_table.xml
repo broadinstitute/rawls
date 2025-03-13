@@ -22,7 +22,7 @@
                                  constraintName="FK_BP_GP"
                                  deferrable="false"
                                  initiallyDeferred="false"
-                                 onDelete="CASCADE"
+                                 onDelete="NO ACTION"
                                  onUpdate="NO ACTION"
                                  referencedColumnNames="name"
                                  referencedTableName="BILLING_PROJECT"/>

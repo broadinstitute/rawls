@@ -542,7 +542,7 @@ object Boot extends IOApp with LazyLogging {
         )(implicitly, IORuntime.global)
 
       val googleProjectServiceConstructor: RawlsRequestContext => GoogleProjectService =
-        new GoogleProjectService(_, slickDataSource, samDAO, googleProjectRepository, billingRepository)
+        new GoogleProjectService(_, slickDataSource, samDAO, googleProjectRepository, billingRepository, gcsDAO)
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,

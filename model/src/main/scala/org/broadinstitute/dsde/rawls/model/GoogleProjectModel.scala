@@ -13,7 +13,6 @@ object GoogleProjectModel {
 
 }
 
-//TODO should any other fields be objects instead of strings?
 case class RawlsGoogleProject(googleProjectId: GoogleProjectId,
                               billingAccount: Option[RawlsBillingAccountName],
                               message: Option[String],

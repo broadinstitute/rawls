@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.googleProject
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsBillingAccountName,
@@ -21,13 +21,14 @@ object GoogleProjectService {
   def constructor(dataSource: SlickDataSource,
                   samDAO: SamDAO,
                   googleProjectRepository: GoogleProjectRepository,
-                  billingRepository: BillingRepository
+                  billingRepository: BillingRepository,
+                  googleServicesDAO: GoogleServicesDAO
   )(
     ctx: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
   ): GoogleProjectService =
-    new GoogleProjectService(ctx, dataSource, samDAO, googleProjectRepository, billingRepository)
+    new GoogleProjectService(ctx, dataSource, samDAO, googleProjectRepository, billingRepository, googleServicesDAO)
 
 }
 
@@ -35,7 +36,8 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
                            val dataSource: SlickDataSource,
                            val samDAO: SamDAO,
                            val googleProjectRepository: GoogleProjectRepository,
-                           val billingRepository: BillingRepository
+                           val billingRepository: BillingRepository,
+                           val googleServicesDAO: GoogleServicesDAO
 )(implicit
   protected val executionContext: ExecutionContext
 ) {
@@ -53,7 +55,7 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
         maybeBillingProject.getOrElse(
           throw new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(
-              StatusCodes.Forbidden,
+              StatusCodes.NotFound,
               "Billing project does not exist or you do not have permission to perform this action."
             )
           )
@@ -65,7 +67,7 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
           if (actions.isEmpty)
             throw new RawlsExceptionWithErrorReport(
               errorReport =
-                ErrorReport(StatusCodes.Forbidden,
+                ErrorReport(StatusCodes.NotFound,
                             "Billing project does not exist or you do not have permission to perform this action."
                 )
             )
@@ -85,6 +87,10 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
           errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
         )
       updatedGoogleProject = googleProject.copy(billingAccount = billingProject.billingAccount)
+      _ <- googleServicesDAO.setBillingAccountName(googleProject.googleProjectId,
+                                                   billingProject.billingAccount.get,
+                                                   ctx.toTracingContext
+      )
       result <- googleProjectRepository.createGoogleProject(updatedGoogleProject)
     } yield result
 
