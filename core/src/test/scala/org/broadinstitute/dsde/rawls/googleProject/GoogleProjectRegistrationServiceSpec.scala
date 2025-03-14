@@ -256,7 +256,7 @@ class GoogleProjectRegistrationServiceSpec
       )
     }
 
-    e.errorReport.statusCode shouldBe Option(StatusCodes.Forbidden)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
 
   }
 
@@ -449,7 +449,7 @@ class GoogleProjectRegistrationServiceSpec
     }
   }
 
-  it should "update the google project if it is already registered with a different billing project" in {
+  it should "throw an error if the google project is already registered with a different billing project" in {
     val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
@@ -515,15 +515,14 @@ class GoogleProjectRegistrationServiceSpec
     when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
       .thenReturn(Future.successful(newProject))
 
-    val result = Await.result(googleProjectRegService.registerGoogleProject(newProject), Duration.Inf)
-    assertResult(newProject) {
-      result
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        googleProjectRegService.registerGoogleProject(newProject),
+        Duration.Inf
+      )
     }
 
-    val captor: ArgumentCaptor[GoogleProjectRegistration] = ArgumentCaptor.forClass(classOf[GoogleProjectRegistration])
-    verify(mockGoogleProjectRegRepo).registerGoogleProject(captor.capture())
-    val capturedProject = captor.getValue
-    assert(capturedProject.billingProjectId.equals(billingProjectId1))
+    e.errorReport.statusCode shouldBe Option(StatusCodes.Conflict)
 
   }
 

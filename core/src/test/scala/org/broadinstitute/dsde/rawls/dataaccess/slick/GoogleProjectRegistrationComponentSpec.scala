@@ -23,25 +23,4 @@ class GoogleProjectRegistrationComponentSpec
 
   }
 
-  it should "update" in withDefaultTestDatabase {
-    val billingProject = testData.testProject1
-    val googleProject = GoogleProjectRegistration(GoogleProjectId("google_project_id"),
-                                                  billingProject.billingAccount,
-                                                  Some("message"),
-                                                  billingProject.projectName
-    )
-    assertResult(googleProject) {
-      runAndWait(googleProjectRegistrationQuery.create(googleProject))
-    }
-    val billingProject2 = testData.testProject2
-    val googleProject2 = GoogleProjectRegistration(GoogleProjectId("google_project_id"),
-                                                   billingProject2.billingAccount,
-                                                   Some("message"),
-                                                   billingProject2.projectName
-    )
-    assertResult(googleProject2) {
-      runAndWait(googleProjectRegistrationQuery.create(googleProject2))
-    }
-
-  }
 }

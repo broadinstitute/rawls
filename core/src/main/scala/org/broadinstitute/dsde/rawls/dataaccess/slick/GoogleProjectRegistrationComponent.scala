@@ -66,16 +66,9 @@ trait GoogleProjectRegistrationComponent {
             googleProjectRegistrationQuery += GoogleProjectRegistrationRecord.fromGoogleProjectRegistration(
               googleProjectReg
             )
-          case _ =>
-            updateBillingProjectIdAndAccount(googleProjectReg)
+          case _ => DBIO.successful(())
         }
         .map(_ => googleProjectReg)
-
-    def updateBillingProjectIdAndAccount(googleProjectReg: GoogleProjectRegistration): WriteAction[Int] =
-      googleProjectRegistrationQuery
-        .withId(googleProjectReg.googleProjectId.value)
-        .map(reg => (reg.billingProject, reg.billingAccount))
-        .update((googleProjectReg.billingProjectId.value, googleProjectReg.billingAccount.map(_.value)))
 
     def withId(projectId: String): GoogleProjectRegistrationQuery =
       filter(_.googleProjectId === projectId)

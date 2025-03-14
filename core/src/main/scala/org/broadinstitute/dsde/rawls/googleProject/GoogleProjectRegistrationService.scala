@@ -63,16 +63,12 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       _ <- samDAO
         .listUserActionsForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, ctx)
         .map { actions =>
-          if (actions.isEmpty)
+          if (actions.isEmpty || !actions.contains(SamBillingProjectActions.link))
             throw new RawlsExceptionWithErrorReport(
               errorReport =
                 ErrorReport(StatusCodes.NotFound,
                             "Billing project does not exist or you do not have permission to perform this action."
                 )
-            )
-          else if (!actions.contains(SamBillingProjectActions.link))
-            throw new RawlsExceptionWithErrorReport(
-              errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
             )
         }
       canLinkGoogleProject <- samDAO
@@ -88,6 +84,12 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       result <- existingGoogleProjectReg match {
         case Some(existing) if existing.billingProjectId == googleProjectReg.billingProjectId =>
           Future.successful(existing)
+        case Some(existing) if existing.billingProjectId != googleProjectReg.billingProjectId =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Conflict,
+                                      "This google project id is already registered with a different billing project."
+            )
+          )
         case _ =>
           val updatedGoogleProjectReg = googleProjectReg.copy(billingAccount = billingProject.billingAccount)
           for {
