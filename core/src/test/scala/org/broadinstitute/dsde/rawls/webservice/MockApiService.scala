@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives.{provide, _}
+import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Directive1
 import akka.stream.Materializer
 import io.opentelemetry.context.Context
@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectService
+import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.{
   ApplicationVersion,
@@ -79,8 +79,8 @@ class MockApiService(
   override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
   override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService = _ =>
     mock[BillingAdminService](RETURNS_SMART_NULLS),
-  override val googleProjectServiceConstructor: RawlsRequestContext => GoogleProjectService = _ =>
-    mock[GoogleProjectService](RETURNS_SMART_NULLS)
+  override val googleProjectRegServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService = _ =>
+    mock[GoogleProjectRegistrationService](RETURNS_SMART_NULLS)
 )(implicit val executionContext: ExecutionContext)
     extends RawlsApiService
     with AdminApiService
@@ -94,7 +94,7 @@ class MockApiService(
     with MethodConfigApiService
     with WorkspaceApiService
     with SubmissionApiService
-    with GoogleProjectApiService {
+    with GoogleProjectRegistrationApiService {
 
   implicit val system: ActorSystem = ActorSystem("rawls")
 

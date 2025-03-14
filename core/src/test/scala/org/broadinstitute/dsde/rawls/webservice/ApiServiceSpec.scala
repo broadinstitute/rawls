@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.googleProject.{GoogleProjectRepository, GoogleProjectService}
+import org.broadinstitute.dsde.rawls.googleProject.{GoogleProjectRegistrationRepository, GoogleProjectRegistrationService}
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
@@ -165,7 +165,7 @@ trait ApiServiceSpec
       with MethodConfigApiService
       with WorkspaceApiService
       with SubmissionApiService
-      with GoogleProjectApiService {
+      with GoogleProjectRegistrationApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
@@ -243,7 +243,7 @@ trait ApiServiceSpec
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
     val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
-    val googleProjectRepository = mock[GoogleProjectRepository]
+    val googleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
@@ -463,8 +463,8 @@ trait ApiServiceSpec
       1000
     ) _
 
-    override val googleProjectServiceConstructor =
-      GoogleProjectService.constructor(slickDataSource, samDAO, googleProjectRepository, billingRepository, gcsDAO)
+    override val googleProjectRegServiceConstructor =
+      GoogleProjectRegistrationService.constructor(slickDataSource, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill

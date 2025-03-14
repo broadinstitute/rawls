@@ -4660,7 +4660,7 @@ paths:
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/CreateGoogleProjectRequest'
+              $ref: '#/components/schemas/RegisterGoogleProjectRequest'
         required: true
       responses:
         200:
@@ -7310,7 +7310,7 @@ components:
         objectsTransferred:
           description: objects that this job has transferred so far
           type: integer
-    CreateGoogleProjectRequest:
+    RegisterGoogleProjectRequest:
       required:
         - googleProjectId
         - billingProjectId

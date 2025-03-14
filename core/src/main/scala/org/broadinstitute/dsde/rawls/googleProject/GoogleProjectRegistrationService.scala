@@ -6,54 +6,59 @@ import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
-  RawlsBillingAccountName,
-  RawlsGoogleProject,
+  GoogleProjectRegistration,
   RawlsRequestContext,
   SamBillingProjectActions,
   SamGoogleProjectActions,
   SamResourceTypeNames
 }
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-object GoogleProjectService {
+object GoogleProjectRegistrationService {
   def constructor(dataSource: SlickDataSource,
                   samDAO: SamDAO,
-                  googleProjectRepository: GoogleProjectRepository,
+                  googleProjectRegRepository: GoogleProjectRegistrationRepository,
                   billingRepository: BillingRepository,
                   googleServicesDAO: GoogleServicesDAO
   )(
     ctx: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
-  ): GoogleProjectService =
-    new GoogleProjectService(ctx, dataSource, samDAO, googleProjectRepository, billingRepository, googleServicesDAO)
+  ): GoogleProjectRegistrationService =
+    new GoogleProjectRegistrationService(ctx,
+                                         dataSource,
+                                         samDAO,
+                                         googleProjectRegRepository,
+                                         billingRepository,
+                                         googleServicesDAO
+    )
 
 }
 
-class GoogleProjectService(protected val ctx: RawlsRequestContext,
-                           val dataSource: SlickDataSource,
-                           val samDAO: SamDAO,
-                           val googleProjectRepository: GoogleProjectRepository,
-                           val billingRepository: BillingRepository,
-                           val googleServicesDAO: GoogleServicesDAO
+class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
+                                       val dataSource: SlickDataSource,
+                                       val samDAO: SamDAO,
+                                       val googleProjectRegRepo: GoogleProjectRegistrationRepository,
+                                       val billingRepository: BillingRepository,
+                                       val googleServicesDAO: GoogleServicesDAO
 )(implicit
   protected val executionContext: ExecutionContext
 ) {
 
-  def createGoogleProject(googleProject: RawlsGoogleProject): Future[RawlsGoogleProject] =
+  def registerGoogleProject(googleProjectReg: GoogleProjectRegistration): Future[GoogleProjectRegistration] =
     for {
-      existingGoogleProject <- googleProjectRepository.getGoogleProject(googleProject.googleProjectId)
-      billingProject <- billingRepository.getBillingProject(googleProject.billingProjectId).map { maybeBillingProject =>
-        maybeBillingProject.getOrElse(
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(
-              StatusCodes.NotFound,
-              "Billing project does not exist or you do not have permission to perform this action."
+      existingGoogleProjectReg <- googleProjectRegRepo.getGoogleProjectRegistration(googleProjectReg.googleProjectId)
+      billingProject <- billingRepository.getBillingProject(googleProjectReg.billingProjectId).map {
+        maybeBillingProject =>
+          maybeBillingProject.getOrElse(
+            throw new RawlsExceptionWithErrorReport(
+              errorReport = ErrorReport(
+                StatusCodes.NotFound,
+                "Billing project does not exist or you do not have permission to perform this action."
+              )
             )
           )
-        )
       }
       _ <- samDAO
         .listUserActionsForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, ctx)
@@ -72,7 +77,7 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
         }
       canLinkGoogleProject <- samDAO
         .userHasAction(SamResourceTypeNames.googleProject,
-                       googleProject.googleProjectId.value,
+                       googleProjectReg.googleProjectId.value,
                        SamGoogleProjectActions.link,
                        ctx
         )
@@ -80,18 +85,18 @@ class GoogleProjectService(protected val ctx: RawlsRequestContext,
         throw new RawlsExceptionWithErrorReport(
           errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
         )
-      result <- existingGoogleProject match {
-        case Some(existing) if existing.billingProjectId == googleProject.billingProjectId =>
+      result <- existingGoogleProjectReg match {
+        case Some(existing) if existing.billingProjectId == googleProjectReg.billingProjectId =>
           Future.successful(existing)
         case _ =>
-          val updatedGoogleProject = googleProject.copy(billingAccount = billingProject.billingAccount)
+          val updatedGoogleProjectReg = googleProjectReg.copy(billingAccount = billingProject.billingAccount)
           for {
-            _ <- googleServicesDAO.setBillingAccountName(googleProject.googleProjectId,
+            _ <- googleServicesDAO.setBillingAccountName(googleProjectReg.googleProjectId,
                                                          billingProject.billingAccount.get,
                                                          ctx.toTracingContext
             )
-            createdGoogleProject <- googleProjectRepository.createGoogleProject(updatedGoogleProject)
-          } yield createdGoogleProject
+            registeredGoogleProject <- googleProjectRegRepo.registerGoogleProject(updatedGoogleProjectReg)
+          } yield registeredGoogleProject
       }
     } yield result
 
