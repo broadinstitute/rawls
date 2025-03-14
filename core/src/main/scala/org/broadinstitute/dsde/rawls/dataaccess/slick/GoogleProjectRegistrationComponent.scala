@@ -58,18 +58,24 @@ trait GoogleProjectRegistrationComponent {
   object googleProjectRegistrationQuery extends TableQuery(new GoogleProjectRegistrationTable(_)) {
 
     def create(googleProjectReg: GoogleProjectRegistration): ReadWriteAction[GoogleProjectRegistration] =
-      googleProjectRegistrationQuery.result
+      googleProjectRegistrationQuery
+        .withId(googleProjectReg.googleProjectId.value)
+        .result
         .flatMap {
           case Seq() =>
             googleProjectRegistrationQuery += GoogleProjectRegistrationRecord.fromGoogleProjectRegistration(
               googleProjectReg
             )
           case _ =>
-            throw new RawlsException(
-              s"Cannot create google project [${googleProjectReg.googleProjectId.value}] in database because it already exists."
-            ) // TODO what should we do here?  This case is checked in the service layer so what should the database do?
+            updateBillingProjectIdAndAccount(googleProjectReg)
         }
         .map(_ => googleProjectReg)
+
+    def updateBillingProjectIdAndAccount(googleProjectReg: GoogleProjectRegistration): WriteAction[Int] =
+      googleProjectRegistrationQuery
+        .withId(googleProjectReg.googleProjectId.value)
+        .map(reg => (reg.billingProject, reg.billingAccount))
+        .update((googleProjectReg.billingProjectId.value, googleProjectReg.billingAccount.map(_.value)))
 
     def withId(projectId: String): GoogleProjectRegistrationQuery =
       filter(_.googleProjectId === projectId)
