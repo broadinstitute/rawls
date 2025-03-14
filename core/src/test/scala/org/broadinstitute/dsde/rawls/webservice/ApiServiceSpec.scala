@@ -30,7 +30,10 @@ import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.googleProject.{GoogleProjectRegistrationRepository, GoogleProjectRegistrationService}
+import org.broadinstitute.dsde.rawls.googleProject.{
+  GoogleProjectRegistrationRepository,
+  GoogleProjectRegistrationService
+}
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
@@ -464,7 +467,12 @@ trait ApiServiceSpec
     ) _
 
     override val googleProjectRegServiceConstructor =
-      GoogleProjectRegistrationService.constructor(slickDataSource, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)
+      GoogleProjectRegistrationService.constructor(slickDataSource,
+                                                   samDAO,
+                                                   googleProjectRegRepo,
+                                                   billingRepository,
+                                                   gcsDAO
+      )
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill

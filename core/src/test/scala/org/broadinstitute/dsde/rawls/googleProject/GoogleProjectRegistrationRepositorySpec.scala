@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.googleProject
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, GoogleProjectRegistration}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectRegistration, RawlsBillingProject}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import java.util.UUID

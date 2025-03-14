@@ -220,29 +220,30 @@ trait VersionApiService {
   }
 }
 
-class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
-                          val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
-                          val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService,
-                          val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
-                          val entityServiceConstructor: RawlsRequestContext => EntityService,
-                          val userServiceConstructor: RawlsRequestContext => UserService,
-                          val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService,
-                          val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
-                          val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
-                          val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
-                          val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
-                          val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
-                          val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
-                          val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService,
-                          val statusServiceConstructor: () => StatusService,
-                          val executionServiceCluster: ExecutionServiceCluster,
-                          val appVersion: ApplicationVersion,
-                          val submissionTimeout: FiniteDuration,
-                          val batchUpsertMaxBytes: Long,
-                          override val workbenchMetricBaseName: String,
-                          val samDAO: SamDAO,
-                          val openIDConnectConfiguration: OpenIDConnectConfiguration,
-                          val googleProjectRegServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService
+class RawlsApiServiceImpl(
+  val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
+  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+  val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService,
+  val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+  val entityServiceConstructor: RawlsRequestContext => EntityService,
+  val userServiceConstructor: RawlsRequestContext => UserService,
+  val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService,
+  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
+  val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
+  val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
+  val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
+  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
+  val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
+  val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService,
+  val statusServiceConstructor: () => StatusService,
+  val executionServiceCluster: ExecutionServiceCluster,
+  val appVersion: ApplicationVersion,
+  val submissionTimeout: FiniteDuration,
+  val batchUpsertMaxBytes: Long,
+  override val workbenchMetricBaseName: String,
+  val samDAO: SamDAO,
+  val openIDConnectConfiguration: OpenIDConnectConfiguration,
+  val googleProjectRegServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService
 )(implicit val executionContext: ExecutionContext, val materializer: Materializer)
     extends RawlsApiService
     with StandardUserInfoDirectives

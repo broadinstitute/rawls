@@ -13,9 +13,9 @@ class GoogleProjectRegistrationComponentSpec
   "RawlsGoogleProjectComponent" should "create" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
     val googleProject = GoogleProjectRegistration(GoogleProjectId("google_project_id"),
-                                           billingProject.billingAccount,
-                                           Some("message"),
-                                           billingProject.projectName
+                                                  billingProject.billingAccount,
+                                                  Some("message"),
+                                                  billingProject.projectName
     )
     assertResult(googleProject) {
       runAndWait(googleProjectRegistrationQuery.create(googleProject))

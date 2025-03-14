@@ -42,7 +42,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.googleProject.{GoogleProjectRegistrationRepository, GoogleProjectRegistrationService}
+import org.broadinstitute.dsde.rawls.googleProject.{
+  GoogleProjectRegistrationRepository,
+  GoogleProjectRegistrationService
+}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
@@ -542,7 +545,13 @@ object Boot extends IOApp with LazyLogging {
         )(implicitly, IORuntime.global)
 
       val googleProjectRegistrationServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService =
-        new GoogleProjectRegistrationService(_, slickDataSource, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)
+        new GoogleProjectRegistrationService(_,
+                                             slickDataSource,
+                                             samDAO,
+                                             googleProjectRegRepo,
+                                             billingRepository,
+                                             gcsDAO
+        )
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
