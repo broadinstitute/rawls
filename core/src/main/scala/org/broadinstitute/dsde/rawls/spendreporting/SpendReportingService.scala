@@ -390,6 +390,7 @@ class SpendReportingService(
   }
 
   def setUpAllUserWorkspaceQuery(
+    jobId: String,
     query: String,
     start: DateTime,
     end: DateTime
@@ -403,7 +404,11 @@ class SpendReportingService(
       .addNamedParameter("endDate", queryParam(toISODateString(end)))
       .build()
 
-    JobInfo.newBuilder(queryConfig).build()
+    JobInfo
+      .newBuilder(queryConfig)
+      .setJobId(JobId.of(jobId)) // jobId is only used in unit tests
+      .build()
+
   }
 
   def logSpendQueryStats(stats: JobStatistics.QueryStatistics): Unit = {
@@ -592,7 +597,7 @@ class SpendReportingService(
               }
             } else {
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
-              val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+              val queryJob = setUpAllUserWorkspaceQuery(tableNameForQuery, query, start, end)
               val queryResults = runBigQueryJob(queryJob, childContext)
                 .map { result =>
                   result.getValues.asScala.toList match {
