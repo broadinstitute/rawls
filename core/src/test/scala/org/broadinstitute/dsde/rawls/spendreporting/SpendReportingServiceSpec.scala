@@ -1706,7 +1706,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           case jobInfo: JobInfo =>
             jobInfo.getJobId.getJob match {
               case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job1)
-              case "fakeTable" => IO(job2)
+              case "fakeTable"                                           => IO(job2)
               case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
             }
           case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
@@ -1815,8 +1815,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
             }
           case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
         }
-      }.thenAnswer(_ => IO.raiseError(new RuntimeException("BigQuery has errored")))
-
+      }
+      .thenAnswer(_ => IO.raiseError(new RuntimeException("BigQuery has errored")))
 
     val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
       mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
