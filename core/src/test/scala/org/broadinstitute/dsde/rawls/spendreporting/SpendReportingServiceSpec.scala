@@ -1617,7 +1617,20 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
     when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job2.waitFor()).thenReturn(job2)
-    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job1), IO(job2))
+
+    when(bigQueryService.runJob(any(), any()))
+      .thenAnswer { invocation =>
+        val args = invocation.getArguments
+        args(0) match {
+          case jobInfo: JobInfo =>
+            jobInfo.getJobId.getJob match {
+              case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job1)
+              case "fakeTable"                                           => IO(job2)
+              case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+            }
+          case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+        }
+      }
 
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
@@ -1686,7 +1699,19 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
     when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job2.waitFor()).thenReturn(job2)
-    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job1), IO(job2))
+    when(bigQueryService.runJob(any(), any()))
+      .thenAnswer { invocation =>
+        val args = invocation.getArguments
+        args(0) match {
+          case jobInfo: JobInfo =>
+            jobInfo.getJobId.getJob match {
+              case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job1)
+              case "fakeTable" => IO(job2)
+              case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+            }
+          case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+        }
+      }
 
     // Records for same projects but different start/end dates
     val startDate: LocalDateTime = SpendReportUtils.convertJodaToJava(Some(from.minusMonths(1)))
@@ -1780,8 +1805,18 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(job.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any()))
-      .thenReturn(IO(job))
-      .thenAnswer(_ => IO.raiseError(new RuntimeException("BigQuery has errored")))
+      .thenAnswer { invocation =>
+        val args = invocation.getArguments
+        args(0) match {
+          case jobInfo: JobInfo =>
+            jobInfo.getJobId.getJob match {
+              case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job)
+              case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+            }
+          case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+        }
+      }.thenAnswer(_ => IO.raiseError(new RuntimeException("BigQuery has errored")))
+
 
     val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
       mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
