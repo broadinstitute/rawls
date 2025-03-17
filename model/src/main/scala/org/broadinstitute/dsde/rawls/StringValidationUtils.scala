@@ -40,8 +40,8 @@ trait StringValidationUtils {
   def validateEntityName(s: String): Unit =
     if (!entityNameRegex.pattern.matcher(s).matches) {
       val msg =
-        s"""Invalid entity name: $s. Input may only contain alphanumeric characters, underscores, dashes, and periods. 
-            If importing a snapshot, making an API call, uploading a TSV, or adding a new row from the Terra UI, 
+        s"""Invalid entity name: $s. Input may only contain alphanumeric characters, underscores, dashes, and periods.
+            If importing a snapshot, making an API call, uploading a TSV, or adding a new row from the Terra UI,
             please modify the impacted name(s) and try again.""".stripMargin
       throw new RawlsExceptionWithErrorReport(
         errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)
@@ -66,11 +66,11 @@ trait StringValidationUtils {
       )
     }
 
-  private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,30}".r
+  private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,60}".r
   def validateBillingProjectName(s: String): Future[Unit] =
     if (!billingProjectNameRegex.pattern.matcher(s).matches) {
       val msg =
-        s"Invalid name for billing project. Input must be between 6 and 30 characters in length and may only contain alphanumeric characters, underscores, and dashes."
+        s"Invalid name for billing project. Input must be between 6 and 60 characters in length and may only contain alphanumeric characters, underscores, and dashes."
       Future.failed(
         new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
       )
