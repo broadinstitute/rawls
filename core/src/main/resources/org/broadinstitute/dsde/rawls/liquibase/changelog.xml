@@ -134,5 +134,5 @@
     <include file="changesets/20250211_add_workspace_spend_report_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250227_update_workspace_spend_report_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250228_add_billing_project_id.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20250310_add_google_project_table.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250317_add_google_project_registration_table.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

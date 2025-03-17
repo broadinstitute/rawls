@@ -5,8 +5,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   GoogleProjectId,
@@ -40,20 +39,8 @@ class GoogleProjectRegistrationServiceSpec
 
   implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
-  val mockServer: RemoteServicesMockServer = RemoteServicesMockServer()
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    mockServer.startServer()
-  }
-
-  override def afterAll(): Unit = {
-    mockServer.stopServer
-    super.afterAll()
-  }
   // Returns 201 on success
   "GoogleProjectRegistrationService" should "register a Google project" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -92,11 +79,11 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -117,7 +104,6 @@ class GoogleProjectRegistrationServiceSpec
 
   // Should set the billing account both in the rawls database and in real life
   it should "set the billing account" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -156,11 +142,11 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -194,7 +180,6 @@ class GoogleProjectRegistrationServiceSpec
 
   // Fails if no link action on billing-project resource in Sam and/or no link action on google-project resource in Sam
   it should "fail if no link action on billing project resource" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -234,11 +219,11 @@ class GoogleProjectRegistrationServiceSpec
     ).thenReturn(Future.successful(true))
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -256,12 +241,11 @@ class GoogleProjectRegistrationServiceSpec
       )
     }
 
-    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.Forbidden)
 
   }
 
   it should "fail if no link action on google project resource" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -301,11 +285,11 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -327,7 +311,6 @@ class GoogleProjectRegistrationServiceSpec
   }
 
   it should "fail if the billing project does not exist" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -360,11 +343,11 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -386,7 +369,6 @@ class GoogleProjectRegistrationServiceSpec
   }
 
   it should "do nothing if the google project is already registered with this billing project" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -431,11 +413,11 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -450,7 +432,6 @@ class GoogleProjectRegistrationServiceSpec
   }
 
   it should "throw an error if the google project is already registered with a different billing project" in {
-    val mockDataSource = mock[SlickDataSource]
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     val mockContext = mock[RawlsRequestContext]
@@ -497,11 +478,11 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     val googleProjectRegService =
-      GoogleProjectRegistrationService.constructor(mockDataSource,
-                                                   mockSamDAO,
-                                                   mockGoogleProjectRegRepo,
-                                                   mockBillingRepository,
-                                                   mockGoogleServicesDAO
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
       )(
         mockContext
       )
@@ -523,6 +504,73 @@ class GoogleProjectRegistrationServiceSpec
     }
 
     e.errorReport.statusCode shouldBe Option(StatusCodes.Conflict)
+
+  }
+
+  it should "throw an error if updating the billing account fails" in {
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+
+    when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
+      .thenThrow(new RuntimeException("Something has gone wrong in Google"))
+
+    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
+      .thenReturn(Future.successful(None))
+
+    val billingProjectId = RawlsBillingProjectName("billing-project-id")
+
+    val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
+                                                                  billingProjectId,
+                                                                  CreationStatuses.Ready,
+                                                                  Option(RawlsBillingAccountName("billing-account")),
+                                                                  None
+    )
+
+    when(mockBillingRepository.getBillingProject(mockitoEq(billingProjectId)))
+      .thenReturn(Future.successful(Some(billingProject)))
+
+    when(
+      mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
+    ).thenReturn(Future.successful(true))
+
+    when(
+      mockSamDAO.listUserActionsForResource(mockitoEq(SamResourceTypeNames.billingProject),
+                                            any[String],
+                                            any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      Future.successful(Set(SamBillingProjectActions.link, SamBillingProjectActions.own))
+    )
+
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    val testProject = GoogleProjectRegistration(GoogleProjectId("test-project"),
+                                                Some(RawlsBillingAccountName("billing-account")),
+                                                None,
+                                                billingProjectId
+    )
+    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
+      .thenReturn(Future.successful(testProject))
+
+    val e = intercept[RuntimeException] {
+      Await.result(
+        googleProjectRegService.registerGoogleProject(testProject),
+        Duration.Inf
+      )
+    }
+
+    e.getMessage shouldBe "Something has gone wrong in Google"
 
   }
 

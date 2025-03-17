@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
-   <changeSet logicalFilePath="dummy" author="bmorgan" id="create_GOOGLE_PROJECT">
-        <createTable tableName="GOOGLE_PROJECT"
+   <changeSet logicalFilePath="dummy" author="bmorgan" id="create_GOOGLE_PROJECT_REGISTRATION">
+        <createTable tableName="GOOGLE_PROJECT_REGISTRATION"
                      remarks="Tracks standalone Google projects for TDR">
             <column name="google_project_id" type="VARCHAR(254)" >
                 <constraints primaryKey="true"/>
@@ -18,7 +18,7 @@
             </column>
         </createTable>
         <addForeignKeyConstraint baseColumnNames="billing_project"
-                                 baseTableName="GOOGLE_PROJECT"
+                                 baseTableName="GOOGLE_PROJECT_REGISTRATION"
                                  constraintName="FK_BP_GP"
                                  deferrable="false"
                                  initiallyDeferred="false"

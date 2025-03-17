@@ -467,11 +467,11 @@ trait ApiServiceSpec
     ) _
 
     override val googleProjectRegServiceConstructor =
-      GoogleProjectRegistrationService.constructor(slickDataSource,
-                                                   samDAO,
-                                                   googleProjectRegRepo,
-                                                   billingRepository,
-                                                   gcsDAO
+      GoogleProjectRegistrationService.constructor(
+        samDAO,
+        googleProjectRegRepo,
+        billingRepository,
+        gcsDAO
       )
 
     def cleanupSupervisor =

@@ -58,16 +58,8 @@ trait GoogleProjectRegistrationComponent {
   object googleProjectRegistrationQuery extends TableQuery(new GoogleProjectRegistrationTable(_)) {
 
     def create(googleProjectReg: GoogleProjectRegistration): ReadWriteAction[GoogleProjectRegistration] =
-      googleProjectRegistrationQuery
-        .withId(googleProjectReg.googleProjectId.value)
-        .result
-        .flatMap {
-          case Seq() =>
-            googleProjectRegistrationQuery += GoogleProjectRegistrationRecord.fromGoogleProjectRegistration(
-              googleProjectReg
-            )
-          case _ => DBIO.successful(())
-        }
+      (googleProjectRegistrationQuery += GoogleProjectRegistrationRecord
+        .fromGoogleProjectRegistration(googleProjectReg))
         .map(_ => googleProjectReg)
 
     def withId(projectId: String): GoogleProjectRegistrationQuery =

@@ -4654,9 +4654,9 @@ paths:
         - googleProjects
       summary: register google project in rawls
       description: Adds a link between a billing project and a google project and assigns the billing account to the google project
-      operationId: createGoogleProject
+      operationId: registerGoogleProject
       requestBody:
-        description: create google project request
+        description: register google project request
         content:
           'application/json':
             schema:
@@ -4665,6 +4665,12 @@ paths:
       responses:
         200:
           description: Successfully registered Google Project in Rawls
+        403:
+          description: You don't have permission to perform this action
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         404:
           description: Billing and/or Google project don't exist or you don't have permission
           content:
