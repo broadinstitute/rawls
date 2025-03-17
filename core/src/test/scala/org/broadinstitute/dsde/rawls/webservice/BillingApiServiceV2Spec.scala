@@ -444,7 +444,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       Post(
         "/billing/v2",
-        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"),
+        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglong"),
                                                Option(services.gcsDAO.accessibleBillingAccountName),
                                                None,
                                                None,
