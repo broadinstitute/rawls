@@ -38,7 +38,8 @@ trait GoogleProjectRegistrationComponent {
 
   import driver.api._
 
-  class GoogleProjectRegistrationTable(tag: Tag) extends Table[GoogleProjectRegistrationRecord](tag, "GOOGLE_PROJECT") {
+  class GoogleProjectRegistrationTable(tag: Tag)
+      extends Table[GoogleProjectRegistrationRecord](tag, "GOOGLE_PROJECT_REGISTRATION") {
     def googleProjectId = column[String]("GOOGLE_PROJECT_ID", O.PrimaryKey, O.Length(254))
 
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT")
