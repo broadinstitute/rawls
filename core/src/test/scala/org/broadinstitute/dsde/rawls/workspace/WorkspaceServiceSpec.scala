@@ -1701,7 +1701,7 @@ class WorkspaceServiceSpec
         captor.getValue
           .asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
 
-      val expectedProjectName = "short--NS1--plus Long- name to"
+      val expectedProjectName = "plus Long- name to get past 30"
       val actualProjectName = capturedProject.getName
       actualProjectName shouldBe expectedProjectName
   }
