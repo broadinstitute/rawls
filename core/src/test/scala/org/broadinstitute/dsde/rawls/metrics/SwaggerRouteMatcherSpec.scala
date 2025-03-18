@@ -25,16 +25,6 @@ class SwaggerRouteMatcherSpec extends AnyFlatSpec with Matchers {
     matchedRoute.get.parametersByName("workspaceName") shouldBe name
   }
 
-  it should "match getBucketUsage" in {
-    val namespace = "this is a namespace"
-    val name = "this is a name"
-    val matchedRoute = SwaggerRouteMatcher.matchRoute(s"/api/workspaces/$namespace/$name/bucketUsage")
-    matchedRoute shouldBe defined
-    matchedRoute.get.route shouldBe "/api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage"
-    matchedRoute.get.parametersByName("workspaceNamespace") shouldBe namespace
-    matchedRoute.get.parametersByName("workspaceName") shouldBe name
-  }
-
   it should "match getWorkflowCost" in {
     val namespace = "this is a namespace"
     val name = "this is a name"
