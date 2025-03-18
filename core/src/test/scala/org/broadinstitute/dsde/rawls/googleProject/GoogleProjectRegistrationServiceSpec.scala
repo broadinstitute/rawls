@@ -2,12 +2,14 @@ package org.broadinstitute.dsde.rawls.googleProject
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
+  ErrorReport,
   GoogleProjectId,
   GoogleProjectRegistration,
   RawlsBillingAccountName,
@@ -515,7 +517,13 @@ class GoogleProjectRegistrationServiceSpec
     val mockGoogleServicesDAO = mock[GoogleServicesDAO]
 
     when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
-      .thenThrow(new RuntimeException("Something has gone wrong in Google"))
+      .thenReturn(
+        Future.failed(
+          new RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.Forbidden, "Something has gone wrong in Google")
+          )
+        )
+      )
 
     when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
       .thenReturn(Future.successful(None))
@@ -563,14 +571,14 @@ class GoogleProjectRegistrationServiceSpec
     when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
       .thenReturn(Future.successful(testProject))
 
-    val e = intercept[RuntimeException] {
+    val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
         googleProjectRegService.registerGoogleProject(testProject),
         Duration.Inf
       )
     }
 
-    e.getMessage shouldBe "Something has gone wrong in Google"
+    e.errorReport.message shouldBe "Something has gone wrong in Google"
 
   }
 

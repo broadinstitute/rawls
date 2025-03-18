@@ -96,13 +96,6 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
                                      billingProject.billingAccount.get,
                                      ctx.toTracingContext
               )
-              .recoverWith { case ex: Exception =>
-                throw new RawlsExceptionWithErrorReport(
-                  errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                            s"Failed to set billing account in Google: ${ex.getMessage}"
-                  )
-                )
-              }
             registeredGoogleProject <- googleProjectRegRepo.registerGoogleProject(updatedGoogleProjectReg)
           } yield registeredGoogleProject
       }
