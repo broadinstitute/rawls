@@ -389,63 +389,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  override def getBucketUsage(googleProject: GoogleProjectId,
-                              bucketName: String,
-                              maxResults: Option[Long] = None
-  ): Future[BucketUsageResponse] = {
-    implicit val service = GoogleInstrumentedService.Storage
-
-    def usageFromLogObject(o: StorageObject): Future[BucketUsageResponse] =
-      streamObject(o.getBucket, o.getName) { inputStream =>
-        val content = Source.fromInputStream(inputStream).mkString
-        val byteHours = BigInt(content.split('\n')(1).split(',')(1).replace("\"", ""))
-        val timestampOpt = Option(o.getUpdated.getValue)
-        val dateLastUpdated = timestampOpt.map(timestamp => new DateTime(timestamp))
-        // convert byte/hours to byte/days to better match the billing unit of GB/days
-        BucketUsageResponse(byteHours / 24, dateLastUpdated)
-      }
-
-    def recurse(pageToken: Option[String] = None): Future[BucketUsageResponse] = {
-      // Fetch objects with a prefix of "${bucketName}_storage_", (ignoring "_usage_" logs)
-      val fetcher = getStorage(getBucketServiceAccountCredential)
-        .objects()
-        .list(GoogleServicesDAO.getStorageLogsBucketName(googleProject))
-        .setPrefix(s"${bucketName}_storage_")
-      maxResults.foreach(fetcher.setMaxResults(_))
-      pageToken.foreach(fetcher.setPageToken)
-
-      // Exclude retrying 404s to fail faster, which can happen if the project or bucket has been deleted
-      val itemsAndNextPageFuture: Future[(Option[java.util.List[StorageObject]], Option[String])] =
-        retryExponentially(when500orNon404GoogleError) { () =>
-          val result = Future(blocking(executeGoogleRequest(fetcher)))
-          result.map(r => (Option(r.getItems), Option(r.getNextPageToken)))
-        }
-
-      itemsAndNextPageFuture.flatMap {
-        case (None, _) =>
-          // No storage logs, so make sure that the bucket is actually empty
-          val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
-          retryWhen500orGoogleError(() => Option(executeGoogleRequest(fetcher).getItems)) flatMap {
-            case Some(items) if !items.isEmpty =>
-              Future.failed(
-                new RawlsExceptionWithErrorReport(
-                  ErrorReport(StatusCodes.NotFound, s"No storage logs found for '$bucketName'.'")
-                )
-              )
-            case _ => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
-          }
-        case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
-        case (Some(items), None)      =>
-          /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
-           * timestamp, they are also in increasing chronological order. Therefore, the last one is the most recent.
-           */
-          usageFromLogObject(items.asScala.last)
-      }
-    }
-
-    recurse()
-  }
-
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
   ): Future[Either[String, Bucket]] = {
