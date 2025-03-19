@@ -29,7 +29,8 @@ trait DataAccess
     with FastPassGrantComponent
     with MultiregionalBucketMigrationHistory
     with WorkspaceSettingComponent
-    with GoogleProjectRegistrationComponent {
+    with GoogleProjectRegistrationComponent 
+    with WorkspaceSpendReportComponent {
 
   this: DriverComponent =>
 

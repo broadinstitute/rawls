@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmAzureSpendReportApiException
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSpendReportRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
@@ -24,7 +25,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
-import java.util.{Currency, UUID}
+import java.util.{Base64, UUID}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
@@ -38,7 +39,8 @@ object SpendReportingService {
     bpmDao: BillingProfileManagerDAO,
     samDAO: SamDAO,
     spendReportingServiceConfig: SpendReportingServiceConfig,
-    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+    workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+    workspaceSpendReportRepository: WorkspaceSpendReportRepository
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
     new SpendReportingService(
       ctx,
@@ -48,7 +50,8 @@ object SpendReportingService {
       bpmDao,
       samDAO,
       spendReportingServiceConfig,
-      workspaceServiceConstructor
+      workspaceServiceConstructor,
+      workspaceSpendReportRepository
     )
 
   val SpendReportingMetrics = "spendReporting"
@@ -64,15 +67,7 @@ object SpendReportingService {
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): SpendReportingResults = {
 
-    val currency = allRows.map(_.get("currency").getStringValue).distinct match {
-      case head :: List() => Currency.getInstance(head)
-      case head :: tail =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
-        )
-      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
-    }
+    val currency = SpendReportUtils.getCurrency(allRows.map(_.get("currency").getStringValue))
 
     def sum(rows: List[FieldValueList], field: String): String = rows
       .map(row => BigDecimal(row.get(field).getDoubleValue))
@@ -151,74 +146,28 @@ object SpendReportingService {
     var total_credits = BigDecimal(0.0)
 
     // TODO: We may want to allow multiple currencies someday
-    val currency = allRows.map(_.get("currency").getStringValue).distinct match {
-      case head :: List() => Currency.getInstance(head)
-      case head :: tail =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
-        )
-      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
-    }
-
+    val currency = SpendReportUtils.getCurrency(allRows.map(_.get("currency").getStringValue))
     val all = allRows.map { row =>
       val currencyString = row.get("currency").getStringValue
-      val currencyCode = Currency.getInstance(currencyString)
       val projectId = row.get("project_id").getStringValue
-      val workspaceName = names.getOrElse(
-        GoogleProjectId(projectId),
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.InternalServerError,
-          s"unexpected project $projectId returned by BigQuery"
-        )
+      val spendReportingForDateRange = WorkspaceSpendReportRecord.toSpendReportAggregation(
+        currencyString,
+        projectId,
+        Some(start),
+        Some(end),
+        row.get("storage_cost").getDoubleValue.toFloat,
+        row.get("storage_credits").getDoubleValue.toFloat,
+        row.get("compute_cost").getDoubleValue.toFloat,
+        row.get("compute_credits").getDoubleValue.toFloat,
+        row.get("other_cost").getDoubleValue.toFloat,
+        row.get("other_credits").getDoubleValue.toFloat,
+        names
       )
-
-      def getRoundedNumericValue(field: String): BigDecimal =
-        BigDecimal(row.get(field).getDoubleValue)
-          .setScale(currencyCode.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-
-      val subAggregation = List(
-        SpendReportingForDateRange(
-          getRoundedNumericValue("other_cost").toString,
-          getRoundedNumericValue("other_credits").toString,
-          currencyCode.toString,
-          category = Option(TerraSpendCategories.Other)
-        ),
-        SpendReportingForDateRange(
-          getRoundedNumericValue("storage_cost").toString,
-          getRoundedNumericValue("storage_credits").toString,
-          currencyCode.toString,
-          category = Option(TerraSpendCategories.Storage)
-        ),
-        SpendReportingForDateRange(
-          getRoundedNumericValue("compute_cost").toString,
-          getRoundedNumericValue("compute_credits").toString,
-          currencyCode.toString,
-          category = Option(TerraSpendCategories.Compute)
-        )
-      )
-
-      val total_cost = getRoundedNumericValue("total_cost")
-      val credits =
-        getRoundedNumericValue("other_credits") + getRoundedNumericValue("storage_credits") + getRoundedNumericValue(
-          "compute_credits"
-        )
+      val total_cost = BigDecimal(spendReportingForDateRange.cost)
+      val credits = BigDecimal(spendReportingForDateRange.credits)
       total = total + total_cost
       total_credits = total_credits + credits
-
-      val workspaceTotal = SpendReportingForDateRange(
-        total_cost.toString,
-        credits.toString,
-        currencyCode.toString,
-        Option(start),
-        Option(end),
-        workspace = Option(workspaceName),
-        googleProjectId = Option(GoogleProject(projectId)),
-        subAggregation = Option(SpendReportingAggregation(SpendReportingAggregationKeys.Category, subAggregation))
-      )
-
-      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(workspaceTotal))
-
+      SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, List(spendReportingForDateRange))
     }
 
     val summary = SpendReportingForDateRange(
@@ -241,7 +190,8 @@ class SpendReportingService(
   bpmDao: BillingProfileManagerDAO,
   samDAO: SamDAO,
   spendReportingServiceConfig: SpendReportingServiceConfig,
-  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
+  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+  workspaceSpendReportRepository: WorkspaceSpendReportRepository
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented {
@@ -596,9 +546,10 @@ class SpendReportingService(
           )
         }
 
+        startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
+        endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
         // find the distinct export table names in our billingMap
         distinctTableNames: Set[Option[String]] = billingMap.keys.map(_.spendExportTable).toSet
-
         // for each distinct export table name, generate a query.
         results <- Future.sequence(distinctTableNames.map { spendExportTable =>
           // find the subset of the billingMap that we'll use in this query
@@ -617,26 +568,88 @@ class SpendReportingService(
           val workspaceNamesByProjectId: Map[GoogleProjectId, WorkspaceName] = billingMapForQuery.values.flatten
             .map(ws => ws.googleProjectId -> ws.toWorkspaceName)
             .toMap
-
-          val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
-          val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
-          runBigQueryJob(queryJob, childContext)
-            .map { result =>
-              result.getValues.asScala.toList match {
-                case Nil => None
-                case rows =>
-                  Some(extractCrossBillingProjectSpendReportingResults(rows, start, end, workspaceNamesByProjectId))
+          val projectIds = workspaceNamesByProjectId.keySet.map(_.value)
+          val cachedResults =
+            workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
+          val spendResults = cachedResults.flatMap { cachedResult =>
+            if (cachedResult.size == projectIds.size) {
+              val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
+              if (hasDataAvailable.nonEmpty) {
+                val spendReportingResults =
+                  WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable,
+                                                                     start,
+                                                                     end,
+                                                                     workspaceNamesByProjectId
+                  )
+                Future.successful(
+                  Some(spendReportingResults)
+                )
+              } else {
+                Future.successful(None)
               }
+            } else {
+              val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
+              val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
+              val queryResults = runBigQueryJob(queryJob, childContext)
+                .map { result =>
+                  result.getValues.asScala.toList match {
+                    case Nil => None
+                    case rows =>
+                      val crossBillingResults =
+                        extractCrossBillingProjectSpendReportingResults(rows, start, end, workspaceNamesByProjectId)
+                      workspaceSpendReportRepository.insertSpendReportResults(crossBillingResults)
+                      Some(crossBillingResults)
+                  }
+                }
+                .recoverWith { case ex: Throwable =>
+                  logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
+                  Future.successful(None)
+                }
+              queryResults.map { res =>
+                insertRecordsWithMissingSpendData(res, workspaceNamesByProjectId, start, end)
+              }
+              queryResults
             }
-            .recoverWith { case ex: Throwable =>
-              logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
-              Future.successful(None)
-            }
+          }
+          spendResults
         })
         combinedResults = results.flatten.reduceOption((acc, res) => acc + res)
       } yield combinedResults
-
     }
+
+  def insertRecordsWithMissingSpendData(result: Option[SpendReportingResults],
+                                        projectNames: Map[GoogleProjectId, WorkspaceName],
+                                        start: DateTime,
+                                        end: DateTime
+  ): Set[Future[Long]] = {
+    val googleProjectsWithReports: Set[GoogleProjectId] =
+      if (result.nonEmpty) {
+        result.get.spendDetails
+          .flatMap(_.spendData)
+          .flatMap(_.googleProjectId)
+          .map(p => GoogleProjectId(p.value))
+          .toSet
+      } else {
+        Set.empty
+      }
+    // find all supplied project names which are not in the SpendReportingResults projects
+    val missingProjectIds: Set[GoogleProjectId] = projectNames.keySet diff googleProjectsWithReports
+    val startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
+    val endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
+    val insertedRecords = missingProjectIds.map { id =>
+      val spendReport = WorkspaceSpendReport.newEmptySpendReport(
+        id.toString(),
+        startLocalDateTime,
+        endLocalDateTime,
+        "USD"
+      )
+      workspaceSpendReportRepository.insertWorkspaceSpendReport(spendReport).recoverWith { case ex: Throwable =>
+        logger.warn(s"Error inserting workspace spend report: ${ex.getMessage}")
+        Future.successful(0L)
+      }
+    }
+    insertedRecords
+  }
 
   def runBigQueryJob(queryJob: JobInfo, ctx: RawlsRequestContext): Future[TableResult] =
     traceFutureWithParent("runBigQueryJob", ctx) { childContext =>

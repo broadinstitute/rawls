@@ -123,7 +123,7 @@ class WorkspaceApiSpec
 
       // verify display name (starts with namespace, ends with name, limited to 30 chars)
       val maybeDisplayName = googleProjectDao.getProjectName(createdWorkspaceGoogleProject.value).futureValue
-      maybeDisplayName.getOrElse("") should startWith(createdWorkspaceResponse.workspace.namespace)
+      maybeDisplayName.getOrElse("") should be(createdWorkspaceResponse.workspace.name.take(30))
 
       // verify labels exist and that we didn't accidentally forget the buffer labels
       val bufferLabels = Map("vpc-network-name" -> "network", "vpc-subnetwork-name" -> "subnetwork")
