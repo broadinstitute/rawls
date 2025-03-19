@@ -60,6 +60,8 @@ object SpendReportingService {
   val BigQueryKey = "bigQuery"
   val BigQueryCacheMetric = "cache"
   val BigQueryBytesProcessedMetric = "processed"
+  val RawlsKey = "rawls"
+  val RawlsCacheMetric = "cache"
 
   def extractSpendReportingResults(
     allRows: List[FieldValueList],
@@ -215,6 +217,17 @@ class SpendReportingService(
       new HitRatioGauge(
         cacheCounter("hits"),
         cacheCounter("calls")
+      )
+    }
+
+  def rawlsCacheCounter(accessType: String): Counter =
+    spendReportingMetrics.expand(RawlsKey, RawlsCacheMetric).asCounter(accessType)
+
+  def rawlsCacheHitRate(): HitRatioGauge =
+    spendReportingMetrics.expand(RawlsKey, RawlsCacheMetric).asRatio[HitRatioGauge]("hitRate") {
+      new HitRatioGauge(
+        rawlsCacheCounter("hits"),
+        rawlsCacheCounter("calls")
       )
     }
 
@@ -581,6 +594,7 @@ class SpendReportingService(
             workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
           val spendResults = cachedResults.flatMap { cachedResult =>
             if (cachedResult.size == projectIds.size) {
+              rawlsCacheHitRate().hit()
               val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
               if (hasDataAvailable.nonEmpty) {
                 val spendReportingResults =
@@ -596,6 +610,7 @@ class SpendReportingService(
                 Future.successful(None)
               }
             } else {
+              rawlsCacheHitRate().miss()
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
               val queryJob = setUpAllUserWorkspaceQuery(tableNameForQuery, query, start, end)
               val queryResults = runBigQueryJob(queryJob, childContext)
