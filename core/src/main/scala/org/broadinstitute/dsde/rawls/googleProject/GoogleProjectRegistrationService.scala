@@ -82,23 +82,28 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       result <- googleProjectRegRepo.registerGoogleProject(
         googleProjectReg.copy(billingAccount = billingProject.billingAccount)
       )
-      _ <- googleServicesDAO
-        .setBillingAccountName(googleProjectReg.googleProjectId,
-                               billingProject.billingAccount.get,
-                               ctx.toTracingContext
-        )
-        .recoverWith { case ex: RawlsExceptionWithErrorReport =>
-          googleProjectRegRepo
-            .deleteGoogleProjectRegistration(googleProjectReg.googleProjectId)
-            .flatMap(_ =>
-              Future.failed(
-                new RawlsExceptionWithErrorReport(
-                  errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                            s"Failed to set billing account in Google: ${ex.getMessage}"
+      finalResult <- result match {
+        case Some(project) =>
+          googleServicesDAO
+            .setBillingAccountName(googleProjectReg.googleProjectId,
+                                   billingProject.billingAccount.get,
+                                   ctx.toTracingContext
+            )
+            .map(_ => Some(project))
+            .recoverWith { case ex: RawlsExceptionWithErrorReport =>
+              googleProjectRegRepo
+                .deleteGoogleProjectRegistration(googleProjectReg.googleProjectId)
+                .flatMap(_ =>
+                  Future.failed(
+                    new RawlsExceptionWithErrorReport(
+                      errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                                s"Failed to set billing account in Google: ${ex.errorReport.message}"
+                      )
+                    )
                   )
                 )
-              )
-            )
-        }
-    } yield result
+            }
+        case None => Future.successful(None)
+      }
+    } yield finalResult
 }

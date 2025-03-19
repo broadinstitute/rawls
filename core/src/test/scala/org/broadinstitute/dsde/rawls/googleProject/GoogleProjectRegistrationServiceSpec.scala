@@ -51,9 +51,6 @@ class GoogleProjectRegistrationServiceSpec
     when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
       .thenReturn(Future.successful(new ProjectBillingInfo()))
 
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(None))
-
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
 
     val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
@@ -114,9 +111,6 @@ class GoogleProjectRegistrationServiceSpec
 
     when(mockGoogleServicesDAO.setBillingAccountName(any[GoogleProjectId], any[RawlsBillingAccountName], any()))
       .thenReturn(Future.successful(new ProjectBillingInfo()))
-
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(None))
 
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
 
@@ -189,9 +183,6 @@ class GoogleProjectRegistrationServiceSpec
     val mockBillingRepository = mock[BillingRepository]
     val mockGoogleServicesDAO = mock[GoogleServicesDAO]
 
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(None))
-
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
 
     val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
@@ -255,9 +246,6 @@ class GoogleProjectRegistrationServiceSpec
     val mockBillingRepository = mock[BillingRepository]
     val mockGoogleServicesDAO = mock[GoogleServicesDAO]
 
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(None))
-
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
 
     val billingProject: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
@@ -319,9 +307,6 @@ class GoogleProjectRegistrationServiceSpec
     val mockContext = mock[RawlsRequestContext]
     val mockBillingRepository = mock[BillingRepository]
     val mockGoogleServicesDAO = mock[GoogleServicesDAO]
-
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(None))
 
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
 
@@ -398,9 +383,6 @@ class GoogleProjectRegistrationServiceSpec
                                                 None,
                                                 billingProjectId
     )
-
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(Some(testProject)))
 
     when(
       mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
@@ -497,9 +479,6 @@ class GoogleProjectRegistrationServiceSpec
         )
       )
 
-    when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(true))
-
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
         googleProjectRegService.registerGoogleProject(newProject),
@@ -526,9 +505,6 @@ class GoogleProjectRegistrationServiceSpec
           )
         )
       )
-
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(None))
 
     val billingProjectId = RawlsBillingProjectName("billing-project-id")
 
@@ -565,6 +541,9 @@ class GoogleProjectRegistrationServiceSpec
         mockContext
       )
 
+    when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
+      .thenReturn(Future.successful(true))
+
     val testProject = GoogleProjectRegistration(GoogleProjectId("test-project"),
                                                 Some(RawlsBillingAccountName("billing-account")),
                                                 None,
@@ -580,7 +559,7 @@ class GoogleProjectRegistrationServiceSpec
       )
     }
 
-    e.errorReport.message shouldBe "Something has gone wrong in Google"
+    e.errorReport.message shouldBe "Failed to set billing account in Google: Something has gone wrong in Google"
 
   }
 

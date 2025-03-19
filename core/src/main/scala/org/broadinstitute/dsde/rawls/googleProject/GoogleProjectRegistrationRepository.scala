@@ -35,11 +35,6 @@ class GoogleProjectRegistrationRepository(dataSource: SlickDataSource) {
       }
     }
 
-  def getGoogleProjectRegistration(id: GoogleProjectId): Future[Option[GoogleProjectRegistration]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.googleProjectRegistrationQuery.findById(id)
-    }
-
   def deleteGoogleProjectRegistration(id: GoogleProjectId): Future[Boolean] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.googleProjectRegistrationQuery.delete(id)
