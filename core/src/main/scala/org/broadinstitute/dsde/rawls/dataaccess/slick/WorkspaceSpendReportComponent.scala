@@ -117,8 +117,7 @@ object WorkspaceSpendReportRecord {
                                otherCredits: Float,
                                projectNames: Map[GoogleProjectId, WorkspaceName]
   ): SpendReportingForDateRange = {
-    val currencyString = currency
-    val currencyCode = Currency.getInstance(currencyString)
+    val currencyCode = Currency.getInstance(currency)
     val workspaceName = projectNames.getOrElse(
       GoogleProjectId(projectId),
       throw RawlsExceptionWithErrorReport(
