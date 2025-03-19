@@ -73,5 +73,8 @@ trait GoogleProjectRegistrationComponent {
           DBIO.successful(Option(GoogleProjectRegistrationRecord.toGoogleProjectRegistration(googleProjectRegRec)))
       }
 
+    def delete(id: GoogleProjectId): ReadWriteAction[Boolean] =
+      googleProjectRegistrationQuery.withId(id.value).delete.map(_ > 0)
+
   }
 }

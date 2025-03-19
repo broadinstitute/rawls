@@ -39,9 +39,8 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
   protected val executionContext: ExecutionContext
 ) {
 
-  def registerGoogleProject(googleProjectReg: GoogleProjectRegistration): Future[GoogleProjectRegistration] =
+  def registerGoogleProject(googleProjectReg: GoogleProjectRegistration): Future[Option[GoogleProjectRegistration]] =
     for {
-      existingGoogleProjectReg <- googleProjectRegRepo.getGoogleProjectRegistration(googleProjectReg.googleProjectId)
       billingProject <- billingRepository.getBillingProject(googleProjectReg.billingProjectId).map {
         maybeBillingProject =>
           maybeBillingProject.getOrElse(
@@ -75,30 +74,31 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
                        SamGoogleProjectActions.link,
                        ctx
         )
-      _ = if (!canLinkGoogleProject)
+      _ = if (!canLinkGoogleProject) {
         throw new RawlsExceptionWithErrorReport(
           errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have permission to perform this action.")
         )
-      result <- existingGoogleProjectReg match {
-        case Some(existing) if existing.billingProjectId == googleProjectReg.billingProjectId =>
-          Future.successful(existing)
-        case Some(existing) if existing.billingProjectId != googleProjectReg.billingProjectId =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.Conflict,
-                                      "This google project id is already registered with a different billing project."
-            )
-          )
-        case _ =>
-          val updatedGoogleProjectReg = googleProjectReg.copy(billingAccount = billingProject.billingAccount)
-          for {
-            _ <- googleServicesDAO
-              .setBillingAccountName(googleProjectReg.googleProjectId,
-                                     billingProject.billingAccount.get,
-                                     ctx.toTracingContext
-              )
-            registeredGoogleProject <- googleProjectRegRepo.registerGoogleProject(updatedGoogleProjectReg)
-          } yield registeredGoogleProject
       }
+      result <- googleProjectRegRepo.registerGoogleProject(
+        googleProjectReg.copy(billingAccount = billingProject.billingAccount)
+      )
+      _ <- googleServicesDAO
+        .setBillingAccountName(googleProjectReg.googleProjectId,
+                               billingProject.billingAccount.get,
+                               ctx.toTracingContext
+        )
+        .recoverWith { case ex: RawlsExceptionWithErrorReport =>
+          googleProjectRegRepo
+            .deleteGoogleProjectRegistration(googleProjectReg.googleProjectId)
+            .flatMap(_ =>
+              Future.failed(
+                new RawlsExceptionWithErrorReport(
+                  errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                            s"Failed to set billing account in Google: ${ex.getMessage}"
+                  )
+                )
+              )
+            )
+        }
     } yield result
-
 }
