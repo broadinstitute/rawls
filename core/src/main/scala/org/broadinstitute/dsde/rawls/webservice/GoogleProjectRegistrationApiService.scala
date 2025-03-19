@@ -28,7 +28,10 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                 .registerGoogleProject(
                   entity
                 )
-                .map(w => StatusCodes.OK -> w)
+                .map {
+                  case None          => StatusCodes.OK -> None
+                  case Some(project) => StatusCodes.Created -> Some(project)
+                }
             }
           }
         }

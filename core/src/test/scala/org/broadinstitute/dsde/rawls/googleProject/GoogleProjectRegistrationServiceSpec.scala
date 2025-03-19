@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.googleProject
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
@@ -95,12 +94,13 @@ class GoogleProjectRegistrationServiceSpec
                                                 None,
                                                 billingProjectId
     )
-    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
-      .thenReturn(Future.successful(testProject))
+    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration])(any[TestExecutionContext]))
+      .thenReturn(Future.successful(Some(testProject)))
 
     val result = Await.result(googleProjectRegService.registerGoogleProject(testProject), Duration.Inf)
-    assertResult(testProject) {
-      result
+    result match {
+      case Some(project) => assertResult(testProject)(project)
+      case None          => fail(s"Expected Some(${testProject}) but got None")
     }
   }
 
@@ -155,12 +155,12 @@ class GoogleProjectRegistrationServiceSpec
 
     val testProject = GoogleProjectRegistration(GoogleProjectId("test-project"), None, None, billingProjectId)
     val expectedProject = testProject.copy(billingAccount = Some(RawlsBillingAccountName("billing-account")))
-    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
-      .thenReturn(Future.successful(expectedProject))
+    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration])(any[TestExecutionContext]))
+      .thenReturn(Future.successful(Some(expectedProject)))
 
     val result = Await.result(googleProjectRegService.registerGoogleProject(testProject), Duration.Inf)
     val captor: ArgumentCaptor[GoogleProjectRegistration] = ArgumentCaptor.forClass(classOf[GoogleProjectRegistration])
-    verify(mockGoogleProjectRegRepo).registerGoogleProject(captor.capture())
+    verify(mockGoogleProjectRegRepo).registerGoogleProject(captor.capture())(any())
     val capturedProject = captor.getValue
     assert(capturedProject.billingAccount.get.equals(RawlsBillingAccountName("billing-account")))
     val googleProjectIdCaptor: ArgumentCaptor[GoogleProjectId] = ArgumentCaptor.forClass(classOf[GoogleProjectId])
@@ -175,8 +175,9 @@ class GoogleProjectRegistrationServiceSpec
     val capturedBillingAccountName = billingAccountNameCaptor.getValue
     assert(capturedBillingAccountName.equals(RawlsBillingAccountName("billing-account")))
 
-    assertResult(expectedProject) {
-      result
+    result match {
+      case Some(project) => assertResult(expectedProject)(project)
+      case None          => fail(s"Expected Some(${expectedProject}) but got None")
     }
   }
 
@@ -424,12 +425,13 @@ class GoogleProjectRegistrationServiceSpec
         mockContext
       )
 
-    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
-      .thenReturn(Future.successful(testProject))
+    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration])(any[TestExecutionContext]))
+      .thenReturn(Future.successful(Some(testProject)))
 
     val result = Await.result(googleProjectRegService.registerGoogleProject(testProject), Duration.Inf)
-    assertResult(testProject) {
-      result
+    result match {
+      case Some(project) => assertResult(testProject)(project)
+      case None          => fail(s"Expected Some(${testProject}) but got None")
     }
   }
 
@@ -445,8 +447,6 @@ class GoogleProjectRegistrationServiceSpec
 
     val billingProjectId1 = RawlsBillingProjectName("billing-project-id1")
 
-    val billingProjectId2 = RawlsBillingProjectName("billing-project-id2")
-
     val billingProject1: RawlsBillingProject = RawlsBillingProject(UUID.randomUUID(),
                                                                    billingProjectId1,
                                                                    CreationStatuses.Ready,
@@ -456,15 +456,6 @@ class GoogleProjectRegistrationServiceSpec
 
     when(mockBillingRepository.getBillingProject(mockitoEq(billingProjectId1)))
       .thenReturn(Future.successful(Some(billingProject1)))
-
-    val existingProject = GoogleProjectRegistration(GoogleProjectId("test-project"),
-                                                    Some(RawlsBillingAccountName("billing-account")),
-                                                    None,
-                                                    billingProjectId2
-    )
-
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(any[GoogleProjectId]))
-      .thenReturn(Future.successful(Some(existingProject)))
 
     when(
       mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
@@ -495,8 +486,19 @@ class GoogleProjectRegistrationServiceSpec
                                                billingProjectId1
     )
 
-    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
-      .thenReturn(Future.successful(newProject))
+    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration])(any[TestExecutionContext]))
+      .thenReturn(
+        Future.failed(
+          RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.Conflict,
+                        "This google project id is already registered with a different billing project."
+            )
+          )
+        )
+      )
+
+    when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
+      .thenReturn(Future.successful(true))
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
@@ -568,8 +570,8 @@ class GoogleProjectRegistrationServiceSpec
                                                 None,
                                                 billingProjectId
     )
-    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration]))
-      .thenReturn(Future.successful(testProject))
+    when(mockGoogleProjectRegRepo.registerGoogleProject(any[GoogleProjectRegistration])(any[TestExecutionContext]))
+      .thenReturn(Future.successful(Some(testProject)))
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(

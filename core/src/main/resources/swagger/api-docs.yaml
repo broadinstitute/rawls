@@ -4664,7 +4664,9 @@ paths:
         required: true
       responses:
         200:
-          description: Successfully registered Google Project in Rawls
+          description: Google Project is already registered in Rawls
+        201:
+          description: Google Project successfully registered in Rawls and billing account updated
         403:
           description: You don't have permission to perform this action
           content:
