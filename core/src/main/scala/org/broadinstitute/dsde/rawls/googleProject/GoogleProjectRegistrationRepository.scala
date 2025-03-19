@@ -6,13 +6,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectRegistration}
 import slick.dbio.DBIO
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class GoogleProjectRegistrationRepository(dataSource: SlickDataSource) {
 
   def registerGoogleProject(
     googleProjectRegistration: GoogleProjectRegistration
-  ): Future[Option[GoogleProjectRegistration]] =
+  ) (implicit executionContext: ExecutionContext): Future[Option[GoogleProjectRegistration]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.googleProjectRegistrationQuery.findById(
         googleProjectRegistration.googleProjectId
