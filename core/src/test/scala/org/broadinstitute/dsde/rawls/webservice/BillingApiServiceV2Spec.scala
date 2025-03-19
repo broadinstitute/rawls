@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
@@ -964,6 +965,47 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       sealRoute(services.billingRoutesV2()) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "GET /billing/v2/id/{projectId}/verifyAction/{action}" should "return 200 if user has requested action" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("projectName")
+      val action = "link"
+      when(
+        services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                      ArgumentMatchers.eq("projectName"),
+                                      ArgumentMatchers.eq(SamResourceAction(action)),
+                                      any()
+        )
+      )
+        .thenReturn(Future.successful(true))
+
+      Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
+        sealRoute(services.billingRoutesV2()) ~> check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+        }
+  }
+
+  it should "return 403 if user does not have requested action" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("projectName")
+    val action = "link"
+    when(
+      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                    ArgumentMatchers.eq("projectName"),
+                                    ArgumentMatchers.eq(SamResourceAction(action)),
+                                    any()
+      )
+    )
+      .thenReturn(Future.successful(false))
+
+    Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
+      sealRoute(services.billingRoutesV2()) ~> check {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
           status
         }
       }

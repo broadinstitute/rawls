@@ -600,6 +600,15 @@ class UserService(
       case ProjectRoles.User  => SamBillingProjectPolicyNames.workspaceCreator
     }
 
+  def verifyBillingProjectAccess(projectUuid: UUID, action: SamResourceAction): Future[Boolean] =
+    for {
+      billingProject <- billingRepository.getBillingProjectById(projectUuid)
+      userHasAction <- billingProject match {
+        case Some(bp) => samDAO.userHasAction(SamResourceTypeNames.billingProject, bp.projectName.value, action, ctx)
+        case None     => Future.successful(false)
+      }
+    } yield userHasAction
+
   def addUserToBillingProject(projectName: RawlsBillingProjectName,
                               projectAccessUpdate: ProjectAccessUpdate
   ): Future[Unit] =

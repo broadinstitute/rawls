@@ -250,6 +250,27 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/v2/id/{projectUuid}/verifyAction/{action}:
+    get:
+      tags:
+        - billing_v2
+      summary: check if user can perform action on billing project
+      description: check if user can perform action on billing project
+      operationId: verifyBillingProjectAction
+      parameters:
+        - $ref: '#/components/parameters/billingProjectUuidPathParam'
+        - $ref: '#/components/parameters/billingProjectActionPathParam'
+      responses:
+        200:
+          description: OK
+        403:
+          description: User does not have permission to perform action or project does not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}:
     get:
       tags:
@@ -7285,6 +7306,13 @@ components:
           description: objects that this job has transferred so far
           type: integer
   parameters:
+    billingProjectActionPathParam:
+      name: action
+      in: path
+      description: Action to take on the billing project
+      required: true
+      schema:
+        type: string
     billingProjectUuidPathParam:
         name: projectUuid
         in: path
