@@ -26,8 +26,9 @@ class GoogleProjectRegistrationRepositorySpec extends AnyFlatSpec with TestDrive
 
     val result = Await.result(repo.registerGoogleProject(googleProjectReg), Duration.Inf)
 
-    assertResult(googleProjectReg) {
-      result
+    result match {
+      case Some(project) => assertResult(googleProjectReg)(project)
+      case None          => fail(s"Expected Some(${googleProjectReg}) but got None")
     }
   }
 
