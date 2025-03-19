@@ -12,7 +12,7 @@ class GoogleProjectRegistrationRepository(dataSource: SlickDataSource) {
 
   def registerGoogleProject(
     googleProjectRegistration: GoogleProjectRegistration
-  ) (implicit executionContext: ExecutionContext): Future[Option[GoogleProjectRegistration]] =
+  )(implicit executionContext: ExecutionContext): Future[Option[GoogleProjectRegistration]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.googleProjectRegistrationQuery.findById(
         googleProjectRegistration.googleProjectId
