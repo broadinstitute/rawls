@@ -1704,7 +1704,7 @@ class WorkspaceService(
                                         ""
         )
 
-        googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+        googleProjectName = gcsDAO.googleProjectNameSafeString(workspaceName.name)
         // RBS projects already come with some labels so combine them to not lose the old ones
         labels = Option(googleProject.getLabels).map(_.asScala).getOrElse(Map.empty) ++ newLabels
         updatedProject = googleProject.setName(googleProjectName).setLabels(labels.toMap.asJava)
