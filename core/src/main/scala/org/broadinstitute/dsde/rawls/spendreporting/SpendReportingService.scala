@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
-import java.util.UUID
+import java.util.{Base64, UUID}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
@@ -390,8 +390,7 @@ class SpendReportingService(
   def setUpAllUserWorkspaceQuery(
     query: String,
     start: DateTime,
-    end: DateTime,
-    exportTableName: String
+    end: DateTime
   ): JobInfo = {
     def queryParam(value: String): QueryParameterValue =
       QueryParameterValue.newBuilder().setType(StandardSQLTypeName.STRING).setValue(value).build()
@@ -400,8 +399,8 @@ class SpendReportingService(
       .newBuilder(query)
       .addNamedParameter("startDate", queryParam(toISODateString(start)))
       .addNamedParameter("endDate", queryParam(toISODateString(end)))
-      .setLabels(Map("exportTableName" -> exportTableName).asJava) // label is only used for unit tests
       .build()
+
     JobInfo.newBuilder(queryConfig).build()
   }
 
@@ -590,7 +589,7 @@ class SpendReportingService(
               }
             } else {
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
-              val queryJob = setUpAllUserWorkspaceQuery(query, start, end, tableNameForQuery)
+              val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
               val queryResults = runBigQueryJob(queryJob, childContext)
                 .map { result =>
                   result.getValues.asScala.toList match {

@@ -42,7 +42,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.time.{LocalDateTime, ZoneId}
-import java.util.{Currency, Date, UUID}
+import java.util.{Base64, Currency, Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
