@@ -25,12 +25,10 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
-import java.sql.Timestamp
-import java.util.{Currency, UUID}
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
-import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import scala.util.Try
 
 object SpendReportingService {
@@ -390,10 +388,10 @@ class SpendReportingService(
   }
 
   def setUpAllUserWorkspaceQuery(
-    jobId: String,
     query: String,
     start: DateTime,
-    end: DateTime
+    end: DateTime,
+    exportTableName: String
   ): JobInfo = {
     def queryParam(value: String): QueryParameterValue =
       QueryParameterValue.newBuilder().setType(StandardSQLTypeName.STRING).setValue(value).build()
@@ -402,13 +400,9 @@ class SpendReportingService(
       .newBuilder(query)
       .addNamedParameter("startDate", queryParam(toISODateString(start)))
       .addNamedParameter("endDate", queryParam(toISODateString(end)))
+      .setLabels(Map("exportTableName" -> exportTableName).asJava) // label is only used for unit tests
       .build()
-
-    JobInfo
-      .newBuilder(queryConfig)
-      .setJobId(JobId.of(jobId)) // jobId is only used in unit tests
-      .build()
-
+    JobInfo.newBuilder(queryConfig).build()
   }
 
   def logSpendQueryStats(stats: JobStatistics.QueryStatistics): Unit = {
@@ -557,7 +551,6 @@ class SpendReportingService(
         endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
         // find the distinct export table names in our billingMap
         distinctTableNames: Set[Option[String]] = billingMap.keys.map(_.spendExportTable).toSet
-
         // for each distinct export table name, generate a query.
         results <- Future.sequence(distinctTableNames.map { spendExportTable =>
           // find the subset of the billingMap that we'll use in this query
@@ -597,7 +590,7 @@ class SpendReportingService(
               }
             } else {
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
-              val queryJob = setUpAllUserWorkspaceQuery(tableNameForQuery, query, start, end)
+              val queryJob = setUpAllUserWorkspaceQuery(query, start, end, tableNameForQuery)
               val queryResults = runBigQueryJob(queryJob, childContext)
                 .map { result =>
                   result.getValues.asScala.toList match {

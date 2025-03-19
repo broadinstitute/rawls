@@ -35,6 +35,7 @@ import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
+import org.mockito.stubbing.OngoingStubbing
 import org.mockito.{ArgumentCaptor, Mockito}
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -698,6 +699,36 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         case _ => fail("Unexpected category")
       }
     }
+  }
+
+  def mockBigQueryJobs(bigQueryService: GoogleBigQueryService[IO],
+                       table1: List[Map[String, String]],
+                       table2: List[Map[String, String]]
+  ): OngoingStubbing[IO[Job]] = {
+    val job1 = mock[Job]
+    when(job1.getQueryResults(any())).thenReturn(createTableResult(table1))
+    when(job1.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
+    when(job1.waitFor()).thenReturn(job1)
+    val job2 = mock[Job]
+    when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
+    when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
+    when(job2.waitFor()).thenReturn(job2)
+    when(bigQueryService.runJob(any(), any()))
+      .thenAnswer { invocation =>
+        val args = invocation.getArguments
+        args(0) match {
+          case jobInfo: JobInfo =>
+            val config = jobInfo.getConfiguration.toString
+            if (config.contains("billing1_bq_project.billing1_dataset.billing1_table")) {
+              IO(job1)
+            } else if (config.contains("fakeTable")) {
+              IO(job2)
+            } else {
+              IO.raiseError(new RuntimeException(s"unit test failure - no matching label for exportTableName"))
+            }
+          case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+        }
+      }
   }
 
   def testGetSpendReportResults(mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository,
@@ -1609,28 +1640,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
 
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    val job1 = mock[Job]
-    when(job1.getQueryResults(any())).thenReturn(createTableResult(table1))
-    when(job1.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
-    when(job1.waitFor()).thenReturn(job1)
-    val job2 = mock[Job]
-    when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
-    when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
-    when(job2.waitFor()).thenReturn(job2)
-
-    when(bigQueryService.runJob(any(), any()))
-      .thenAnswer { invocation =>
-        val args = invocation.getArguments
-        args(0) match {
-          case jobInfo: JobInfo =>
-            jobInfo.getJobId.getJob match {
-              case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job1)
-              case "fakeTable"                                           => IO(job2)
-              case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
-            }
-          case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
-        }
-      }
+    mockBigQueryJobs(bigQueryService, table1, table2)
 
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
@@ -1661,6 +1671,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val zero = BigDecimal("0.00")
     val total = price1 + price2
 
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val table1: List[Map[String, String]] = List(
       Map(
         "storage_cost" -> s"$price1",
@@ -1689,29 +1700,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "other_credits" -> s"$zero"
       )
     )
-
-    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    val job1 = mock[Job]
-    when(job1.getQueryResults(any())).thenReturn(createTableResult(table1))
-    when(job1.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
-    when(job1.waitFor()).thenReturn(job1)
-    val job2 = mock[Job]
-    when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
-    when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
-    when(job2.waitFor()).thenReturn(job2)
-    when(bigQueryService.runJob(any(), any()))
-      .thenAnswer { invocation =>
-        val args = invocation.getArguments
-        args(0) match {
-          case jobInfo: JobInfo =>
-            jobInfo.getJobId.getJob match {
-              case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job1)
-              case "fakeTable"                                           => IO(job2)
-              case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
-            }
-          case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
-        }
-      }
+    mockBigQueryJobs(bigQueryService, table1, table2)
 
     // Records for same projects but different start/end dates
     val startDate: LocalDateTime = SpendReportUtils.convertJodaToJava(Some(from.minusMonths(1)))
@@ -1809,10 +1798,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         val args = invocation.getArguments
         args(0) match {
           case jobInfo: JobInfo =>
-            jobInfo.getJobId.getJob match {
-              case "billing1_bq_project.billing1_dataset.billing1_table" => IO(job)
-              case "fakeTable" => IO.raiseError(new RuntimeException("BigQuery has errored"))
-              case x           => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
+            val config = jobInfo.getConfiguration.toString
+            if (config.contains("billing1_bq_project.billing1_dataset.billing1_table")) {
+              IO(job)
+            } else if (config.contains("fakeTable")) {
+              IO.raiseError(new RuntimeException("BigQuery has errored"))
+            } else {
+              IO.raiseError(new RuntimeException(s"unit test failure - no matching label for exportTableName"))
             }
           case x => IO.raiseError(new RuntimeException(s"unit test failure with input $x"))
         }
