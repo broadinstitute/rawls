@@ -1,5 +1,5 @@
 # TODO: Replace build script with multi-stage Dockerfile that builds its own JAR
-# FROM sbtscala/scala-sbt:eclipse-temurin-17.0.13_11_1.10.7_2.13.16 as jar-builder
+# FROM sbtscala/scala-sbt:eclipse-temurin-17.0.14_7_1.10.10_2.13.16 as jar-builder
 # ...build JAR...
 # FROM us.gcr.io/broad-dsp-gcr-public/base/jre:17-debian
 # COPY --from=jar-builder ./rawls*.jar /rawls
@@ -18,14 +18,14 @@ RUN mkdir /rawls
 COPY ./rawls*.jar /rawls
 
 # Add Rawls as a service (it will start when the container starts)
-# 1. “Exec” form of CMD necessary to avoid “shell” form’s `sh` stripping 
-#    environment variables with periods in them, often used in DSP for Lightbend 
+# 1. “Exec” form of CMD necessary to avoid “shell” form’s `sh` stripping
+#    environment variables with periods in them, often used in DSP for Lightbend
 #    config.
-# 2. Handling $JAVA_OPTS is necessary as long as firecloud-develop or the app’s 
-#    chart tries to set it. Apps that use devops’s foundation subchart don’t need 
+# 2. Handling $JAVA_OPTS is necessary as long as firecloud-develop or the app’s
+#    chart tries to set it. Apps that use devops’s foundation subchart don’t need
 #    to handle this.
-# 3. The jar’s location and naming scheme in the filesystem is required by preflight 
-#    liquibase migrations in some app charts. Apps that expose liveness endpoints 
+# 3. The jar’s location and naming scheme in the filesystem is required by preflight
+#    liquibase migrations in some app charts. Apps that expose liveness endpoints
 #    may not need preflight liquibase migrations.
 # We use the “exec” form with `bash` to accomplish all of the above.
 CMD ["/bin/bash", "-c", "java $JAVA_OPTS -jar $(find /rawls -name 'rawls*.jar')"]
