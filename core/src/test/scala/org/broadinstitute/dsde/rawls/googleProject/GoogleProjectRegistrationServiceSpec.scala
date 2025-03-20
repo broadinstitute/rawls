@@ -559,6 +559,12 @@ class GoogleProjectRegistrationServiceSpec
       )
     }
 
+    val captor: ArgumentCaptor[GoogleProjectId] = ArgumentCaptor.forClass(classOf[GoogleProjectId])
+    verify(mockGoogleProjectRegRepo).deleteGoogleProjectRegistration(captor.capture())
+    val capturedId = captor.getValue
+    assert(capturedId.equals(GoogleProjectId("test-project")))
+
+
     e.errorReport.message shouldBe "Failed to set billing account in Google: Something has gone wrong in Google"
 
   }
