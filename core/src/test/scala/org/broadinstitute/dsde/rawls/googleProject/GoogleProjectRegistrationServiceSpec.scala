@@ -595,8 +595,13 @@ class GoogleProjectRegistrationServiceSpec
     when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
       .thenReturn(Future.successful(true))
 
+    // Returns Unit, so just run to make sure no errors are thrown
     Await.result(googleProjectRegService.unregisterGoogleProject(GoogleProjectId("test-project")), Duration.Inf)
 
+    val captor: ArgumentCaptor[GoogleProjectId] = ArgumentCaptor.forClass(classOf[GoogleProjectId])
+    verify(mockGoogleServicesDAO).disableBillingOnGoogleProject(captor.capture(), any())
+    val capturedId = captor.getValue
+    assert(capturedId.equals(GoogleProjectId("test-project")))
   }
 
   it should "fail if no delete action on google project" in {

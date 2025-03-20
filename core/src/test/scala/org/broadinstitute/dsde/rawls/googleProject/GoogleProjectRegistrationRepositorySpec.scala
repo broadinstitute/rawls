@@ -56,4 +56,19 @@ class GoogleProjectRegistrationRepositorySpec extends AnyFlatSpec with TestDrive
     }
   }
 
+  behavior of "deleteGoogleProjectRegistration"
+
+  it should "do nothing if trying to delete a record that does not exist" in withDefaultTestDatabase {
+    val repo = new GoogleProjectRegistrationRepository(slickDataSource)
+    val googleProjectReg = makeGoogleProjectRegistration(testData.testProject1)
+
+    val result =
+      Await.result(repo.deleteGoogleProjectRegistration(googleProjectReg.googleProjectId), Duration.Inf)
+
+    assertResult(Some(false)) {
+      result
+    }
+
+  }
+
 }
