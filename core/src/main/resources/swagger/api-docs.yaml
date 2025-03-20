@@ -25,6 +25,7 @@ tags:
   - name: workflows
   - name: workspaces
   - name: workspaces_v2
+  - name: googleProjects
 
 paths:
   /version:
@@ -4629,6 +4630,39 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects:
+    put:
+      tags:
+        - googleProjects
+      summary: register google project in rawls
+      description: Adds a link between a billing project and a google project and assigns the billing account to the google project
+      operationId: registerGoogleProject
+      requestBody:
+        description: register google project request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/RegisterGoogleProjectRequest'
+        required: true
+      responses:
+        200:
+          description: Google Project is already registered in Rawls
+        201:
+          description: Google Project successfully registered in Rawls and billing account updated
+        403:
+          description: You don't have permission to perform this action
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing and/or Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
@@ -7253,6 +7287,18 @@ components:
         objectsTransferred:
           description: objects that this job has transferred so far
           type: integer
+    RegisterGoogleProjectRequest:
+      required:
+        - googleProjectId
+        - billingProjectId
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
   parameters:
     billingProjectUuidPathParam:
         name: projectUuid
