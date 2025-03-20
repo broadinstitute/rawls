@@ -7,9 +7,10 @@ import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.model.GoogleProjectRegistrationJsonSupport$._
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectRegistration, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectRegistration, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
@@ -20,21 +21,30 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
   def googleProjectRegistrationRoutes(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      path("googleProjects") {
-        put {
-          entity(as[GoogleProjectRegistration]) { entity =>
-            complete {
-              googleProjectRegServiceConstructor(ctx)
-                .registerGoogleProject(
-                  entity
-                )
-                .map {
-                  case None          => StatusCodes.OK -> None
-                  case Some(project) => StatusCodes.Created -> Some(project)
-                }
+      pathPrefix("googleProjects") {
+        pathEnd {
+          put {
+            entity(as[GoogleProjectRegistration]) { entity =>
+              complete {
+                googleProjectRegServiceConstructor(ctx)
+                  .registerGoogleProject(
+                    entity
+                  )
+                  .map {
+                    case None => StatusCodes.OK -> None
+                    case Some(project) => StatusCodes.Created -> Some(project)
+                  }
+              }
             }
           }
-        }
+        } ~
+          path(Segment) { googleProjectId =>
+            delete {
+              complete {
+                googleProjectRegServiceConstructor(ctx).unregisterGoogleProject(GoogleProjectId(googleProjectId)).map(_ => StatusCodes.NoContent)
+              }
+            }
+          }
       }
     }
 

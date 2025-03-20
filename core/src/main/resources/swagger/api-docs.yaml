@@ -4681,6 +4681,33 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects/{googleProjectId}:
+    delete:
+      tags:
+        - googleProjects
+      summary: unregister google project in rawls
+      description: Removes link between a billing project and a google project and disables the google project
+      operationId: unregisterGoogleProject
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        204:
+          description: Successfully unregistered google project
+          content: { }
+        403:
+          description: You do not have the necessary permissions
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Google project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
@@ -7457,6 +7484,13 @@ components:
       name: workspaceId
       in: path
       description: The workspace id
+      required: true
+      schema:
+        type: string
+    googleProjectIdPathParam:
+      name: googleProjectId
+      in: path
+      description: Google Project ID
       required: true
       schema:
         type: string
