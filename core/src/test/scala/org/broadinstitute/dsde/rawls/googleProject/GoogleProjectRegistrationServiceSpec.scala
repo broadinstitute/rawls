@@ -564,7 +564,6 @@ class GoogleProjectRegistrationServiceSpec
     val capturedId = captor.getValue
     assert(capturedId.equals(GoogleProjectId("test-project")))
 
-
     e.errorReport.message shouldBe "Failed to set billing account in Google: Something has gone wrong in Google"
 
   }
