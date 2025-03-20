@@ -50,7 +50,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.serviceFactory._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
-import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
+import org.broadinstitute.dsde.rawls.spendreporting.{SpendReportingService, WorkspaceSpendReportRepository}
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -520,7 +520,8 @@ object Boot extends IOApp with LazyLogging {
           billingProfileManagerDAO,
           samDAO,
           spendReportingServiceConfig,
-          workspaceServiceConstructor
+          workspaceServiceConstructor,
+          new WorkspaceSpendReportRepository(slickDataSource)
         )
 
       val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =

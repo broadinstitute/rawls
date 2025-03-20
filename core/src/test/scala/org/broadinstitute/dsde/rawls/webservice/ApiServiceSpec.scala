@@ -46,7 +46,7 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
-import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
+import org.broadinstitute.dsde.rawls.spendreporting.{SpendReportingService, WorkspaceSpendReportRepository}
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -419,7 +419,8 @@ trait ApiServiceSpec
       mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig,
-      workspaceServiceConstructor
+      workspaceServiceConstructor,
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
     )
 
     override val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService =
