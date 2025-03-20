@@ -196,11 +196,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] =
     Future.successful(Some(new Group))
 
-  def getBucketUsage(googleProject: GoogleProjectId,
-                     bucketName: String,
-                     maxResults: Option[Long]
-  ): Future[BucketUsageResponse] = Future.successful(BucketUsageResponse(42, Option(new DateTime(0))))
-
   override def getBucketMetrics(googleProject: GoogleProjectId): BucketMetricsResponse =
     BucketMetricsResponse(Seq(BucketMetric("REGIONAL", 12345), BucketMetric("MULTI_REGIONAL", 54321)))
 

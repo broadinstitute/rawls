@@ -3668,24 +3668,6 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceRequest
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage:
-    get:
-      tags:
-        - workspaces
-      summary: Get bucket usage
-      deprecated: true
-      description: Deprecated in favor of /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketUsage
-      operationId: getBucketUsage
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/BucketUsageResponse'
   /api/workspaces/tags:
     get:
       tags:
@@ -6350,19 +6332,6 @@ components:
           type: boolean
           description: Clone this workspace with a bucket that collects extra logging about data access.
           default: false
-      description: ""
-    BucketUsageResponse:
-      required:
-        - usageInBytes
-      type: object
-      properties:
-        usageInBytes:
-          type: integer
-          description: The current storage bucket usage in bytes
-        lastUpdated:
-          type: string
-          format: timestamp
-          description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
       description: ""
     BucketMetricsResponse:
       type: array
