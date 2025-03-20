@@ -269,6 +269,12 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Project does not exist or user does not have permission to view it
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}:

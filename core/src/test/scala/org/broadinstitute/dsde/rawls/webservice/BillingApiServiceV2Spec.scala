@@ -974,13 +974,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       val project = createProject("projectName")
       val action = "link"
       when(
-        services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                      ArgumentMatchers.eq("projectName"),
-                                      ArgumentMatchers.eq(SamResourceAction(action)),
-                                      any()
+        services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                   ArgumentMatchers.eq("projectName"),
+                                                   any()
         )
       )
-        .thenReturn(Future.successful(true))
+        .thenReturn(Future.successful(Set(SamResourceAction(action))))
 
       Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
         sealRoute(services.billingRoutesV2()) ~> check {
@@ -994,13 +993,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val project = createProject("projectName")
     val action = "link"
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq("projectName"),
-                                    ArgumentMatchers.eq(SamResourceAction(action)),
-                                    any()
+      services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                 ArgumentMatchers.eq("projectName"),
+                                                 any()
       )
     )
-      .thenReturn(Future.successful(false))
+      .thenReturn(Future.successful(Set(SamResourceAction("notLink"))))
 
     Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
       sealRoute(services.billingRoutesV2()) ~> check {
@@ -1008,6 +1006,32 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           status
         }
       }
+  }
+
+  it should "return 404 if user has no access to project or project does not exist" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("projectName")
+      val action = "link"
+      when(
+        services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                   ArgumentMatchers.eq("projectName"),
+                                                   any()
+        )
+      ).thenReturn(Future.successful(Set.empty))
+
+      Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
+        sealRoute(services.billingRoutesV2()) ~> check {
+          assertResult(StatusCodes.NotFound, responseAs[String]) {
+            status
+          }
+        }
+
+      Get(s"/billing/v2/id/${UUID.randomUUID()}/verifyAction/$action") ~>
+        sealRoute(services.billingRoutesV2()) ~> check {
+          assertResult(StatusCodes.NotFound, responseAs[String]) {
+            status
+          }
+        }
   }
 
   "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {

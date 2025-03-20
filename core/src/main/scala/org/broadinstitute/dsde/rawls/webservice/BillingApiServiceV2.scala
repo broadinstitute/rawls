@@ -78,9 +78,10 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     complete {
                       userServiceConstructor(ctx)
                         .verifyBillingProjectAccess(UUID.fromString(id), SamResourceAction(action))
-                        .map { userHasAction =>
-                          if (userHasAction) StatusCodes.OK -> None
-                          else StatusCodes.Forbidden -> None
+                        .map {
+                          case Some(true)  => StatusCodes.OK -> None
+                          case Some(false) => StatusCodes.Forbidden -> None
+                          case None        => StatusCodes.NotFound -> None
                         }
                     }
                   }
