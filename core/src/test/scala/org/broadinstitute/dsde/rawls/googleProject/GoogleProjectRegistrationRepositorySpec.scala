@@ -65,7 +65,7 @@ class GoogleProjectRegistrationRepositorySpec extends AnyFlatSpec with TestDrive
     val result =
       Await.result(repo.deleteGoogleProjectRegistration(googleProjectReg.googleProjectId), Duration.Inf)
 
-    assertResult(Some(false)) {
+    assertResult(false) {
       result
     }
 
