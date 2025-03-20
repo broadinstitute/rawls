@@ -4,7 +4,15 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectRegistration, RawlsRequestContext, SamBillingProjectActions, SamGoogleProjectActions, SamResourceTypeNames}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  GoogleProjectId,
+  GoogleProjectRegistration,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamGoogleProjectActions,
+  SamResourceTypeNames
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -103,18 +111,20 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       }
     } yield finalResult
 
-  def unregisterGoogleProject(googleProjectId: GoogleProjectId): Future[Unit] = {
-    //1. Check delete action on google-project resource.
+  def unregisterGoogleProject(googleProjectId: GoogleProjectId): Future[Unit] =
+    // 1. Check delete action on google-project resource.
     for {
-      _ <- samDAO.userHasAction(SamResourceTypeNames.googleProject,
-      googleProjectId.value,
-      SamGoogleProjectActions.delete,
-      ctx
-      ).map(canDelete => if (!canDelete) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Google project not found or you do not have permission to delete.")))
-      //2. Disable billing on the Google project.
+      _ <- samDAO
+        .userHasAction(SamResourceTypeNames.googleProject, googleProjectId.value, SamGoogleProjectActions.delete, ctx)
+        .map(canDelete =>
+          if (!canDelete)
+            throw new RawlsExceptionWithErrorReport(errorReport =
+              ErrorReport(StatusCodes.Forbidden, s"Google project not found or you do not have permission to delete.")
+            )
+        )
+      // 2. Disable billing on the Google project.
       _ <- googleServicesDAO.disableBillingOnGoogleProject(googleProjectId, ctx.toTracingContext)
-      //3. Delete the record in the GOOGLE_PROJECT table.
+      // 3. Delete the record in the GOOGLE_PROJECT table.
       _ <- googleProjectRegRepo.deleteGoogleProjectRegistration(googleProjectId)
     } yield ()
-  }
 }

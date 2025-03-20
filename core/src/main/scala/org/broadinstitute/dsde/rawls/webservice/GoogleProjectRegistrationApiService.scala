@@ -31,7 +31,7 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                     entity
                   )
                   .map {
-                    case None => StatusCodes.OK -> None
+                    case None          => StatusCodes.OK -> None
                     case Some(project) => StatusCodes.Created -> Some(project)
                   }
               }
@@ -41,7 +41,9 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
           path(Segment) { googleProjectId =>
             delete {
               complete {
-                googleProjectRegServiceConstructor(ctx).unregisterGoogleProject(GoogleProjectId(googleProjectId)).map(_ => StatusCodes.NoContent)
+                googleProjectRegServiceConstructor(ctx)
+                  .unregisterGoogleProject(GoogleProjectId(googleProjectId))
+                  .map(_ => StatusCodes.NoContent)
               }
             }
           }
