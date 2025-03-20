@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext}
@@ -120,7 +121,8 @@ trait RawlsApiService
     with StatusApiService
     with InstrumentationDirectives
     with VersionApiService
-    with ServicePerimeterApiService {
+    with ServicePerimeterApiService
+    with GoogleProjectRegistrationApiService {
 
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService
   val submissionTimeout: FiniteDuration
@@ -143,7 +145,8 @@ trait RawlsApiService
       billingRoutes(otelContext) ~
       notificationsRoutes ~
       servicePerimeterRoutes(otelContext) ~
-      snapshotRoutes(otelContext)
+      snapshotRoutes(otelContext) ~
+      googleProjectRegistrationRoutes(otelContext)
 
   def apiRoutes =
     options(complete(OK)) ~
@@ -217,28 +220,30 @@ trait VersionApiService {
   }
 }
 
-class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
-                          val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
-                          val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService,
-                          val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
-                          val entityServiceConstructor: RawlsRequestContext => EntityService,
-                          val userServiceConstructor: RawlsRequestContext => UserService,
-                          val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService,
-                          val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
-                          val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
-                          val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
-                          val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
-                          val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
-                          val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
-                          val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService,
-                          val statusServiceConstructor: () => StatusService,
-                          val executionServiceCluster: ExecutionServiceCluster,
-                          val appVersion: ApplicationVersion,
-                          val submissionTimeout: FiniteDuration,
-                          val batchUpsertMaxBytes: Long,
-                          override val workbenchMetricBaseName: String,
-                          val samDAO: SamDAO,
-                          val openIDConnectConfiguration: OpenIDConnectConfiguration
+class RawlsApiServiceImpl(
+  val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
+  val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+  val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService,
+  val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+  val entityServiceConstructor: RawlsRequestContext => EntityService,
+  val userServiceConstructor: RawlsRequestContext => UserService,
+  val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService,
+  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
+  val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
+  val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
+  val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
+  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
+  val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
+  val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService,
+  val statusServiceConstructor: () => StatusService,
+  val executionServiceCluster: ExecutionServiceCluster,
+  val appVersion: ApplicationVersion,
+  val submissionTimeout: FiniteDuration,
+  val batchUpsertMaxBytes: Long,
+  override val workbenchMetricBaseName: String,
+  val samDAO: SamDAO,
+  val openIDConnectConfiguration: OpenIDConnectConfiguration,
+  val googleProjectRegServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService
 )(implicit val executionContext: ExecutionContext, val materializer: Materializer)
     extends RawlsApiService
     with StandardUserInfoDirectives
