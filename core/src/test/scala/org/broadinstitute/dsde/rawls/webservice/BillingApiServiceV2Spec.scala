@@ -969,6 +969,71 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
+  "GET /billing/v2/id/{projectId}/verifyAction/{action}" should "return 200 if user has requested action" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("projectName")
+      val action = "link"
+      when(
+        services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                   ArgumentMatchers.eq("projectName"),
+                                                   any()
+        )
+      )
+        .thenReturn(Future.successful(Set(SamResourceAction(action))))
+
+      Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
+        sealRoute(services.billingRoutesV2()) ~> check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+        }
+  }
+
+  it should "return 403 if user does not have requested action" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("projectName")
+    val action = "link"
+    when(
+      services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                 ArgumentMatchers.eq("projectName"),
+                                                 any()
+      )
+    )
+      .thenReturn(Future.successful(Set(SamResourceAction("notLink"))))
+
+    Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
+      sealRoute(services.billingRoutesV2()) ~> check {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 if user has no access to project or project does not exist" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("projectName")
+      val action = "link"
+      when(
+        services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                   ArgumentMatchers.eq("projectName"),
+                                                   any()
+        )
+      ).thenReturn(Future.successful(Set.empty))
+
+      Get(s"/billing/v2/id/${project.id}/verifyAction/$action") ~>
+        sealRoute(services.billingRoutesV2()) ~> check {
+          assertResult(StatusCodes.NotFound, responseAs[String]) {
+            status
+          }
+        }
+
+      Get(s"/billing/v2/id/${UUID.randomUUID()}/verifyAction/$action") ~>
+        sealRoute(services.billingRoutesV2()) ~> check {
+          assertResult(StatusCodes.NotFound, responseAs[String]) {
+            status
+          }
+        }
+  }
+
   "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {
     services =>
       val project = createProject("project")
