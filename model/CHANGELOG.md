@@ -11,5 +11,7 @@ Added:
 - Added `ID` to `BILLING_PROJECT` table
 - Added `id` field to `RawlsBillingProjectResponse` response
 - Added `getBillingProjectById` API
+- Removed `getBucketUsage` API
+- Removed `BucketUsageResponse` response
 
-SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.314-SNAP"`
+SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.327-SNAP"`
