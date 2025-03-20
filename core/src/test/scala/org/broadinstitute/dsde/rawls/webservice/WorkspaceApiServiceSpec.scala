@@ -691,27 +691,6 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).unlockWorkspace(workspaceName)
   }
 
-  it should "get the bucket usage for the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
-    val workspaceService = mock[WorkspaceService]
-    val workspaceName = testData.workspace.toWorkspaceName
-    val response = BucketUsageResponse(BigInt(83729), None)
-    when(workspaceService.getBucketUsage(workspaceName)).thenReturn(Future.successful(response))
-    val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
-    )
-    Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/bucketUsage") ~>
-      service.testRoutes ~>
-      check {
-        status shouldBe StatusCodes.OK
-        val resp = responseAs[BucketUsageResponse]
-        resp shouldBe response
-      }
-
-    verify(workspaceService).getBucketUsage(workspaceName)
-  }
-
   it should "call sendChangeNotifications on the workspace" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]

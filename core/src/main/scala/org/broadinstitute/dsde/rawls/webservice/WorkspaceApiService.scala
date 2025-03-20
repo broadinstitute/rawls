@@ -256,13 +256,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "bucketUsage") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName))
-            }
-          }
-        } ~
         path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
           post {
             complete {
