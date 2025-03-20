@@ -76,7 +76,10 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
         )
       _ = if (!canLinkGoogleProject) {
         throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(StatusCodes.Forbidden, "Google project does not exist or you do not have permission to perform this action.")
+          errorReport = ErrorReport(
+            StatusCodes.Forbidden,
+            "Google project does not exist or you do not have permission to perform this action."
+          )
         )
       }
       result <- googleProjectRegRepo.registerGoogleProject(
