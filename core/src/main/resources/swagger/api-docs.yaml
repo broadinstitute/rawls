@@ -4658,6 +4658,43 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/googleProjects:
+    get:
+      tags:
+        - googleProjects
+      summary: list google projects
+      description: List google projects
+      operationId: listGoogleProjects
+      parameters:
+        - name: billingProjectId
+          in: query
+          description: |
+            Optional. If provided, only return google projects that are linked to the given billing project.
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegisterGoogleProjectRequest'
+        403:
+          description: You don't have permission to perform this action
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing and/or Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - googleProjects
@@ -4684,6 +4721,42 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Billing and/or Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects/{googleProjectId}:
+    get:
+      tags:
+        - googleProjects
+      summary: Get GoogleProject by googleProjectId
+      description: Get a single google project's details by google project id
+      operationId: getGoogleProjectById
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RegisterGoogleProjectRequest'
+        400:
+          description: Unrecognized query parameters
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You do not have the necessary permissions
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Google project not found
           content:
             'application/json':
               schema:
@@ -7460,6 +7533,13 @@ components:
       name: workspaceId
       in: path
       description: The workspace id
+      required: true
+      schema:
+        type: string
+    googleProjectIdPathParam:
+      name: googleProjectId
+      in: path
+      description: Google Project ID
       required: true
       schema:
         type: string
