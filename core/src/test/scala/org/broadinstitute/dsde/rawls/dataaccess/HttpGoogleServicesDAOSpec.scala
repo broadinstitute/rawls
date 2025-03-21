@@ -291,8 +291,8 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     val response = httpGoogleServicesDao.listTimeSeriesPagedResponseToBucketMetricsResponse(mockResponse)
     response.metrics.length shouldBe 2
     val expectedMetrics = Set(
-      BucketMetric("COLDLINE", 123.45),
-      BucketMetric("REGIONAL", 5432.1)
+      BucketMetric("COLDLINE", 123),
+      BucketMetric("REGIONAL", 5432)
     )
     response.metrics.toSet shouldBe expectedMetrics
   }
