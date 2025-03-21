@@ -61,15 +61,32 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("billing" / "v2") {
         pathPrefix("id") {
-          path(Segment) { id =>
-            get {
-              complete {
-                userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
-                  case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
-                  case None                  => StatusCodes.NotFound -> None
+          pathPrefix(Segment) { id =>
+            pathEndOrSingleSlash {
+              get {
+                complete {
+                  userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
+                    case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
+                    case None                  => StatusCodes.NotFound -> None
+                  }
                 }
               }
-            }
+            } ~
+              pathPrefix("verifyAction") {
+                path(Segment) { action =>
+                  get {
+                    complete {
+                      userServiceConstructor(ctx)
+                        .verifyBillingProjectAccess(UUID.fromString(id), SamResourceAction(action))
+                        .map {
+                          case Some(true)  => StatusCodes.OK -> None
+                          case Some(false) => StatusCodes.Forbidden -> None
+                          case None        => StatusCodes.NotFound -> None
+                        }
+                    }
+                  }
+                }
+              }
           }
         } ~
           pathPrefix("spendReport") {
