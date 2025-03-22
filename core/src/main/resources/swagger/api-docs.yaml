@@ -4663,7 +4663,7 @@ paths:
         - googleProjects
       summary: list google projects
       description: List google projects
-      operationId: listGoogleProjects
+      operationId: getGoogleProjects
       parameters:
         - name: billingProjectId
           in: query
@@ -4731,7 +4731,7 @@ paths:
     get:
       tags:
         - googleProjects
-      summary: Get GoogleProject by googleProjectId
+      summary: Get google project by googleProjectId
       description: Get a single google project's details by google project id
       operationId: getGoogleProjectById
       parameters:
