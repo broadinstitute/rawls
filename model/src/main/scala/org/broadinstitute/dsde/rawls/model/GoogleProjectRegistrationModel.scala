@@ -19,6 +19,15 @@ case class GoogleProjectRegistration(googleProjectId: GoogleProjectId,
                                      billingProjectId: RawlsBillingProjectName
 )
 
+case class UnRegisteredGoogleProjectRegistration(
+  override val googleProjectId: GoogleProjectId
+) extends GoogleProjectRegistration(
+      googleProjectId = googleProjectId,
+      billingAccount = None,
+      message = None,
+      billingProjectId = RawlsBillingProjectName("UNREGISTERED")
+    )
+
 trait GoogleProjectRegistrationJsonSupport$ extends DefaultJsonProtocol {
 
   implicit val GoogleProjectRegistrationFormat: RootJsonFormat[GoogleProjectRegistration] = jsonFormat4(
