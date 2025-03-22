@@ -101,6 +101,7 @@ object SamResourceTypeAdminActions {
 
 object SamGoogleProjectActions {
   val link = SamResourceAction("link")
+  val readPolicies = SamResourceAction("read_policies")
 }
 
 /*
