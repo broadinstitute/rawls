@@ -19,11 +19,13 @@ import org.broadinstitute.dsde.rawls.model.{
   SamGoogleProjectActions,
   SamResourceAction,
   SamResourceTypeName,
-  SamResourceTypeNames
+  SamResourceTypeNames,
+  UnRegisteredGoogleProjectRegistration
 }
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
 import org.mockito.ArgumentCaptor
 import org.scalatest.matchers.should.Matchers
 import org.mockito.ArgumentMatchers.{eq => mockitoEq, _}
@@ -568,4 +570,247 @@ class GoogleProjectRegistrationServiceSpec
 
   }
 
+  it should "retrieve Google projects filtered by billing project name" in {
+    val billingProjectName = RawlsBillingProjectName("test-billing-project")
+    val googleProjectRegistration = GoogleProjectRegistration(
+      GoogleProjectId("test-project-id"),
+      Some(RawlsBillingAccountName("billing-account")),
+      None,
+      billingProjectName
+    )
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject,
+                                          SamGoogleProjectActions.readPolicies,
+                                          mockContext
+      )
+    )
+      .thenReturn(
+        Future.successful(
+          Seq(
+            new FilteredFlatResource()
+              .resourceId("test-project-id")
+              .resourceType(SamResourceTypeNames.googleProject.value)
+          )
+        )
+      )
+
+    when(mockGoogleProjectRegRepo.getGoogleProjectRegistrations(Set(GoogleProjectId("test-project-id"))))
+      .thenReturn(Future.successful(Seq(googleProjectRegistration)))
+
+    val result = Await.result(googleProjectRegService.getGoogleProjects(Some(billingProjectName)), Duration.Inf)
+    result shouldEqual Seq(googleProjectRegistration)
+  }
+
+  it should "return NotFound if billing project name is set but no matches are found" in {
+    val billingProjectName = RawlsBillingProjectName("non-existent-billing-project")
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject,
+                                          SamGoogleProjectActions.readPolicies,
+                                          mockContext
+      )
+    )
+      .thenReturn(
+        Future.successful(
+          Seq(
+            new FilteredFlatResource()
+              .resourceId("test-project-id")
+              .resourceType(SamResourceTypeNames.googleProject.value)
+          )
+        )
+      )
+    when(mockGoogleProjectRegRepo.getGoogleProjectRegistrations(Set(GoogleProjectId("test-project-id"))))
+      .thenReturn(Future.successful(Seq.empty))
+
+    val result = Await.result(googleProjectRegService.getGoogleProjects(Some(billingProjectName)), Duration.Inf)
+    result shouldEqual Seq.empty
+  }
+
+  it should "retrieve all Google projects if no billing project name is provided" in {
+    val googleProjectRegistration1 = GoogleProjectRegistration(
+      GoogleProjectId("test-project-id-1"),
+      Some(RawlsBillingAccountName("billing-account-1")),
+      None,
+      RawlsBillingProjectName("test-billing-project-1")
+    )
+    val googleProjectRegistration2 = GoogleProjectRegistration(
+      GoogleProjectId("test-project-id-2"),
+      Some(RawlsBillingAccountName("billing-account-2")),
+      None,
+      RawlsBillingProjectName("test-billing-project-2")
+    )
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject,
+                                          SamGoogleProjectActions.readPolicies,
+                                          mockContext
+      )
+    )
+      .thenReturn(
+        Future.successful(
+          Seq(
+            new FilteredFlatResource()
+              .resourceId("test-project-id-1")
+              .resourceType(SamResourceTypeNames.googleProject.value),
+            new FilteredFlatResource()
+              .resourceId("test-project-id-2")
+              .resourceType(SamResourceTypeNames.googleProject.value)
+          )
+        )
+      )
+
+    when(
+      mockGoogleProjectRegRepo.getGoogleProjectRegistrations(
+        Set(GoogleProjectId("test-project-id-1"), GoogleProjectId("test-project-id-2"))
+      )
+    )
+      .thenReturn(Future.successful(Seq(googleProjectRegistration1, googleProjectRegistration2)))
+
+    val result = Await.result(googleProjectRegService.getGoogleProjects(None), Duration.Inf)
+    result shouldEqual Seq(googleProjectRegistration1, googleProjectRegistration2)
+  }
+
+  it should "retrieve a Google project by ID if the user has the required action and the project is found" in {
+    val googleProjectId = GoogleProjectId("test-project-id")
+    val googleProjectRegistration = GoogleProjectRegistration(
+      googleProjectId,
+      Some(RawlsBillingAccountName("billing-account")),
+      None,
+      RawlsBillingProjectName("test-billing-project")
+    )
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
+                               googleProjectId.value,
+                               SamGoogleProjectActions.readPolicies,
+                               mockContext
+      )
+    )
+      .thenReturn(Future.successful(true))
+    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(googleProjectId))
+      .thenReturn(Future.successful(Some(googleProjectRegistration)))
+
+    val result = Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
+    result shouldEqual Some(googleProjectRegistration)
+  }
+
+  it should "return an UnRegisteredGoogleProjectRegistration if the user has the required action but the project is not found" in {
+    val googleProjectId = GoogleProjectId("test-project-id")
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
+                               googleProjectId.value,
+                               SamGoogleProjectActions.readPolicies,
+                               mockContext
+      )
+    )
+      .thenReturn(Future.successful(true))
+    when(mockGoogleProjectRegRepo.getGoogleProjectRegistration(googleProjectId))
+      .thenReturn(Future.successful(None))
+
+    val result = Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
+    result shouldEqual Some(UnRegisteredGoogleProjectRegistration(googleProjectId))
+  }
+
+  it should "return None if the user does not have the required action" in {
+    val googleProjectId = GoogleProjectId("test-project-id")
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
+                               googleProjectId.value,
+                               SamGoogleProjectActions.readPolicies,
+                               mockContext
+      )
+    )
+      .thenReturn(Future.successful(false))
+
+    val result = Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
+    result shouldEqual None
+  }
 }

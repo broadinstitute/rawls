@@ -23,4 +23,35 @@ class GoogleProjectRegistrationComponentSpec
 
   }
 
+  it should "findByIDs" in withDefaultTestDatabase {
+    val billingProject = testData.testProject1
+    val googleProjectRegistrations = Seq(
+      GoogleProjectRegistration(GoogleProjectId("project1"),
+                                billingProject.billingAccount,
+                                Some("message1"),
+                                billingProject.projectName
+      ),
+      GoogleProjectRegistration(GoogleProjectId("project2"),
+                                billingProject.billingAccount,
+                                Some("message2"),
+                                billingProject.projectName
+      ),
+      GoogleProjectRegistration(GoogleProjectId("project3"),
+                                billingProject.billingAccount,
+                                Some("message3"),
+                                billingProject.projectName
+      )
+    )
+
+    googleProjectRegistrations.foreach { googleProject =>
+      runAndWait(googleProjectRegistrationQuery.create(googleProject))
+    }
+
+    val result = runAndWait(
+      googleProjectRegistrationQuery.findByIds(Set(GoogleProjectId("project1"), GoogleProjectId("project2")))
+    )
+
+    result should have size 2
+    result.map(_.googleProjectId.value) should contain allOf ("project1", "project2")
+  }
 }
