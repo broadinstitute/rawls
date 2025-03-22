@@ -4662,7 +4662,7 @@ paths:
       tags:
         - googleProjects
       summary: list google projects
-      description: List google projects
+      description: List the Google projects accessible to the user
       operationId: getGoogleProjects
       parameters:
         - name: billingProjectId
@@ -4681,12 +4681,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RegisterGoogleProjectRequest'
-        403:
-          description: You don't have permission to perform this action
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
         404:
           description: Billing and/or Google project don't exist or you don't have permission
           content:
@@ -4731,8 +4725,8 @@ paths:
     get:
       tags:
         - googleProjects
-      summary: Get google project by googleProjectId
-      description: Get a single google project's details by google project id
+      summary: get google project by googleProjectId
+      description: Get the Google project if known and the user has access
       operationId: getGoogleProjectById
       parameters:
         - $ref: '#/components/parameters/googleProjectIdPathParam'
@@ -4743,20 +4737,8 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/RegisterGoogleProjectRequest'
-        400:
-          description: Unrecognized query parameters
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        403:
-          description: You do not have the necessary permissions
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Google project not found
+          description: Google project don't exist or you don't have permission
           content:
             'application/json':
               schema:
