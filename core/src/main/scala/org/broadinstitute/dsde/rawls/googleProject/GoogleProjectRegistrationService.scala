@@ -124,7 +124,7 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
           .map(name => registrations.filter(_.billingProjectId == name))
           .getOrElse(registrations)
 
-        if (filteredRegistrations.isEmpty) {
+        if (billingProjectName.isDefined && filteredRegistrations.isEmpty) {
           Seq.empty
         } else {
           val registeredProjectIds = filteredRegistrations.map(_.googleProjectId).toSet
