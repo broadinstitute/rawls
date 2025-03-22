@@ -124,11 +124,15 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
           .map(name => registrations.filter(_.billingProjectId == name))
           .getOrElse(registrations)
 
-        val registeredProjectIds = filteredRegistrations.map(_.googleProjectId).toSet
-        val unregisteredProjects =
-          accessibleGoogleProjects.diff(registeredProjectIds).map(UnRegisteredGoogleProjectRegistration)
+        if (filteredRegistrations.isEmpty) {
+          Seq.empty
+        } else {
+          val registeredProjectIds = filteredRegistrations.map(_.googleProjectId).toSet
+          val unregisteredProjects =
+            accessibleGoogleProjects.diff(registeredProjectIds).map(UnRegisteredGoogleProjectRegistration.apply)
 
-        filteredRegistrations ++ unregisteredProjects
+          filteredRegistrations ++ unregisteredProjects
+        }
       }
     }
   }
