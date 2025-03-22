@@ -26,21 +26,7 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
       pathPrefix("googleProjects") {
-        pathEndOrSingleSlash {
-          get {
-            parameters(
-              "billingProjectId".as[String]
-            ) { billingProjectId =>
-              complete {
-                googleProjectRegServiceConstructor(ctx)
-                  .getGoogleProjects(Option(RawlsBillingProjectName(billingProjectId)))
-                  .map {
-                    case Some(googleProjectsResponse) => StatusCodes.OK -> Option(googleProjectsResponse)
-                    case None                         => StatusCodes.NotFound -> None
-                  }
-              }
-            }
-          }
+        pathEnd {
           put {
             entity(as[GoogleProjectRegistration]) { entity =>
               complete {
@@ -54,18 +40,29 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                   }
               }
             }
-          }
-        } ~
-          path(Segment) { googleProjectId =>
+          } ~
             get {
-              complete {
-                googleProjectRegServiceConstructor(ctx).getBillingProjectById(GoogleProjectId(googleProjectId)).map {
-                  case Some(googleProjectResponse) => StatusCodes.OK -> Option(googleProjectResponse)
-                  case None                        => StatusCodes.NotFound -> None
+              parameters("billingProjectId".optional) { billingProjectId =>
+                onSuccess(
+                  googleProjectRegServiceConstructor(ctx)
+                    .getGoogleProjects(billingProjectId.map(RawlsBillingProjectName))
+                ) { projects =>
+                  if (projects.isEmpty) complete(StatusCodes.NotFound -> None)
+                  else complete(StatusCodes.OK -> projects)
                 }
               }
             }
-
+        } ~
+          path(Segment) { googleProjectId =>
+            get {
+              onSuccess(
+                googleProjectRegServiceConstructor(ctx)
+                  .getGoogleProjectById(GoogleProjectId(googleProjectId))
+              ) {
+                case Some(projectId) => complete(StatusCodes.OK -> projectId)
+                case None            => complete(StatusCodes.NotFound)
+              }
+            }
           }
       }
     }
