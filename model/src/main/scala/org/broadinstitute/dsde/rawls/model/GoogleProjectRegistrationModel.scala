@@ -19,14 +19,23 @@ case class GoogleProjectRegistration(googleProjectId: GoogleProjectId,
                                      billingProjectId: RawlsBillingProjectName
 )
 
-case class UnRegisteredGoogleProjectRegistration(
-  override val googleProjectId: GoogleProjectId
-) extends GoogleProjectRegistration(
+object UnRegisteredGoogleProjectRegistration {
+  def apply(googleProjectId: GoogleProjectId): GoogleProjectRegistration =
+    GoogleProjectRegistration(
       googleProjectId = googleProjectId,
       billingAccount = None,
       message = None,
       billingProjectId = RawlsBillingProjectName("UNREGISTERED")
     )
+
+  def unapply(registration: GoogleProjectRegistration): Option[GoogleProjectId] =
+    if (
+      registration.billingAccount.isEmpty && registration.message.isEmpty && registration.billingProjectId.value == "UNREGISTERED"
+    )
+      Some(registration.googleProjectId)
+    else
+      None
+}
 
 trait GoogleProjectRegistrationJsonSupport$ extends DefaultJsonProtocol {
 
