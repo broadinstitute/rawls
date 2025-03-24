@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{FieldValueList, JobStatistics, Option => _, _}
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -483,6 +484,13 @@ class SpendReportingService(
         workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
+  /* As long as no aggregation contains "daily", it is cacheable */
+  @VisibleForTesting
+  def aggregationsAreCacheable(aggregations: Set[SpendReportingAggregationKeyWithSub]): Boolean =
+    !aggregations.exists(x =>
+      x.key == SpendReportingAggregationKeys.Daily || x.subAggregationKey.contains(SpendReportingAggregationKeys.Daily)
+    )
+
   // single-project report: step 3
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
@@ -509,20 +517,50 @@ class SpendReportingService(
         )
       }
 
-      query = getQuery(aggregations, spendExportConf)
-      queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+      // look for a cached spend report
+      isCacheable = aggregationsAreCacheable(aggregations)
+      cachedResults <-
+        if (isCacheable)
+          getCachedSpendReportData(projectNames, start, end)
+        else
+          Future.successful(CachedSpendReportingResults(isCacheValid = false, results = None))
 
-      job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-      _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-      result = job.getQueryResults()
-    } yield result.getValues.asScala.toList match {
-      case Nil =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.NotFound,
-          s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-        )
-      case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
-    }
+      spendResults <-
+        if (cachedResults.isCacheValid) {
+          rawlsCacheHitRate().hit()
+          cachedResults.results match {
+            case Some(report) => Future.successful(report)
+            case None =>
+              throw RawlsExceptionWithErrorReport(
+                StatusCodes.NotFound,
+                s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+              )
+          }
+        } else {
+          rawlsCacheHitRate().miss()
+          val query = getQuery(aggregations, spendExportConf)
+          val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+
+          val queryResults = runBigQueryJob(queryJob, childContext).map { result =>
+            result.getValues.asScala.toList match {
+              case Nil =>
+                throw RawlsExceptionWithErrorReport(
+                  StatusCodes.NotFound,
+                  s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+                )
+              case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
+            }
+          }
+
+          // write BigQuery results back to cache
+          queryResults.map { res =>
+            insertRecordsWithMissingSpendData(Option(res), projectNames, start, end)
+          }
+          queryResults
+
+        }
+    } yield spendResults
+
   }
 
   // single-project report: entry point

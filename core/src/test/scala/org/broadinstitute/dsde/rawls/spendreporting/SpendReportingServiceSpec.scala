@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSpendReportRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.{Workspace => WorkspaceAggKey, _}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeys, _}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -42,7 +43,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.time.{LocalDateTime, ZoneId}
-import java.util.{Base64, Currency, Date, UUID}
+import java.util.{Currency, Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
@@ -344,10 +345,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(),
-      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
+      Set(SpendReportingAggregationKeyWithSub(Daily))
     )
     reportingResults.spendSummary.cost shouldBe TestData.Daily.totalCostRounded.toString
-    reportingResults.spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
+    reportingResults.spendDetails.head.aggregationKey shouldBe Daily
     reportingResults.spendDetails.head.spendData.foreach { spendForDay =>
       spendForDay.startTime match {
         case Some(date) if date.toLocalDate.equals(TestData.Daily.firstRowDate.toLocalDate) =>
@@ -400,12 +401,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(),
-      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))
+      Set(SpendReportingAggregationKeyWithSub(Category))
     )
 
     reportingResults.spendSummary.cost shouldBe TestData.Category.totalCostRounded
     val categoryAggregation = reportingResults.spendDetails.headOption.get
-    categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+    categoryAggregation.aggregationKey shouldBe Category
     verifyCategoryAggregation(
       categoryAggregation,
       expectedCompute = TestData.Category.computeRowCostRounded,
@@ -433,9 +434,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now(),
       TestData.googleProjectsToWorkspaceNames,
       Set(
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
-                                            Option(SpendReportingAggregationKeys.Category)
-        )
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category))
       )
     )
 
@@ -453,10 +452,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         TestData.workspace2.googleProjectId -> TestData.workspace2.toWorkspaceName
       ),
       Set(
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
-                                            Option(SpendReportingAggregationKeys.Category)
-        ),
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category)
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)),
+        SpendReportingAggregationKeyWithSub(Category)
       )
     )
 
@@ -465,7 +462,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     reportingResults.spendDetails.map {
       case workspaceAggregation @ SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, _) =>
         verifyWorkspaceCategorySubAggregation(workspaceAggregation)
-      case categoryAggregation @ SpendReportingAggregation(SpendReportingAggregationKeys.Category, _) =>
+      case categoryAggregation @ SpendReportingAggregation(Category, _) =>
         verifyCategoryAggregation(
           categoryAggregation,
           expectedCompute = TestData.SubAggregation.computeTotalCostRounded,
@@ -504,7 +501,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     topLevelAggregation.spendData.foreach { spendData =>
       val workspaceGoogleProject = spendData.googleProjectId.get.value
       val subAggregation = spendData.subAggregation.get
-      subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+      subAggregation.aggregationKey shouldBe Category
 
       if (workspaceGoogleProject.equals(TestData.workspace1.googleProjectId.value)) {
         spendData.cost shouldBe TestData.SubAggregation.workspace1TotalCostRounded.toString
@@ -550,7 +547,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         DateTime.now().minusDays(1),
         DateTime.now(),
         Map(),
-        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
+        Set(SpendReportingAggregationKeyWithSub(Daily))
       )
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
@@ -678,7 +675,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   ): Unit = {
     actualSpendData.cost shouldBe expectedTotal.toString
     val aggSub = actualSpendData.subAggregation.get
-    aggSub.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+    aggSub.aggregationKey shouldBe Category
     verifyCategoricalSpendData(aggSub.spendData, expectedCompute, expectedStorage, expectedOther)
   }
 
@@ -1308,7 +1305,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val result = service.getQuery(
       Set(
         SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace),
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily)
+        SpendReportingAggregationKeyWithSub(Daily)
       ),
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), Some("NonBroadTable"))
     )
@@ -1343,7 +1340,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val result = service.getQuery(
       Set(
         SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace),
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily)
+        SpendReportingAggregationKeyWithSub(Daily)
       ),
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     )
@@ -2595,6 +2592,50 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
     actual.isCacheValid shouldBe false
+  }
+
+  behavior of "aggregationsAreCacheable"
+
+  val testCases: Map[Set[SpendReportingAggregationKeyWithSub], Boolean] = Map(
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None)) -> true,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, Option(Category))) -> true,
+    Set(SpendReportingAggregationKeyWithSub(Category, None)) -> true,
+    Set(SpendReportingAggregationKeyWithSub(Category, Option(WorkspaceAggKey))) -> true,
+    Set(SpendReportingAggregationKeyWithSub(Daily, None)) -> false,
+    Set(SpendReportingAggregationKeyWithSub(Category, Option(Daily))) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, Option(Daily))) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None),
+        SpendReportingAggregationKeyWithSub(Daily, None)
+    ) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None),
+        SpendReportingAggregationKeyWithSub(Category, Option(Daily))
+    ) -> false
+  )
+
+  testCases.foreach { case (aggkeys, expected) =>
+    it should s"be $expected for input of $aggkeys" in {
+      val samDAO = mock[SamDAO]
+      val workspaceService = mock[WorkspaceService]
+
+      val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+        mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+
+      val service = new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        _ => workspaceService,
+        mockWorkspaceSpendReportRepository
+      )
+
+      val actual = service.aggregationsAreCacheable(aggkeys)
+      actual shouldBe expected
+    }
+
   }
 
 }
