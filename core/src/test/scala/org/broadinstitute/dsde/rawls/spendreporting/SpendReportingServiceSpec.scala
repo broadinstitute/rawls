@@ -2208,7 +2208,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verify(mockWorkspaceSpendReportRepository, times(1)).insertWorkspaceSpendReport(spendReport2)
   }
 
-  "insertRecordsWithMissingSpendData" should "not insert additional records when all spend data is available" in {
+  it should "not insert additional records when all spend data is available" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
     val mockWorkspaceSpendReportRepository = mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
@@ -2280,7 +2280,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verifyNoInteractions(mockWorkspaceSpendReportRepository)
   }
 
-  "insertRecordsWithMissingSpendData" should "handle errors when inserting a record" in {
+  it should "handle errors when inserting a record" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
 
@@ -2355,6 +2355,246 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         result shouldBe Future.successful(0L)
       }
     }
+  }
+
+  behavior of "getCachedSpendReportData"
+
+  private def setUpCacheTestReturning(returns: Seq[WorkspaceSpendReport]): SpendReportingService = {
+    val samDAO = mock[SamDAO]
+    val workspaceService = mock[WorkspaceService]
+
+    val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+    // cache returns results for only 1 project
+    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(returns))
+
+    new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      spendReportingServiceConfig,
+      _ => workspaceService,
+      mockWorkspaceSpendReportRepository
+    )
+  }
+
+  it should "return valid if results match requested projects" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      ),
+      WorkspaceSpendReport(1,
+                           projectId2.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(2.1f),
+                           Option(3.2f),
+                           Option(5.4f),
+                           Option(7.6f),
+                           Option(9.8f),
+                           Option(1.0f)
+      )
+    )
+    // cache returns two projects; we are requesting two
+    val service = setUpCacheTestReturning(mockReturn)
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe true
+    actual.results should not be empty
+  }
+
+  it should "return valid if results match requested projects but some data isn't available" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      ),
+      WorkspaceSpendReport(1,
+                           projectId2.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = false,
+                           Option(2.1f),
+                           Option(3.2f),
+                           Option(5.4f),
+                           Option(7.6f),
+                           Option(9.8f),
+                           Option(1.0f)
+      )
+    )
+    // cache returns two projects, one with isDataAvailable=false; we are requesting two
+    val service = setUpCacheTestReturning(mockReturn)
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe true
+    actual.results should not be empty
+  }
+
+  it should "return valid but empty if results match requested projects but no data found" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = false,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      ),
+      WorkspaceSpendReport(1,
+                           projectId2.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = false,
+                           Option(2.1f),
+                           Option(3.2f),
+                           Option(5.4f),
+                           Option(7.6f),
+                           Option(9.8f),
+                           Option(1.0f)
+      )
+    )
+    // cache returns two projects with isDataAvailable=false; we are requesting two
+    val service = setUpCacheTestReturning(mockReturn)
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe true
+    actual.results shouldBe empty
+  }
+
+  it should "return invalid if results don't match requested projects" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      )
+    )
+
+    val service = setUpCacheTestReturning(mockReturn)
+
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe false
+  }
+
+  it should "return invalid if nothing in cache" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq()
+
+    val service = setUpCacheTestReturning(mockReturn)
+
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe false
   }
 
 }

@@ -422,6 +422,49 @@ class SpendReportingService(
     bytesProcessedCounter += stats.getEstimatedBytesProcessed
   }
 
+  case class CachedSpendReportingResults(isCacheValid: Boolean, results: Option[SpendReportingResults])
+
+  /**
+    * Query the spend report cache and inspect the cache results to see if they are valid.
+    * @param workspaceNamesByProjectId workspaces/project for which to query
+    * @param start beginning of report timeframe
+    * @param end end of report timeframe
+    * @return potentially-valid cache results
+    */
+  def getCachedSpendReportData(workspaceNamesByProjectId: Map[GoogleProjectId, WorkspaceName],
+                               start: DateTime,
+                               end: DateTime
+  ): Future[CachedSpendReportingResults] = {
+    // set up
+    val startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
+    val endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
+    val projectIds = workspaceNamesByProjectId.keySet.map(_.value)
+
+    // query the cache for possible results
+    val cachedResultsFuture =
+      workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
+
+    cachedResultsFuture.map { cachedResult =>
+      // we consider cached results valid if they return one row for each
+      // requested google project
+      if (cachedResult.size == projectIds.size) {
+        // we may have cached that some projects have no data in this report;
+        // handle those cases
+        val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
+        if (hasDataAvailable.nonEmpty) {
+          val spendReportingResults =
+            WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable, start, end, workspaceNamesByProjectId)
+          CachedSpendReportingResults(isCacheValid = true, Option(spendReportingResults))
+        } else {
+          CachedSpendReportingResults(isCacheValid = true, None)
+        }
+      } else {
+        // cached results are not valid for these projects/this timeframe
+        CachedSpendReportingResults(isCacheValid = false, None)
+      }
+    }
+  }
+
   // shared between single-project and consolidated reports
   def getSpendReportableWorkspaceGoogleProjects(
     childContext: RawlsRequestContext
@@ -559,8 +602,6 @@ class SpendReportingService(
           )
         }
 
-        startLocalDateTime = SpendReportUtils.convertJodaToJava(Some(start))
-        endLocalDateTime = SpendReportUtils.convertJodaToJava(Some(end))
         // find the distinct export table names in our billingMap
         distinctTableNames: Set[Option[String]] = billingMap.keys.map(_.spendExportTable).toSet
         // for each distinct export table name, generate a query.
@@ -581,27 +622,15 @@ class SpendReportingService(
           val workspaceNamesByProjectId: Map[GoogleProjectId, WorkspaceName] = billingMapForQuery.values.flatten
             .map(ws => ws.googleProjectId -> ws.toWorkspaceName)
             .toMap
-          val projectIds = workspaceNamesByProjectId.keySet.map(_.value)
-          val cachedResults =
-            workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime)
-          val spendResults = cachedResults.flatMap { cachedResult =>
-            if (cachedResult.size == projectIds.size) {
+
+          // look for results in cache
+          val spendResults = getCachedSpendReportData(workspaceNamesByProjectId, start, end).flatMap { cachedResults =>
+            if (cachedResults.isCacheValid) {
+              // we have valid cache results; use them
               rawlsCacheHitRate().hit()
-              val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
-              if (hasDataAvailable.nonEmpty) {
-                val spendReportingResults =
-                  WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable,
-                                                                     start,
-                                                                     end,
-                                                                     workspaceNamesByProjectId
-                  )
-                Future.successful(
-                  Some(spendReportingResults)
-                )
-              } else {
-                Future.successful(None)
-              }
+              Future.successful(cachedResults.results)
             } else {
+              // cached results are invalid; ask BigQuery for results
               rawlsCacheHitRate().miss()
               val query = getAllUserWorkspaceQuery(tableNameForQuery, billingProjectsByAccount, pageSize, offset)
               val queryJob = setUpAllUserWorkspaceQuery(query, start, end)
@@ -620,6 +649,7 @@ class SpendReportingService(
                   logger.warn(s"Error fetching results from BigQuery: ${ex.getMessage}")
                   Future.successful(None)
                 }
+              // write BigQuery results back to cache
               queryResults.map { res =>
                 insertRecordsWithMissingSpendData(res, workspaceNamesByProjectId, start, end)
               }
