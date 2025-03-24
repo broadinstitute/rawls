@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{FieldValueList, JobStatistics, Option => _, _}
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -25,11 +26,12 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
+import java.time.LocalDateTime
 import java.util.{Base64, UUID}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
-import scala.util.Try
+import scala.util.{Success, Try}
 
 object SpendReportingService {
   def constructor(
@@ -440,6 +442,70 @@ class SpendReportingService(
         workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
+  /* As long as no aggregation contains "daily", it is cacheable */
+  @VisibleForTesting
+  def aggregationsAreCacheable(aggregations: Set[SpendReportingAggregationKeyWithSub]): Boolean =
+    aggregations.exists(x =>
+      x.key == SpendReportingAggregationKeys.Daily || x.subAggregationKey.contains(SpendReportingAggregationKeys.Daily)
+    )
+
+  // TODO CORE-291: can this be used by the consolidated report?
+  @VisibleForTesting
+  def getCachedSpendReportResults(workspaceNamesByProjectId: Map[GoogleProjectId, WorkspaceName],
+                                  start: DateTime,
+                                  end: DateTime
+  ): Future[(Boolean, Option[SpendReportingResults])] = {
+    val projectIds = workspaceNamesByProjectId.keySet.map(_.value)
+    val startLocalDateTime = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocalDateTime = SpendReportUtils.convertJodaToJava(Option(end))
+
+    workspaceSpendReportRepository.getWorkspaceSpendReports(projectIds, startLocalDateTime, endLocalDateTime) flatMap {
+      cachedResult =>
+        if (cachedResult.size == projectIds.size) {
+          val hasDataAvailable = cachedResult.filter(cached => cached.isDataAvailable)
+          if (hasDataAvailable.nonEmpty) {
+            val spendReportingResults =
+              WorkspaceSpendReportRecord.toSpendReportingResults(hasDataAvailable,
+                                                                 start,
+                                                                 end,
+                                                                 workspaceNamesByProjectId
+              )
+            Future.successful(
+              (true, Some(spendReportingResults))
+            )
+          } else {
+            Future.successful((true, None))
+          }
+        } else {
+          Future.successful((false, None))
+        }
+    }
+  }
+
+  def getBigQuerySpendReportResults(aggregations: Set[SpendReportingAggregationKeyWithSub],
+                                    spendExportConf: BillingProjectSpendExport,
+                                    projectNames: Map[GoogleProjectId, WorkspaceName],
+                                    project: RawlsBillingProjectName,
+                                    start: DateTime,
+                                    end: DateTime
+  ): Future[SpendReportingResults] = {
+    val query = getQuery(aggregations, spendExportConf)
+    val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+
+    for {
+      job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+      _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+      result = job.getQueryResults()
+    } yield result.getValues.asScala.toList match {
+      case Nil =>
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.NotFound,
+          s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+        )
+      case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
+    }
+  }
+
   // single-project report: step 3
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
@@ -448,6 +514,9 @@ class SpendReportingService(
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] = traceFutureWithParent("getSpendForGCPBillingProject", ctx) { childContext =>
     validateReportParameters(start, end)
+    // inspect the aggregations for this report to see if it is valid for caching
+    val isCacheable = aggregationsAreCacheable(aggregations)
+
     for {
       spendExportConf <- getSpendExportConfiguration(project)
       projectNames <- getSpendReportableWorkspaceGoogleProjects(ctx).map { workspacesByProject =>
@@ -466,20 +535,26 @@ class SpendReportingService(
         )
       }
 
-      query = getQuery(aggregations, spendExportConf)
-      queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+      // ask the cache if it has results. If this report is not cacheable, just return an empty Seq.
+      // if the report is not cacheable at all, don't even ask the cache
+      (isCacheValid, cachedResults) <-
+        if (isCacheable)
+          getCachedSpendReportResults(projectNames, start, end)
+        else
+          Future.successful((false, None))
 
-      job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-      _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-      result = job.getQueryResults()
-    } yield result.getValues.asScala.toList match {
-      case Nil =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.NotFound,
-          s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-        )
-      case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
-    }
+      spendReportingResults <-
+        if (isCacheValid && cachedResults.nonEmpty)
+          Future.successful(cachedResults.get)
+        else {
+          // TODO CORE-291: clean up this chain. Change insertRecordsWithMissingSpendData return type?
+          getBigQuerySpendReportResults(aggregations, spendExportConf, projectNames, project, start, end) andThen {
+            case Success(res) =>
+              Future.sequence(insertRecordsWithMissingSpendData(Option(res), projectNames, start, end))
+          }
+        }
+    } yield spendReportingResults
+    // TODO CORE-291: add unit tests
   }
 
   // single-project report: entry point
