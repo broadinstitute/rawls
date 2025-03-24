@@ -872,8 +872,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    // TODO CORE-291: this is the wrong return type
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
 
@@ -981,8 +980,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    // TODO CORE-291: this is the wrong return type
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
 
@@ -1268,8 +1266,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    // TODO CORE-291: this is the wrong return type
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendForGCPBillingProject(any(), any(), any(), any())
 
@@ -1321,8 +1318,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    // TODO CORE-291: this is the wrong return type
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendForGCPBillingProject(any(), any(), any(), any())
 
