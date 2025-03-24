@@ -81,6 +81,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
     val workspace2: Workspace = workspace("workspace2", GoogleProjectId("project2"))
 
+    val billingProjectsToWorkspaces: Map[RawlsBillingProjectName, Seq[Workspace]] = Map(
+      // workspace 1 and 2 use the same billing project/namespace
+      RawlsBillingProjectName(workspace1.namespace) -> Seq(workspace1, workspace2)
+    )
+
     val googleProjectsToWorkspaceNames: Map[GoogleProjectId, WorkspaceName] = Map(
       workspace1.googleProjectId -> workspace1.toWorkspaceName,
       workspace2.googleProjectId -> workspace2.toWorkspaceName
@@ -867,6 +872,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    // TODO CORE-291: this is the wrong return type
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
@@ -975,6 +981,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    // TODO CORE-291: this is the wrong return type
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
@@ -991,6 +998,170 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+  }
+
+  it should "use cached results when available" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val data = List[Map[String, String]]()
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(data))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache returns a row for each workspace in question
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+      .toSeq
+
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    // should not throw
+    Await.result(
+      service.getSpendForGCPBillingProject(
+        billingProject.projectName,
+        start,
+        end,
+        Set.empty
+      ),
+      Duration.Inf
+    )
+    // verify: ask cache for results, find them
+    verify(mockSpendReportRepo, times(1)).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since cache had results, we don't ask anything of BigQuery
+    verify(bigQueryService, never()).runJob(any(), any())
+    // verify: since cache had results, we don't write anything back to cache
+    verify(service, never()).insertRecordsWithMissingSpendData(any(), any(), any(), any())
+  }
+  it should "use BigQuery when cached results are not available, and write back to cache" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    val table: List[Map[String, String]] = TestData.googleProjectsToWorkspaceNames.keys.toList.map { projectId =>
+      Map("cost" -> "0.10111", "credits" -> "0.0", "currency" -> "USD", "date" -> DateTime.now().toString)
+    }
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache is missing one of the workspaces in question (via use of .tail)
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys.toSeq.tail
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    // should not throw
+    Await.result(
+      service.getSpendForGCPBillingProject(
+        billingProject.projectName,
+        start,
+        end,
+        Set.empty
+      ),
+      Duration.Inf
+    )
+    // verify: ask cache for results, this test does not find them
+    verify(mockSpendReportRepo, times(1)).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since cache did not have results, ask BigQuery instead
+    verify(bigQueryService, times(1)).runJob(any(), any())
+    // verify: write BigQuery results back to cache
+    verify(service, times(1)).insertRecordsWithMissingSpendData(any(), any(), any(), any())
   }
 
   "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
@@ -1097,6 +1268,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    // TODO CORE-291: this is the wrong return type
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
       .getSpendForGCPBillingProject(any(), any(), any(), any())
@@ -1149,6 +1321,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    // TODO CORE-291: this is the wrong return type
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
       .when(service)
       .getSpendForGCPBillingProject(any(), any(), any(), any())
