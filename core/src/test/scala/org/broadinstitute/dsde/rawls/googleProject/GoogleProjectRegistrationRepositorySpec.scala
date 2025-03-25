@@ -71,4 +71,19 @@ class GoogleProjectRegistrationRepositorySpec extends AnyFlatSpec with TestDrive
 
   }
 
+  it should "delete the googleProjectRegistration record" in withDefaultTestDatabase {
+    val repo = new GoogleProjectRegistrationRepository(slickDataSource)
+    val googleProjectReg = makeGoogleProjectRegistration(testData.testProject1)
+
+    Await.result(repo.registerGoogleProject(googleProjectReg), Duration.Inf)
+
+    val result =
+      Await.result(repo.deleteGoogleProjectRegistration(googleProjectReg.googleProjectId), Duration.Inf)
+
+    assertResult(true) {
+      result
+    }
+
+  }
+
 }

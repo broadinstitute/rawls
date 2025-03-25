@@ -7463,6 +7463,9 @@ components:
       required: true
       schema:
         type: string
+        minLength: 6
+        maxLength: 30
+        pattern: '^[a-z0-9-]+$'
   responses:
     RawlsInternalError:
       description: Rawls Internal Error

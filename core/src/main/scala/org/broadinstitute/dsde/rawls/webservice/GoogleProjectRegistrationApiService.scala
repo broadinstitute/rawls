@@ -10,7 +10,6 @@ import org.broadinstitute.dsde.rawls.model.GoogleProjectRegistrationJsonSupport$
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectRegistration, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 
-import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
