@@ -530,11 +530,12 @@ class SpendReportingService(
           rawlsCacheHitRate().hit()
           cachedResults.results match {
             case Some(report) => Future.successful(report)
-            case None         =>
-              // TODO CORE-291: Future.failed vs. throw
-              throw RawlsExceptionWithErrorReport(
-                StatusCodes.NotFound,
-                s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+            case None =>
+              Future.failed(
+                RawlsExceptionWithErrorReport(
+                  StatusCodes.NotFound,
+                  s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+                )
               )
           }
         } else {
