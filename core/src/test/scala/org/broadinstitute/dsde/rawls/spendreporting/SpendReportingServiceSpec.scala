@@ -1079,6 +1079,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     // verify: since cache had results, we don't write anything back to cache
     verify(service, never()).insertRecordsWithMissingSpendData(any(), any(), any(), any())
   }
+
   it should "use BigQuery when cached results are not available, and write back to cache" in {
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
@@ -1160,6 +1161,91 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verify(bigQueryService, times(1)).runJob(any(), any())
     // verify: write BigQuery results back to cache
     verify(service, times(1)).insertRecordsWithMissingSpendData(any(), any(), any(), any())
+  }
+
+  it should "use BigQuery for daily aggregations and not write back to cache" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    val table: List[Map[String, String]] = TestData.googleProjectsToWorkspaceNames.keys.toList.map { projectId =>
+      Map("cost" -> "0.10111", "credits" -> "0.0", "currency" -> "USD", "date" -> DateTime.now().toString)
+    }
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache returns a row for each workspace in question, so is valid - but
+    // the daily aggregation should not even query cache
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+      .toSeq
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    // should not throw
+    Await.result(
+      service.getSpendForGCPBillingProject(
+        billingProject.projectName,
+        start,
+        end,
+        Set(SpendReportingAggregationKeyWithSub(Daily))
+      ),
+      Duration.Inf
+    )
+    // verify: daily aggregation skips cache
+    verify(mockSpendReportRepo, never()).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since we skipped cache, ask BigQuery instead
+    verify(bigQueryService, times(1)).runJob(any(), any())
+    // verify: daily aggregation does not write back to cache
+    verify(service, never()).insertRecordsWithMissingSpendData(any(), any(), any(), any())
   }
 
   "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
