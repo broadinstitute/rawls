@@ -530,13 +530,15 @@ class SpendReportingService(
           rawlsCacheHitRate().hit()
           cachedResults.results match {
             case Some(report) => Future.successful(report)
-            case None =>
+            case None         =>
+              // TODO CORE-291: Future.failed vs. throw
               throw RawlsExceptionWithErrorReport(
                 StatusCodes.NotFound,
                 s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
               )
           }
         } else {
+          // TODO CORE-291: should this log a miss even for Daily aggregations?
           rawlsCacheHitRate().miss()
           val query = getQuery(aggregations, spendExportConf)
           val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
@@ -544,6 +546,7 @@ class SpendReportingService(
           val queryResults = runBigQueryJob(queryJob, childContext).map { result =>
             result.getValues.asScala.toList match {
               case Nil =>
+                // TODO CORE-291: this needs to write back to cache
                 throw RawlsExceptionWithErrorReport(
                   StatusCodes.NotFound,
                   s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
@@ -553,8 +556,10 @@ class SpendReportingService(
           }
 
           // write BigQuery results back to cache
-          queryResults.map { res =>
-            insertRecordsWithMissingSpendData(Option(res), projectNames, start, end)
+          if (isCacheable) {
+            queryResults.map { res =>
+              insertRecordsWithMissingSpendData(Option(res), projectNames, start, end)
+            }
           }
           queryResults
 
