@@ -1248,6 +1248,91 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verify(service, never()).insertRecordsWithMissingSpendData(any(), any(), any(), any())
   }
 
+  it should "write back to cache even when BigQuery returns no results" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    // BigQuery returns no results for this timeframe
+    val table: List[Map[String, String]] = List()
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache is missing one of the workspaces in question (via use of .tail)
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys.toSeq.tail
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.getSpendForGCPBillingProject(
+          billingProject.projectName,
+          start,
+          end,
+          Set.empty
+        ),
+        Duration.Inf
+      )
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+
+    // verify: ask cache for results, this test does not find them
+    verify(mockSpendReportRepo, times(1)).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since cache did not have results, ask BigQuery instead
+    verify(bigQueryService, times(1)).runJob(any(), any())
+    // verify: write BigQuery results back to cache
+    verify(service, times(1)).insertRecordsWithMissingSpendData(any(), any(), any(), any())
+  }
+
   "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
