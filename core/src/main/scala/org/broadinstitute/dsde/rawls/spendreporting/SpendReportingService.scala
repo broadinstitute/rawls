@@ -539,8 +539,11 @@ class SpendReportingService(
               )
           }
         } else {
-          // TODO CORE-291: should this log a miss even for Daily aggregations?
-          rawlsCacheHitRate().miss()
+          // only log a cache-miss if this report was valid for caching in the first place
+          if (isCacheable) {
+            rawlsCacheHitRate().miss()
+          }
+
           val query = getQuery(aggregations, spendExportConf)
           val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
 
