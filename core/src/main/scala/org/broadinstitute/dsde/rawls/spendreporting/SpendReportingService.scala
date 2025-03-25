@@ -546,24 +546,25 @@ class SpendReportingService(
 
           val queryResults = runBigQueryJob(queryJob, childContext).map { result =>
             result.getValues.asScala.toList match {
-              case Nil =>
-                // TODO CORE-291: this needs to write back to cache
-                throw RawlsExceptionWithErrorReport(
-                  StatusCodes.NotFound,
-                  s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-                )
-              case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
+              case Nil  => None
+              case rows => Option(extractSpendReportingResults(rows, start, end, projectNames, aggregations))
             }
           }
 
           // write BigQuery results back to cache
           if (isCacheable) {
             queryResults.map { res =>
-              insertRecordsWithMissingSpendData(Option(res), projectNames, start, end)
+              insertRecordsWithMissingSpendData(res, projectNames, start, end)
             }
           }
-          queryResults
-
+          queryResults.map {
+            case Some(results) => results
+            case None =>
+              throw RawlsExceptionWithErrorReport(
+                StatusCodes.NotFound,
+                s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+              )
+          }
         }
     } yield spendResults
 
