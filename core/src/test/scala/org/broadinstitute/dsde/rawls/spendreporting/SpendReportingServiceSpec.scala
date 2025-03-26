@@ -1068,7 +1068,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingProject.projectName,
         start,
         end,
-        Set.empty
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
       ),
       Duration.Inf
     )
@@ -1088,7 +1088,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
 
     val table: List[Map[String, String]] = TestData.googleProjectsToWorkspaceNames.keys.toList.map { projectId =>
-      Map("cost" -> "0.10111", "credits" -> "0.0", "currency" -> "USD", "date" -> DateTime.now().toString)
+      Map("googleProjectId" -> projectId.value,
+          "service" -> "whatever",
+          "cost" -> "0.10111",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> DateTime.now().toString
+      )
     }
 
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
@@ -1151,7 +1157,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         billingProject.projectName,
         start,
         end,
-        Set.empty
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
       ),
       Duration.Inf
     )
@@ -1171,7 +1177,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
 
     val table: List[Map[String, String]] = TestData.googleProjectsToWorkspaceNames.keys.toList.map { projectId =>
-      Map("cost" -> "0.10111", "credits" -> "0.0", "currency" -> "USD", "date" -> DateTime.now().toString)
+      Map("googleProjectId" -> projectId.value,
+          "service" -> "whatever",
+          "cost" -> "0.10111",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> DateTime.now().toString
+      )
     }
 
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
@@ -1318,7 +1330,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           billingProject.projectName,
           start,
           end,
-          Set.empty
+          Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
         ),
         Duration.Inf
       )
@@ -2937,10 +2949,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   behavior of "aggregationsAreCacheable"
 
   val testCases: Map[Set[SpendReportingAggregationKeyWithSub], Boolean] = Map(
-    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None)) -> true,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None)) -> false,
     Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, Option(Category))) -> true,
-    Set(SpendReportingAggregationKeyWithSub(Category, None)) -> true,
-    Set(SpendReportingAggregationKeyWithSub(Category, Option(WorkspaceAggKey))) -> true,
+    Set(SpendReportingAggregationKeyWithSub(Category, None)) -> false,
+    Set(SpendReportingAggregationKeyWithSub(Category, Option(WorkspaceAggKey))) -> false,
     Set(SpendReportingAggregationKeyWithSub(Daily, None)) -> false,
     Set(SpendReportingAggregationKeyWithSub(Category, Option(Daily))) -> false,
     Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, Option(Daily))) -> false,

@@ -16,7 +16,8 @@ import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSpendReportRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
+import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.Category
+import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, SpendReportingAggregationKeys, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -487,9 +488,9 @@ class SpendReportingService(
   /* As long as no aggregation contains "daily", it is cacheable */
   @VisibleForTesting
   def aggregationsAreCacheable(aggregations: Set[SpendReportingAggregationKeyWithSub]): Boolean =
-    !aggregations.exists(x =>
-      x.key == SpendReportingAggregationKeys.Daily || x.subAggregationKey.contains(SpendReportingAggregationKeys.Daily)
-    )
+    // as of this writing we only support Workspace~Category for caching
+    Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
+      .equals(aggregations)
 
   // single-project report: step 3
   def getSpendForGCPBillingProject(
