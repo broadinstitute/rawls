@@ -27,7 +27,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
-import java.util.{Base64, UUID}
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
@@ -485,10 +485,9 @@ class SpendReportingService(
         workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
-  /* As long as no aggregation contains "daily", it is cacheable */
+  /* as of this writing we only support Workspace~Category for caching */
   @VisibleForTesting
   def aggregationsAreCacheable(aggregations: Set[SpendReportingAggregationKeyWithSub]): Boolean =
-    // as of this writing we only support Workspace~Category for caching
     Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
       .equals(aggregations)
 
@@ -503,7 +502,6 @@ class SpendReportingService(
   ): Future[Option[SpendReportingResults]] = {
     val query = getQuery(aggregations, spendExportConf)
     val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
-
     runBigQueryJob(queryJob, childContext).map { result =>
       result.getValues.asScala.toList match {
         case Nil  => None
