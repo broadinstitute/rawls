@@ -23,7 +23,6 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
   when(mockUserInfo.accessToken).thenReturn(OAuth2BearerToken("access_token"))
   behavior of "DrsHubResolver"
 
-  // TODO update result to be a url
   it should "get the signed url for a drs object" in {
     doReturn(
       Future.successful(

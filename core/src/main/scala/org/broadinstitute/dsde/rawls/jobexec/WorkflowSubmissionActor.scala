@@ -527,9 +527,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       _ <-
         if (dosSignedUrls.isEmpty) Future.successful(false)
         else Future.successful(true) // TODO Is this correct? Or just don't check that it's empty at all?
-//          googleServicesDAO.addPolicyBindings(GoogleProjectId(wfOpts.google_project),
-//                                              Map(requesterPaysRole -> dosSignedUrls.map("serviceAccount:" + _))
-//          )
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs,
                                                                       wdl,

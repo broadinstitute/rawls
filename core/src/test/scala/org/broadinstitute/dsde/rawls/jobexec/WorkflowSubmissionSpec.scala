@@ -6,13 +6,8 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{drs, _}
-import org.broadinstitute.dsde.rawls.dataaccess.drs.{
-  DrsHubMinimalResponse,
-  DrsHubResolver,
-  ServiceAccountEmail,
-  ServiceAccountPayload
-}
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{
   ProcessNextWorkflow,
@@ -80,20 +75,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   object DrsTestVals {
     val jdrDevUrl = "drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4"
     val dgUrl = "drs://dg.712C/fa640b0e-9779-452f-99a6-16d833d15bd0"
-
-//    val mrBeanEmail: ServiceAccountEmail = ServiceAccountEmail("mr_bean@gmail.com")
-//    val mrBeanSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(mrBeanEmail))
-//    val mrBeanSAMinimalResponse: DrsHubMinimalResponse = DrsHubMinimalResponse(Option("https://signed-url.url"))
-
-//    val drsServiceAccount = "serviceaccount@foo.com"
-//    val drsSAEmail: ServiceAccountEmail = ServiceAccountEmail(drsServiceAccount)
-//    val drsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(drsSAEmail))
-//    val drsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option("https://signed-url.url"))
-
-//    val differentDrsServiceAccount = "differentserviceaccount@foo.com"
-//    val differentDrsSAEmail: ServiceAccountEmail = ServiceAccountEmail(differentDrsServiceAccount)
-//    val differentDrsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(differentDrsSAEmail))
-//    val differentDrsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option("https://signed-url.url"))
 
     val dosUrl = "dos://foo/bar"
     val dosSignedUrl = "https://dos.com/signed-url?key=12345"
@@ -1331,6 +1312,38 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
     // dosUrl and dosUrl3 have the same provider, so only one result for the pair
     assertResult(3) {
+      result.size
+    }
+
+  }
+
+  it should "handle null accessUrls" in withDefaultTestDatabase {
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
+      .thenReturn(Future.successful(None))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl1)))
+
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    val result = Await.result(
+      workflowSubmission.resolveDrsSignedUrls(
+        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR, DrsTestVals.dosUrlDiff, DrsTestVals.dosUrl3),
+        userInfo
+      ),
+      Duration.Inf
+    )
+
+    // Lack of accessUrl should simply result in a shorter result
+    assertResult(2) {
       result.size
     }
 
