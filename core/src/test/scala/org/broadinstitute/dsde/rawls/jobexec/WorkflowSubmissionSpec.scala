@@ -588,7 +588,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         Duration.Inf
       )
 
-      //TODO what to verify
+      // TODO what to verify
 //      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
 //        List("serviceAccount:" + DrsTestVals.drsServiceAccount,
 //             "serviceAccount:" + DrsTestVals.differentDrsServiceAccount
@@ -659,7 +659,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         Duration.Inf
       )
 
-      //TODO what to verify
+      // TODO what to verify
 //      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
 //        List("serviceAccount:" + DrsTestVals.drsServiceAccount,
 //             "serviceAccount:" + DrsTestVals.differentDrsServiceAccount
@@ -730,7 +730,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         Duration.Inf
       )
 
-      //TODO what to verify
+      // TODO what to verify
 //      val expectedClientEmail =
 //        List("serviceAccount:" + DrsTestVals.drsServiceAccount,
 //             "serviceAccount:" + DrsTestVals.differentDrsServiceAccount
@@ -1321,10 +1321,16 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
     }
 
-    val result = Await.result(workflowSubmission.resolveDrsSignedUrls(Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR, DrsTestVals.dosUrlDiff, DrsTestVals.dosUrl3), userInfo), Duration.Inf)
+    val result = Await.result(
+      workflowSubmission.resolveDrsSignedUrls(
+        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR, DrsTestVals.dosUrlDiff, DrsTestVals.dosUrl3),
+        userInfo
+      ),
+      Duration.Inf
+    )
 
-    //dosUrl and dosUrl3 have the same provider, so only one result for the pair
-    assertResult(3){
+    // dosUrl and dosUrl3 have the same provider, so only one result for the pair
+    assertResult(3) {
       result.size
     }
 

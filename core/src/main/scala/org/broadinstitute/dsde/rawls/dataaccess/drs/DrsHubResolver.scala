@@ -47,7 +47,7 @@ class DrsHubResolver(drsHubUrl: String)(implicit
     resolveDrs(drsUrl, userInfo).map { resp =>
       // The email field must remain an `Option` because DRS servers that do not use Bond (HCA, JDR) do not return a service account
       // AEN 2020-09-08 [WA-325]
-      //TODO can it be not an Option now?
+      // TODO can it be not an Option now?
       val signedUrl: Option[String] = resp.accessUrl
 
       if (signedUrl.isEmpty) {

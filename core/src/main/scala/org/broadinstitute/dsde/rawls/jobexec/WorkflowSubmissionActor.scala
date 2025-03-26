@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.metrics.logEvents.SubmissionEvent
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
+import org.broadinstitute.dsde.rawls.util.{addJitter, FutureSupport, MethodWiths}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.DefaultJsonProtocol._
@@ -382,10 +382,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
 
   def resolveDrsSignedUrls(drsUris: Set[String], userInfo: UserInfo)(implicit
-                                                                                     executionContext: ExecutionContext
+    executionContext: ExecutionContext
   ): Future[Set[String]] = {
-    //TODO should this be done in this method or before calling this method?
-    val urisByProvider = drsUris.flatMap(Uri.parseOption).map(_.toUrl).groupBy(_.hostOption.map(_.value).getOrElse("unknown")).map { case (provider, uris) => uris.head.toString() }
+    // TODO should this be done in this method or before calling this method?
+    val urisByProvider =
+      drsUris.flatMap(Uri.parseOption).map(_.toUrl).groupBy(_.hostOption.map(_.value).getOrElse("unknown")).map {
+        case (provider, uris) => uris.head.toString()
+      }
 
     Future
       .traverse(urisByProvider) { drsUri =>
@@ -523,7 +526,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // AEN 2020-09-08 [WA-325]
       _ <-
         if (dosSignedUrls.isEmpty) Future.successful(false)
-        else Future.successful(true) //TODO Is this correct? Or just don't check that it's empty at all?
+        else Future.successful(true) // TODO Is this correct? Or just don't check that it's empty at all?
 //          googleServicesDAO.addPolicyBindings(GoogleProjectId(wfOpts.google_project),
 //                                              Map(requesterPaysRole -> dosSignedUrls.map("serviceAccount:" + _))
 //          )
