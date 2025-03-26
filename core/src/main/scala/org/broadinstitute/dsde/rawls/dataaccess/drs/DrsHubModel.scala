@@ -2,9 +2,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.drs
 
 import spray.json.RootJsonFormat
 
-case class DrsHubRequest(url: String, fields: Array[String])
+case class DrsHubRequest(dataObjectUri: String, fields: Array[String])
 
-case class DrsHubMinimalResponse(googleServiceAccount: Option[ServiceAccountPayload])
+case class DrsHubMinimalResponse(accessUrl: Option[String])
 
 object DrsHubJsonSupport {
   import spray.json.DefaultJsonProtocol._

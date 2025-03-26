@@ -23,7 +23,7 @@ class DrsHubResolver(drsHubUrl: String)(implicit
     with Retry {
 
   // the list of fields we want in DrsHub response. More info can be found here: https://github.com/broadinstitute/drsHub#drsHub-v3
-  private val DrsHubRequestFieldsKey: Array[String] = Array("googleServiceAccount")
+  private val DrsHubRequestFieldsKey: Array[String] = Array("accessUrl")
   private val DrsHubHeaders: Seq[HttpHeader] = HttpHeader.parse("X-App-ID", "rawls") match {
     case HttpHeader.ParsingResult.Ok(header, _) => Seq(header)
     case _                                      => Seq()
@@ -33,8 +33,6 @@ class DrsHubResolver(drsHubUrl: String)(implicit
   val httpClientUtils: HttpClientUtilsStandard = HttpClientUtilsStandard()
 
   private def resolveDrs(drsUrl: String, userInfo: UserInfo): Future[DrsHubMinimalResponse] = {
-    // Evan idea 2020-09-08:
-    // Have Rawls call an "SA-only" endpoint in DrsHub because it doesn't need any URI info (calls Bond but not overloaded DRS servers)
     val requestObj = DrsHubRequest(drsUrl, DrsHubRequestFieldsKey)
     Marshal(requestObj).to[RequestEntity] flatMap { entity =>
       retry[DrsHubMinimalResponse](when5xx) { () =>
@@ -45,16 +43,17 @@ class DrsHubResolver(drsHubUrl: String)(implicit
     }
   }
 
-  override def drsServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
+  override def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
     resolveDrs(drsUrl, userInfo).map { resp =>
       // The email field must remain an `Option` because DRS servers that do not use Bond (HCA, JDR) do not return a service account
       // AEN 2020-09-08 [WA-325]
-      val saEmail: Option[String] = resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
+      //TODO can it be not an Option now?
+      val signedUrl: Option[String] = resp.accessUrl
 
-      if (saEmail.isEmpty) {
-        logger.info(s"DrsHubResolver.drsServiceAccountEmail returned no SA for DRS url $drsUrl")
+      if (signedUrl.isEmpty) {
+        logger.info(s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
       }
 
-      saEmail
+      signedUrl
     }
 }

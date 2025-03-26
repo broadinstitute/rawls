@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import scala.concurrent.Future
 
 trait DrsResolver {
-  def drsServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]]
+  def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[Option[String]]
 }
 
 object DrsResolver {

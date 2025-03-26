@@ -23,25 +23,26 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
   when(mockUserInfo.accessToken).thenReturn(OAuth2BearerToken("access_token"))
   behavior of "DrsHubResolver"
 
-  it should "get the service account of a drs object" in {
+  //TODO update result to be a url
+  it should "get the signed url for a drs object" in {
     doReturn(
       Future.successful(
-        DrsHubMinimalResponse(Option(ServiceAccountPayload(Option(ServiceAccountEmail("foo@bar.com")))))
+        DrsHubMinimalResponse(Option(("https://signed-url.com/file?key=123")))
       )
     )
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
-    val response = mockDrsHubResolver.drsServiceAccountEmail("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
-    assertResult(Option("foo@bar.com")) {
+    val response = mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
+    assertResult(Option("https://signed-url.com/file?key=123")) {
       Await.result(response, 1 minute)
     }
   }
 
-  it should "handle no service account for a drs object" in {
-    doReturn(Future.successful(DrsHubMinimalResponse(Option(ServiceAccountPayload(None)))))
+  it should "handle no signed url for a drs object" in {
+    doReturn(Future.successful(DrsHubMinimalResponse(None)))
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
-    val response = mockDrsHubResolver.drsServiceAccountEmail("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
+    val response = mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
     assertResult(None) {
       Await.result(response, 1 minute)
     }
