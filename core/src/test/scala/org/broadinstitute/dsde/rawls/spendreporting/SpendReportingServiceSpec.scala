@@ -1323,6 +1323,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
+    doReturn(Set())
+      .when(service)
+      .insertRecordsWithMissingSpendData(any(), any(), any(), any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(

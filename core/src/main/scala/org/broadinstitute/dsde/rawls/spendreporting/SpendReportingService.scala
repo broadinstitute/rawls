@@ -492,6 +492,26 @@ class SpendReportingService(
     Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
       .equals(aggregations)
 
+  /* reusable method to retrieve per-project spend report from BQ */
+  private def getSpendForGCPBillingProjectFromBigQuery(
+    aggregations: Set[SpendReportingAggregationKeyWithSub],
+    spendExportConf: BillingProjectSpendExport,
+    start: DateTime,
+    end: DateTime,
+    projectNames: Map[GoogleProjectId, WorkspaceName],
+    childContext: RawlsRequestContext
+  ): Future[Option[SpendReportingResults]] = {
+    val query = getQuery(aggregations, spendExportConf)
+    val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+
+    runBigQueryJob(queryJob, childContext).map { result =>
+      result.getValues.asScala.toList match {
+        case Nil  => None
+        case rows => Option(extractSpendReportingResults(rows, start, end, projectNames, aggregations))
+      }
+    }
+  }
+
   // single-project report: step 3
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
@@ -501,6 +521,8 @@ class SpendReportingService(
   ): Future[SpendReportingResults] = traceFutureWithParent("getSpendForGCPBillingProject", ctx) { childContext =>
     validateReportParameters(start, end)
     for {
+      // retrieve spend export configuration for this BP
+      // and the Google projects/workspaces in this BP
       spendExportConf <- getSpendExportConfiguration(project)
       projectNames <- getSpendReportableWorkspaceGoogleProjects(ctx).map { workspacesByProject =>
         workspacesByProject
@@ -510,7 +532,6 @@ class SpendReportingService(
           }
           .toMap
       }
-
       _ = if (projectNames.isEmpty) {
         throw RawlsExceptionWithErrorReport(
           StatusCodes.NotFound,
@@ -518,58 +539,54 @@ class SpendReportingService(
         )
       }
 
-      // look for a cached spend report
+      // is this spend report cacheable?
       isCacheable = aggregationsAreCacheable(aggregations)
-      cachedResults <-
-        if (isCacheable)
-          getCachedSpendReportData(projectNames, start, end)
-        else
-          Future.successful(CachedSpendReportingResults(isCacheValid = false, results = None))
 
-      spendResults <-
-        if (cachedResults.isCacheValid) {
-          rawlsCacheHitRate().hit()
-          cachedResults.results match {
-            case Some(report) => Future.successful(report)
-            case None =>
-              Future.failed(
-                RawlsExceptionWithErrorReport(
-                  StatusCodes.NotFound,
-                  s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-                )
-              )
+      queryResults: Option[SpendReportingResults] <-
+        if (isCacheable) {
+          // look for a cached spend report
+          getCachedSpendReportData(projectNames, start, end) flatMap { cachedResults =>
+            if (cachedResults.isCacheValid) {
+              // cached spend report found; use it
+              rawlsCacheHitRate().hit()
+              Future.successful(cachedResults.results)
+            } else {
+              // cached spend report not found; go to BigQuery for results
+              rawlsCacheHitRate().miss()
+              getSpendForGCPBillingProjectFromBigQuery(aggregations,
+                                                       spendExportConf,
+                                                       start,
+                                                       end,
+                                                       projectNames,
+                                                       childContext
+              ) map { bqResults =>
+                // save the BigQuery results back to cache and return
+                // the writeback to cache is fire-and-forget
+                insertRecordsWithMissingSpendData(bqResults, projectNames, start, end)
+                bqResults
+              }
+            }
           }
         } else {
-          // only log a cache-miss if this report was valid for caching in the first place
-          if (isCacheable) {
-            rawlsCacheHitRate().miss()
-          }
-
-          val query = getQuery(aggregations, spendExportConf)
-          val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
-
-          val queryResults = runBigQueryJob(queryJob, childContext).map { result =>
-            result.getValues.asScala.toList match {
-              case Nil  => None
-              case rows => Option(extractSpendReportingResults(rows, start, end, projectNames, aggregations))
-            }
-          }
-
-          // write BigQuery results back to cache
-          if (isCacheable) {
-            queryResults.map { res =>
-              insertRecordsWithMissingSpendData(res, projectNames, start, end)
-            }
-          }
-          queryResults.map {
-            case Some(results) => results
-            case None =>
-              throw RawlsExceptionWithErrorReport(
-                StatusCodes.NotFound,
-                s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-              )
-          }
+          // this spend report is not cacheable; bypass the cache
+          // and ask BigQuery directly
+          getSpendForGCPBillingProjectFromBigQuery(aggregations,
+                                                   spendExportConf,
+                                                   start,
+                                                   end,
+                                                   projectNames,
+                                                   childContext
+          )
         }
+
+      spendResults = queryResults match {
+        case Some(results) => results
+        case None =>
+          throw RawlsExceptionWithErrorReport(
+            StatusCodes.NotFound,
+            s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+          )
+      }
     } yield spendResults
 
   }
