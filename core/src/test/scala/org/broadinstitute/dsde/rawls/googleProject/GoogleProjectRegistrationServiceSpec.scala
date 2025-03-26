@@ -21,10 +21,10 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeName,
   SamResourceTypeNames
 }
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.mockito.ArgumentCaptor
+import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.scalatest.matchers.should.Matchers
 import org.mockito.ArgumentMatchers.{eq => mockitoEq, _}
 
@@ -565,6 +565,130 @@ class GoogleProjectRegistrationServiceSpec
     assert(capturedId.equals(GoogleProjectId("test-project")))
 
     e.errorReport.message shouldBe "Failed to set billing account in Google: Something has gone wrong in Google"
+
+  }
+
+  it should "unregister a Google project" in {
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+
+    when(mockGoogleServicesDAO.disableBillingOnGoogleProject(any[GoogleProjectId], any()))
+      .thenReturn(Future.successful(new ProjectBillingInfo()))
+
+    when(
+      mockSamDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext])
+    ).thenReturn(Future.successful(true))
+
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
+      .thenReturn(Future.successful(true))
+
+    // Returns Unit, so just run to make sure no errors are thrown
+    Await.result(googleProjectRegService.unregisterGoogleProject(GoogleProjectId("test-project")), Duration.Inf)
+
+    verify(mockGoogleServicesDAO).disableBillingOnGoogleProject(ArgumentMatchers.eq(GoogleProjectId("test-project")),
+                                                                any()
+    )
+
+    verify(mockGoogleProjectRegRepo).deleteGoogleProjectRegistration(
+      ArgumentMatchers.eq(GoogleProjectId("test-project"))
+    )
+  }
+
+  it should "fail if no delete action on google project" in {
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+
+    when(mockGoogleServicesDAO.disableBillingOnGoogleProject(any[GoogleProjectId], any()))
+      .thenReturn(Future.successful(new ProjectBillingInfo()))
+
+    when(
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+                               any[String],
+                               mockitoEq(SamGoogleProjectActions.delete),
+                               any[RawlsRequestContext]
+      )
+    ).thenReturn(Future.successful(false))
+
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
+      .thenReturn(Future.successful(true))
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(googleProjectRegService.unregisterGoogleProject(GoogleProjectId("test-project")), Duration.Inf)
+    }
+
+    assertResult(Some(StatusCodes.Forbidden))(e.errorReport.statusCode)
+
+  }
+
+  it should "not delete record if disabling billing fails" in {
+    val mockSamDAO = mock[SamDAO]
+    val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
+    val mockContext = mock[RawlsRequestContext]
+    val mockBillingRepository = mock[BillingRepository]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+
+    when(mockGoogleServicesDAO.disableBillingOnGoogleProject(any[GoogleProjectId], any()))
+      .thenReturn(
+        Future.failed(
+          new RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.Forbidden, "Something has gone wrong in Google")
+          )
+        )
+      )
+
+    when(
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+                               any[String],
+                               mockitoEq(SamGoogleProjectActions.delete),
+                               any[RawlsRequestContext]
+      )
+    ).thenReturn(Future.successful(true))
+
+    val googleProjectRegService =
+      GoogleProjectRegistrationService.constructor(
+        mockSamDAO,
+        mockGoogleProjectRegRepo,
+        mockBillingRepository,
+        mockGoogleServicesDAO
+      )(
+        mockContext
+      )
+
+    when(mockGoogleProjectRegRepo.deleteGoogleProjectRegistration(any[GoogleProjectId]))
+      .thenReturn(Future.successful(true))
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(googleProjectRegService.unregisterGoogleProject(GoogleProjectId("test-project")), Duration.Inf)
+    }
+
+    assertResult(Some(StatusCodes.Forbidden))(e.errorReport.statusCode)
+    verify(mockGoogleProjectRegRepo, never()).deleteGoogleProjectRegistration(any[GoogleProjectId])
 
   }
 
