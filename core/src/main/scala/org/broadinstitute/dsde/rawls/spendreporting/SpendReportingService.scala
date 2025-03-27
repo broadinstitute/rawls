@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{FieldValueList, JobStatistics, Option => _, _}
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
@@ -15,7 +16,8 @@ import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSpendReportRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
+import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.Category
+import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, SpendReportingAggregationKeys, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -25,7 +27,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
 
-import java.util.{Base64, UUID}
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
@@ -483,6 +485,31 @@ class SpendReportingService(
         workspaceServiceConstructor(childContext).getGCPWorkspacesByBillingProjects(validWorkspaceIds)
       }
 
+  /* as of this writing we only support Workspace~Category for caching */
+  @VisibleForTesting
+  def aggregationsAreCacheable(aggregations: Set[SpendReportingAggregationKeyWithSub]): Boolean =
+    Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
+      .equals(aggregations)
+
+  /* reusable method to retrieve per-project spend report from BQ */
+  private def getSpendForGCPBillingProjectFromBigQuery(
+    aggregations: Set[SpendReportingAggregationKeyWithSub],
+    spendExportConf: BillingProjectSpendExport,
+    start: DateTime,
+    end: DateTime,
+    projectNames: Map[GoogleProjectId, WorkspaceName],
+    childContext: RawlsRequestContext
+  ): Future[Option[SpendReportingResults]] = {
+    val query = getQuery(aggregations, spendExportConf)
+    val queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+    runBigQueryJob(queryJob, childContext).map { result =>
+      result.getValues.asScala.toList match {
+        case Nil  => None
+        case rows => Option(extractSpendReportingResults(rows, start, end, projectNames, aggregations))
+      }
+    }
+  }
+
   // single-project report: step 3
   def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
@@ -492,6 +519,8 @@ class SpendReportingService(
   ): Future[SpendReportingResults] = traceFutureWithParent("getSpendForGCPBillingProject", ctx) { childContext =>
     validateReportParameters(start, end)
     for {
+      // retrieve spend export configuration for this BP
+      // and the Google projects/workspaces in this BP
       spendExportConf <- getSpendExportConfiguration(project)
       projectNames <- getSpendReportableWorkspaceGoogleProjects(ctx).map { workspacesByProject =>
         workspacesByProject
@@ -501,7 +530,6 @@ class SpendReportingService(
           }
           .toMap
       }
-
       _ = if (projectNames.isEmpty) {
         throw RawlsExceptionWithErrorReport(
           StatusCodes.NotFound,
@@ -509,20 +537,56 @@ class SpendReportingService(
         )
       }
 
-      query = getQuery(aggregations, spendExportConf)
-      queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+      // is this spend report cacheable?
+      isCacheable = aggregationsAreCacheable(aggregations)
 
-      job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-      _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-      result = job.getQueryResults()
-    } yield result.getValues.asScala.toList match {
-      case Nil =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.NotFound,
-          s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-        )
-      case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
-    }
+      queryResults: Option[SpendReportingResults] <-
+        if (isCacheable) {
+          // look for a cached spend report
+          getCachedSpendReportData(projectNames, start, end) flatMap { cachedResults =>
+            if (cachedResults.isCacheValid) {
+              // cached spend report found; use it
+              rawlsCacheHitRate().hit()
+              Future.successful(cachedResults.results)
+            } else {
+              // cached spend report not found; go to BigQuery for results
+              rawlsCacheHitRate().miss()
+              getSpendForGCPBillingProjectFromBigQuery(aggregations,
+                                                       spendExportConf,
+                                                       start,
+                                                       end,
+                                                       projectNames,
+                                                       childContext
+              ) map { bqResults =>
+                // save the BigQuery results back to cache and return
+                // the writeback to cache is fire-and-forget
+                insertRecordsWithMissingSpendData(bqResults, projectNames, start, end)
+                bqResults
+              }
+            }
+          }
+        } else {
+          // this spend report is not cacheable; bypass the cache
+          // and ask BigQuery directly
+          getSpendForGCPBillingProjectFromBigQuery(aggregations,
+                                                   spendExportConf,
+                                                   start,
+                                                   end,
+                                                   projectNames,
+                                                   childContext
+          )
+        }
+
+      spendResults = queryResults match {
+        case Some(results) => results
+        case None =>
+          throw RawlsExceptionWithErrorReport(
+            StatusCodes.NotFound,
+            s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+          )
+      }
+    } yield spendResults
+
   }
 
   // single-project report: entry point
