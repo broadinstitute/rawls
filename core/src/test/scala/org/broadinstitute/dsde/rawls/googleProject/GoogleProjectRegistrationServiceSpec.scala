@@ -742,7 +742,7 @@ class GoogleProjectRegistrationServiceSpec
     result shouldEqual Seq(googleProjectRegistration)
   }
 
-  it should "return NotFound if billing project name is set but no matches are found" in {
+  it should "return an empty sequence if no Google projects match the given billing project name" in {
     val billingProjectName = RawlsBillingProjectName("non-existent-billing-project")
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
@@ -913,7 +913,7 @@ class GoogleProjectRegistrationServiceSpec
     result shouldEqual None
   }
 
-  it should "return None if the user does not have the required action" in {
+  it should "return NotFound status if the user does not have the required action to access the Google project" in {
     val googleProjectId = GoogleProjectId("test-project-id")
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
@@ -943,6 +943,6 @@ class GoogleProjectRegistrationServiceSpec
       Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
     }
 
-    assertResult(Some(StatusCodes.Forbidden))(e.errorReport.statusCode)
+    e.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
   }
 }
