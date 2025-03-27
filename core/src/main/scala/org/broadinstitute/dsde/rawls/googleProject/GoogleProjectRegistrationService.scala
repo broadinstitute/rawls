@@ -133,6 +133,9 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
                         pageSize: Int,
                         offset: Int
   ): Future[Seq[GoogleProjectRegistration]] = {
+    require(pageSize > 0 && pageSize <= 5000, "pageSize must be greater than 0 and less than or equal to 5000")
+    require(offset >= 0, "offset must be greater than or equal to 0")
+
     val accessibleGoogleProjectsFuture = samDAO
       .listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, ctx)
       .map(_.map(resource => GoogleProjectId(resource.getResourceId)).toSet)
