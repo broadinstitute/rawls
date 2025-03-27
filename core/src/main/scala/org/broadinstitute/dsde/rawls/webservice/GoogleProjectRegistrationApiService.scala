@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProjectName,
   RawlsRequestContext
 }
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectRegistration, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 
 import scala.concurrent.ExecutionContext
@@ -54,6 +55,13 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
             }
         } ~
           path(Segment) { googleProjectId =>
+            delete {
+              complete {
+                googleProjectRegServiceConstructor(ctx)
+                  .unregisterGoogleProject(GoogleProjectId(googleProjectId))
+                  .map(_ => StatusCodes.NoContent)
+              }
+            } ~
             get {
               onSuccess(
                 googleProjectRegServiceConstructor(ctx)

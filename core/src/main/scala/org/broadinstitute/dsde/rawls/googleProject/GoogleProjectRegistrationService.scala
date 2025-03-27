@@ -113,6 +113,23 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       }
     } yield finalResult
 
+  def unregisterGoogleProject(googleProjectId: GoogleProjectId): Future[Unit] =
+    // 1. Check delete action on google-project resource.
+    for {
+      _ <- samDAO
+        .userHasAction(SamResourceTypeNames.googleProject, googleProjectId.value, SamGoogleProjectActions.delete, ctx)
+        .map(canDelete =>
+          if (!canDelete)
+            throw new RawlsExceptionWithErrorReport(errorReport =
+              ErrorReport(StatusCodes.Forbidden, s"Google project not found or you do not have permission to delete.")
+            )
+        )
+      // 2. Disable billing on the Google project.
+      _ <- googleServicesDAO.disableBillingOnGoogleProject(googleProjectId, ctx.toTracingContext)
+      // 3. Delete the record in the GOOGLE_PROJECT table.
+      _ <- googleProjectRegRepo.deleteGoogleProjectRegistration(googleProjectId)
+    } yield ()
+
   def getGoogleProjects(billingProjectName: Option[RawlsBillingProjectName]): Future[Seq[GoogleProjectRegistration]] = {
     val accessibleGoogleProjectsFuture = samDAO
       .listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.readPolicies, ctx)
