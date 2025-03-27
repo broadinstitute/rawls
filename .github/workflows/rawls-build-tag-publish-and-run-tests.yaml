@@ -1,12 +1,7 @@
 name: rawls-build-tag-publish-and-run-tests
 
 on:
-  pull_request:
-    paths-ignore: ['**.md']
-  push:
-    branches:
-      - develop
-    paths-ignore: ['**.md']
+  workflow_dispatch:
 
 env:
   RAWLS_BUILD_RUN_NAME: 'rawls-build-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}'

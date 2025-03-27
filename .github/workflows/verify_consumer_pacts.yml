@@ -14,16 +14,6 @@ name: Verify consumer contracts
 # - PACT_BROKER_USERNAME - the Pact Broker username
 # - PACT_BROKER_PASSWORD - the Pact Broker password
 on:
-  pull_request:
-    branches:
-      - develop
-    paths-ignore:
-      - 'README.md'
-  push:
-    branches:
-      - develop
-    paths-ignore:
-      - 'README.md'
   workflow_dispatch:
     inputs:
       pb-event-type:

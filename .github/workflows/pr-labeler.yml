@@ -1,7 +1,6 @@
 name: PR Labeler
 on:
-  pull_request:
-    types: [opened]
+  workflow_dispatch:
 
 jobs:
   pr-labeler:

@@ -1,8 +1,7 @@
 name: Check formatting for modified files with scalafmt
 
 on:
-  pull_request:
-    paths-ignore: ['**.md']
+  workflow_dispatch:
 
 jobs:
   format:
