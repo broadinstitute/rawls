@@ -77,16 +77,19 @@ trait GoogleProjectRegistrationComponent {
       billingProjectName: Option[RawlsBillingProjectName],
       pageSize: Int,
       offset: Int
-    ): ReadAction[Seq[GoogleProjectRegistration]] = {
-      val query = googleProjectRegistrationQuery.filter(_.googleProjectId inSet googleProjectIds.map(_.value))
-      val filteredQuery = billingProjectName match {
-        case Some(RawlsBillingProjectName(name)) => query.filter(_.billingProject === name)
-        case None                                => query
+    ): ReadAction[Seq[GoogleProjectRegistration]] =
+      if (googleProjectIds.isEmpty) {
+        DBIO.successful(Seq.empty)
+      } else {
+        val query = googleProjectRegistrationQuery.filter(_.googleProjectId inSet googleProjectIds.map(_.value))
+        val filteredQuery = billingProjectName match {
+          case Some(RawlsBillingProjectName(name)) => query.filter(_.billingProject === name)
+          case None                                => query
+        }
+        filteredQuery.drop(offset).take(pageSize).result.map { records =>
+          records.map(GoogleProjectRegistrationRecord.toGoogleProjectRegistration)
+        }
       }
-      filteredQuery.drop(offset).take(pageSize).result.map { records =>
-        records.map(GoogleProjectRegistrationRecord.toGoogleProjectRegistration)
-      }
-    }
 
     def delete(id: GoogleProjectId): ReadWriteAction[Boolean] =
       googleProjectRegistrationQuery.withId(id.value).delete.map(_ > 0)
