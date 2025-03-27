@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProjectName,
   RawlsRequestContext
 }
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectRegistration, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 
 import scala.concurrent.ExecutionContext
@@ -43,13 +42,14 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
             }
           } ~
             get {
-              parameters("billingProjectId".optional) { billingProjectId =>
-                onSuccess(
+              parameters(
+                "billingProjectId".optional,
+                "pageSize".as[Int],
+                "offset".as[Int]
+              ) { (billingProjectId, pageSize, offset) =>
+                complete {
                   googleProjectRegServiceConstructor(ctx)
-                    .getGoogleProjects(billingProjectId.map(RawlsBillingProjectName))
-                ) { projects =>
-                  if (projects.isEmpty) complete(StatusCodes.NotFound -> None)
-                  else complete(StatusCodes.OK -> projects)
+                    .getGoogleProjects(billingProjectId.map(RawlsBillingProjectName), pageSize, offset)
                 }
               }
             }
@@ -62,15 +62,12 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                   .map(_ => StatusCodes.NoContent)
               }
             } ~
-            get {
-              onSuccess(
-                googleProjectRegServiceConstructor(ctx)
-                  .getGoogleProjectById(GoogleProjectId(googleProjectId))
-              ) {
-                case Some(projectId) => complete(StatusCodes.OK -> projectId)
-                case None            => complete(StatusCodes.NotFound)
+              get {
+                complete {
+                  googleProjectRegServiceConstructor(ctx)
+                    .getGoogleProjectById(GoogleProjectId(googleProjectId))
+                }
               }
-            }
           }
       }
     }
