@@ -20,16 +20,3 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           inputs: '{}'
 
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#
-#      - name: Setup K6
-#        uses: grafana/setup-k6-action@v1
-#
-#      - name: Run local k6 test
-#        uses: grafana/run-k6-action@v1
-#        env:
-#          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
-#          K6_CLOUD_PROJECT_ID: ${{ secrets.K6_CLOUD_PROJECT_ID }}
-#        with:
-#          path: core/src/test/k6/script.js
