@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   GoogleProjectRegistration,
@@ -73,12 +72,21 @@ trait GoogleProjectRegistrationComponent {
           DBIO.successful(Option(GoogleProjectRegistrationRecord.toGoogleProjectRegistration(googleProjectRegRec)))
       }
 
-    def findByIds(
-      googleProjectIds: Set[GoogleProjectId]
-    ): ReadAction[Seq[GoogleProjectRegistration]] =
-      googleProjectRegistrationQuery.filter(_.googleProjectId inSet googleProjectIds.map(_.value)).result.map { records =>
+    def findByIdsAndBillingProject(
+      googleProjectIds: Set[GoogleProjectId],
+      billingProjectName: Option[RawlsBillingProjectName],
+      pageSize: Int,
+      offset: Int
+    ): ReadAction[Seq[GoogleProjectRegistration]] = {
+      val query = googleProjectRegistrationQuery.filter(_.googleProjectId inSet googleProjectIds.map(_.value))
+      val filteredQuery = billingProjectName match {
+        case Some(name) => query.filter(_.billingProject === name.value)
+        case None       => query
+      }
+      filteredQuery.drop(offset).take(pageSize).result.map { records =>
         records.map(GoogleProjectRegistrationRecord.toGoogleProjectRegistration)
       }
+    }
 
     def delete(id: GoogleProjectId): ReadWriteAction[Boolean] =
       googleProjectRegistrationQuery.withId(id.value).delete.map(_ > 0)
