@@ -153,14 +153,13 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
 
   def getGoogleProjectById(googleProjectId: GoogleProjectId): Future[Option[GoogleProjectRegistration]] =
     for {
-      _ <- samDAO
+      canRead <- samDAO
         .userHasAction(SamResourceTypeNames.googleProject, googleProjectId.value, SamGoogleProjectActions.read, ctx)
-        .map(canRead =>
-          if (!canRead)
-            throw new RawlsExceptionWithErrorReport(errorReport =
-              ErrorReport(StatusCodes.NotFound, s"Google project does not exist or you don't have access.")
-            )
-        )
-      projectRegistration <- googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId)
+      projectRegistration <-
+        if (canRead) {
+          googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId)
+        } else {
+          Future.successful(None)
+        }
     } yield projectRegistration
 }
