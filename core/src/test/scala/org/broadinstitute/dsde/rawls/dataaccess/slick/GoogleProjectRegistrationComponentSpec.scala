@@ -78,7 +78,13 @@ class GoogleProjectRegistrationComponentSpec
     }
 
     val result = runAndWait(
-      googleProjectRegistrationQuery.findByIds(Set(GoogleProjectId("project1"), GoogleProjectId("project2")))
+      googleProjectRegistrationQuery.findByIdsAndBillingProject(Set(GoogleProjectId("project1"),
+                                                                    GoogleProjectId("project2")
+                                                                ),
+                                                                None,
+                                                                10,
+                                                                0
+      )
     )
 
     result should have size 2

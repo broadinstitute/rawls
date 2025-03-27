@@ -9,7 +9,7 @@ class SamModelSpec extends AnyFlatSpec with Matchers {
     SamGoogleProjectActions.link shouldEqual SamResourceAction("link")
   }
 
-  it should "have a readPolicies action" in {
-    SamGoogleProjectActions.readPolicies shouldEqual SamResourceAction("read_policies")
+  it should "have a read action" in {
+    SamGoogleProjectActions.read shouldEqual SamResourceAction("read")
   }
 }

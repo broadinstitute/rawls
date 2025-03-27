@@ -119,7 +119,11 @@ class GoogleProjectRegistrationRepositorySpec extends AnyFlatSpec with TestDrive
     Await.result(repo.registerGoogleProject(googleProjectReg2), Duration.Inf)
 
     val result = Await.result(
-      repo.getGoogleProjectRegistrations(Set(googleProjectReg1.googleProjectId, googleProjectReg2.googleProjectId)),
+      repo.getGoogleProjectRegistrations(Set(googleProjectReg1.googleProjectId, googleProjectReg2.googleProjectId),
+                                         None,
+                                         10,
+                                         0
+      ),
       Duration.Inf
     )
 
@@ -132,7 +136,8 @@ class GoogleProjectRegistrationRepositorySpec extends AnyFlatSpec with TestDrive
     val nonExistentId1 = GoogleProjectId(UUID.randomUUID().toString)
     val nonExistentId2 = GoogleProjectId(UUID.randomUUID().toString)
 
-    val result = Await.result(repo.getGoogleProjectRegistrations(Set(nonExistentId1, nonExistentId2)), Duration.Inf)
+    val result =
+      Await.result(repo.getGoogleProjectRegistrations(Set(nonExistentId1, nonExistentId2), None, 10, 0), Duration.Inf)
 
     assert(result.isEmpty)
   }

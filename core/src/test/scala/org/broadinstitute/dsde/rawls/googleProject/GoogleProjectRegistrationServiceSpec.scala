@@ -19,15 +19,13 @@ import org.broadinstitute.dsde.rawls.model.{
   SamGoogleProjectActions,
   SamResourceAction,
   SamResourceTypeName,
-  SamResourceTypeNames,
-  UnRegisteredGoogleProjectRegistration
+  SamResourceTypeNames
 }
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
-import org.mockito.ArgumentCaptor
 import org.scalatest.matchers.should.Matchers
 import org.mockito.ArgumentMatchers.{eq => mockitoEq, _}
 
@@ -719,10 +717,7 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject,
-                                          SamGoogleProjectActions.readPolicies,
-                                          mockContext
-      )
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, mockContext)
     )
       .thenReturn(
         Future.successful(
@@ -734,10 +729,16 @@ class GoogleProjectRegistrationServiceSpec
         )
       )
 
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistrations(Set(GoogleProjectId("test-project-id"))))
+    when(
+      mockGoogleProjectRegRepo.getGoogleProjectRegistrations(Set(GoogleProjectId("test-project-id")),
+                                                             Some(billingProjectName),
+                                                             10,
+                                                             0
+      )
+    )
       .thenReturn(Future.successful(Seq(googleProjectRegistration)))
 
-    val result = Await.result(googleProjectRegService.getGoogleProjects(Some(billingProjectName)), Duration.Inf)
+    val result = Await.result(googleProjectRegService.getGoogleProjects(Some(billingProjectName), 10, 0), Duration.Inf)
     result shouldEqual Seq(googleProjectRegistration)
   }
 
@@ -759,10 +760,7 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject,
-                                          SamGoogleProjectActions.readPolicies,
-                                          mockContext
-      )
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, mockContext)
     )
       .thenReturn(
         Future.successful(
@@ -773,14 +771,20 @@ class GoogleProjectRegistrationServiceSpec
           )
         )
       )
-    when(mockGoogleProjectRegRepo.getGoogleProjectRegistrations(Set(GoogleProjectId("test-project-id"))))
+    when(
+      mockGoogleProjectRegRepo.getGoogleProjectRegistrations(Set(GoogleProjectId("test-project-id")),
+                                                             Some(billingProjectName),
+                                                             10,
+                                                             0
+      )
+    )
       .thenReturn(Future.successful(Seq.empty))
 
-    val result = Await.result(googleProjectRegService.getGoogleProjects(Some(billingProjectName)), Duration.Inf)
+    val result = Await.result(googleProjectRegService.getGoogleProjects(Some(billingProjectName), 10, 0), Duration.Inf)
     result shouldEqual Seq.empty
   }
 
-  it should "retrieve all Google projects if no billing project name is provided" in {
+  it should "retrieve all accessible Google projects if no billing project name is provided" in {
     val googleProjectRegistration1 = GoogleProjectRegistration(
       GoogleProjectId("test-project-id-1"),
       Some(RawlsBillingAccountName("billing-account-1")),
@@ -809,10 +813,7 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject,
-                                          SamGoogleProjectActions.readPolicies,
-                                          mockContext
-      )
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, mockContext)
     )
       .thenReturn(
         Future.successful(
@@ -829,12 +830,15 @@ class GoogleProjectRegistrationServiceSpec
 
     when(
       mockGoogleProjectRegRepo.getGoogleProjectRegistrations(
-        Set(GoogleProjectId("test-project-id-1"), GoogleProjectId("test-project-id-2"))
+        Set(GoogleProjectId("test-project-id-1"), GoogleProjectId("test-project-id-2")),
+        None,
+        10,
+        0
       )
     )
       .thenReturn(Future.successful(Seq(googleProjectRegistration1, googleProjectRegistration2)))
 
-    val result = Await.result(googleProjectRegService.getGoogleProjects(None), Duration.Inf)
+    val result = Await.result(googleProjectRegService.getGoogleProjects(None, 10, 0), Duration.Inf)
     result shouldEqual Seq(googleProjectRegistration1, googleProjectRegistration2)
   }
 
@@ -864,7 +868,7 @@ class GoogleProjectRegistrationServiceSpec
     when(
       mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
                                googleProjectId.value,
-                               SamGoogleProjectActions.readPolicies,
+                               SamGoogleProjectActions.read,
                                mockContext
       )
     )
@@ -876,7 +880,7 @@ class GoogleProjectRegistrationServiceSpec
     result shouldEqual Some(googleProjectRegistration)
   }
 
-  it should "return an UnRegisteredGoogleProjectRegistration if the user has the required action but the project is not found" in {
+  it should "return None if the user has the required action but the project is not found" in {
     val googleProjectId = GoogleProjectId("test-project-id")
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
@@ -897,7 +901,7 @@ class GoogleProjectRegistrationServiceSpec
     when(
       mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
                                googleProjectId.value,
-                               SamGoogleProjectActions.readPolicies,
+                               SamGoogleProjectActions.read,
                                mockContext
       )
     )
@@ -906,7 +910,7 @@ class GoogleProjectRegistrationServiceSpec
       .thenReturn(Future.successful(None))
 
     val result = Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
-    result shouldEqual Some(UnRegisteredGoogleProjectRegistration(googleProjectId))
+    result shouldEqual None
   }
 
   it should "return None if the user does not have the required action" in {
@@ -929,13 +933,16 @@ class GoogleProjectRegistrationServiceSpec
     when(
       mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
                                googleProjectId.value,
-                               SamGoogleProjectActions.readPolicies,
+                               SamGoogleProjectActions.read,
                                mockContext
       )
     )
       .thenReturn(Future.successful(false))
 
-    val result = Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
-    result shouldEqual None
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
+    }
+
+    assertResult(Some(StatusCodes.Forbidden))(e.errorReport.statusCode)
   }
 }

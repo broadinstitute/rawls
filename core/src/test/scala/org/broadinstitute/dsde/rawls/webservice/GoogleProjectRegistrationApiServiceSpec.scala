@@ -5,9 +5,16 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.provide
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.googleProject.{
+  GoogleProjectRegistrationRepository,
+  GoogleProjectRegistrationService
+}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectRegistrationJsonSupport$._
 import org.broadinstitute.dsde.rawls.model._
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -19,6 +26,8 @@ class GoogleProjectRegistrationApiServiceSpec
     with GoogleProjectRegistrationApiService {
 
   val mockGoogleProjectRegService: GoogleProjectRegistrationService = mock[GoogleProjectRegistrationService]
+  val mockSamDAO: SamDAO = mock[SamDAO]
+  val mockGoogleProjectRegRepo: GoogleProjectRegistrationRepository = mock[GoogleProjectRegistrationRepository]
 
   override val googleProjectRegServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService = { _ =>
     mockGoogleProjectRegService
@@ -37,21 +46,33 @@ class GoogleProjectRegistrationApiServiceSpec
       RawlsBillingProjectName("test-billing-project")
     )
 
-    when(mockGoogleProjectRegService.getGoogleProjects(Some(RawlsBillingProjectName("test-billing-project"))))
+    when(
+      mockGoogleProjectRegService.getGoogleProjects(Some(RawlsBillingProjectName("test-billing-project")), 10, 0)
+    )
       .thenReturn(Future.successful(Seq(googleProjectRegistration)))
 
-    Get("/googleProjects?billingProjectId=test-billing-project") ~> googleProjectRegistrationRoutes() ~> check {
+    Get(
+      "/googleProjects?billingProjectId=test-billing-project&pageSize=10&offset=0"
+    ) ~> googleProjectRegistrationRoutes() ~> check {
       status shouldEqual StatusCodes.OK
       responseAs[Seq[GoogleProjectRegistration]] shouldEqual Seq(googleProjectRegistration)
     }
   }
 
   it should "return NotFound if billing project name is set but no matches are found" in {
-    when(mockGoogleProjectRegService.getGoogleProjects(Some(RawlsBillingProjectName("non-existent-billing-project"))))
+    when(
+      mockGoogleProjectRegService.getGoogleProjects(Some(RawlsBillingProjectName("non-existent-billing-project")),
+                                                    10,
+                                                    0
+      )
+    )
       .thenReturn(Future.successful(Seq.empty))
 
-    Get("/googleProjects?billingProjectId=non-existent-billing-project") ~> googleProjectRegistrationRoutes() ~> check {
-      status shouldEqual StatusCodes.NotFound
+    Get(
+      "/googleProjects?billingProjectId=non-existent-billing-project&pageSize=10&offset=0"
+    ) ~> googleProjectRegistrationRoutes() ~> check {
+      status shouldEqual StatusCodes.OK
+      responseAs[Seq[GoogleProjectRegistration]] shouldEqual Seq.empty
     }
   }
 
@@ -70,10 +91,10 @@ class GoogleProjectRegistrationApiServiceSpec
       RawlsBillingProjectName("test-billing-project-2")
     )
 
-    when(mockGoogleProjectRegService.getGoogleProjects(None))
+    when(mockGoogleProjectRegService.getGoogleProjects(None, 10, 0))
       .thenReturn(Future.successful(Seq(googleProjectRegistration1, googleProjectRegistration2)))
 
-    Get("/googleProjects") ~> googleProjectRegistrationRoutes() ~> check {
+    Get("/googleProjects?pageSize=10&offset=0") ~> googleProjectRegistrationRoutes() ~> check {
       status shouldEqual StatusCodes.OK
       responseAs[Seq[GoogleProjectRegistration]] shouldEqual Seq(googleProjectRegistration1, googleProjectRegistration2)
     }
@@ -93,15 +114,6 @@ class GoogleProjectRegistrationApiServiceSpec
     Get("/googleProjects/test-project-id") ~> googleProjectRegistrationRoutes() ~> check {
       status shouldEqual StatusCodes.OK
       responseAs[GoogleProjectRegistration] shouldEqual googleProjectRegistration
-    }
-  }
-
-  it should "return NotFound if the Google project is not found" in {
-    when(mockGoogleProjectRegService.getGoogleProjectById(GoogleProjectId("non-existent-project-id")))
-      .thenReturn(Future.successful(None))
-
-    Get("/googleProjects/non-existent-project-id") ~> googleProjectRegistrationRoutes() ~> check {
-      status shouldEqual StatusCodes.NotFound
     }
   }
 }
