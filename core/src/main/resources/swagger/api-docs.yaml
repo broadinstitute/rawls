@@ -4661,7 +4661,7 @@ paths:
     get:
       tags:
         - googleProjects
-      summary: list google projects
+      summary: list google projects in rawls
       description: List the Google projects accessible to the user
       operationId: getGoogleProjects
       parameters:
@@ -4672,6 +4672,16 @@ paths:
           required: false
           schema:
             type: string
+        - name: pageSize
+          in: query
+          description: how many google projects to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
       responses:
         200:
           description: Successful Request
@@ -4680,7 +4690,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/RegisterGoogleProjectRequest'
+                  $ref: '#/components/schemas/GoogleProjectResponse'
         404:
           description: Billing and/or Google project don't exist or you don't have permission
           content:
@@ -4725,7 +4735,7 @@ paths:
     get:
       tags:
         - googleProjects
-      summary: get google project by googleProjectId
+      summary: get google project in rawls by id
       description: Get the Google project if known and the user has access
       operationId: getGoogleProjectById
       parameters:
@@ -4736,7 +4746,7 @@ paths:
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/RegisterGoogleProjectRequest'
+                $ref: '#/components/schemas/GoogleProjectResponse'
         404:
           description: Google project don't exist or you don't have permission
           content:
@@ -7407,6 +7417,26 @@ components:
         billingProjectId:
           type: string
           description: the id of the billing project
+    GoogleProjectResponse:
+      required:
+        - googleProjectId
+        - billingProjectId
+        - billingAccount
+        - message
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
+        billingAccount:
+          type: string
+          description: the id of the billing account
+        message:
+            type: string
+            description: informational message about the project
   parameters:
     billingProjectActionPathParam:
       name: action
