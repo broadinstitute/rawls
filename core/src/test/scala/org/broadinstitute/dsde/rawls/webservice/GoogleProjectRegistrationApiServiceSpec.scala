@@ -70,4 +70,14 @@ class GoogleProjectRegistrationApiServiceSpec
       responseAs[GoogleProjectRegistration] shouldEqual googleProjectRegistration
     }
   }
+
+  it should "return 404 Not Found if the Google project is not found" in {
+    when(mockGoogleProjectRegService.getGoogleProjectById(GoogleProjectId("non-existent-project-id")))
+      .thenReturn(Future.successful(None))
+
+    Get("/googleProjects/non-existent-project-id") ~> googleProjectRegistrationRoutes() ~> check {
+      status shouldEqual StatusCodes.NotFound
+      responseAs[String] shouldEqual "Google project does not exist or you don't have access."
+    }
+  }
 }
