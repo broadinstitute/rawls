@@ -44,8 +44,8 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
             get {
               parameters(
                 "billingProjectId".optional,
-                "pageSize".as[Int],
-                "offset".as[Int]
+                "pageSize".as[Int].withDefault(100),
+                "offset".as[Int].withDefault(0)
               ) { (billingProjectId, pageSize, offset) =>
                 complete {
                   googleProjectRegServiceConstructor(ctx)
