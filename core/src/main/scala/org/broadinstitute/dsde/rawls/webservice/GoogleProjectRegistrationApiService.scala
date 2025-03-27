@@ -63,9 +63,13 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
               }
             } ~
               get {
-                complete {
+                onSuccess(
                   googleProjectRegServiceConstructor(ctx)
                     .getGoogleProjectById(GoogleProjectId(googleProjectId))
+                ) {
+                  case Some(project) => complete(StatusCodes.OK -> project)
+                  case None =>
+                    complete(StatusCodes.NotFound -> "Google project does not exist or you don't have access.")
                 }
               }
           }
