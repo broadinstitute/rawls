@@ -12,8 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamBillingProjectActions,
   SamGoogleProjectActions,
-  SamResourceTypeNames,
-  UnRegisteredGoogleProjectRegistration
+  SamResourceTypeNames
 }
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -130,43 +129,29 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       _ <- googleProjectRegRepo.deleteGoogleProjectRegistration(googleProjectId)
     } yield ()
 
-  def getGoogleProjects(billingProjectName: Option[RawlsBillingProjectName]): Future[Seq[GoogleProjectRegistration]] = {
+  def getGoogleProjects(billingProjectName: Option[RawlsBillingProjectName],
+                        pageSize: Int,
+                        offset: Int
+  ): Future[Seq[GoogleProjectRegistration]] = {
     val accessibleGoogleProjectsFuture = samDAO
-      .listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.readPolicies, ctx)
+      .listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, ctx)
       .map(_.map(resource => GoogleProjectId(resource.getResourceId)).toSet)
 
     accessibleGoogleProjectsFuture.flatMap { accessibleGoogleProjects =>
-      googleProjectRegRepo.getGoogleProjectRegistrations(accessibleGoogleProjects).map { registrations =>
-        val filteredRegistrations = billingProjectName
-          .map(name => registrations.filter(_.billingProjectId == name))
-          .getOrElse(registrations)
-
-        if (billingProjectName.isDefined && filteredRegistrations.isEmpty) {
-          Seq.empty
-        } else {
-          val registeredProjectIds = filteredRegistrations.map(_.googleProjectId).toSet
-          val unregisteredProjects =
-            accessibleGoogleProjects.diff(registeredProjectIds).map(UnRegisteredGoogleProjectRegistration.apply)
-
-          filteredRegistrations ++ unregisteredProjects
-        }
-      }
+      googleProjectRegRepo.getGoogleProjectRegistrations(accessibleGoogleProjects, billingProjectName, pageSize, offset)
     }
   }
 
   def getGoogleProjectById(googleProjectId: GoogleProjectId): Future[Option[GoogleProjectRegistration]] =
-    samDAO
-      .userHasAction(SamResourceTypeNames.googleProject,
-                     googleProjectId.value,
-                     SamGoogleProjectActions.readPolicies,
-                     ctx
-      )
-      .flatMap {
-        case true =>
-          googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId).map {
-            case Some(project) => Some(project)
-            case None          => Some(UnRegisteredGoogleProjectRegistration(googleProjectId))
-          }
-        case false => Future.successful(None)
-      }
+    for {
+      _ <- samDAO
+        .userHasAction(SamResourceTypeNames.googleProject, googleProjectId.value, SamGoogleProjectActions.read, ctx)
+        .map(canRead =>
+          if (!canRead)
+            throw new RawlsExceptionWithErrorReport(errorReport =
+              ErrorReport(StatusCodes.Forbidden, s"Google project not found or you do not have permission to read.")
+            )
+        )
+      projectRegistration <- googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId)
+    } yield projectRegistration
 }
