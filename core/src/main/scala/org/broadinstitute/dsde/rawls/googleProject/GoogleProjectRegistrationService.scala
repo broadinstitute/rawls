@@ -149,7 +149,7 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
         .map(canRead =>
           if (!canRead)
             throw new RawlsExceptionWithErrorReport(errorReport =
-              ErrorReport(StatusCodes.Forbidden, s"Google project not found or you do not have permission to read.")
+              ErrorReport(StatusCodes.NotFound, s"Google project does not exist or you don't have access.")
             )
         )
       projectRegistration <- googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId)
