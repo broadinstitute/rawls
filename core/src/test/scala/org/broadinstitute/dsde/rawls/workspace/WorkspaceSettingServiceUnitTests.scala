@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
   PubliclyReadableConfig,
+  QuicksilverDataTablesConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   PubliclyReadableSetting,
+  QuicksilverDataTablesSetting,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -756,6 +758,54 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       any(),
       any()
     )
+  }
+
+  "quicksilver data tables setting" should "persist properly" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val workspaceSettings = List(QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(true)))
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+    when(
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                workspaceSettings,
+                                                                defaultRequestContext.userInfo.userSubjectId
+      )
+    ).thenReturn(Future.successful(workspaceSettings))
+    workspaceSettings.foreach(workspaceSetting =>
+      when(workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, workspaceSetting.settingType))
+        .thenReturn(Future.successful(1))
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           ArgumentMatchers.eq(workspaceId.toString),
+                           ArgumentMatchers.eq(SamWorkspaceActions.own),
+                           any()
+      )
+    ).thenReturn(Future.successful(true))
+    val gcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    val googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
+
+    val service =
+      workspaceSettingServiceConstructor(
+        samDAO = samDAO,
+        workspaceRepository = workspaceRepository,
+        workspaceSettingRepository = workspaceSettingRepository,
+        gcsDAO = gcsDAO,
+        googleStorageService = googleStorageService
+      )
+
+    val result = Await.result(service.setWorkspaceSettings(workspaceName, workspaceSettings), Duration.Inf)
+    result.successes should contain theSameElementsAs workspaceSettings
+    result.failures shouldEqual Map.empty
   }
 
   it should "unset public in sam and remove all users from bucket" in {

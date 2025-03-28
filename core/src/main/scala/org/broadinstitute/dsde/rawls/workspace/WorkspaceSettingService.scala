@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   PubliclyReadableSetting,
+  QuicksilverDataTablesSetting,
   RawlsRequestContext,
   SamResourceTypeNames,
   SamWorkspaceActions,
@@ -118,6 +119,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
+          case QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(_))                   => None
         }
       }
 
@@ -189,8 +191,11 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        // SeparateSubmissionFinalOutputsSetting and UseCromwellGcpBatchBackendSetting are not bucket settings,
-        // so we do not need to apply anything here
+        // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and QuicksilverDataTablesSetting
+        // are not bucket settings, so we do not need to apply anything here
+
+        case QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(_)) =>
+          Future.successful(())
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
           Future.successful(())

@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
   PubliclyReadableConfig,
+  QuicksilverDataTablesConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
   GcpBucketRequesterPays,
   GcpBucketSoftDelete,
   PubliclyReadable,
+  QuicksilverDataTables,
   SeparateSubmissionFinalOutputs,
   UseCromwellGcpBatchBackend,
   WorkspaceSettingType
@@ -602,6 +604,9 @@ case class UseCromwellGcpBatchBackendSetting(override val config: UseCromwellGcp
 case class PubliclyReadableSetting(override val config: PubliclyReadableConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.PubliclyReadable, config)
 
+case class QuicksilverDataTablesSetting(override val config: QuicksilverDataTablesConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.QuicksilverDataTables, config)
+
 object WorkspaceSettingTypes {
   sealed trait WorkspaceSettingType extends RawlsEnumeration[WorkspaceSettingType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -615,6 +620,7 @@ object WorkspaceSettingTypes {
     case "separatesubmissionfinaloutputs" => SeparateSubmissionFinalOutputs
     case "usecromwellgcpbatchbackend"     => UseCromwellGcpBatchBackend
     case "publiclyreadable"               => PubliclyReadable
+    case "quicksilverdatatables"          => QuicksilverDataTables
     case _                                => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
   }
 
@@ -629,6 +635,8 @@ object WorkspaceSettingTypes {
   case object UseCromwellGcpBatchBackend extends WorkspaceSettingType
 
   case object PubliclyReadable extends WorkspaceSettingType
+
+  case object QuicksilverDataTables extends WorkspaceSettingType
 }
 
 sealed trait WorkspaceSettingConfig
@@ -650,6 +658,8 @@ object WorkspaceSettingConfig {
   case class UseCromwellGcpBatchBackendConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
   case class PubliclyReadableConfig(enabled: Boolean) extends WorkspaceSettingConfig
+
+  case class QuicksilverDataTablesConfig(enabled: Boolean) extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1299,6 +1309,10 @@ class WorkspaceJsonSupport extends JsonSupport {
     PubliclyReadableConfig.apply
   )
 
+  implicit val QuicksilverDataTablesConfigFormat: RootJsonFormat[QuicksilverDataTablesConfig] = jsonFormat1(
+    QuicksilverDataTablesConfig.apply
+  )
+
   implicit object WorkspaceSettingTypeFormat extends RootJsonFormat[WorkspaceSettingType] {
     override def write(obj: WorkspaceSettingType): JsValue = JsString(obj.toString)
 
@@ -1316,6 +1330,7 @@ class WorkspaceJsonSupport extends JsonSupport {
       case config: SeparateSubmissionFinalOutputsConfig => config.toJson
       case config: UseCromwellGcpBatchBackendConfig     => config.toJson
       case config: PubliclyReadableConfig               => config.toJson
+      case config: QuicksilverDataTablesConfig          => config.toJson
     }
 
     // We prevent reading WorkspaceSettingConfig directly because we need
@@ -1345,6 +1360,8 @@ class WorkspaceJsonSupport extends JsonSupport {
           UseCromwellGcpBatchBackendSetting(fields("config").convertTo[UseCromwellGcpBatchBackendConfig])
         case PubliclyReadable =>
           PubliclyReadableSetting(fields("config").convertTo[PubliclyReadableConfig])
+        case QuicksilverDataTables =>
+          QuicksilverDataTablesSetting(fields("config").convertTo[QuicksilverDataTablesConfig])
       }
     }
   }
