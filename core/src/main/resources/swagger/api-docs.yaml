@@ -4691,12 +4691,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/GoogleProjectResponse'
-        404:
-          description: Billing and/or Google project don't exist or you don't have permission
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
     put:
