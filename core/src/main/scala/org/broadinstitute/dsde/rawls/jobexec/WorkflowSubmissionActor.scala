@@ -384,11 +384,15 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   def resolveDrsSignedUrls(drsUris: Set[String], userInfo: UserInfo)(implicit
     executionContext: ExecutionContext
   ): Future[Set[String]] = {
-    // TODO should this be done in this method or before calling this method?
     val urisByProvider =
-      drsUris.flatMap(Uri.parseOption).map(_.toUrl).groupBy(_.hostOption.map(_.value).getOrElse("unknown")).map {
-        case (provider, uris) => uris.head.toString()
+      drsUris.flatMap(Uri.parseOption).map(_.toUrl).groupBy(_.hostOption).map { case (_, uris) =>
+        uris.head.toString
       }
+
+    val parsedUris = drsUris.flatMap(Uri.parseOption)
+    if (parsedUris.size != drsUris.size) {
+      logger.warn("Some URIs were unparsable")
+    }
 
     Future
       .traverse(urisByProvider) { drsUri =>
@@ -519,14 +523,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
         workflowBatchFuture
-      dosSignedUrls <- resolveDrsSignedUrls(dosUris, petUserInfo)
-      // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
-      // We still call DRSHub for those because we can verify the user has permission on the DRS object as
-      // early as possible, rather than letting the workflow(s) launch and fail
-      // AEN 2020-09-08 [WA-325]
-      _ <-
-        if (dosSignedUrls.isEmpty) Future.successful(false)
-        else Future.successful(true) // TODO Is this correct? Or just don't check that it's empty at all?
+      _ <- resolveDrsSignedUrls(dosUris, petUserInfo)
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs,
                                                                       wdl,
