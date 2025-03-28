@@ -88,7 +88,7 @@ class GoogleProjectRegistrationComponentSpec
     )
 
     result should have size 2
-    result.map(_.googleProjectId.value) should contain allOf ("project1", "project2")
+    result.map(_.googleProjectId.value) should contain only ("project1", "project2")
   }
 
   it should "findByIdsAndBillingProject with pagination" in withDefaultTestDatabase {
@@ -134,7 +134,7 @@ class GoogleProjectRegistrationComponentSpec
     )
 
     firstPageResult should have size 2
-    firstPageResult.map(_.googleProjectId.value) should contain allOf ("project1", "project2")
+    firstPageResult.map(_.googleProjectId.value) should contain only ("project1", "project2")
 
     // Test second page
     val secondPageResult = runAndWait(
@@ -150,6 +150,6 @@ class GoogleProjectRegistrationComponentSpec
     )
 
     secondPageResult should have size 2
-    secondPageResult.map(_.googleProjectId.value) should contain allOf ("project3", "project4")
+    secondPageResult.map(_.googleProjectId.value) should contain only ("project3", "project4")
   }
 }
