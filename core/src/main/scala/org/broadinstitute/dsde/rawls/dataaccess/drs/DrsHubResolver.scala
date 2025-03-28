@@ -45,12 +45,15 @@ class DrsHubResolver(drsHubUrl: String)(implicit
 
   override def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
     resolveDrs(drsUrl, userInfo).map { resp =>
-      val signedUrl: Option[String] = resp.accessUrl
-
-      if (signedUrl.isEmpty) {
-        logger.info(s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
+      resp.accessUrl match {
+        case Some(accessUrl) =>
+          val signedUrl = accessUrl.url
+          if (signedUrl.isEmpty)
+            logger.info(s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
+          signedUrl
+        case None =>
+          logger.info(s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
+          None
       }
-
-      signedUrl
     }
 }

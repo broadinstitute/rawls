@@ -512,7 +512,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl1), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl1)))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
-      .thenReturn(Future.failed(new RuntimeException("403"))) // TODO what will actually be thrown
+      .thenReturn(
+        Future.failed(
+          new RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.Forbidden, "User does not have access")
+          )
+        )
+      )
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl3)))
 

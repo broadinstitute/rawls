@@ -26,7 +26,7 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
   it should "get the signed url for a drs object" in {
     doReturn(
       Future.successful(
-        DrsHubMinimalResponse(Option("https://signed-url.com/file?key=123"))
+        DrsHubMinimalResponse(Some(DrsHubAccessUrl(Some("https://signed-url.com/file?key=123"), None)))
       )
     )
       .when(mockDrsHubResolver)
