@@ -4658,6 +4658,41 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/googleProjects:
+    get:
+      tags:
+        - googleProjects
+      summary: list google projects in rawls
+      description: List the Google projects accessible to the user
+      operationId: getGoogleProjects
+      parameters:
+        - name: billingProjectId
+          in: query
+          description: |
+            Optional. If provided, only return google projects that are linked to the given billing project.
+          required: false
+          schema:
+            type: string
+        - name: pageSize
+          in: query
+          description: how many google projects to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GoogleProjectResponse'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - googleProjects
@@ -4691,6 +4726,29 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/googleProjects/{googleProjectId}:
+    get:
+      tags:
+        - googleProjects
+      summary: get google project in rawls by id
+      description: Get the Google project if known and the user has access
+      operationId: getGoogleProjectById
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GoogleProjectResponse'
+        404:
+          description: Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - googleProjects
@@ -7353,6 +7411,26 @@ components:
         billingProjectId:
           type: string
           description: the id of the billing project
+    GoogleProjectResponse:
+      required:
+        - googleProjectId
+        - billingProjectId
+        - billingAccount
+        - message
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
+        billingAccount:
+          type: string
+          description: the id of the billing account
+        message:
+            type: string
+            description: informational message about the project
   parameters:
     billingProjectActionPathParam:
       name: action

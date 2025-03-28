@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GoogleProjectId,
   GoogleProjectRegistration,
+  RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
   SamGoogleProjectActions,
@@ -127,4 +128,38 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
       // 3. Delete the record in the GOOGLE_PROJECT table.
       _ <- googleProjectRegRepo.deleteGoogleProjectRegistration(googleProjectId)
     } yield ()
+
+  def getGoogleProjects(billingProjectName: Option[RawlsBillingProjectName],
+                        pageSize: Int,
+                        offset: Int
+  ): Future[Seq[GoogleProjectRegistration]] = {
+    require(pageSize > 0 && pageSize <= 5000, "pageSize must be greater than 0 and less than or equal to 5000")
+    require(offset >= 0, "offset must be greater than or equal to 0")
+
+    for {
+      accessibleGoogleProjectResources <- samDAO
+        .listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, ctx)
+      accessibleGoogleProjects = accessibleGoogleProjectResources
+        .map(resource => GoogleProjectId(resource.getResourceId))
+        .toSet
+
+      projectRegistrations <- googleProjectRegRepo.getGoogleProjectRegistrations(accessibleGoogleProjects,
+                                                                                 billingProjectName,
+                                                                                 pageSize,
+                                                                                 offset
+      )
+    } yield projectRegistrations
+  }
+
+  def getGoogleProjectById(googleProjectId: GoogleProjectId): Future[Option[GoogleProjectRegistration]] =
+    for {
+      canRead <- samDAO
+        .userHasAction(SamResourceTypeNames.googleProject, googleProjectId.value, SamGoogleProjectActions.read, ctx)
+      projectRegistration <-
+        if (canRead) {
+          googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId)
+        } else {
+          Future.successful(None)
+        }
+    } yield projectRegistration
 }
