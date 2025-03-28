@@ -53,7 +53,7 @@ class GoogleProjectRegistrationComponentSpec
 
   }
 
-  it should "findByIdsAndBillingProject" in withDefaultTestDatabase {
+  "RawlsGoogleProjectComponent" should "findByIdsAndBillingProject" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
     val googleProjectRegistrations = Seq(
       GoogleProjectRegistration(GoogleProjectId("project1"),
