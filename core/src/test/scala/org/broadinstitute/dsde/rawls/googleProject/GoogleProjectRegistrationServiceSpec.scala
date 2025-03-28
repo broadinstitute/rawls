@@ -913,7 +913,7 @@ class GoogleProjectRegistrationServiceSpec
     result shouldEqual None
   }
 
-  it should "return NotFound status if the user does not have the required action to access the Google project" in {
+  it should "return None if the user does not have the required action to access the Google project" in {
     val googleProjectId = GoogleProjectId("test-project-id")
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
@@ -939,10 +939,7 @@ class GoogleProjectRegistrationServiceSpec
     )
       .thenReturn(Future.successful(false))
 
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
-    }
-
-    e.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+    val result = Await.result(googleProjectRegService.getGoogleProjectById(googleProjectId), Duration.Inf)
+    result shouldEqual None
   }
 }
