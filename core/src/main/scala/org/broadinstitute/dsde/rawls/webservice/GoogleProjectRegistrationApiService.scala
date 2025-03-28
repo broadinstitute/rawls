@@ -7,7 +7,12 @@ import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.model.GoogleProjectRegistrationJsonSupport$._
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectRegistration, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  GoogleProjectId,
+  GoogleProjectRegistration,
+  RawlsBillingProjectName,
+  RawlsRequestContext
+}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 
 import scala.concurrent.ExecutionContext
@@ -35,7 +40,19 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                   }
               }
             }
-          }
+          } ~
+            get {
+              parameters(
+                "billingProjectId".optional,
+                "pageSize".as[Int].withDefault(100),
+                "offset".as[Int].withDefault(0)
+              ) { (billingProjectId, pageSize, offset) =>
+                complete {
+                  googleProjectRegServiceConstructor(ctx)
+                    .getGoogleProjects(billingProjectId.map(RawlsBillingProjectName), pageSize, offset)
+                }
+              }
+            }
         } ~
           path(Segment) { googleProjectId =>
             delete {
@@ -44,9 +61,18 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                   .unregisterGoogleProject(GoogleProjectId(googleProjectId))
                   .map(_ => StatusCodes.NoContent)
               }
-            }
+            } ~
+              get {
+                onSuccess(
+                  googleProjectRegServiceConstructor(ctx)
+                    .getGoogleProjectById(GoogleProjectId(googleProjectId))
+                ) {
+                  case Some(project) => complete(StatusCodes.OK -> project)
+                  case None =>
+                    complete(StatusCodes.NotFound -> "Google project does not exist or you don't have access.")
+                }
+              }
           }
       }
     }
-
 }
