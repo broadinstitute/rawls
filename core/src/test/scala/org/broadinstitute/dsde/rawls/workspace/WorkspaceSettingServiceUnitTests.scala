@@ -51,7 +51,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers.{contain, include}
-import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper}
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import java.util.UUID
 import scala.jdk.CollectionConverters._
