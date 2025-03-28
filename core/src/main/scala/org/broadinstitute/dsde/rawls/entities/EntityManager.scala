@@ -1,26 +1,25 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactory,
-  GoogleBigQueryServiceFactoryImpl,
-  SamDAO,
-  SlickDataSource
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceType}
+import org.broadinstitute.dsde.rawls.entities.quicksilver.{QuicksilverEntityProvider, QuicksilverEntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.QuicksilverDataTables
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, QuicksilverDataTablesSetting, WorkspaceType}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.runtime.universe._
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success}
 
 /**
  * Here's the philosophy behind the important entity classes:
@@ -45,9 +44,18 @@ import scala.util.{Failure, Try}
  *    be used to satisfy the request, and using that builder to create and return a provider instance.
  *
  */
-class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]]) {
+class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]],
+                    workspaceSettingRepository: WorkspaceSettingRepository
+) {
 
-  def resolveProvider(requestArguments: EntityRequestArguments): Try[EntityProvider] = {
+  /**
+    * Returns the appropriate EntityProvider to use for the current request.
+    * @param requestArguments description of the request
+    * @return the provider
+    */
+  def resolveProviderFuture(
+    requestArguments: EntityRequestArguments
+  )(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
 
     if (!WorkspaceType.RawlsWorkspace.equals(requestArguments.workspace.workspaceType)) {
       throw new DataEntityException(
@@ -57,39 +65,45 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
-    val targetTag = if (requestArguments.dataReference.isDefined) {
-      typeTag[DataRepoEntityProvider]
+    val targetTagFuture = if (requestArguments.dataReference.isDefined) {
+      Future.successful(typeTag[DataRepoEntityProvider])
     } else {
-      typeTag[LocalEntityProvider]
+      val useQuicksilver =
+        workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
+                                                             QuicksilverDataTables
+        ) map {
+          case Some(qs: QuicksilverDataTablesSetting) => qs.config.enabled
+          case _                                      => false
+        }
+      useQuicksilver map {
+        case true  => typeTag[QuicksilverEntityProvider]
+        case false => typeTag[LocalEntityProvider]
+      }
     }
 
-    providerBuilders.find(_.builds == targetTag) match {
-      case None =>
-        Failure(
-          new DataEntityException(s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}")
-        )
-      case Some(builder) => builder.build(requestArguments)
+    targetTagFuture map { targetTag =>
+      providerBuilders.find(_.builds == targetTag) match {
+        case None =>
+          throw new DataEntityException(
+            s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}"
+          )
+        case Some(builder) =>
+          builder.build(requestArguments) match {
+            case Success(provider) => provider
+            case Failure(regrets: DataEntityException) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
+            case Failure(ex: Throwable) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex.getMessage))
+          }
+      }
     }
   }
-
-  /**
-    * Convenience function that converts resolveProvider to Future and adds a 400 status code in case of DataEntityException
-    * @param entityRequestArguments
-    * @param executionContext
-    * @return
-    */
-  def resolveProviderFuture(
-    entityRequestArguments: EntityRequestArguments
-  )(implicit executionContext: ExecutionContext): Future[EntityProvider] =
-    Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith { case regrets: DataEntityException =>
-      // bubble up the status code from the DataEntityException
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage)))
-    }
 }
 
 object EntityManager {
   def defaultEntityManager(dataSource: SlickDataSource,
                            workspaceManagerDAO: WorkspaceManagerDAO,
+                           workspaceSettingRepository: WorkspaceSettingRepository,
                            dataRepoDAO: DataRepoDAO,
                            samDAO: SamDAO,
                            bqServiceFactory: GoogleBigQueryServiceFactory,
@@ -109,7 +123,11 @@ object EntityManager {
                                                                           bqServiceFactory,
                                                                           config
     ) // implicit executionContext
+    val quicksilverEntityProviderBuilder = new QuicksilverEntityProviderBuilder()
 
-    new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
+    new EntityManager(
+      Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, quicksilverEntityProviderBuilder),
+      workspaceSettingRepository
+    )
   }
 }

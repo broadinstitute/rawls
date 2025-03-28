@@ -32,7 +32,8 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
-  WorkspaceService
+  WorkspaceService,
+  WorkspaceSettingRepository
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -220,6 +221,7 @@ class FastPassMonitorSpec
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       workspaceManagerDAO,
+      new WorkspaceSettingRepository(dataSource),
       dataRepoDAO,
       samDAO,
       bigQueryServiceFactory,
