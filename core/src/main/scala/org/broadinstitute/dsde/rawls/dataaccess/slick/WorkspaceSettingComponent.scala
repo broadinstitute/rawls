@@ -1,20 +1,20 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
+  CompactDataTablesConfigFormat,
   GcpBucketLifecycleConfigFormat,
   GcpBucketRequesterPaysConfigFormat,
   GcpBucketSoftDeleteConfigFormat,
   PubliclyReadableConfigFormat,
-  CompactDataTablesConfigFormat,
   SeparateSubmissionFinalOutputsConfigFormat,
   UseCromwellGcpBatchBackendConfigFormat
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  CompactDataTablesConfig,
   GcpBucketLifecycleConfig,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
   PubliclyReadableConfig,
-  CompactDataTablesConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }

@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, CompactDataTablesSetting, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{CompactDataTablesSetting, ErrorReport, WorkspaceType}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 
 import java.time.Duration
@@ -73,7 +73,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
                                                              CompactDataTables
         ) map {
           case Some(qs: CompactDataTablesSetting) => qs.config.enabled
-          case _                                      => false
+          case _                                  => false
         }
       compactDataTables map {
         case true  => typeTag[CompactEntityProvider]
