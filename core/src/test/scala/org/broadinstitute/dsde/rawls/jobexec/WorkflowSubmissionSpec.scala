@@ -78,20 +78,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
     val dosUrl = "dos://foo/bar"
     val dosSignedUrl = "https://dos.com/signed-url?key=12345"
-    val dosUrl1 = "dos://foo/bar1"
-    val dosSignedUrl1 = "https://dos.com/signed-url1?key=6789"
-    val dosUrl3 = "dos://foo/bar3"
-    val dosSignedUrl3 = "https://dos.com/signed-url3?key=98765"
-    val dosUrlDiff = "dos://different"
-    val dosSignedUrlDiff = "https://dos2.com/signed-diff?key=0001"
-    val drsUrlTDR = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123"
-    val drsSignedUrl = "https://storage.googleapis.com/v1_abc-123?key=54321"
     val drsUrlTDR1 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-1234"
     val drsSignedUrl1 = "https://storage.googleapis.com/v1_abc-1234?key=65432"
     val drsUrlTDR2 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-12345"
     val drsSignedUrl2 = "https://storage.googleapis.com/v1_abc-12345?key=12345"
-    val drsUrlTDR3 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123456"
-    val drsSignedUrl3 = "https://storage.googleapis.com/v1_abc-123456?key=54321"
+    val drsCompactUrl = "drs://dg.anv:123-abc/v1_abc-123456"
+    val drsCompactSignedUrl = "https://storage.googleapis.com/v1_abc-123456?key=54321"
   }
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
@@ -509,9 +501,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   it should "fail if any URIs fail to resolve" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl1), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl1)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
       .thenReturn(
         Future.failed(
           new RawlsExceptionWithErrorReport(errorReport =
@@ -519,8 +509,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           )
         )
       )
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl3)))
 
     val data = testData
     // Set up system under test
@@ -538,14 +526,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
         )
       val inputResolutions = Seq(
-        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
         SubmissionValidationValue(
           Option(
             AttributeValueList(
-              Seq(AttributeString(DrsTestVals.dosUrl1),
-                  AttributeString(DrsTestVals.dosUrlDiff),
-                  AttributeString(DrsTestVals.dosUrl3)
-              )
+              Seq(AttributeString(DrsTestVals.dosUrl), AttributeString(DrsTestVals.drsUrlTDR1))
             )
           ),
           None,
@@ -1362,13 +1346,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
   "resolveDrsSignedUrls" should "only resolve once per provider" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl1)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl3)))
+      .thenReturn(Future.successful(Some(DrsTestVals.dosSignedUrl)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
+      .thenReturn(Future.successful(Some(DrsTestVals.drsSignedUrl1)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo]))
+      .thenReturn(Future.successful(Some(DrsTestVals.drsUrlTDR2)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
+      .thenReturn(Future.successful(Some(DrsTestVals.drsCompactSignedUrl)))
 
     val data = testData
     // Set up system under test
@@ -1379,13 +1363,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
     val result = Await.result(
       workflowSubmission.resolveDrsSignedUrls(
-        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR, DrsTestVals.dosUrlDiff, DrsTestVals.dosUrl3),
+        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsUrlTDR2, DrsTestVals.drsCompactUrl),
         userInfo
       ),
       Duration.Inf
     )
 
-    // dosUrl and dosUrl3 have the same provider, so only one result for the pair
+    // drsUrlTDR1 and drsUrlTDR2 have the same provider, so only one result for the pair
     assertResult(3) {
       result.size
     }
@@ -1395,12 +1379,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   it should "handle null accessUrls" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
-      .thenReturn(Future.successful(None))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl1)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo]))
+      .thenReturn(Future.successful(None))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.drsCompactSignedUrl)))
 
     val data = testData
     // Set up system under test
@@ -1411,13 +1395,14 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
     val result = Await.result(
       workflowSubmission.resolveDrsSignedUrls(
-        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR, DrsTestVals.dosUrlDiff, DrsTestVals.dosUrl3),
+        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsUrlTDR2, DrsTestVals.drsCompactUrl),
         userInfo
       ),
       Duration.Inf
     )
 
     // Lack of accessUrl should simply result in a shorter result
+    // TODO or should it fail?
     assertResult(2) {
       result.size
     }

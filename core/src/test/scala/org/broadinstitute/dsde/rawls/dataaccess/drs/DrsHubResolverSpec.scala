@@ -9,6 +9,8 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.must.Matchers.be
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.DurationInt
@@ -45,5 +47,17 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
     assertResult(None) {
       Await.result(response, 1 minute)
     }
+  }
+
+  "getProvider" should "get correct providers" in {
+    DrsResolver.getProvider("drs://dg.anv0:f51fc329-b09e-4e16-b1a9-2f60ebc428ab") shouldBe Some("dg.anv0")
+    DrsResolver.getProvider("drs://drs.example.org/ga4gh/drs/v1/objects/314159") shouldBe Some("drs.example.org")
+    DrsResolver.getProvider("https://storage.googleapis.com/v1_abc-123?key=54321") shouldBe Some(
+      "storage.googleapis.com"
+    )
+    DrsResolver.getProvider("drs://jade.datarepo-dev.broadinstitute.org/v1_abcd-123-efg") shouldBe Some(
+      "jade.datarepo-dev.broadinstitute.org"
+    )
+    DrsResolver.getProvider("invalid-url") shouldBe None
   }
 }

@@ -384,18 +384,17 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   def resolveDrsSignedUrls(drsUris: Set[String], userInfo: UserInfo)(implicit
     executionContext: ExecutionContext
   ): Future[Set[String]] = {
-    val urisByProvider =
-      drsUris.flatMap(Uri.parseOption).map(_.toUrl).groupBy(_.hostOption).map { case (_, uris) =>
-        uris.head.toString
-      }
 
-    val parsedUris = drsUris.flatMap(Uri.parseOption)
-    if (parsedUris.size != drsUris.size) {
-      logger.warn("Some URIs were unparsable")
+    val urisByProvider: Map[Option[String], List[String]] = drsUris.toList.groupBy(DrsResolver.getProvider)
+
+    if (urisByProvider.contains(None)) {
+      logger.warn(s"Some URIs were unparsable: ${urisByProvider(None)}") // TODO should this throw an error
     }
 
+    val urisToParse = urisByProvider.values.map(_.head).toList // TODO exclude None
+
     Future
-      .traverse(urisByProvider) { drsUri =>
+      .traverse(urisToParse) { drsUri =>
         drsResolver.drsSignedUrl(drsUri, userInfo)
       }
       .map { urls =>
