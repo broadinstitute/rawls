@@ -388,19 +388,25 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val urisByProvider: Map[Option[String], List[String]] = drsUris.toList.groupBy(DrsResolver.getProvider)
 
     if (urisByProvider.contains(None)) {
-      logger.warn(s"Some URIs were unparsable: ${urisByProvider(None)}") // TODO should this throw an error
+      logger.warn(s"Some URIs were unparsable: ${urisByProvider(None)}") // TODO What should be logged vs. thrown?
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Unable to parse URI"))
     }
 
-    val urisToParse = urisByProvider.values.map(_.head).toList // TODO exclude None
+    val urisToParse = urisByProvider.values.map(_.head).toList
 
     Future
       .traverse(urisToParse) { drsUri =>
         drsResolver.drsSignedUrl(drsUri, userInfo)
       }
       .map { urls =>
-        val collected = urls.collect { case Some(url) =>
-          url
-        }.toSet
+        val collected = urls.collect { case Some(url) => url }.toSet
+        if (collected.size != urls.size) {
+          throw new RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.InternalServerError,
+                        "One or more URLs could not be resolved"
+            ) // TODO what should the status code be
+          )
+        }
         logger.debug(s"resolveDrsSignedUrls found ${collected.size} urls for ${drsUris.size} DRS URIs")
         collected
       }

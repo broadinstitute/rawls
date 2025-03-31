@@ -565,292 +565,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     }
   }
 
-//  it should "resolve DOS URIs when submitting workflows" in withDefaultTestDatabase {
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl1), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl1)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrlDiff)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl3)))
-//
-//    val data = testData
-//    // Set up system under test
-//    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-//    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
-//      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
-//    }
-//
-//    withWorkspaceContext(data.workspace) { ctx =>
-//      // Create test submission data
-//      val sample = Entity("sample", "Sample", Map())
-//      val sampleSet =
-//        Entity("sampleset",
-//               "sample_set",
-//               Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
-//        )
-//      val inputResolutions = Seq(
-//        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
-//        SubmissionValidationValue(
-//          Option(
-//            AttributeValueList(
-//              Seq(AttributeString(DrsTestVals.dosUrl1),
-//                  AttributeString(DrsTestVals.dosUrlDiff),
-//                  AttributeString(DrsTestVals.dosUrl3)
-//              )
-//            )
-//          ),
-//          None,
-//          "test_input_dos_array"
-//        )
-//      )
-//      val submissionDos = createTestSubmission(
-//        data.workspace,
-//        data.agoraMethodConfig,
-//        sampleSet,
-//        WorkbenchEmail(data.userOwner.userEmail.value),
-//        Seq(sample),
-//        Map(sample -> inputResolutions),
-//        Seq(),
-//        Map()
-//      )
-//
-//      runAndWait(entityQuery.save(ctx, sample))
-//      runAndWait(entityQuery.save(ctx, sampleSet))
-//      runAndWait(submissionQuery.create(ctx, submissionDos))
-//      val (workflowRecs, submissionRec, workspaceRec) =
-//        getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
-//
-//      // Submit workflow!
-//      Await.result(
-//        workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
-//        Duration.Inf
-//      )
-//
-//      // TODO what to verify
-////      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
-////        List("serviceAccount:" + DrsTestVals.drsServiceAccount,
-////             "serviceAccount:" + DrsTestVals.differentDrsServiceAccount
-////        )
-//    }
-//  }
-//
-//  it should "resolve DRS URIs when submitting workflows" in withDefaultTestDatabase {
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl1), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl1)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrlDiff)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl3)))
-//
-//    val data = testData
-//    // Set up system under test
-//    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-//    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
-//      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
-//    }
-//
-//    withWorkspaceContext(data.workspace) { ctx =>
-//      // Create test submission data
-//      val sample = Entity("sample", "Sample", Map())
-//      val sampleSet =
-//        Entity("sampleset",
-//               "sample_set",
-//               Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
-//        )
-//      val inputResolutions = Seq(
-//        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
-//        SubmissionValidationValue(
-//          Option(
-//            AttributeValueList(
-//              Seq(AttributeString(DrsTestVals.dosUrl1),
-//                  AttributeString(DrsTestVals.dosUrlDiff),
-//                  AttributeString(DrsTestVals.dosUrl3)
-//              )
-//            )
-//          ),
-//          None,
-//          "test_input_dos_array"
-//        )
-//      )
-//      val submissionDrs = createTestSubmission(
-//        data.workspace,
-//        data.agoraMethodConfig,
-//        sampleSet,
-//        WorkbenchEmail(data.userOwner.userEmail.value),
-//        Seq(sample),
-//        Map(sample -> inputResolutions),
-//        Seq(),
-//        Map()
-//      )
-//
-//      runAndWait(entityQuery.save(ctx, sample))
-//      runAndWait(entityQuery.save(ctx, sampleSet))
-//      runAndWait(submissionQuery.create(ctx, submissionDrs))
-//      val (workflowRecs, submissionRec, workspaceRec) =
-//        getWorkflowSubmissionWorkspaceRecords(submissionDrs, data.workspace)
-//
-//      // Submit workflow!
-//      Await.result(
-//        workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
-//        Duration.Inf
-//      )
-//
-//      // TODO what to verify
-////      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
-////        List("serviceAccount:" + DrsTestVals.drsServiceAccount,
-////             "serviceAccount:" + DrsTestVals.differentDrsServiceAccount
-////        )
-//    }
-//  }
-//
-//  it should "resolve DRS URIs containing Jade Data Repo urls when submitting workflows" in withDefaultTestDatabase {
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl1)))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo]))
-//      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl3)))
-//
-//    val data = testData
-//    // Set up system under test
-//    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-//    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
-//      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
-//    }
-//
-//    withWorkspaceContext(data.workspace) { ctx =>
-//      // Create test submission data
-//      val sample = Entity("sample", "Sample", Map())
-//      val sampleSet =
-//        Entity("sampleset",
-//               "sample_set",
-//               Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
-//        )
-//      val inputResolutions = Seq(
-//        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
-//        SubmissionValidationValue(
-//          Option(
-//            AttributeValueList(
-//              Seq(AttributeString(DrsTestVals.drsUrlTDR),
-//                  AttributeString(DrsTestVals.dosUrlDiff),
-//                  AttributeString(DrsTestVals.dosUrl3)
-//              )
-//            )
-//          ),
-//          None,
-//          "test_input_dos_array"
-//        )
-//      )
-//      val submissionDrs = createTestSubmission(
-//        data.workspace,
-//        data.agoraMethodConfig,
-//        sampleSet,
-//        WorkbenchEmail(data.userOwner.userEmail.value),
-//        Seq(sample),
-//        Map(sample -> inputResolutions),
-//        Seq(),
-//        Map()
-//      )
-//
-//      runAndWait(entityQuery.save(ctx, sample))
-//      runAndWait(entityQuery.save(ctx, sampleSet))
-//      runAndWait(submissionQuery.create(ctx, submissionDrs))
-//      val (workflowRecs, submissionRec, workspaceRec) =
-//        getWorkflowSubmissionWorkspaceRecords(submissionDrs, data.workspace)
-//
-//      // Submit workflow!
-//      Await.result(
-//        workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
-//        Duration.Inf
-//      )
-//
-//      // TODO what to verify
-////      val expectedClientEmail =
-////        List("serviceAccount:" + DrsTestVals.drsServiceAccount,
-////             "serviceAccount:" + DrsTestVals.differentDrsServiceAccount
-////        )
-////      mockGoogleServicesDAO.policies(ctx.googleProjectId)(
-////        requesterPaysRole
-////      ) should contain theSameElementsAs expectedClientEmail
-//    }
-//  }
-//
-//  it should "resolve DRS URIs containing only Jade Data Repo urls when submitting workflows" in withDefaultTestDatabase {
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo]))
-//      .thenReturn(Future.successful(None))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
-//      .thenReturn(Future.successful(None))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo]))
-//      .thenReturn(Future.successful(None))
-//    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR3), any[UserInfo]))
-//      .thenReturn(Future.successful(None))
-//
-//    val data = testData
-//    // Set up system under test
-//    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-//    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
-//      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
-//    }
-//
-//    withWorkspaceContext(data.workspace) { ctx =>
-//      // Create test submission data
-//      val sample = Entity("sample", "Sample", Map())
-//      val sampleSet =
-//        Entity("sampleset",
-//               "sample_set",
-//               Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
-//        )
-//      val inputResolutions = Seq(
-//        SubmissionValidationValue(Option(AttributeString(DrsTestVals.drsUrlTDR)), None, "test_input_dos"),
-//        SubmissionValidationValue(
-//          Option(
-//            AttributeValueList(
-//              Seq(
-//                AttributeString(DrsTestVals.drsUrlTDR1),
-//                AttributeString(DrsTestVals.drsUrlTDR2),
-//                AttributeString(DrsTestVals.drsUrlTDR3)
-//              )
-//            )
-//          ),
-//          None,
-//          "test_input_dos_array"
-//        )
-//      )
-//      val submissionDrs = createTestSubmission(
-//        data.workspace,
-//        data.agoraMethodConfig,
-//        sampleSet,
-//        WorkbenchEmail(data.userOwner.userEmail.value),
-//        Seq(sample),
-//        Map(sample -> inputResolutions),
-//        Seq(),
-//        Map()
-//      )
-//
-//      runAndWait(entityQuery.save(ctx, sample))
-//      runAndWait(entityQuery.save(ctx, sampleSet))
-//      runAndWait(submissionQuery.create(ctx, submissionDrs))
-//      val (workflowRecs, submissionRec, workspaceRec) =
-//        getWorkflowSubmissionWorkspaceRecords(submissionDrs, data.workspace)
-//
-//      // Submit workflow!
-//      Await.result(
-//        workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)),
-//        Duration.Inf
-//      )
-//
-//      // Verify
-//      // since no SA was returned from DRSHub for JDR urls, requester pays role was never added to the polices. Hence it should be empty
-//      mockGoogleServicesDAO.policies shouldBe TrieMap.empty[RawlsBillingProjectName, Map[String, Set[String]]]
-//    }
-//  }
-
   it should "match workflows to entities they run on in the right order" in withDefaultTestDatabase {
     val workflowSubmission = new TestWorkflowSubmissionWithMockExecSvc(slickDataSource)
 
@@ -1376,12 +1090,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
   }
 
-  it should "handle null accessUrls" in withDefaultTestDatabase {
+  it should "error on null accessUrls" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl1)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo]))
       .thenReturn(Future.successful(None))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
       .thenReturn(Future.successful(Option(DrsTestVals.drsCompactSignedUrl)))
@@ -1393,18 +1105,41 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
     }
 
-    val result = Await.result(
-      workflowSubmission.resolveDrsSignedUrls(
-        Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsUrlTDR2, DrsTestVals.drsCompactUrl),
-        userInfo
-      ),
-      Duration.Inf
-    )
+    val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        workflowSubmission.resolveDrsSignedUrls(
+          Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsCompactUrl),
+          userInfo
+        ),
+        Duration.Inf
+      )
+    }
 
-    // Lack of accessUrl should simply result in a shorter result
-    // TODO or should it fail?
-    assertResult(2) {
-      result.size
+  }
+
+  it should "error on unparseable URIs" in withDefaultTestDatabase {
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl1)))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
+      .thenReturn(Future.successful(Option(DrsTestVals.drsCompactSignedUrl)))
+
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        workflowSubmission.resolveDrsSignedUrls(
+          Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, "not a valid uri", DrsTestVals.drsCompactUrl),
+          userInfo
+        ),
+        Duration.Inf
+      )
     }
 
   }
