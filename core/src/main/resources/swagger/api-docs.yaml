@@ -6237,7 +6237,7 @@ components:
             - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
             - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
             - $ref: '#/components/schemas/WorkspaceSettingPubliclyReadableConfig'
-            - $ref: '#/components/schemas/WorkspaceSettingQuicksilverDataTablesConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingCompactDataTablesConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
       required:
         - rules
@@ -6320,7 +6320,7 @@ components:
         enabled:
           type: boolean
           description: Whether or not the workspace should be publicly readable
-    WorkspaceSettingQuicksilverDataTablesConfig:
+    WorkspaceSettingCompactDataTablesConfig:
       required:
         - enabled
       type: object

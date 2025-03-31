@@ -11,9 +11,9 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProvid
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.entities.quicksilver.{QuicksilverEntityProvider, QuicksilverEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.QuicksilverDataTables
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, QuicksilverDataTablesSetting, WorkspaceType}
+import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, CompactDataTablesSetting, WorkspaceType}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 
 import java.time.Duration
@@ -68,15 +68,15 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     val targetTagFuture = if (requestArguments.dataReference.isDefined) {
       Future.successful(typeTag[DataRepoEntityProvider])
     } else {
-      val useQuicksilver =
+      val compactDataTables =
         workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
-                                                             QuicksilverDataTables
+                                                             CompactDataTables
         ) map {
-          case Some(qs: QuicksilverDataTablesSetting) => qs.config.enabled
+          case Some(qs: CompactDataTablesSetting) => qs.config.enabled
           case _                                      => false
         }
-      useQuicksilver map {
-        case true  => typeTag[QuicksilverEntityProvider]
+      compactDataTables map {
+        case true  => typeTag[CompactEntityProvider]
         case false => typeTag[LocalEntityProvider]
       }
     }
@@ -123,10 +123,10 @@ object EntityManager {
                                                                           bqServiceFactory,
                                                                           config
     ) // implicit executionContext
-    val quicksilverEntityProviderBuilder = new QuicksilverEntityProviderBuilder()
+    val compactEntityProviderBuilder = new CompactEntityProviderBuilder()
 
     new EntityManager(
-      Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, quicksilverEntityProviderBuilder),
+      Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, compactEntityProviderBuilder),
       workspaceSettingRepository
     )
   }

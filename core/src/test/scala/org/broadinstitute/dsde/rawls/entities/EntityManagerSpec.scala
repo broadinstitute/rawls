@@ -6,11 +6,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
-import org.broadinstitute.dsde.rawls.entities.quicksilver.QuicksilverEntityProvider
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.QuicksilverDataTablesConfig
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.QuicksilverDataTables
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model.{
-  QuicksilverDataTablesSetting,
+  CompactDataTablesSetting,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -49,7 +49,7 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
     Map.empty
   )
 
-  "quicksilver data tables setting" should "control the provider returned by the EntityManager" in {
+  "compact data tables setting" should "control the provider returned by the EntityManager" in {
     val workspaceId = workspace.workspaceIdAsUUID
 
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
@@ -75,21 +75,21 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
 
     val entityRequestArguments = EntityRequestArguments(workspace, defaultRequestContext)
 
-    // check the EntityManager behavior when the quicksilver setting is not set
-    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, QuicksilverDataTables))
+    // check the EntityManager behavior when the compact data tables setting is not set
+    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
       .thenReturn(Future.successful(None))
     val beforeSetting = Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
     beforeSetting shouldBe a[LocalEntityProvider]
 
-    // check the EntityManager behavior when quicksilver is enabled
-    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, QuicksilverDataTables))
-      .thenReturn(Future.successful(Option(QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(enabled = true)))))
+    // check the EntityManager behavior when compact data tables is enabled
+    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
+      .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
     val afterSetting = Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
-    afterSetting shouldBe a[QuicksilverEntityProvider]
+    afterSetting shouldBe a[CompactEntityProvider]
 
-    // check the EntityManager behavior when quicksilver is disabled
-    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, QuicksilverDataTables))
-      .thenReturn(Future.successful(Option(QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(enabled = false)))))
+    // check the EntityManager behavior when compact data tables is disabled
+    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
+      .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = false)))))
     val afterUpdate = Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
     afterUpdate shouldBe a[LocalEntityProvider]
   }

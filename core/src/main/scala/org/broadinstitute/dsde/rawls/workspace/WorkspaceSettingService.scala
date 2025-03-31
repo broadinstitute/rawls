@@ -14,12 +14,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
+  CompactDataTablesSetting,
   ErrorReport,
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   PubliclyReadableSetting,
-  QuicksilverDataTablesSetting,
   RawlsRequestContext,
   SamResourceTypeNames,
   SamWorkspaceActions,
@@ -119,7 +119,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
-          case QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(_))                   => None
+          case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
         }
       }
 
@@ -191,10 +191,10 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and QuicksilverDataTablesSetting
+        // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
 
-        case QuicksilverDataTablesSetting(QuicksilverDataTablesConfig(_)) =>
+        case CompactDataTablesSetting(CompactDataTablesConfig(_)) =>
           Future.successful(())
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>

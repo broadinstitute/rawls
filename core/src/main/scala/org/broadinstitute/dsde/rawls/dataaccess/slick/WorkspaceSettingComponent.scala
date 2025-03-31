@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   GcpBucketRequesterPaysConfigFormat,
   GcpBucketSoftDeleteConfigFormat,
   PubliclyReadableConfigFormat,
-  QuicksilverDataTablesConfigFormat,
+  CompactDataTablesConfigFormat,
   SeparateSubmissionFinalOutputsConfigFormat,
   UseCromwellGcpBatchBackendConfigFormat
 }
@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
   PubliclyReadableConfig,
-  QuicksilverDataTablesConfig,
+  CompactDataTablesConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -83,8 +83,8 @@ object WorkspaceSettingRecord {
         )
       case WorkspaceSettingTypes.PubliclyReadable =>
         PubliclyReadableSetting(workspaceSettingRecord.config.parseJson.convertTo[PubliclyReadableConfig])
-      case WorkspaceSettingTypes.QuicksilverDataTables =>
-        QuicksilverDataTablesSetting(workspaceSettingRecord.config.parseJson.convertTo[QuicksilverDataTablesConfig])
+      case WorkspaceSettingTypes.CompactDataTables =>
+        CompactDataTablesSetting(workspaceSettingRecord.config.parseJson.convertTo[CompactDataTablesConfig])
     }
   }
 }

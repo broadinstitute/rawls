@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.entities.quicksilver
+package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
@@ -26,7 +26,14 @@ import org.broadinstitute.dsde.rawls.model.{
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-class QuicksilverEntityProvider(implicit protected val executionContext: ExecutionContext) extends EntityProvider {
+/**
+  * Implementation logic for compact data tables. Compact data tables store all an entity's attributes in a
+  * single JSON packet within the database. Compare this to the implementation in LocalEntityProvider, which
+  * requires at least one row per attribute.
+  *
+  * @param executionContext scala concurrency context
+  */
+class CompactEntityProvider(implicit protected val executionContext: ExecutionContext) extends EntityProvider {
   override def entityStoreId: Option[String] = ???
 
   override def batchUpdateEntities(

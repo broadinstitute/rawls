@@ -27,7 +27,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
   PubliclyReadableSetting,
-  QuicksilverDataTablesSetting,
+  CompactDataTablesSetting,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
