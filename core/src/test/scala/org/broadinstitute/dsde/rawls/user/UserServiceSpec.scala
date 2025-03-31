@@ -24,7 +24,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -1674,6 +1674,77 @@ class UserServiceSpec
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
     verify(repository).getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName)))
+  }
+
+  behavior of "verifyBillingProjectAccess"
+
+  it should "return Some(true) if Sam says the user has requested action on the billing project" in {
+    val billingProject = billingProjectFromName("projectName")
+    val action = SamResourceAction("action")
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(billingRepository.getBillingProjectById(billingProject.id))
+      .thenReturn(Future.successful(Option(billingProject)))
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(
+      samDAO.listUserActionsForResource(mockitoEq(SamResourceTypeNames.billingProject),
+                                        mockitoEq(billingProject.projectName.value),
+                                        any()
+      )
+    )
+      .thenReturn(Future.successful(Set(action)))
+    val userService = getUserService(billingRepository = Option(billingRepository), samDAO = samDAO)
+
+    Await.result(userService.verifyBillingProjectAccess(billingProject.id, action), Duration.Inf) shouldEqual Some(true)
+  }
+
+  it should "return Some(false) if Sam says the user doesn't have requested action on the billing project but has some actions" in {
+    val billingProject = billingProjectFromName("projectName")
+    val action = SamResourceAction("action")
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(billingRepository.getBillingProjectById(billingProject.id))
+      .thenReturn(Future.successful(Option(billingProject)))
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(
+      samDAO.listUserActionsForResource(mockitoEq(SamResourceTypeNames.billingProject),
+                                        mockitoEq(billingProject.projectName.value),
+                                        any()
+      )
+    )
+      .thenReturn(Future.successful(Set(SamResourceAction("otherAction"))))
+    val userService = getUserService(billingRepository = Option(billingRepository), samDAO = samDAO)
+
+    Await.result(userService.verifyBillingProjectAccess(billingProject.id, action), Duration.Inf) shouldEqual Some(
+      false
+    )
+  }
+
+  it should "return None if the billing project exists but the user doesn't have any actions on it" in {
+    val billingProject = billingProjectFromName("projectName")
+    val action = SamResourceAction("action")
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(billingRepository.getBillingProjectById(billingProject.id))
+      .thenReturn(Future.successful(Option(billingProject)))
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(
+      samDAO.listUserActionsForResource(mockitoEq(SamResourceTypeNames.billingProject),
+                                        mockitoEq(billingProject.projectName.value),
+                                        any()
+      )
+    )
+      .thenReturn(Future.successful(Set.empty))
+    val userService = getUserService(billingRepository = Option(billingRepository), samDAO = samDAO)
+
+    Await.result(userService.verifyBillingProjectAccess(billingProject.id, action), Duration.Inf) shouldEqual None
+  }
+
+  it should "return None if the billing project doesn't exist" in {
+    val billingProject = billingProjectFromName("projectName")
+    val action = SamResourceAction("action")
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(billingRepository.getBillingProjectById(billingProject.id)).thenReturn(Future.successful(None))
+    val userService = getUserService(billingRepository = Option(billingRepository))
+
+    Await.result(userService.verifyBillingProjectAccess(billingProject.id, action), Duration.Inf) shouldEqual None
   }
 
   behavior of "addUserToBillingProjectV2"

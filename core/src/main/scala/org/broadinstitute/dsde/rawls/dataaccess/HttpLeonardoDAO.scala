@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import okhttp3.{Dispatcher, Protocol}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
@@ -11,24 +12,34 @@ import scala.jdk.CollectionConverters._
 
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
 
+  private val okHttpClient = {
+    val dispatcher = new Dispatcher()
+    new ApiClient().getHttpClient.newBuilder
+      .protocols(Seq(Protocol.HTTP_1_1).asJava)
+      .dispatcher(dispatcher)
+      .build()
+  }
+
+  protected def getApiClient(accessToken: String): ApiClient = {
+    val leoApiClient = new ApiClient(okHttpClient)
+    leoApiClient.setBasePath(leonardoConfig.baseUrl)
+    leoApiClient.setAccessToken(accessToken)
+
+    leoApiClient
+  }
+
   private def getAppsV2LeonardoApi(accessToken: String): AppsApi = {
-    val apiClient = new ApiClient()
-    apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(leonardoConfig.baseUrl)
+    val apiClient = getApiClient(accessToken)
     new AppsApi(apiClient)
   }
 
   private def getResourcesLeonardoApi(accessToken: String) = {
-    val apiClient = new ApiClient()
-    apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(leonardoConfig.baseUrl)
+    val apiClient = getApiClient(accessToken)
     new ResourcesApi(apiClient)
   }
 
   private def getRuntimesV2LeonardoApi(accessToken: String): RuntimesApi = {
-    val apiClient = new ApiClient()
-    apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(leonardoConfig.baseUrl)
+    val apiClient = getApiClient(accessToken)
     new RuntimesApi(apiClient)
   }
   override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =

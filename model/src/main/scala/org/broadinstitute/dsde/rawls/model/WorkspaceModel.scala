@@ -1095,8 +1095,6 @@ case class ManagedGroupAccessInstructions(groupName: String, instructions: Strin
 
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
-case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: Option[DateTime])
-
 case class BucketMetricsResponse(
   metrics: Seq[BucketMetric]
 )
@@ -1381,8 +1379,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val EntityQueryResponseFormat: RootJsonFormat[EntityQueryResponse] = jsonFormat3(EntityQueryResponse)
 
   implicit val WorkspaceStatusFormat: RootJsonFormat[WorkspaceStatus] = jsonFormat2(WorkspaceStatus)
-
-  implicit val BucketUsageResponseFormat: RootJsonFormat[BucketUsageResponse] = jsonFormat2(BucketUsageResponse)
 
   implicit val BucketMetricsFormat: RootJsonFormat[BucketMetric] = jsonFormat2(BucketMetric)
 

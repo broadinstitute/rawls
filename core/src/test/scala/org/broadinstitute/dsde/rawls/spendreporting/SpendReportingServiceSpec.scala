@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceSpendReportRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.{Workspace => WorkspaceAggKey, _}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeys, _}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -42,7 +43,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.time.{LocalDateTime, ZoneId}
-import java.util.{Base64, Currency, Date, UUID}
+import java.util.{Currency, Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
@@ -79,6 +80,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   object TestData {
     val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
     val workspace2: Workspace = workspace("workspace2", GoogleProjectId("project2"))
+
+    val billingProjectsToWorkspaces: Map[RawlsBillingProjectName, Seq[Workspace]] = Map(
+      // workspace 1 and 2 use the same billing project/namespace
+      RawlsBillingProjectName(workspace1.namespace) -> Seq(workspace1, workspace2)
+    )
 
     val googleProjectsToWorkspaceNames: Map[GoogleProjectId, WorkspaceName] = Map(
       workspace1.googleProjectId -> workspace1.toWorkspaceName,
@@ -344,10 +350,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(),
-      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
+      Set(SpendReportingAggregationKeyWithSub(Daily))
     )
     reportingResults.spendSummary.cost shouldBe TestData.Daily.totalCostRounded.toString
-    reportingResults.spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
+    reportingResults.spendDetails.head.aggregationKey shouldBe Daily
     reportingResults.spendDetails.head.spendData.foreach { spendForDay =>
       spendForDay.startTime match {
         case Some(date) if date.toLocalDate.equals(TestData.Daily.firstRowDate.toLocalDate) =>
@@ -400,12 +406,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(),
-      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))
+      Set(SpendReportingAggregationKeyWithSub(Category))
     )
 
     reportingResults.spendSummary.cost shouldBe TestData.Category.totalCostRounded
     val categoryAggregation = reportingResults.spendDetails.headOption.get
-    categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+    categoryAggregation.aggregationKey shouldBe Category
     verifyCategoryAggregation(
       categoryAggregation,
       expectedCompute = TestData.Category.computeRowCostRounded,
@@ -433,9 +439,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now(),
       TestData.googleProjectsToWorkspaceNames,
       Set(
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
-                                            Option(SpendReportingAggregationKeys.Category)
-        )
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category))
       )
     )
 
@@ -453,10 +457,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         TestData.workspace2.googleProjectId -> TestData.workspace2.toWorkspaceName
       ),
       Set(
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
-                                            Option(SpendReportingAggregationKeys.Category)
-        ),
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category)
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)),
+        SpendReportingAggregationKeyWithSub(Category)
       )
     )
 
@@ -465,7 +467,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     reportingResults.spendDetails.map {
       case workspaceAggregation @ SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, _) =>
         verifyWorkspaceCategorySubAggregation(workspaceAggregation)
-      case categoryAggregation @ SpendReportingAggregation(SpendReportingAggregationKeys.Category, _) =>
+      case categoryAggregation @ SpendReportingAggregation(Category, _) =>
         verifyCategoryAggregation(
           categoryAggregation,
           expectedCompute = TestData.SubAggregation.computeTotalCostRounded,
@@ -504,7 +506,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     topLevelAggregation.spendData.foreach { spendData =>
       val workspaceGoogleProject = spendData.googleProjectId.get.value
       val subAggregation = spendData.subAggregation.get
-      subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+      subAggregation.aggregationKey shouldBe Category
 
       if (workspaceGoogleProject.equals(TestData.workspace1.googleProjectId.value)) {
         spendData.cost shouldBe TestData.SubAggregation.workspace1TotalCostRounded.toString
@@ -550,7 +552,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         DateTime.now().minusDays(1),
         DateTime.now(),
         Map(),
-        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
+        Set(SpendReportingAggregationKeyWithSub(Daily))
       )
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
@@ -678,7 +680,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   ): Unit = {
     actualSpendData.cost shouldBe expectedTotal.toString
     val aggSub = actualSpendData.subAggregation.get
-    aggSub.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+    aggSub.aggregationKey shouldBe Category
     verifyCategoricalSpendData(aggSub.spendData, expectedCompute, expectedStorage, expectedOther)
   }
 
@@ -870,7 +872,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
 
@@ -978,7 +980,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendReportableWorkspaceGoogleProjects(any())
 
@@ -994,6 +996,356 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+  }
+
+  it should "use cached results when available" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val data = List[Map[String, String]]()
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(data))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache returns a row for each workspace in question
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+      .toSeq
+
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    // should not throw
+    Await.result(
+      service.getSpendForGCPBillingProject(
+        billingProject.projectName,
+        start,
+        end,
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
+      ),
+      Duration.Inf
+    )
+    // verify: ask cache for results, find them
+    verify(mockSpendReportRepo, times(1)).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since cache had results, we don't ask anything of BigQuery
+    verify(bigQueryService, never()).runJob(any(), any())
+    // verify: since cache had results, we don't write anything back to cache
+    verify(service, never()).insertRecordsWithMissingSpendData(any(), any(), any(), any())
+  }
+
+  it should "use BigQuery when cached results are not available, and write back to cache" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    val table: List[Map[String, String]] = TestData.googleProjectsToWorkspaceNames.keys.toList.map { projectId =>
+      Map("googleProjectId" -> projectId.value,
+          "service" -> "whatever",
+          "cost" -> "0.10111",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> DateTime.now().toString
+      )
+    }
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache is missing one of the workspaces in question (via use of .tail)
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys.toSeq.tail
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    // should not throw
+    Await.result(
+      service.getSpendForGCPBillingProject(
+        billingProject.projectName,
+        start,
+        end,
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
+      ),
+      Duration.Inf
+    )
+    // verify: ask cache for results, this test does not find them
+    verify(mockSpendReportRepo, times(1)).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since cache did not have results, ask BigQuery instead
+    verify(bigQueryService, times(1)).runJob(any(), any())
+    // verify: write BigQuery results back to cache
+    verify(service, times(1)).insertRecordsWithMissingSpendData(any(), any(), any(), any())
+  }
+
+  it should "use BigQuery for daily aggregations and not write back to cache" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    val table: List[Map[String, String]] = TestData.googleProjectsToWorkspaceNames.keys.toList.map { projectId =>
+      Map("googleProjectId" -> projectId.value,
+          "service" -> "whatever",
+          "cost" -> "0.10111",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> DateTime.now().toString
+      )
+    }
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache returns a row for each workspace in question, so is valid - but
+    // the daily aggregation should not even query cache
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+      .toSeq
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+
+    // should not throw
+    Await.result(
+      service.getSpendForGCPBillingProject(
+        billingProject.projectName,
+        start,
+        end,
+        Set(SpendReportingAggregationKeyWithSub(Daily))
+      ),
+      Duration.Inf
+    )
+    // verify: daily aggregation skips cache
+    verify(mockSpendReportRepo, never()).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since we skipped cache, ask BigQuery instead
+    verify(bigQueryService, times(1)).runJob(any(), any())
+    // verify: daily aggregation does not write back to cache
+    verify(service, never()).insertRecordsWithMissingSpendData(any(), any(), any(), any())
+  }
+
+  it should "write back to cache even when BigQuery returns no results" in {
+    val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
+
+    // BigQuery returns no results for this timeframe
+    val table: List[Map[String, String]] = List()
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    val bqServiceResource = Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+
+    val start = DateTime.now().minusDays(1)
+    val end = DateTime.now()
+    val startLocal = SpendReportUtils.convertJodaToJava(Option(start))
+    val endLocal = SpendReportUtils.convertJodaToJava(Option(end))
+
+    // spend report cache is missing one of the workspaces in question (via use of .tail)
+    val spendReportRepoResults = TestData.googleProjectsToWorkspaceNames.keys.toSeq.tail
+      .map(projName =>
+        WorkspaceSpendReport.newWorkspaceSpendReport(projName.value,
+                                                     startLocal,
+                                                     endLocal,
+                                                     "USD",
+                                                     isDataAvailable = true,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None,
+                                                     None
+        )
+      )
+    val mockSpendReportRepo = mock[WorkspaceSpendReportRepository]
+    when(mockSpendReportRepo.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(spendReportRepoResults))
+
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bqServiceResource,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig,
+        mockWorkspaceServiceConstructor,
+        mockSpendReportRepo
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(billingProject.projectName, RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
+      .when(service)
+      .getSpendReportableWorkspaceGoogleProjects(any())
+    doReturn(Set())
+      .when(service)
+      .insertRecordsWithMissingSpendData(any(), any(), any(), any())
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.getSpendForGCPBillingProject(
+          billingProject.projectName,
+          start,
+          end,
+          Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category)))
+        ),
+        Duration.Inf
+      )
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+
+    // verify: ask cache for results, this test does not find them
+    verify(mockSpendReportRepo, times(1)).getWorkspaceSpendReports(any(), any(), any())
+    // verify: since cache did not have results, ask BigQuery instead
+    verify(bigQueryService, times(1)).runJob(any(), any())
+    // verify: write BigQuery results back to cache
+    verify(service, times(1)).insertRecordsWithMissingSpendData(any(), any(), any(), any())
   }
 
   "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
@@ -1100,7 +1452,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendForGCPBillingProject(any(), any(), any(), any())
 
@@ -1152,7 +1504,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingProjectSpendExport =
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
-    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames))
+    doReturn(Future.successful(TestData.billingProjectsToWorkspaces))
       .when(service)
       .getSpendForGCPBillingProject(any(), any(), any(), any())
 
@@ -1308,7 +1660,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val result = service.getQuery(
       Set(
         SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace),
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily)
+        SpendReportingAggregationKeyWithSub(Daily)
       ),
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), Some("NonBroadTable"))
     )
@@ -1343,7 +1695,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val result = service.getQuery(
       Set(
         SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace),
-        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily)
+        SpendReportingAggregationKeyWithSub(Daily)
       ),
       BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
     )
@@ -2208,7 +2560,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verify(mockWorkspaceSpendReportRepository, times(1)).insertWorkspaceSpendReport(spendReport2)
   }
 
-  "insertRecordsWithMissingSpendData" should "not insert additional records when all spend data is available" in {
+  it should "not insert additional records when all spend data is available" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
     val mockWorkspaceSpendReportRepository = mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
@@ -2280,7 +2632,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     verifyNoInteractions(mockWorkspaceSpendReportRepository)
   }
 
-  "insertRecordsWithMissingSpendData" should "handle errors when inserting a record" in {
+  it should "handle errors when inserting a record" in {
     val samDAO = mock[SamDAO]
     val workspaceService = mock[WorkspaceService]
 
@@ -2355,6 +2707,290 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         result shouldBe Future.successful(0L)
       }
     }
+  }
+
+  behavior of "getCachedSpendReportData"
+
+  private def setUpCacheTestReturning(returns: Seq[WorkspaceSpendReport]): SpendReportingService = {
+    val samDAO = mock[SamDAO]
+    val workspaceService = mock[WorkspaceService]
+
+    val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+      mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+    // cache returns results for only 1 project
+    when(mockWorkspaceSpendReportRepository.getWorkspaceSpendReports(any(), any(), any()))
+      .thenReturn(Future.successful(returns))
+
+    new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      spendReportingServiceConfig,
+      _ => workspaceService,
+      mockWorkspaceSpendReportRepository
+    )
+  }
+
+  it should "return valid if results match requested projects" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      ),
+      WorkspaceSpendReport(1,
+                           projectId2.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(2.1f),
+                           Option(3.2f),
+                           Option(5.4f),
+                           Option(7.6f),
+                           Option(9.8f),
+                           Option(1.0f)
+      )
+    )
+    // cache returns two projects; we are requesting two
+    val service = setUpCacheTestReturning(mockReturn)
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe true
+    actual.results should not be empty
+  }
+
+  it should "return valid if results match requested projects but some data isn't available" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      ),
+      WorkspaceSpendReport(1,
+                           projectId2.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = false,
+                           Option(2.1f),
+                           Option(3.2f),
+                           Option(5.4f),
+                           Option(7.6f),
+                           Option(9.8f),
+                           Option(1.0f)
+      )
+    )
+    // cache returns two projects, one with isDataAvailable=false; we are requesting two
+    val service = setUpCacheTestReturning(mockReturn)
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe true
+    actual.results should not be empty
+  }
+
+  it should "return valid but empty if results match requested projects but no data found" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = false,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      ),
+      WorkspaceSpendReport(1,
+                           projectId2.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = false,
+                           Option(2.1f),
+                           Option(3.2f),
+                           Option(5.4f),
+                           Option(7.6f),
+                           Option(9.8f),
+                           Option(1.0f)
+      )
+    )
+    // cache returns two projects with isDataAvailable=false; we are requesting two
+    val service = setUpCacheTestReturning(mockReturn)
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe true
+    actual.results shouldBe empty
+  }
+
+  it should "return invalid if results don't match requested projects" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq(
+      WorkspaceSpendReport(1,
+                           projectId1.value,
+                           startDate,
+                           endDate,
+                           "USD",
+                           isDataAvailable = true,
+                           Option(1.2f),
+                           Option(2.3f),
+                           Option(4.5f),
+                           Option(6.7f),
+                           Option(8.9f),
+                           Option(0.1f)
+      )
+    )
+
+    val service = setUpCacheTestReturning(mockReturn)
+
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe false
+  }
+
+  it should "return invalid if nothing in cache" in {
+    val projectId1 = GoogleProjectId("workspace1ProjectId")
+    val projectId2 = GoogleProjectId("workspace2ProjectId")
+
+    val projectNames = Map(projectId1 -> WorkspaceName("billingProject1", "workspace2Billing1"),
+                           projectId2 -> WorkspaceName("billingProject2", "workspace2Billing2")
+    )
+
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val startDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(from.getMillis), ZoneId.systemDefault())
+    val endDate: LocalDateTime =
+      LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(to.getMillis), ZoneId.systemDefault())
+
+    val mockReturn = Seq()
+
+    val service = setUpCacheTestReturning(mockReturn)
+
+    val actual = Await.result(service.getCachedSpendReportData(projectNames, from, to), Duration.Inf)
+    actual.isCacheValid shouldBe false
+  }
+
+  behavior of "aggregationsAreCacheable"
+
+  val testCases: Map[Set[SpendReportingAggregationKeyWithSub], Boolean] = Map(
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None)) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, Option(Category))) -> true,
+    Set(SpendReportingAggregationKeyWithSub(Category, None)) -> false,
+    Set(SpendReportingAggregationKeyWithSub(Category, Option(WorkspaceAggKey))) -> false,
+    Set(SpendReportingAggregationKeyWithSub(Daily, None)) -> false,
+    Set(SpendReportingAggregationKeyWithSub(Category, Option(Daily))) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, Option(Daily))) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None),
+        SpendReportingAggregationKeyWithSub(Daily, None)
+    ) -> false,
+    Set(SpendReportingAggregationKeyWithSub(WorkspaceAggKey, None),
+        SpendReportingAggregationKeyWithSub(Category, Option(Daily))
+    ) -> false
+  )
+
+  testCases.foreach { case (aggkeys, expected) =>
+    it should s"be $expected for input of $aggkeys" in {
+      val samDAO = mock[SamDAO]
+      val workspaceService = mock[WorkspaceService]
+
+      val mockWorkspaceSpendReportRepository: WorkspaceSpendReportRepository =
+        mock[WorkspaceSpendReportRepository](RETURNS_SMART_NULLS)
+
+      val service = new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+        mock[BillingRepository],
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        spendReportingServiceConfig,
+        _ => workspaceService,
+        mockWorkspaceSpendReportRepository
+      )
+
+      val actual = service.aggregationsAreCacheable(aggkeys)
+      actual shouldBe expected
+    }
+
   }
 
 }

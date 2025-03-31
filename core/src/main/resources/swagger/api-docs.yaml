@@ -25,6 +25,7 @@ tags:
   - name: workflows
   - name: workspaces
   - name: workspaces_v2
+  - name: googleProjects
 
 paths:
   /version:
@@ -244,6 +245,33 @@ paths:
                 $ref: '#/components/schemas/RawlsBillingProjectResponse'
         404:
           description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/billing/v2/id/{projectUuid}/verifyAction/{action}:
+    get:
+      tags:
+        - billing_v2
+      summary: check if user can perform action on billing project
+      description: check if user can perform action on billing project
+      operationId: verifyBillingProjectAction
+      parameters:
+        - $ref: '#/components/parameters/billingProjectUuidPathParam'
+        - $ref: '#/components/parameters/billingProjectActionPathParam'
+      responses:
+        200:
+          description: OK
+        403:
+          description: User does not have permission to perform action or project does not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Project does not exist or user does not have permission to view it
           content:
             'application/json':
               schema:
@@ -3650,24 +3678,6 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceRequest
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage:
-    get:
-      tags:
-        - workspaces
-      summary: Get bucket usage
-      deprecated: true
-      description: Deprecated in favor of /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/bucketUsage
-      operationId: getBucketUsage
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/BucketUsageResponse'
   /api/workspaces/tags:
     get:
       tags:
@@ -4630,6 +4640,124 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects:
+    get:
+      tags:
+        - googleProjects
+      summary: list google projects in rawls
+      description: List the Google projects accessible to the user
+      operationId: getGoogleProjects
+      parameters:
+        - name: billingProjectId
+          in: query
+          description: |
+            Optional. If provided, only return google projects that are linked to the given billing project.
+          required: false
+          schema:
+            type: string
+        - name: pageSize
+          in: query
+          description: how many google projects to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GoogleProjectResponse'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    put:
+      tags:
+        - googleProjects
+      summary: register google project in rawls
+      description: Adds a link between a billing project and a google project and assigns the billing account to the google project
+      operationId: registerGoogleProject
+      requestBody:
+        description: register google project request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/RegisterGoogleProjectRequest'
+        required: true
+      responses:
+        200:
+          description: Google Project is already registered in Rawls
+        201:
+          description: Google Project successfully registered in Rawls and billing account updated
+        403:
+          description: You don't have permission to perform this action
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing and/or Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects/{googleProjectId}:
+    get:
+      tags:
+        - googleProjects
+      summary: get google project in rawls by id
+      description: Get the Google project if known and the user has access
+      operationId: getGoogleProjectById
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GoogleProjectResponse'
+        404:
+          description: Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    delete:
+      tags:
+        - googleProjects
+      summary: unregister google project in rawls
+      description: Removes link between a billing project and a google project and disables the google project
+      operationId: unregisterGoogleProject
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        204:
+          description: Successfully unregistered google project
+          content: { }
+        403:
+          description: You do not have the necessary permissions
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Google project not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
@@ -5131,6 +5259,13 @@ components:
         monitoringImageScript:
           type: string
           description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
+        perWorkflowCostCap:
+          type: number
+          description: A cost threshold in USD to apply to individual workflows. When the estimated cost is exceeded, the workflow is terminated.
+          format: float
+          minimum: 0.01
+          maximum: 9999999999.99
+          multipleOf: 0.01
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -6254,19 +6389,6 @@ components:
           description: Clone this workspace with a bucket that collects extra logging about data access.
           default: false
       description: ""
-    BucketUsageResponse:
-      required:
-        - usageInBytes
-      type: object
-      properties:
-        usageInBytes:
-          type: integer
-          description: The current storage bucket usage in bytes
-        lastUpdated:
-          type: string
-          format: timestamp
-          description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
-      description: ""
     BucketMetricsResponse:
       type: array
       properties:
@@ -7248,7 +7370,46 @@ components:
         objectsTransferred:
           description: objects that this job has transferred so far
           type: integer
+    RegisterGoogleProjectRequest:
+      required:
+        - googleProjectId
+        - billingProjectId
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
+    GoogleProjectResponse:
+      required:
+        - googleProjectId
+        - billingProjectId
+        - billingAccount
+        - message
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
+        billingAccount:
+          type: string
+          description: the id of the billing account
+        message:
+            type: string
+            description: informational message about the project
   parameters:
+    billingProjectActionPathParam:
+      name: action
+      in: path
+      description: Action to take on the billing project
+      required: true
+      schema:
+        type: string
     billingProjectUuidPathParam:
         name: projectUuid
         in: path
@@ -7378,6 +7539,16 @@ components:
       required: true
       schema:
         type: string
+    googleProjectIdPathParam:
+      name: googleProjectId
+      in: path
+      description: Google Project ID
+      required: true
+      schema:
+        type: string
+        minLength: 6
+        maxLength: 30
+        pattern: '^[a-z0-9-]+$'
   responses:
     RawlsInternalError:
       description: Rawls Internal Error
