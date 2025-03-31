@@ -112,7 +112,7 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.15.3"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.15.4"
   val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.16.2"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
@@ -134,7 +134,7 @@ object Dependencies {
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
   val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.606-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.371")
+  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.375")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
 
   // OpenTelemetry
