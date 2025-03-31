@@ -64,12 +64,10 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkflowFailureModes,
   WorkflowOutputs,
   WorkflowQueueStatusByUserResponse,
-  WorkflowQueueStatusResponse,
   WorkflowStatuses,
   Workspace,
   WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceSettingTypes
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
   extractOperationIdsFromCromwellMetadata,
@@ -77,9 +75,8 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.util.FutureSupport.toFutureTry
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
 import spray.json.DefaultJsonProtocol._
@@ -87,7 +84,6 @@ import spray.json.JsObject
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 object SubmissionsService {
@@ -253,21 +249,6 @@ class SubmissionsService(
       executionServiceCluster.callLevelMetadata(submissionId, workflowId, metadataParams, _, ctx.userInfo)
     }
   }
-
-  def workflowQueueStatus(): Future[WorkflowQueueStatusResponse] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workflowQuery.countWorkflowsByQueueStatus.flatMap { statusMap =>
-        // determine the current size of the workflow queue
-        statusMap.get(WorkflowStatuses.Queued.toString) match {
-          case Some(x) if x > 0 =>
-            for {
-              timeEstimate <- dataAccess.workflowAuditStatusQuery.queueTimeMostRecentSubmittedWorkflow
-              workflowsAhead <- dataAccess.workflowQuery.countWorkflowsAheadOfUserInQueue(ctx.userInfo)
-            } yield WorkflowQueueStatusResponse(timeEstimate, workflowsAhead, statusMap)
-          case _ => DBIO.successful(WorkflowQueueStatusResponse(0, 0, statusMap))
-        }
-      }
-    }
 
   def getSubmissionMethodConfiguration(workspaceName: WorkspaceName,
                                        submissionId: String

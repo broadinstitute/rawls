@@ -80,8 +80,6 @@ trait DataAccess
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[BillingAccountChanges].delete andThen // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen
-      TableQuery[WorkflowAuditStatusTable].delete andThen
-      TableQuery[SubmissionAuditStatusTable].delete andThen
       TableQuery[PendingBucketDeletionTable].delete andThen
       TableQuery[EntityAttributeTempTable].delete andThen
       TableQuery[WorkspaceAttributeTempTable].delete andThen
