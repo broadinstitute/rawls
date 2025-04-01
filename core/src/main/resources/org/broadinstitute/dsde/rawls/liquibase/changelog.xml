@@ -136,4 +136,5 @@
     <include file="changesets/20250228_add_billing_project_id.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250311_update_workspace_spend_report_dates.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250317_add_google_project_registration_table.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250401_drop_cromwell_backend_column.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -772,7 +772,6 @@ class SubmissionsService(
                                     _,
                                     _,
                                     _,
-                                    _,
                                     Some(spendReportDataset),
                                     Some(spendReportTable),
                                     Some(spendReportDatasetGoogleProject),
