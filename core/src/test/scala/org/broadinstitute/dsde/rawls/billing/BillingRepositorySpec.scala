@@ -32,7 +32,6 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     CreationStatuses.Ready,
     Some(RawlsBillingAccountName("fake_account")),
     Some("fake message"),
-    Some(CromwellBackend("fake_cromwell_backend")),
     Some(ServicePerimeterName("fake_sp_name")),
     Some(GoogleProjectNumber("fake_google_project_number")),
     false,
