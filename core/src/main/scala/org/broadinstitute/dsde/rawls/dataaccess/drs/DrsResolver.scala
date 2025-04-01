@@ -8,7 +8,7 @@ import scala.concurrent.Future
 import scala.util.matching.Regex
 
 trait DrsResolver {
-  def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[Option[String]]
+  def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[String]
 }
 
 object DrsResolver {

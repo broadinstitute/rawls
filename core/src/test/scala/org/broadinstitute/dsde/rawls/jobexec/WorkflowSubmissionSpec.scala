@@ -500,7 +500,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
   it should "fail if any URIs fail to resolve" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
+      .thenReturn(Future.successful(DrsTestVals.dosSignedUrl))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
       .thenReturn(
         Future.failed(
@@ -1060,13 +1060,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
   "resolveDrsSignedUrls" should "only resolve once per provider" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Some(DrsTestVals.dosSignedUrl)))
+      .thenReturn(Future.successful(DrsTestVals.dosSignedUrl))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
-      .thenReturn(Future.successful(Some(DrsTestVals.drsSignedUrl1)))
+      .thenReturn(Future.successful(DrsTestVals.drsSignedUrl1))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo]))
-      .thenReturn(Future.successful(Some(DrsTestVals.drsUrlTDR2)))
+      .thenReturn(Future.successful(DrsTestVals.drsUrlTDR2))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Some(DrsTestVals.drsCompactSignedUrl)))
+      .thenReturn(Future.successful(DrsTestVals.drsCompactSignedUrl))
 
     val data = testData
     // Set up system under test
@@ -1092,11 +1092,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
   it should "error on unparseable URIs" in withDefaultTestDatabase {
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
+      .thenReturn(Future.successful(DrsTestVals.dosSignedUrl))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.drsSignedUrl1)))
+      .thenReturn(Future.successful(DrsTestVals.drsSignedUrl1))
     when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.drsCompactSignedUrl)))
+      .thenReturn(Future.successful(DrsTestVals.drsCompactSignedUrl))
 
     val data = testData
     // Set up system under test

@@ -35,7 +35,7 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
     val response = mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
-    assertResult(Option("https://signed-url.com/file?key=123")) {
+    assertResult("https://signed-url.com/file?key=123") {
       Await.result(response, 1 minute)
     }
   }

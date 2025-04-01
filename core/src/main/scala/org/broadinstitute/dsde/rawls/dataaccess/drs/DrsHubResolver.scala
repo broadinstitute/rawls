@@ -44,17 +44,12 @@ class DrsHubResolver(drsHubUrl: String)(implicit
     }
   }
 
-  override def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
+  override def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[String] =
     resolveDrs(drsUrl, userInfo).map { resp =>
       resp.accessUrl match {
-        case Some(accessUrl) =>
-          val signedUrl = accessUrl.url
-          if (signedUrl.isEmpty)
-            throw new RawlsExceptionWithErrorReport(errorReport =
-              ErrorReport(StatusCodes.BadRequest, s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
-            )
-          signedUrl
-        case None =>
+        case Some(DrsHubAccessUrl(Some(url), _)) =>
+          url
+        case _ =>
           throw new RawlsExceptionWithErrorReport(errorReport =
             ErrorReport(StatusCodes.BadRequest, s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
           )

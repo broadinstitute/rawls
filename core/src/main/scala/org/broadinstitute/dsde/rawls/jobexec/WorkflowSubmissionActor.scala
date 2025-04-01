@@ -400,9 +400,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         drsResolver.drsSignedUrl(drsUri, userInfo)
       }
       .map { urls =>
-        val collected = urls.collect { case Some(url) => url }.toSet
-        logger.debug(s"resolveDrsSignedUrls found ${collected.size} urls for ${drsUris.size} DRS URIs")
-        collected
+        logger.debug(s"resolveDrsSignedUrls found ${urls.size} urls for ${drsUris.size} DRS URIs")
+        urls.toSet
       }
   }
 
