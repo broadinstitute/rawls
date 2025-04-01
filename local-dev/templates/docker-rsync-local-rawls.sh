@@ -96,7 +96,7 @@ start_server () {
     -e JAVA_OPTS="$JAVA_OPTS" \
     -e GOOGLE_APPLICATION_CREDENTIALS='/etc/rawls-account.json' \
     -e GIT_HASH=$GIT_HASH \
-    sbtscala/scala-sbt:eclipse-temurin-17.0.14_7_1.10.10_2.13.16 \
+    sbtscala/scala-sbt:eclipse-temurin-17.0.14_7_1.10.11_2.13.16 \
     bash -c "git config --global --add safe.directory /app && sbt clean \~reStart"
 
     docker cp config/rawls-account.pem rawls-sbt:/etc/rawls-account.pem

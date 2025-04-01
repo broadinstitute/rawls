@@ -33,7 +33,8 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
-  WorkspaceService
+  WorkspaceService,
+  WorkspaceSettingRepository
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
@@ -249,6 +250,7 @@ class FastPassServiceSpec
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       workspaceManagerDAO,
+      new WorkspaceSettingRepository(dataSource),
       dataRepoDAO,
       samDAO,
       bigQueryServiceFactory,

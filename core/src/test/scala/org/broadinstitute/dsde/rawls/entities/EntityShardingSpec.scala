@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -72,6 +73,7 @@ class EntityShardingSpec
       EntityManager.defaultEntityManager(
         dataSource,
         new MockWorkspaceManagerDAO(),
+        new WorkspaceSettingRepository(dataSource),
         new MockDataRepoDAO("mockrepo"),
         samDAO,
         bigQueryServiceFactory,
