@@ -331,6 +331,7 @@ trait ApiServiceSpec
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       workspaceManagerDAO,
+      new WorkspaceSettingRepository(dataSource),
       dataRepoDAO,
       samDAO,
       bigQueryServiceFactory,

@@ -4658,6 +4658,41 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/googleProjects:
+    get:
+      tags:
+        - googleProjects
+      summary: list google projects in rawls
+      description: List the Google projects accessible to the user
+      operationId: getGoogleProjects
+      parameters:
+        - name: billingProjectId
+          in: query
+          description: |
+            Optional. If provided, only return google projects that are linked to the given billing project.
+          required: false
+          schema:
+            type: string
+        - name: pageSize
+          in: query
+          description: how many google projects to return at a time
+          required: false
+          default: 100
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+          required: false
+          default: 0
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GoogleProjectResponse'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - googleProjects
@@ -4684,6 +4719,56 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Billing and/or Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/googleProjects/{googleProjectId}:
+    get:
+      tags:
+        - googleProjects
+      summary: get google project in rawls by id
+      description: Get the Google project if known and the user has access
+      operationId: getGoogleProjectById
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GoogleProjectResponse'
+        404:
+          description: Google project don't exist or you don't have permission
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    delete:
+      tags:
+        - googleProjects
+      summary: unregister google project in rawls
+      description: Removes link between a billing project and a google project and disables the google project
+      operationId: unregisterGoogleProject
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        204:
+          description: Successfully unregistered google project
+          content: { }
+        403:
+          description: You do not have the necessary permissions
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Google project not found
           content:
             'application/json':
               schema:
@@ -5191,6 +5276,13 @@ components:
         monitoringImageScript:
           type: string
           description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
+        perWorkflowCostCap:
+          type: number
+          description: A cost threshold in USD to apply to individual workflows. When the estimated cost is exceeded, the workflow is terminated.
+          format: float
+          minimum: 0.01
+          maximum: 9999999999.99
+          multipleOf: 0.01
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -6145,6 +6237,7 @@ components:
             - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
             - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
             - $ref: '#/components/schemas/WorkspaceSettingPubliclyReadableConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingCompactDataTablesConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
       required:
         - rules
@@ -6227,6 +6320,14 @@ components:
         enabled:
           type: boolean
           description: Whether or not the workspace should be publicly readable
+    WorkspaceSettingCompactDataTablesConfig:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: 'DANGER: Enabling this setting will cause you to lose access to your data tables.'
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount
@@ -7326,6 +7427,26 @@ components:
         billingProjectId:
           type: string
           description: the id of the billing project
+    GoogleProjectResponse:
+      required:
+        - googleProjectId
+        - billingProjectId
+        - billingAccount
+        - message
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        billingProjectId:
+          type: string
+          description: the id of the billing project
+        billingAccount:
+          type: string
+          description: the id of the billing account
+        message:
+            type: string
+            description: informational message about the project
   parameters:
     billingProjectActionPathParam:
       name: action
@@ -7463,6 +7584,16 @@ components:
       required: true
       schema:
         type: string
+    googleProjectIdPathParam:
+      name: googleProjectId
+      in: path
+      description: Google Project ID
+      required: true
+      schema:
+        type: string
+        minLength: 6
+        maxLength: 30
+        pattern: '^[a-z0-9-]+$'
   responses:
     RawlsInternalError:
       description: Rawls Internal Error

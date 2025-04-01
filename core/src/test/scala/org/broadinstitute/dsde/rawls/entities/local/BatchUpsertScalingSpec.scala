@@ -37,6 +37,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
@@ -111,6 +112,7 @@ class BatchUpsertScalingSpec
       EntityManager.defaultEntityManager(
         dataSource,
         new MockWorkspaceManagerDAO(),
+        new WorkspaceSettingRepository(dataSource),
         new MockDataRepoDAO(mockServer.mockServerBaseUrl),
         samDAO,
         bigQueryServiceFactory,
