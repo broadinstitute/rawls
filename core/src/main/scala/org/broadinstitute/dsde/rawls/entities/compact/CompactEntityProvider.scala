@@ -70,7 +70,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
       for {
         // find and validate all references in the entity-to-be-saved
         referenceTargets <- DBIO.from(validateReferences(entity))
-
         // save the entity
         _ <- dataAccess.compactEntityQuery.createEntity(workspaceId, entity)
         // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
@@ -176,6 +175,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
   }
 
   // given an entity, finds all references in that entity, grouped by their attribute names
+  // TODO CORE-362: make visible for unit tests
   private def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
     entity.attributes
       .collect {
@@ -202,9 +202,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
       val currentEntityRefTargets: Set[Long] = foundRefs.values.flatten.map(_.id).toSet
       logger.trace(s"~~~~~ found ${currentEntityRefTargets.size} ref targets in entity $fromId")
       for {
-        // TODO AJ-2008: instead of (retrieve all, then calculate diffs, then execute diffs), try doing it all in the db:
+        // TODO CORE-362: instead of (retrieve all, then calculate diffs, then execute diffs), try doing it all in the db:
         //  - delete from ENTITY_REFS where from_id = $fromId and to_id not in ($currentEntityRefTargets)
         //  - insert into ENTITY_REFS (from_id, to_id) values ($fromId, $currentEntityRefTargets:_*) on duplicate key update from_id=from_id (noop)
+        // TODO CORE-362: remove verbose logging
         // retrieve all existing refs in ENTITY_REFS for this entity; create a set of the target ids
         existingRowsSeq <-
           if (isInsert) {

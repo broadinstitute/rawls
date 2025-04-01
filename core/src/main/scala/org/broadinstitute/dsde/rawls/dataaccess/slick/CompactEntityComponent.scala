@@ -100,9 +100,10 @@ trait CompactEntityComponent extends LazyLogging {
       GetResult(r => CompactEntityRefRecord(r.<<, r.<<, r.<<))
 
     /**
-      * Insert a single entity to the db
+      * Insert a single entity to the db.
+      *
+      * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
       */
-    // TODO CORE-362: handle refs
     def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
       val attributesJson: JsValue = entity.attributes.toJson
 
@@ -125,7 +126,6 @@ trait CompactEntityComponent extends LazyLogging {
     }
 
     /** Given a set of entity references, retrieve those entities */
-    // TODO AJ-2008: address lots of copy/paste between getEntities and getEntityRefs
     def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
       // short-circuit
       if (refs.isEmpty) {
@@ -140,11 +140,11 @@ trait CompactEntityComponent extends LazyLogging {
             // build the "IN" clause values
             val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
 
-            // TODO AJ-2008: check query plan for this and make sure it is properly using indexes
+            // TODO CORE-362: check query plan for this and make sure it is properly using indexes
             //   UNION query does use indexes for each select; but it also requires a temporary table to
             //   combine the results, and we can probably do better. `where (entity_type, name) in ((?, ?), (?, ?))
             //   looks like it works well
-            // TODO AJ-2008: include `where deleted=0`? Make that an argument?
+            // TODO CORE-362: include `where deleted=0`? Make that an argument?
             concatSqlActions(
               sql"""select id, name, entity_type
                 from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
