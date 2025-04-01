@@ -13,4 +13,13 @@
         </sql>
     </changeSet>
 
+    <changeSet logicalFilePath="dummy" author="davidan" id="drop_status_change_log_triggers">
+        <sql stripComments="true">
+            DROP TRIGGER IF EXISTS after_workflow_insert;
+            DROP TRIGGER IF EXISTS after_workflow_update;
+            DROP TRIGGER IF EXISTS after_submission_insert;
+            DROP TRIGGER IF EXISTS after_submission_update;
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>
