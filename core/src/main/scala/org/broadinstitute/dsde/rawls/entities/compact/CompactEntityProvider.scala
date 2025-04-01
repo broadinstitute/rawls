@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
+import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -33,7 +35,9 @@ import scala.util.Try
   *
   * @param executionContext scala concurrency context
   */
-class CompactEntityProvider(implicit protected val executionContext: ExecutionContext) extends EntityProvider {
+class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource: SlickDataSource)(implicit
+  protected val executionContext: ExecutionContext
+) extends EntityProvider {
   override def entityStoreId: Option[String] = ???
 
   override def batchUpdateEntities(
