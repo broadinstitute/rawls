@@ -1,9 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.drs
 
-import io.lemonlabs.uri.Uri
 import org.broadinstitute.dsde.rawls.model.UserInfo
 
-import java.net.URI
+import java.net.{URI, URISyntaxException}
 import scala.concurrent.Future
 import scala.util.matching.Regex
 
@@ -28,7 +27,7 @@ object DrsResolver {
         case None       => getProviderFromId(uri)
       }
     catch {
-      case _: Throwable => getProviderFromId(uri)
+      case _: URISyntaxException => getProviderFromId(uri)
     }
 
   def getProviderFromId(uri: String): Option[String] =
