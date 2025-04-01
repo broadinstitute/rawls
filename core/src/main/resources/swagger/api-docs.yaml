@@ -6201,6 +6201,7 @@ components:
             - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
             - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
             - $ref: '#/components/schemas/WorkspaceSettingPubliclyReadableConfig'
+            - $ref: '#/components/schemas/WorkspaceSettingCompactDataTablesConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
       required:
         - rules
@@ -6283,6 +6284,14 @@ components:
         enabled:
           type: boolean
           description: Whether or not the workspace should be publicly readable
+    WorkspaceSettingCompactDataTablesConfig:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: 'DANGER: Enabling this setting will cause you to lose access to your data tables.'
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount

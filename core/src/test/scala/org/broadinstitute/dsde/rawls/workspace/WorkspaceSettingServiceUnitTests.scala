@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   UseCromwellGcpBatchBackendConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
+  CompactDataTablesSetting,
   ErrorReport,
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,

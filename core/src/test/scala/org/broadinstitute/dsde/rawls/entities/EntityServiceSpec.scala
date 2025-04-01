@@ -62,6 +62,7 @@ import org.broadinstitute.dsde.rawls.util.{
   MockitoTestUtils
 }
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -144,6 +145,7 @@ class EntityServiceSpec
       EntityManager.defaultEntityManager(
         dataSource,
         new MockWorkspaceManagerDAO(),
+        new WorkspaceSettingRepository(dataSource),
         new MockDataRepoDAO(mockServer.mockServerBaseUrl),
         samDAO,
         bigQueryServiceFactory,

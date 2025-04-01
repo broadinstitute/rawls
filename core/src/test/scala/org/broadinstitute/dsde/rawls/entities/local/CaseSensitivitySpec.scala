@@ -43,6 +43,7 @@ import org.scalatest.time.{Millis, Span}
 
 import scala.concurrent.{Await, ExecutionContext}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 
 import scala.concurrent.duration.Duration
 
@@ -943,6 +944,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       EntityManager.defaultEntityManager(
         dataSource,
         new MockWorkspaceManagerDAO(),
+        new WorkspaceSettingRepository(dataSource),
         new MockDataRepoDAO("mockrepo"),
         samDAO,
         bigQueryServiceFactory,
