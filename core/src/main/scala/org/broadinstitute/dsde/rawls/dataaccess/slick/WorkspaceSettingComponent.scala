@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
+  CompactDataTablesConfigFormat,
   GcpBucketLifecycleConfigFormat,
   GcpBucketRequesterPaysConfigFormat,
   GcpBucketSoftDeleteConfigFormat,
@@ -9,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   UseCromwellGcpBatchBackendConfigFormat
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  CompactDataTablesConfig,
   GcpBucketLifecycleConfig,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
@@ -81,6 +83,8 @@ object WorkspaceSettingRecord {
         )
       case WorkspaceSettingTypes.PubliclyReadable =>
         PubliclyReadableSetting(workspaceSettingRecord.config.parseJson.convertTo[PubliclyReadableConfig])
+      case WorkspaceSettingTypes.CompactDataTables =>
+        CompactDataTablesSetting(workspaceSettingRecord.config.parseJson.convertTo[CompactDataTablesConfig])
     }
   }
 }
