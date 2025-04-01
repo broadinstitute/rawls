@@ -151,8 +151,6 @@ class RawlsApiSpec
         s"${Rawls.url}api/workspaces/$billingProject/$workspaceName/submissions/$submissionId/workflows/$workflowId"
       )
     )
-  def getQueueStatus()(implicit token: AuthToken): String =
-    Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/submissions/queueStatus"))
 
   "Rawls" - {
     "should agree with Sam on the permissions it sets on its resources" in {
@@ -285,7 +283,7 @@ class RawlsApiSpec
             val firstWorkflowId = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               withClue(
-                s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+                s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
               ) {
                 status should (be("Submitted") or be(
                   "Done"
@@ -411,7 +409,7 @@ class RawlsApiSpec
                 val (status, workflows) =
                   Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
                 withClue(
-                  s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+                  s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
                 ) {
                   status should (be("Submitted") or be(
                     "Done"
@@ -549,7 +547,7 @@ class RawlsApiSpec
                 val (status, workflows) =
                   Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
                 withClue(
-                  s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+                  s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
                 ) {
                   status should (be("Submitted") or be(
                     "Done"
@@ -931,7 +929,7 @@ class RawlsApiSpec
             val workflowId = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               withClue(
-                s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+                s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
               ) {
                 workflows should not be empty
                 workflows.head
@@ -1097,8 +1095,7 @@ class RawlsApiSpec
             val workflowId = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               val clue =
-                s"queue status: ${getQueueStatus()}, " +
-                  s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+                s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
               withClue(clue) {
                 workflows should not be empty
                 workflows.head
