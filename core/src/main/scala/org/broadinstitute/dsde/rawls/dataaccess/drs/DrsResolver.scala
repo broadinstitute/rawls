@@ -25,19 +25,20 @@ object DrsResolver {
     try
       Option(new URI(uri).getHost) match {
         case Some(host) => Some(host)
-        case None       => throw new Throwable()
+        case None       => getProviderFromId(uri)
       }
     catch {
-      case _: Throwable =>
-        hostNameRegex.findFirstMatchIn(uri) match {
-          case Some(matchGroup) => Some(matchGroup.group("hostname"))
-          case None =>
-            compactIdRegex.findFirstMatchIn(uri) match {
-              case Some(matchGroup) => Some(matchGroup.group("compactIdPrefix"))
-              case None             => None
-            }
-        }
+      case _: Throwable => getProviderFromId(uri)
+    }
 
+  def getProviderFromId(uri: String): Option[String] =
+    hostNameRegex.findFirstMatchIn(uri) match {
+      case Some(matchGroup) => Some(matchGroup.group("hostname"))
+      case None =>
+        compactIdRegex.findFirstMatchIn(uri) match {
+          case Some(matchGroup) => Some(matchGroup.group("compactIdPrefix"))
+          case None             => None
+        }
     }
 
 }

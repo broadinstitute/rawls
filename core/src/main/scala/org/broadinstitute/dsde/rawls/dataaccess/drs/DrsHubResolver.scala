@@ -4,11 +4,12 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.{HttpHeader, RequestEntity}
+import akka.http.scaladsl.model.{HttpHeader, RequestEntity, StatusCodes}
 import akka.http.scaladsl.{Http, HttpExt}
 import akka.stream.Materializer
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.DsdeHttpDAO
-import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, UserInfo}
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubJsonSupport._
 
@@ -49,11 +50,14 @@ class DrsHubResolver(drsHubUrl: String)(implicit
         case Some(accessUrl) =>
           val signedUrl = accessUrl.url
           if (signedUrl.isEmpty)
-            logger.info(s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
+            throw new RawlsExceptionWithErrorReport(errorReport =
+              ErrorReport(StatusCodes.BadRequest, s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
+            )
           signedUrl
         case None =>
-          logger.info(s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
-          None
+          throw new RawlsExceptionWithErrorReport(errorReport =
+            ErrorReport(StatusCodes.BadRequest, s"DrsHubResolver.accessUrl returned no url for DRS url $drsUrl")
+          )
       }
     }
 }

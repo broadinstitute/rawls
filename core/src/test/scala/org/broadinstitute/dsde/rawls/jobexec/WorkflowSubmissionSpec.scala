@@ -1076,7 +1076,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     }
 
     val result = Await.result(
-      workflowSubmission.resolveDrsSignedUrls(
+      workflowSubmission.validateDrsProviderAccess(
         Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsUrlTDR2, DrsTestVals.drsCompactUrl),
         userInfo
       ),
@@ -1086,33 +1086,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     // drsUrlTDR1 and drsUrlTDR2 have the same provider, so only one result for the pair
     assertResult(3) {
       result.size
-    }
-
-  }
-
-  it should "error on null accessUrls" in withDefaultTestDatabase {
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.dosSignedUrl)))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
-      .thenReturn(Future.successful(None))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
-      .thenReturn(Future.successful(Option(DrsTestVals.drsCompactSignedUrl)))
-
-    val data = testData
-    // Set up system under test
-    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
-      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
-    }
-
-    val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        workflowSubmission.resolveDrsSignedUrls(
-          Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsCompactUrl),
-          userInfo
-        ),
-        Duration.Inf
-      )
     }
 
   }
@@ -1134,7 +1107,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
     val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        workflowSubmission.resolveDrsSignedUrls(
+        workflowSubmission.validateDrsProviderAccess(
           Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, "not a valid uri", DrsTestVals.drsCompactUrl),
           userInfo
         ),

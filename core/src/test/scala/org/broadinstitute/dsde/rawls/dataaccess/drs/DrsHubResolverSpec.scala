@@ -2,9 +2,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.drs
 
 import akka.actor.ActorSystem
 import org.scalatestplus.mockito.MockitoSugar.mock
-import akka.http.scaladsl.model.HttpRequest
+import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.testkit.TestKit
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
@@ -39,13 +40,15 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
     }
   }
 
-  it should "handle no signed url for a drs object" in {
+  it should "error on no signed url for a drs object" in {
     doReturn(Future.successful(DrsHubMinimalResponse(None)))
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
-    val response = mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
-    assertResult(None) {
-      Await.result(response, 1 minute)
+    val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo), 1 minute)
+    }
+    assertResult(Some(StatusCodes.BadRequest)) {
+      resolveFailure.errorReport.statusCode
     }
   }
 

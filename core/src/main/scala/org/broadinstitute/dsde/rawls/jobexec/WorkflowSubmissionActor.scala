@@ -381,15 +381,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case err: JsValue  => AttributeString(err.toString)
     }
 
-  def resolveDrsSignedUrls(drsUris: Set[String], userInfo: UserInfo)(implicit
+  def validateDrsProviderAccess(drsUris: Set[String], userInfo: UserInfo)(implicit
     executionContext: ExecutionContext
   ): Future[Set[String]] = {
 
     val urisByProvider: Map[Option[String], List[String]] = drsUris.toList.groupBy(DrsResolver.getProvider)
 
     if (urisByProvider.contains(None)) {
-      logger.warn(s"Some URIs were unparsable: ${urisByProvider(None)}") // TODO What should be logged vs. thrown?
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Unable to parse URI"))
+      throw new RawlsExceptionWithErrorReport(errorReport =
+        ErrorReport(StatusCodes.BadRequest, s"Unable to parse URIs: ${urisByProvider(None)}")
+      )
     }
 
     val urisToParse = urisByProvider.values.map(_.head).toList
@@ -400,13 +401,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
       .map { urls =>
         val collected = urls.collect { case Some(url) => url }.toSet
-        if (collected.size != urls.size) {
-          throw new RawlsExceptionWithErrorReport(errorReport =
-            ErrorReport(StatusCodes.InternalServerError,
-                        "One or more URLs could not be resolved"
-            ) // TODO what should the status code be
-          )
-        }
         logger.debug(s"resolveDrsSignedUrls found ${collected.size} urls for ${drsUris.size} DRS URIs")
         collected
       }
@@ -528,7 +522,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
         workflowBatchFuture
-      _ <- resolveDrsSignedUrls(dosUris, petUserInfo)
+      _ <- validateDrsProviderAccess(dosUris, petUserInfo)
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs,
                                                                       wdl,
