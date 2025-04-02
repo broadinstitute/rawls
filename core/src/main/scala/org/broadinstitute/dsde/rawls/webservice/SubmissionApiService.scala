@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportForma
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsString, PrettyPrinter}
 
@@ -193,13 +192,6 @@ trait SubmissionApiService extends UserInfoDirectives {
                   StatusCodes.OK -> jsobj
                 case None => StatusCodes.NotFound -> JsString(s"jobId ${operationId.mkString("/")} not found.")
               }
-            }
-          }
-        } ~
-        path("submissions" / "queueStatus") {
-          get {
-            complete {
-              submissionsServiceConstructor(ctx).workflowQueueStatus
             }
           }
         }
