@@ -67,15 +67,17 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
 
   override def createEntity(entity: Entity): Future[Entity] =
     dataSource.inTransaction { dataAccess =>
+      val query = dataAccess.getCompactEntityQuery
       for {
         // find and validate all references in the entity-to-be-saved
+        // TODO CORE-362 consider doing all the validation in the db; don't return the ref rows; just do an exists()
         referenceTargets <- DBIO.from(validateReferences(entity))
         // save the entity
-        _ <- dataAccess.compactEntityQuery.createEntity(workspaceId, entity)
+        _ <- query.createEntity(workspaceId, entity)
         // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
         // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
         // normalized version.
-        savedEntityRecordOption <- dataAccess.compactEntityQuery.getEntity(workspaceId, entity.entityType, entity.name)
+        savedEntityRecordOption <- query.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
         // save all references from this entity to other entities
         _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referenceTargets, isInsert = true))
@@ -104,8 +106,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.compactEntityQuery.getEntity(workspaceId, entityType, entityName)
-    } map { result => result.map(_.toEntity).getOrElse(throw new EntityNotFoundException()) }
+      val query = dataAccess.getCompactEntityQuery
+      query.getEntity(workspaceId, entityType, entityName)
+    } map {
+      case Some(entityRec) => entityRec.toEntity
+      case None            => throw new EntityNotFoundException()
+    }
 
   override def listEntities(entityType: String): Source[Entity, NotUsed] = ???
 
@@ -151,7 +157,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
       val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
 
       dataSource.inTransaction { dataAccess =>
-        dataAccess.compactEntityQuery.getEntityRefs(workspaceId, allRefs) map { foundRefs =>
+        val query = dataAccess.getCompactEntityQuery
+        query.getEntityRefs(workspaceId, allRefs) map { foundRefs =>
           if (foundRefs.size != allRefs.size) {
             throw new RuntimeException("Did not find all references")
           }
@@ -198,6 +205,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
     }
     dataSource.inTransaction { dataAccess =>
       import dataAccess.driver.api._
+      // TODO CORE-362: use query getter to allow mocking
       // we don't actually care about the referencing attribute name or referenced type&name; reduce to just the referenced ids.
       val currentEntityRefTargets: Set[Long] = foundRefs.values.flatten.map(_.id).toSet
       logger.trace(s"~~~~~ found ${currentEntityRefTargets.size} ref targets in entity $fromId")

@@ -79,7 +79,10 @@ trait CompactEntityComponent extends LazyLogging {
   object compactEntityRefSlickQuery extends TableQuery(new CompactEntityRefTable(_)) {}
 
   /** low-level raw SQL queries for ENTITY */
-  object compactEntityQuery extends RawSqlQuery {
+  // getter and trait allow for easy unit testing
+  def getCompactEntityQuery: CompactEntityQuery = compactEntityQuery
+  object compactEntityQuery extends CompactEntityQuery
+  trait CompactEntityQuery extends RawSqlQuery {
     val driver: JdbcProfile = CompactEntityComponent.this.driver
 
     // read a json column from the db and translate into a JsValue
