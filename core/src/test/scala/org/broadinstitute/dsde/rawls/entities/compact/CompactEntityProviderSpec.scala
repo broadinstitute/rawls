@@ -1,61 +1,46 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
-import akka.NotUsed
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.scaladsl.Source
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, DbResource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.base.{ExpressionEvaluationContext, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
-  AttributeRename,
   AttributeString,
-  AttributeUpdateOperations,
-  AttributeValue,
   Entity,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
-  SubmissionValidationEntityInputs,
   UserInfo,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString}
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import slick.dbio.SuccessAction
-import slick.jdbc.MySQLProfile.api._
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
-import scala.util.Try
 
 class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  val defaultRequestContext: RawlsRequestContext =
+  private val slickDataSource = DbResource.dataSource // needed for transactions in the provider
+  private val atMost = Duration("60 seconds") // timeout for Await() in tests
+
+  private val defaultRequestContext =
     RawlsRequestContext(
       UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     )
 
-  val defaultWorkspace: Workspace = Workspace(
+  private val defaultWorkspace = Workspace(
     "entityManagerSpecTestWorkspace",
     "entityManagerSpecTestNamespace",
     UUID.randomUUID.toString,
@@ -67,7 +52,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     Map.empty
   )
 
-  val defaultEntityRequestArguments: EntityRequestArguments =
+  private val defaultEntityRequestArguments =
     EntityRequestArguments(defaultWorkspace, defaultRequestContext)
 
   // ====================================================================================================
@@ -93,16 +78,14 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some("{}"))
 
     // mocks
-    val mockDataAccess: DataAccess = mock[DataAccess]
-    val mockCompactEntityQuery = mock[mockDataAccess.CompactEntityQuery]
-    when(mockCompactEntityQuery.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(DBIO.successful(Some(rec)))
-    when(mockDataAccess.getCompactEntityQuery).thenReturn(mockCompactEntityQuery)
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(Some(rec)))
+
     // provider using mocks
-    val compactEntityProvider = mockingProvider(mockDataAccess)
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(compactEntityProvider.getEntity("nonexistent-type", "nonexistent-name"), Duration.Inf)
-
+    val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name"), atMost)
     val expected = Entity(rec.name, rec.entityType, Map())
 
     actual shouldBe expected
@@ -114,15 +97,13 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some(attrString))
 
     // mocks
-    val mockDataAccess: DataAccess = mock[DataAccess]
-    val mockCompactEntityQuery = mock[mockDataAccess.CompactEntityQuery]
-    when(mockCompactEntityQuery.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(DBIO.successful(Some(rec)))
-    when(mockDataAccess.getCompactEntityQuery).thenReturn(mockCompactEntityQuery)
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(Some(rec)))
     // provider using mocks
-    val compactEntityProvider = mockingProvider(mockDataAccess)
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(compactEntityProvider.getEntity("nonexistent-type", "nonexistent-name"), Duration.Inf)
+    val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name"), atMost)
 
     val expected = Entity(rec.name,
                           rec.entityType,
@@ -137,16 +118,14 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
   it should "throw EntityNotFoundException if row not found in db" in {
     // mocks
-    val mockDataAccess: DataAccess = mock[DataAccess]
-    val mockCompactEntityQuery = mock[mockDataAccess.CompactEntityQuery]
-    when(mockCompactEntityQuery.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(DBIO.successful(None))
-    when(mockDataAccess.getCompactEntityQuery).thenReturn(mockCompactEntityQuery)
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(None))
     // provider using mocks
-    val compactEntityProvider = mockingProvider(mockDataAccess)
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
     val actual = intercept[EntityNotFoundException] {
-      Await.result(compactEntityProvider.getEntity("nonexistent-type", "nonexistent-name"), Duration.Inf)
+      Await.result(provider.getEntity("nonexistent-type", "nonexistent-name"), atMost)
     }
     actual shouldBe a[EntityNotFoundException]
   }
@@ -171,7 +150,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
     )
     val entity = Entity("name", "type", attributes)
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mock[SlickDataSource])
+    val provider =
+      new CompactEntityProvider(defaultEntityRequestArguments, mock[CompactEntityRepository], slickDataSource)
 
     val actual: Map[AttributeName, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
 
@@ -191,7 +171,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       )
     )
     val entity = Entity("name", "type", attributes)
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mock[SlickDataSource])
+    val provider =
+      new CompactEntityProvider(defaultEntityRequestArguments, mock[CompactEntityRepository], slickDataSource)
 
     val actual: Map[AttributeName, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
 
@@ -207,30 +188,82 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     actual shouldBe expected
   }
 
+  behavior of "replaceReferences"
+
+  it should "skip deletes and upserts when isInsert=true and references are empty" in {
+    // mocks
+    val mockRepository = mock[CompactEntityRepository]
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.replaceReferences(2, Set(), isInsert = true), atMost)
+
+    actual shouldBe (0, 0)
+
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, never()).upsertReferences(any(), any())
+  }
+
+  it should "skip deletes when isInsert=true and non-empty references" in {
+    // mocks
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.upsertReferences(any(), any()))
+      .thenAnswer { invocation =>
+        Future.successful(invocation.getArgument[Set[Long]](1).size)
+      }
+    when(mockRepository.deleteReferences(any(), any()))
+      .thenReturn(Future.successful(Int.MinValue))
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.replaceReferences(2, Set(7, 8, 9), isInsert = true), atMost)
+
+    actual shouldBe (0, 3)
+
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, times(1)).upsertReferences(2, Set(7, 8, 9))
+  }
+
+  it should "skip upserts when isInsert=false and references are empty" in {
+    // mocks
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.deleteReferences(any(), any()))
+      .thenReturn(Future.successful(Int.MinValue))
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.replaceReferences(2, Set(), isInsert = false), atMost)
+
+    actual shouldBe (Int.MinValue, 0)
+
+    verify(mockRepository, times(1)).deleteReferences(2, Set())
+    verify(mockRepository, never()).upsertReferences(any(), any())
+  }
+
+  it should "both delete and upsert when isInsert=false and non-empty references" in {
+    // mocks
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.upsertReferences(any(), any()))
+      .thenAnswer { invocation =>
+        Future.successful(invocation.getArgument[Set[Long]](1).size)
+      }
+    when(mockRepository.deleteReferences(any(), any()))
+      .thenReturn(Future.successful(Int.MinValue))
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.replaceReferences(2, Set(7, 8, 9), isInsert = false), atMost)
+
+    actual shouldBe (Int.MinValue, 3)
+
+    verify(mockRepository, times(1)).deleteReferences(2, Set(7, 8, 9))
+    verify(mockRepository, times(1)).upsertReferences(2, Set(7, 8, 9))
+  }
+
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================
-
-  private def mockingProvider(mockDataAccess: DataAccess): CompactEntityProvider = {
-    // mock for DataSource
-    val mockDataSource = mock[SlickDataSource]
-    when(
-      mockDataSource.inTransaction[Option[CompactEntityRecord]](
-        any[DataAccess => ReadWriteAction[Option[CompactEntityRecord]]],
-        any()
-      )
-    )
-      .thenAnswer { answer =>
-        val innerFunc = answer.getArgument[DataAccess => ReadWriteAction[Option[CompactEntityRecord]]](0)
-        val dbResult = innerFunc(mockDataAccess)
-        dbResult match {
-          case SuccessAction(v) => Future.successful(v)
-          case x                => fail(s"inTransaction mock received wrong result: $x")
-        }
-      }
-
-    // create provider
-    new CompactEntityProvider(defaultEntityRequestArguments, mockDataSource)
-  }
 
 }

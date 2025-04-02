@@ -50,43 +50,44 @@ trait CompactEntityComponent extends LazyLogging {
 
   /** high-level Slick table for ENTITY */
   // TODO CORE-362: delete?
-  class CompactEntityTable(tag: Tag) extends Table[CompactEntityRecord](tag, "ENTITY") {
-    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def name = column[String]("name", O.Length(254))
-    def entityType = column[String]("entity_type", O.Length(254))
-    def workspaceId = column[UUID]("workspace_id")
-    def version = column[Long]("record_version")
-    def deleted = column[Boolean]("deleted")
-    def attributes = column[Option[String]]("attributes")
-
-    def * =
-      (id, name, entityType, workspaceId, version, deleted, attributes) <> (CompactEntityRecord.tupled,
-                                                                            CompactEntityRecord.unapply
-      )
-  }
+//  class CompactEntityTable(tag: Tag) extends Table[CompactEntityRecord](tag, "ENTITY") {
+//    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+//    def name = column[String]("name", O.Length(254))
+//    def entityType = column[String]("entity_type", O.Length(254))
+//    def workspaceId = column[UUID]("workspace_id")
+//    def version = column[Long]("record_version")
+//    def deleted = column[Boolean]("deleted")
+//    def attributes = column[Option[String]]("attributes")
+//
+//    def * =
+//      (id, name, entityType, workspaceId, version, deleted, attributes) <> (CompactEntityRecord.tupled,
+//                                                                            CompactEntityRecord.unapply
+//      )
+//  }
 
   /** high-level Slick table for ENTITY_REFS */
   // TODO CORE-362: delete?
-  class CompactEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
-    def fromId = column[Long]("from_id")
-    def toId = column[Long]("to_id")
-
-    def * =
-      (fromId, toId) <> (RefPointerRecord.tupled, RefPointerRecord.unapply)
-  }
+//  class CompactEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
+//    def fromId = column[Long]("from_id")
+//    def toId = column[Long]("to_id")
+//
+//    def * =
+//      (fromId, toId) <> (RefPointerRecord.tupled, RefPointerRecord.unapply)
+//  }
 
   /** high-level Slick query object for ENTITY */
   // TODO CORE-362: delete?
-  object compactEntitySlickQuery extends TableQuery(new CompactEntityTable(_)) {}
+//  object compactEntitySlickQuery extends TableQuery(new CompactEntityTable(_)) {}
 
   /** high-level Slick query object for ENTITY_REFS */
   // TODO CORE-362: delete?
-  object compactEntityRefSlickQuery extends TableQuery(new CompactEntityRefTable(_)) {}
+//  object compactEntityRefSlickQuery extends TableQuery(new CompactEntityRefTable(_)) {}
 
   /** low-level raw SQL queries for ENTITY */
   // getter and trait allow for easy unit testing
   def getCompactEntityQuery: CompactEntityQuery = compactEntityQuery
   object compactEntityQuery extends CompactEntityQuery
+
   trait CompactEntityQuery extends RawSqlQuery {
     val driver: JdbcProfile = CompactEntityComponent.this.driver
 
@@ -175,6 +176,8 @@ trait CompactEntityComponent extends LazyLogging {
 
     /**
       * Delete from ENTITY_REFS where to_id not in (toIds) and from_id = ?
+      *
+      * Returns the number of rows deleted.
       */
     def deleteReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
       val allValues =
@@ -192,6 +195,8 @@ trait CompactEntityComponent extends LazyLogging {
 
     /**
       * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
+      *
+      * Returns the number of rows upserted.
       */
     def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
       val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
@@ -210,6 +215,14 @@ trait CompactEntityComponent extends LazyLogging {
 
       query.asUpdate
     }
+
+    // ====================================================================================================
+    //  testing helpers
+    // ====================================================================================================
+
+    def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
+      sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
+
   }
 
 }

@@ -44,7 +44,10 @@ import scala.util.Try
   *
   * @param executionContext scala concurrency context
   */
-class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource: SlickDataSource)(implicit
+class CompactEntityProvider(requestArguments: EntityRequestArguments,
+                            repository: CompactEntityRepository,
+                            dataSource: SlickDataSource
+)(implicit
   protected val executionContext: ExecutionContext
 ) extends EntityProvider
     with LazyLogging {
@@ -116,10 +119,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
   override def expressionValidator: ExpressionValidator = ???
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] =
-    dataSource.inTransaction { dataAccess =>
-      val query = dataAccess.getCompactEntityQuery
-      query.getEntity(workspaceId, entityType, entityName)
-    } map {
+    repository.getEntity(workspaceId, entityType, entityName) map {
       case Some(entityRec) => entityRec.toEntity
       case None            => throw new EntityNotFoundException()
     }
@@ -154,6 +154,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
   //  helper methods
   // ====================================================================================================
 
+  def getRepository(dataSource: SlickDataSource) = new CompactEntityRepository(dataSource)
+
   // given an entity, finds all references in that entity, grouped by their attribute names
   protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
     entity.attributes
@@ -167,24 +169,27 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
 
   // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
   // entity
-  // TODO CORE-362: unit tests
-  private def replaceReferences(fromId: Long, toIds: Set[Long], isInsert: Boolean = false): Future[(Int, Int)] = {
+  protected[compact] def replaceReferences(fromId: Long, toIds: Set[Long], isInsert: Boolean): Future[(Int, Int)] = {
     // short-circuit
     if (isInsert && toIds.isEmpty) {
-      return Future.successful((0, 0))
+      Future.successful((0, 0))
     }
-    dataSource.inTransaction { dataAccess =>
-      val query = dataAccess.getCompactEntityQuery
+    dataSource.inTransaction { _ =>
       for {
         // delete any reference pointers that should no longer exist
         deletes <-
           if (isInsert) {
             DBIO.successful(0)
           } else {
-            query.deleteReferences(fromId, toIds)
+            DBIO.from(repository.deleteReferences(fromId, toIds))
           }
         // upsert all reference pointers that do exist
-        upserts <- query.upsertReferences(fromId, toIds)
+        upserts <-
+          if (toIds.isEmpty) {
+            DBIO.successful(0)
+          } else {
+            DBIO.from(repository.upsertReferences(fromId, toIds))
+          }
       } yield (deletes, upserts)
     }
   }
