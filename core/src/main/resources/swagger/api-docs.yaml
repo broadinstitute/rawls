@@ -7055,9 +7055,6 @@ components:
         billingProfileId:
           type: string
           description: the billing profile ID associated with the project
-        cromwellBackend:
-          type: string
-          description: the cromwell backend to use for this billing project
         servicePerimeter:
           type: string
           description: the name of the service perimeter for this billing project (cloudPlatform GCP only)

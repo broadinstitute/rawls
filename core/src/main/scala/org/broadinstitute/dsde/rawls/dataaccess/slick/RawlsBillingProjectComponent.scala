@@ -26,7 +26,6 @@ final case class RawlsBillingProjectRecord(id: UUID,
                                            creationStatus: String,
                                            billingAccount: Option[String],
                                            message: Option[String],
-                                           cromwellBackend: Option[String],
                                            servicePerimeter: Option[String],
                                            googleProjectNumber: Option[String],
                                            invalidBillingAccount: Boolean,
@@ -45,7 +44,6 @@ object RawlsBillingProjectRecord {
       billingProject.status.toString,
       billingProject.billingAccount.map(_.value),
       billingProject.message,
-      billingProject.cromwellBackend.map(_.value),
       billingProject.servicePerimeter.map(_.value),
       billingProject.googleProjectNumber.map(_.value),
       billingProject.invalidBillingAccount,
@@ -63,7 +61,6 @@ object RawlsBillingProjectRecord {
       CreationStatuses.withName(projectRecord.creationStatus),
       projectRecord.billingAccount.map(RawlsBillingAccountName),
       projectRecord.message,
-      projectRecord.cromwellBackend.map(CromwellBackend),
       projectRecord.servicePerimeter.map(ServicePerimeterName),
       projectRecord.googleProjectNumber.map(GoogleProjectNumber),
       projectRecord.invalidBillingAccount,
@@ -141,8 +138,6 @@ trait RawlsBillingProjectComponent {
 
     def message = column[Option[String]]("MESSAGE")
 
-    def cromwellBackend = column[Option[String]]("CROMWELL_BACKEND")
-
     def servicePerimeter = column[Option[String]]("SERVICE_PERIMETER")
 
     def googleProjectNumber = column[Option[String]]("GOOGLE_PROJECT_NUMBER")
@@ -164,7 +159,6 @@ trait RawlsBillingProjectComponent {
              creationStatus,
              billingAccount,
              message,
-             cromwellBackend,
              servicePerimeter,
              googleProjectNumber,
              invalidBillingAccount,

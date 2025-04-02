@@ -72,7 +72,6 @@ case class RawlsBillingProject(
   status: CreationStatuses.CreationStatus,
   billingAccount: Option[RawlsBillingAccountName],
   message: Option[String],
-  cromwellBackend: Option[CromwellBackend] = None,
   servicePerimeter: Option[ServicePerimeterName] = None,
   googleProjectNumber: Option[GoogleProjectNumber] = None,
   invalidBillingAccount: Boolean = false,
@@ -282,7 +281,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat: RootJsonFormat[RawlsGroupMemberList] = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat15(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat14(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat: RootJsonFormat[RawlsBillingAccount] = jsonFormat3(RawlsBillingAccount)
 

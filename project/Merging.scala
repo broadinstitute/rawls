@@ -27,6 +27,7 @@ object Merging {
     case x if x.endsWith("arrow-git.properties")         => MergeStrategy.concat
     case x if x.endsWith("aot.factories")                => MergeStrategy.first
     case x if x.endsWith("public-suffix-list.txt")       => MergeStrategy.first
+    case "META-INF/proguard/concurrent.pro"              => MergeStrategy.concat
     case x                                               => oldStrategy(x)
   }
 }
