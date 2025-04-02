@@ -347,7 +347,7 @@ class LocalEntityProviderSpec
                                  Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeString("222")))
           )
         )
-        val writes = localEntityProvider.batchUpsertEntities(multiUpsert).futureValue
+        val writes = localEntityProvider.batchUpsertEntities(multiUpsert, testContext).futureValue
 
         writes.size shouldBe 2
 
@@ -415,7 +415,7 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -450,7 +450,7 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -484,7 +484,7 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -517,7 +517,7 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -579,7 +579,7 @@ class LocalEntityProviderSpec
 
         // verify the attribute name cache is stale on first access, because of the feature flags
         val entityTypeMetadataResultWithFlags =
-          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
         val addedAttrNamesWithFlags = entityTypeMetadataResultWithFlags("participant").attributeNames
         addedAttrNamesWithFlags shouldNot contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
 
@@ -588,7 +588,7 @@ class LocalEntityProviderSpec
           entityTypeMetadataResultWithFlags(typeName).count shouldBe expectedResultWhenUsingCache(typeName).count
         }
         // now call again, this time without the cache, and make sure the values are updated
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false, testContext)))
         val addedAttrNames = entityTypeMetadataResult("participant").attributeNames
         addedAttrNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
 
@@ -640,7 +640,7 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         // metadata response always contains the union of types found by cache and by full queries
         val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
@@ -695,7 +695,7 @@ class LocalEntityProviderSpec
 
         // verify the new attributes are present in uncached metadata
         val entityTypeMetadataResultBeforeFlags =
-          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         val addedAttrNames = entityTypeMetadataResultBeforeFlags(
           "participant"
@@ -734,7 +734,7 @@ class LocalEntityProviderSpec
 
         // with feature flag set, retrieve metadata again. This time it should use the cache, which will NOT return
         // the added attribute names
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         // metadata response always contains the union of types found by cache and by full queries
         val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
@@ -973,7 +973,7 @@ class LocalEntityProviderSpec
         }
 
         // requesting metadata should update the cache as a side effect
-        localEntityProvider.entityTypeMetadata(true).futureValue
+        localEntityProvider.entityTypeMetadata(true, testContext).futureValue
 
         withClue("cache record should exist after requesting metadata") {
           assert(runAndWait(workspaceFilter.exists.result))
@@ -1003,13 +1003,13 @@ class LocalEntityProviderSpec
 
         // create the first entity with name "myname"
         val entity1 = Entity("myname", "casetest", Map())
-        val created1 = localEntityProvider.createEntity(entity1).futureValue
+        val created1 = localEntityProvider.createEntity(entity1, testContext).futureValue
         created1 shouldBe entity1
 
         // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
         val entity2 = Entity("MyName", "casetest", Map())
         val ex = recoverToExceptionIf[Exception] {
-          localEntityProvider.createEntity(entity2)
+          localEntityProvider.createEntity(entity2, testContext)
         }.futureValue
 
         ex match {
@@ -1039,13 +1039,13 @@ class LocalEntityProviderSpec
 
         // create the first entity with name "myname"
         val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
-        val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+        val created1 = localEntityProvider.batchUpsertEntities(upsert1, testContext).futureValue
         created1.size shouldBe 1
 
         // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
         val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))
         val ex = recoverToExceptionIf[Exception] {
-          localEntityProvider.batchUpsertEntities(upsert2)
+          localEntityProvider.batchUpsertEntities(upsert2, testContext)
         }.futureValue
 
         ex match {

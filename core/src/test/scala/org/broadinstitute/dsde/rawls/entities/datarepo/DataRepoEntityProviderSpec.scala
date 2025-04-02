@@ -98,7 +98,7 @@ class DataRepoEntityProviderSpec
 
     val provider = createTestProvider()
 
-    provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
+    provider.entityTypeMetadata(parentContext = testContext) map { metadata: Map[String, EntityTypeMetadata] =>
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
         ("table1", EntityTypeMetadata(10, "datarepo_row_id", Seq("integer-field", "boolean-field", "timestamp-field"))),
@@ -112,7 +112,7 @@ class DataRepoEntityProviderSpec
   it should "return an empty Map if data repo snapshot has no tables" in {
     val provider = createTestProvider(snapshotModel = createSnapshotModel(List.empty[TableModel]))
 
-    provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
+    provider.entityTypeMetadata(parentContext = testContext) map { metadata: Map[String, EntityTypeMetadata] =>
       assert(metadata.isEmpty, "expected response data to be the empty map")
     }
   }
@@ -153,7 +153,7 @@ class DataRepoEntityProviderSpec
     // set up a provider with a mock that returns exactly one BQ row
     val provider =
       createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))))
-    provider.getEntity("table1", "Row0") map { entity: Entity =>
+    provider.getEntity("table1", "Row0", testContext) map { entity: Entity =>
       // this is the default expected value, should it move to the support trait?
       val expected = Entity(
         "Row0",
@@ -173,7 +173,7 @@ class DataRepoEntityProviderSpec
     val provider = createTestProvider(samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
 
     val futureEx = recoverToExceptionIf[Exception] {
-      provider.getEntity("table1", "Row0")
+      provider.getEntity("table1", "Row0", testContext)
     }
     futureEx map { ex =>
       assertResult(
@@ -191,7 +191,7 @@ class DataRepoEntityProviderSpec
     val provider = createTestProvider() // default behavior returns three rows
 
     val ex = intercept[EntityTypeNotFoundException] {
-      provider.getEntity("this_table_is_unknown", "Row0")
+      provider.getEntity("this_table_is_unknown", "Row0", testContext)
     }
     assertResult("this_table_is_unknown")(ex.requestedType)
   }
@@ -202,7 +202,7 @@ class DataRepoEntityProviderSpec
     )
 
     val futureEx = recoverToExceptionIf[BigQueryException] {
-      provider.getEntity("table1", "Row0")
+      provider.getEntity("table1", "Row0", testContext)
     }
     futureEx map { ex =>
       assertResult("unit test exception message")(ex.getMessage)
@@ -216,7 +216,7 @@ class DataRepoEntityProviderSpec
     val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
 
     val futureEx = recoverToExceptionIf[EntityNotFoundException] {
-      provider.getEntity("table1", "Row0")
+      provider.getEntity("table1", "Row0", testContext)
     }
     futureEx map { ex =>
       assertResult("Entity not found.")(ex.getMessage)
@@ -227,7 +227,7 @@ class DataRepoEntityProviderSpec
     val provider = createTestProvider() // default behavior returns three rows
 
     val futureEx = recoverToExceptionIf[DataEntityException] {
-      provider.getEntity("table1", "Row0")
+      provider.getEntity("table1", "Row0", testContext)
     }
     futureEx map { ex =>
       assertResult("Query succeeded, but returned 3 rows; expected one row.")(ex.getMessage)
