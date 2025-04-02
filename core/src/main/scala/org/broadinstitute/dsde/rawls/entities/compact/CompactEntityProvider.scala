@@ -183,7 +183,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
 
   // given an entity, finds all references in that entity, grouped by their attribute names
   // TODO CORE-362: make visible for unit tests
-  private def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
+  protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
     entity.attributes
       .collect {
         case (name: AttributeName, ref: AttributeEntityReference)         => Seq((name, ref))
@@ -208,12 +208,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
       // TODO CORE-362: use query getter to allow mocking
       // we don't actually care about the referencing attribute name or referenced type&name; reduce to just the referenced ids.
       val currentEntityRefTargets: Set[Long] = foundRefs.values.flatten.map(_.id).toSet
-      logger.trace(s"~~~~~ found ${currentEntityRefTargets.size} ref targets in entity $fromId")
       for {
         // TODO CORE-362: instead of (retrieve all, then calculate diffs, then execute diffs), try doing it all in the db:
         //  - delete from ENTITY_REFS where from_id = $fromId and to_id not in ($currentEntityRefTargets)
         //  - insert into ENTITY_REFS (from_id, to_id) values ($fromId, $currentEntityRefTargets:_*) on duplicate key update from_id=from_id (noop)
-        // TODO CORE-362: remove verbose logging
         // retrieve all existing refs in ENTITY_REFS for this entity; create a set of the target ids
         existingRowsSeq <-
           if (isInsert) {
@@ -223,22 +221,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
           }
         existingRefTargets = existingRowsSeq.toSet
 
-        _ = logger.trace(s"~~~~~ found ${existingRefTargets.size} ref targets in db for entity $fromId")
         // find all target ids in the db that are not in the current entity
         deletes = existingRefTargets diff currentEntityRefTargets
         // find all target ids in the current entity that are not in the db
         inserts = currentEntityRefTargets diff existingRefTargets
         insertPairs = inserts.map(toId => (fromId, toId))
-        _ = logger.trace(
-          s"~~~~~ prepared ${inserts.size} inserts and ${deletes.size} deletes to perform for entity $fromId"
-        )
-        _ = logger.trace(s"~~~~~ inserts: $insertPairs for entity $fromId")
         // insert what needs to be inserted
         insertResult <-
           if (inserts.nonEmpty) { dataAccess.compactEntityRefSlickQuery.map(r => (r.fromId, r.toId)) ++= insertPairs }
           else { slick.dbio.DBIO.successful(0) }
         //        insertResult <- dataAccess.jsonEntityQuery.bulkInsertReferences(fromId, inserts)
-        _ = logger.trace(s"~~~~~ actually inserted ${insertResult} rows for entity $fromId")
         // delete what needs to be deleted
         deleteResult <-
           if (deletes.nonEmpty) {
@@ -246,7 +238,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
               .filter(x => x.fromId === fromId && x.toId.inSetBind(deletes))
               .delete
           } else { slick.dbio.DBIO.successful(0) }
-        _ = logger.trace(s"~~~~~ actually deleted ${deleteResult} rows for entity $fromId")
       } yield foundRefs
     }
   }

@@ -128,7 +128,7 @@ trait CompactEntityComponent extends LazyLogging {
       uniqueResult(selectStatement.as[CompactEntityRecord])
     }
 
-    /** Given a set of entity references, retrieve those entities */
+    /** Given a set of entity references, retrieve those entities. Ignores deleted entities. */
     def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
       // short-circuit
       if (refs.isEmpty) {

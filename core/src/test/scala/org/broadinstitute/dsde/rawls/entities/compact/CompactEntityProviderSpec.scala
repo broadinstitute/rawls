@@ -1,18 +1,34 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import akka.NotUsed
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.base.{ExpressionEvaluationContext, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
+  AttributeEntityReference,
+  AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
+  AttributeRename,
   AttributeString,
+  AttributeUpdateOperations,
+  AttributeValue,
   Entity,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntityTypeMetadata,
+  EntityTypeRename,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
+  SubmissionValidationEntityInputs,
   UserInfo,
   Workspace
 }
@@ -28,6 +44,7 @@ import slick.jdbc.MySQLProfile.api._
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
+import scala.util.Try
 
 class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
@@ -52,6 +69,22 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
   val defaultEntityRequestArguments: EntityRequestArguments =
     EntityRequestArguments(defaultWorkspace, defaultRequestContext)
+
+  // ====================================================================================================
+  // tests for CompactEntityProvider public implementations of EntityProvider methods
+  // ====================================================================================================
+
+  "batchUpdateEntities" should "have tests" is pending
+  "batchUpsertEntities" should "have tests" is pending
+  "copyEntities" should "have tests" is pending
+  "createEntity" should "have tests" is pending
+  "deleteEntities" should "have tests" is pending
+  "deleteEntitiesOfType" should "have tests" is pending
+  "deleteEntityAttributes" should "have tests" is pending
+  "entityTypeMetadata" should "have tests" is pending
+  "evaluateExpression" should "have tests" is pending
+  "evaluateExpressions" should "have tests" is pending
+  "expressionValidator" should "have tests" is pending
 
   behavior of "getEntity"
 
@@ -117,6 +150,66 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     }
     actual shouldBe a[EntityNotFoundException]
   }
+
+  "listEntities" should "have tests" is pending
+  "queryEntities" should "have tests" is pending
+  "queryEntitiesSource" should "have tests" is pending
+  "renameAttribute" should "have tests" is pending
+  "renameEntity" should "have tests" is pending
+  "renameEntityType" should "have tests" is pending
+  "updateEntity" should "have tests" is pending
+
+  // ====================================================================================================
+  // tests for CompactEntityProvider helper methods
+  // ====================================================================================================
+
+  behavior of "findAllReferences"
+
+  it should "return nothing if entity has no references" in {
+    val attributes = Map(
+      AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+      AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+    )
+    val entity = Entity("name", "type", attributes)
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mock[SlickDataSource])
+
+    val actual: Map[AttributeName, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
+
+    actual shouldBe empty
+  }
+
+  it should "find references in the entity's attributes" in {
+    val attributes = Map(
+      AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+      AttributeName.withDefaultNS("baz") -> AttributeNumber(42),
+      AttributeName.withDefaultNS("ref") -> AttributeEntityReference("refTypeA", "refName1"),
+      AttributeName.withDefaultNS("reflist") -> AttributeEntityReferenceList(
+        Seq(
+          AttributeEntityReference("refTypeB", "refName2"),
+          AttributeEntityReference("refTypeB", "refName3")
+        )
+      )
+    )
+    val entity = Entity("name", "type", attributes)
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mock[SlickDataSource])
+
+    val actual: Map[AttributeName, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
+
+    val expected = Map(
+      AttributeName.withDefaultNS("ref") -> Seq(AttributeEntityReference("refTypeA", "refName1")),
+      AttributeName.withDefaultNS("reflist") ->
+        Seq(
+          AttributeEntityReference("refTypeB", "refName2"),
+          AttributeEntityReference("refTypeB", "refName3")
+        )
+    )
+
+    actual shouldBe expected
+  }
+
+  // ====================================================================================================
+  //  helper methods
+  // ====================================================================================================
 
   private def mockingProvider(mockDataAccess: DataAccess): CompactEntityProvider = {
     // mock for DataSource
