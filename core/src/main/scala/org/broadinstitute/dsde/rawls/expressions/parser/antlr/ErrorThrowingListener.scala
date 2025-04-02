@@ -29,8 +29,11 @@ class ErrorThrowingListener extends BaseErrorListener {
                            msg: String,
                            e: RecognitionException
   ): Unit = {
-    val errorMsg =
+    val errorMsg = if (msg.startsWith("mismatched input")) {
+      s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg. For instance strings should be formatted as \"string\"."
+    } else {
       s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg"
+    }
     throw new RawlsException(errorMsg, new ParseCancellationException(errorMsg, e))
   }
   /*_*/
