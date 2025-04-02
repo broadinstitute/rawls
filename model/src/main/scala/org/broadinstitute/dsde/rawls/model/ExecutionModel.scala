@@ -337,12 +337,6 @@ case class ActiveSubmission(
   submission: Submission
 )
 
-case class WorkflowQueueStatusResponse(
-  estimatedQueueTimeMS: Long, // milliseconds to drain queue
-  workflowsBeforeNextUserWorkflow: Int,
-  workflowCountsByStatus: StatusCounts
-)
-
 case class WorkflowQueueStatusByUserResponse(
   statuses: StatusCounts,
   users: StatusCountsByUser,
@@ -558,10 +552,6 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val CallMetadataFormat: RootJsonFormat[CallMetadata] = jsonFormat14(CallMetadata)
 
   implicit val ActiveSubmissionFormat: RootJsonFormat[ActiveSubmission] = jsonFormat3(ActiveSubmission)
-
-  implicit val WorkflowQueueStatusResponseFormat: RootJsonFormat[WorkflowQueueStatusResponse] = jsonFormat3(
-    WorkflowQueueStatusResponse
-  )
 
   implicit val UserCommentUpdateOperationFormat: RootJsonFormat[UserCommentUpdateOperation] = jsonFormat1(
     UserCommentUpdateOperation
