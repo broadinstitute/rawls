@@ -30,7 +30,7 @@ class ErrorThrowingListener extends BaseErrorListener {
                            e: RecognitionException
   ): Unit = {
     val errorMsg = if (msg.startsWith("mismatched input")) {
-      s"Error while parsing the expression. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as {\"value1\", \"value2\"}. For a file, format input as \"gs://\". For a boolean, format input as `true` or `false`."
+      "Error while parsing the expression. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as {\"value1\", \"value2\"}. For a file, format input as \"gs://\". For a boolean, format input as `true` or `false`."
     } else {
       s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg"
     }
