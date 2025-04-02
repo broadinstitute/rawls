@@ -19,6 +19,7 @@ import slick.jdbc.MySQLProfile.api._
 /**
   * model class for rows in the ENTITY table, used for high-level Slick operations
   */
+// TODO CORE-362: move models to another file?
 case class CompactEntityRecord(id: Long,
                                name: String,
                                entityType: String,
@@ -48,6 +49,7 @@ trait CompactEntityComponent extends LazyLogging {
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
   /** high-level Slick table for ENTITY */
+  // TODO CORE-362: delete?
   class CompactEntityTable(tag: Tag) extends Table[CompactEntityRecord](tag, "ENTITY") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def name = column[String]("name", O.Length(254))
@@ -64,6 +66,7 @@ trait CompactEntityComponent extends LazyLogging {
   }
 
   /** high-level Slick table for ENTITY_REFS */
+  // TODO CORE-362: delete?
   class CompactEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
     def fromId = column[Long]("from_id")
     def toId = column[Long]("to_id")
@@ -73,9 +76,11 @@ trait CompactEntityComponent extends LazyLogging {
   }
 
   /** high-level Slick query object for ENTITY */
+  // TODO CORE-362: delete?
   object compactEntitySlickQuery extends TableQuery(new CompactEntityTable(_)) {}
 
   /** high-level Slick query object for ENTITY_REFS */
+  // TODO CORE-362: delete?
   object compactEntityRefSlickQuery extends TableQuery(new CompactEntityRefTable(_)) {}
 
   /** low-level raw SQL queries for ENTITY */
@@ -128,41 +133,83 @@ trait CompactEntityComponent extends LazyLogging {
       uniqueResult(selectStatement.as[CompactEntityRecord])
     }
 
-    /** Given a set of entity references, retrieve those entities. Ignores deleted entities. */
-    def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
+    /** Given a set of entity references, return the ids being referenced.
+      * Ignores deleted entities.
+      */
+    // should this return CompactEntityRefRecord instead of Long? Do we ever need to know which ids
+    // belong to which reference?
+    def getReferencedIds(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[Long]] =
       // short-circuit
       if (refs.isEmpty) {
-        DBIO.successful(Seq.empty[CompactEntityRefRecord])
+        DBIO.successful(Seq())
       } else {
         // group the entity type/name pairs by type
         val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
 
-        // build select statements for each type
-        val queryParts: Iterable[SQLActionBuilder] = groupedReferences.map {
+        // build clauses for the type/name pairs
+        val clauses: Iterable[SQLActionBuilder] = groupedReferences.map {
           case (entityType: String, entityNames: Set[String]) =>
             // build the "IN" clause values
             val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
-
-            // TODO CORE-362: check query plan for this and make sure it is properly using indexes
-            //   UNION query does use indexes for each select; but it also requires a temporary table to
-            //   combine the results, and we can probably do better. `where (entity_type, name) in ((?, ?), (?, ?))
-            //   looks like it works well
-            // TODO CORE-362: include `where deleted=0`? Make that an argument?
             concatSqlActions(
-              sql"""select id, name, entity_type
-                from ENTITY where workspace_id = $workspaceId and entity_type = $entityType
-                and name in (""",
+              sql""" entity_type = $entityType and name in (""",
               entityNamesSql,
-              sql")"
+              sql") "
             )
         }
 
-        // union the select statements together
-        val unionQuery = reduceSqlActionsWithDelim(queryParts.toSeq, sql" union ")
+        // build the overall query
+        val query = concatSqlActions(
+          sql"""select id
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+          reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
+          sql""" );"""
+        )
 
         // execute
-        unionQuery.as[CompactEntityRefRecord](getJsonEntityRefRecord)
+        query.as[Long]
       }
+
+    /**
+      * Delete from ENTITY_REFS where to_id not in (toIds) and from_id = ?
+      */
+    def deleteReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
+      val allValues =
+        reduceSqlActionsWithDelim(toIds.map(x => sql"$x").toSeq, sql",")
+
+      val query = concatSqlActions(
+        sql"""delete from ENTITY_REFS
+           where from_id = $fromId
+           and to_ids not in (""",
+        allValues,
+        sql""");"""
+      )
+      query.asUpdate
+    }
+
+    /**
+      * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
+      */
+    def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
+      val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
+        sql"($fromId,$toId)"
+      }
+      val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",\n")
+
+      val query = concatSqlActions(
+        sql"""insert into ENTITY_REFS(from_id, to_id)
+              values (
+              """,
+        allInsertValues,
+        sql"""
+             ) on duplicate key update from_id=from_id;"""
+      )
+
+      query.asUpdate
+    }
   }
 
 }

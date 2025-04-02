@@ -4,11 +4,14 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityRefRecord
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityNotFoundException,
+  EntityReferenceNotFoundException
+}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
@@ -65,13 +68,20 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = ???
 
-  override def createEntity(entity: Entity): Future[Entity] =
+  // TODO CORE-362: unit tests
+  override def createEntity(entity: Entity): Future[Entity] = {
+    // find all references in this entity
+    val refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
+    // find all unique references in this entity
+    val uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
+
     dataSource.inTransaction { dataAccess =>
       val query = dataAccess.getCompactEntityQuery
       for {
-        // find and validate all references in the entity-to-be-saved
-        // TODO CORE-362 consider doing all the validation in the db; don't return the ref rows; just do an exists()
-        referenceTargets <- DBIO.from(validateReferences(entity))
+        // verify that all references in the entity-to-be-saved actually exist
+        referencedIds <- query.getReferencedIds(workspaceId, uniqueRefs)
+        _ = if (uniqueRefs.size != referencedIds.size)
+          throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
         _ <- query.createEntity(workspaceId, entity)
         // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
@@ -80,9 +90,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
         savedEntityRecordOption <- query.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
         // save all references from this entity to other entities
-        _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referenceTargets, isInsert = true))
+        _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true))
       } yield savedEntityRecord.toEntity
     }
+  }
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 
@@ -143,46 +154,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
   //  helper methods
   // ====================================================================================================
 
-  // given potential references from an entity, verify that the reference targets all exist,
-  // and return their ids.
-  private def validateReferences(entity: Entity): Future[Map[AttributeName, Seq[CompactEntityRefRecord]]] = {
-    // find all refs in the entity
-    val refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
-
-    // short-circuit
-    if (refs.isEmpty) {
-      Future.successful(Map())
-    } else {
-      // validate all refs
-      val allRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
-
-      dataSource.inTransaction { dataAccess =>
-        val query = dataAccess.getCompactEntityQuery
-        query.getEntityRefs(workspaceId, allRefs) map { foundRefs =>
-          if (foundRefs.size != allRefs.size) {
-            throw new RuntimeException("Did not find all references")
-          }
-          // convert the foundRefs to a map for easier lookup
-          val foundMap: Map[(String, String), CompactEntityRefRecord] = foundRefs.map { foundRef =>
-            ((foundRef.entityType, foundRef.name), foundRef)
-          }.toMap
-
-          // return all the references found in this entity, mapped to the ids they are referencing
-          refs.map { case (name: AttributeName, refs: Seq[AttributeEntityReference]) =>
-            val refRecords: Seq[CompactEntityRefRecord] = refs.map(ref =>
-              foundMap.getOrElse((ref.entityType, ref.entityName),
-                                 throw new RuntimeException("unexpected; couldn't find ref")
-              )
-            )
-            (name, refRecords)
-          }
-        }
-      }
-    }
-  }
-
   // given an entity, finds all references in that entity, grouped by their attribute names
-  // TODO CORE-362: make visible for unit tests
   protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
     entity.attributes
       .collect {
@@ -193,52 +165,27 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, dataSource
       .toSeq
       .groupMap(_._1)(_._2)
 
-  // given already-validated references, including target ids, update the ENTITY_REFS table for a given source
+  // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
   // entity
-  private def replaceReferences(fromId: Long,
-                                foundRefs: Map[AttributeName, Seq[CompactEntityRefRecord]],
-                                isInsert: Boolean = false
-  ): Future[Map[AttributeName, Seq[CompactEntityRefRecord]]] = {
+  // TODO CORE-362: unit tests
+  private def replaceReferences(fromId: Long, toIds: Set[Long], isInsert: Boolean = false): Future[(Int, Int)] = {
     // short-circuit
-    if (isInsert && foundRefs.isEmpty) {
-      return Future.successful(Map())
+    if (isInsert && toIds.isEmpty) {
+      return Future.successful((0, 0))
     }
     dataSource.inTransaction { dataAccess =>
-      import dataAccess.driver.api._
-      // TODO CORE-362: use query getter to allow mocking
-      // we don't actually care about the referencing attribute name or referenced type&name; reduce to just the referenced ids.
-      val currentEntityRefTargets: Set[Long] = foundRefs.values.flatten.map(_.id).toSet
+      val query = dataAccess.getCompactEntityQuery
       for {
-        // TODO CORE-362: instead of (retrieve all, then calculate diffs, then execute diffs), try doing it all in the db:
-        //  - delete from ENTITY_REFS where from_id = $fromId and to_id not in ($currentEntityRefTargets)
-        //  - insert into ENTITY_REFS (from_id, to_id) values ($fromId, $currentEntityRefTargets:_*) on duplicate key update from_id=from_id (noop)
-        // retrieve all existing refs in ENTITY_REFS for this entity; create a set of the target ids
-        existingRowsSeq <-
+        // delete any reference pointers that should no longer exist
+        deletes <-
           if (isInsert) {
-            slick.dbio.DBIO.successful(Seq.empty[Long])
+            DBIO.successful(0)
           } else {
-            dataAccess.compactEntityRefSlickQuery.filter(_.fromId === fromId).map(_.toId).result
+            query.deleteReferences(fromId, toIds)
           }
-        existingRefTargets = existingRowsSeq.toSet
-
-        // find all target ids in the db that are not in the current entity
-        deletes = existingRefTargets diff currentEntityRefTargets
-        // find all target ids in the current entity that are not in the db
-        inserts = currentEntityRefTargets diff existingRefTargets
-        insertPairs = inserts.map(toId => (fromId, toId))
-        // insert what needs to be inserted
-        insertResult <-
-          if (inserts.nonEmpty) { dataAccess.compactEntityRefSlickQuery.map(r => (r.fromId, r.toId)) ++= insertPairs }
-          else { slick.dbio.DBIO.successful(0) }
-        //        insertResult <- dataAccess.jsonEntityQuery.bulkInsertReferences(fromId, inserts)
-        // delete what needs to be deleted
-        deleteResult <-
-          if (deletes.nonEmpty) {
-            dataAccess.compactEntityRefSlickQuery
-              .filter(x => x.fromId === fromId && x.toId.inSetBind(deletes))
-              .delete
-          } else { slick.dbio.DBIO.successful(0) }
-      } yield foundRefs
+        // upsert all reference pointers that do exist
+        upserts <- query.upsertReferences(fromId, toIds)
+      } yield (deletes, upserts)
     }
   }
 
