@@ -146,7 +146,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       if (entRefs.isEmpty) {
         Future.successful(Set.empty)
       } else {
-        traceFutureWithParent("getWorkspaceContextAndPermissions", localContext) { _ =>
+        traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
                                               SamWorkspaceActions.write,
                                               Some(WorkspaceAttributeSpecs(all = false))
@@ -488,7 +488,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): Future[Int] = traceFutureWithParent("EntityService.renameAttribute", ctx) { localContext =>
     withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
       for {
-        workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx) { _ =>
+        workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
                                               SamWorkspaceActions.write,
                                               Some(WorkspaceAttributeSpecs(all = false))
@@ -497,7 +497,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
           entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
         }
-        result <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+        result <- traceFutureWithParent("EntityProvider.renameAttribute", localContext) { s =>
           entityProvider.renameAttribute(entityType, oldAttributeName, attributeRenameRequest, s)
         }
       } yield result
