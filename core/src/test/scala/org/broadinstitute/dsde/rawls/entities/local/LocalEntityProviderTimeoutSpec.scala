@@ -75,7 +75,8 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
     "enforce on deleteEntities" in withLocalEntityProviderTestDatabase { dataSource =>
       lockedEntitiesTest(dataSource, a[MySQLTimeoutException]) { localEntityProvider =>
         localEntityProvider.deleteEntities(
-          Seq(AttributeEntityReference(entityType = "unitTestType", entityName = "deleteTimeoutTest")), testContext
+          Seq(AttributeEntityReference(entityType = "unitTestType", entityName = "deleteTimeoutTest")),
+          testContext
         )
       }
     }

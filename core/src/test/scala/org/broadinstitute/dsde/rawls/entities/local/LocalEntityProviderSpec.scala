@@ -415,7 +415,8 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
+        val entityTypeMetadataResult =
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -450,7 +451,8 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
+        val entityTypeMetadataResult =
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -484,7 +486,8 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false, testContext)))
+        val entityTypeMetadataResult =
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false, testContext)))
 
         val typeCountCache =
           runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
@@ -588,7 +591,8 @@ class LocalEntityProviderSpec
           entityTypeMetadataResultWithFlags(typeName).count shouldBe expectedResultWhenUsingCache(typeName).count
         }
         // now call again, this time without the cache, and make sure the values are updated
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false, testContext)))
+        val entityTypeMetadataResult =
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false, testContext)))
         val addedAttrNames = entityTypeMetadataResult("participant").attributeNames
         addedAttrNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
 
@@ -640,7 +644,8 @@ class LocalEntityProviderSpec
           )
         )
 
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
+        val entityTypeMetadataResult =
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         // metadata response always contains the union of types found by cache and by full queries
         val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
@@ -734,7 +739,8 @@ class LocalEntityProviderSpec
 
         // with feature flag set, retrieve metadata again. This time it should use the cache, which will NOT return
         // the added attribute names
-        val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
+        val entityTypeMetadataResult =
+          runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true, testContext)))
 
         // metadata response always contains the union of types found by cache and by full queries
         val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet

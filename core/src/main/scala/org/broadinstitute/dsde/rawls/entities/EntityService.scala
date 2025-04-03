@@ -64,7 +64,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                                 Some(WorkspaceAttributeSpecs(all = false))
             )
           }
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
+          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+            entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+          }
           result <- traceFutureWithParent("EntityProvider.createEntity", localContext) { s =>
             entityProvider.createEntity(entity, s)
           }
@@ -77,16 +79,20 @@ class EntityService(protected val ctx: RawlsRequestContext,
                 entityName: String,
                 dataReference: Option[DataReferenceName],
                 billingProject: Option[GoogleProjectId]
-  ): Future[Entity] = {
+  ): Future[Entity] =
     traceFutureWithParent("EntityService.getEntity", ctx) { localContext =>
       traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
         getV2WorkspaceContextAndPermissions(workspaceName,
-          SamWorkspaceActions.read,
-          Some(WorkspaceAttributeSpecs(all = false))
+                                            SamWorkspaceActions.read,
+                                            Some(WorkspaceAttributeSpecs(all = false))
         )
       } flatMap { workspaceContext =>
         val entityFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s, dataReference, billingProject)) }
+          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+            entityManager.resolveProviderFuture(
+              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+            )
+          }
           entity <- traceFutureWithParent("EntityProvider.getEntity", localContext) { s =>
             entityProvider.getEntity(entityType, entityName, s)
           }
@@ -103,34 +109,38 @@ class EntityService(protected val ctx: RawlsRequestContext,
           .recover(bigQueryRecover)
       }
     }
-  }
 
   def updateEntity(workspaceName: WorkspaceName,
                    entityType: String,
                    entityName: String,
                    operations: Seq[AttributeUpdateOperation]
-  ): Future[Entity] = {
+  ): Future[Entity] =
     traceFutureWithParent("EntityService.updateEntity", ctx) { localContext =>
       withAttributeNamespaceCheck(operations.map(_.name)) {
         for {
           workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
             getV2WorkspaceContextAndPermissions(workspaceName,
-              SamWorkspaceActions.write,
-              Some(WorkspaceAttributeSpecs(all = false))
+                                                SamWorkspaceActions.write,
+                                                Some(WorkspaceAttributeSpecs(all = false))
             )
           }
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
-          result <- traceFutureWithParent("EntityProvider.updateEntity", localContext) { s => entityProvider.updateEntity(entityType, entityName, operations, s) }
+          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+            entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+          }
+          result <- traceFutureWithParent("EntityProvider.updateEntity", localContext) { s =>
+            entityProvider.updateEntity(entityType, entityName, operations, s)
+          }
         } yield result
-      }.recover(sqlLoggingRecover(s"updateEntity: $workspaceName $entityType/$entityName ${operations.size} operations"))
+      }.recover(
+        sqlLoggingRecover(s"updateEntity: $workspaceName $entityType/$entityName ${operations.size} operations")
+      )
     }
-  }
 
   def deleteEntities(workspaceName: WorkspaceName,
                      entRefs: Seq[AttributeEntityReference],
                      dataReference: Option[DataReferenceName],
                      billingProject: Option[GoogleProjectId]
-  ): Future[Set[AttributeEntityReference]] = {
+  ): Future[Set[AttributeEntityReference]] =
     traceFutureWithParent("EntityService.deleteEntities", ctx) { localContext =>
       // short-circuit: if caller requested to delete nothing, then we do nothing
       if (entRefs.isEmpty) {
@@ -138,12 +148,16 @@ class EntityService(protected val ctx: RawlsRequestContext,
       } else {
         traceFutureWithParent("getWorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
-            SamWorkspaceActions.write,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.write,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         } flatMap { workspaceContext =>
           val deleteFuture = for {
-            entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s, dataReference, billingProject)) }
+            entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+              entityManager.resolveProviderFuture(
+                EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+              )
+            }
             _ <- traceFutureWithParent("entityProvider.deleteEntities", localContext) { s =>
               entityProvider.deleteEntities(entRefs, s)
             }
@@ -158,7 +172,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
       }
     }
-  }
 
   def deleteEntitiesOfType(workspaceName: WorkspaceName,
                            entityType: String,
@@ -168,13 +181,19 @@ class EntityService(protected val ctx: RawlsRequestContext,
     traceFutureWithParent("EntityService.deleteEntitiesOfType", ctx) { localContext =>
       traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
         getV2WorkspaceContextAndPermissions(workspaceName,
-          SamWorkspaceActions.write,
-          Some(WorkspaceAttributeSpecs(all = false))
+                                            SamWorkspaceActions.write,
+                                            Some(WorkspaceAttributeSpecs(all = false))
         )
       } flatMap { workspaceContext =>
         val deleteFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s, dataReference, billingProject)) }
-          numberOfEntitiesDeleted <- traceFutureWithParent("EntityProvider.deleteEntitiesOfType", localContext) { s => entityProvider.deleteEntitiesOfType(entityType, s) }
+          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+            entityManager.resolveProviderFuture(
+              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+            )
+          }
+          numberOfEntitiesDeleted <- traceFutureWithParent("EntityProvider.deleteEntitiesOfType", localContext) { s =>
+            entityProvider.deleteEntitiesOfType(entityType, s)
+          }
         } yield numberOfEntitiesDeleted
 
         deleteFuture
@@ -196,70 +215,88 @@ class EntityService(protected val ctx: RawlsRequestContext,
                              entityType: String,
                              attributeNames: Set[AttributeName]
   ): Future[Unit] =
-    traceFutureWithParent("deleteEntityAttributes", ctx) { localContext => (for {
-      workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
-        getV2WorkspaceContextAndPermissions(workspaceName,
-          SamWorkspaceActions.write,
-          Some(WorkspaceAttributeSpecs(all = false))
-        )
-      }
-      entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
-      result <- traceFutureWithParent("EntityProvider.deleteEntityAttributes", localContext) { s => entityProvider.deleteEntityAttributes(entityType, attributeNames, s) }
-    } yield result)
-      .recover(
-        sqlLoggingRecover(s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names")
-      )
-    }
-
-  def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
-    traceFutureWithParent("renameEntity", ctx) { localContext =>
+    traceFutureWithParent("EntityService.deleteEntityAttributes", ctx) { localContext =>
       (for {
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
-            SamWorkspaceActions.write,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.write,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
-        result <- traceFutureWithParent("EntityProvider.renameEntity", localContext) { s => entityProvider.renameEntity(entityType, entityName, newName, s) }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+        }
+        result <- traceFutureWithParent("EntityProvider.deleteEntityAttributes", localContext) { s =>
+          entityProvider.deleteEntityAttributes(entityType, attributeNames, s)
+        }
+      } yield result)
+        .recover(
+          sqlLoggingRecover(
+            s"deleteEntityAttributes: $workspaceName $entityType ${attributeNames.size} attribute names"
+          )
+        )
+    }
+
+  def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
+    traceFutureWithParent("EntityService.renameEntity", ctx) { localContext =>
+      (for {
+        workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
+          getV2WorkspaceContextAndPermissions(workspaceName,
+                                              SamWorkspaceActions.write,
+                                              Some(WorkspaceAttributeSpecs(all = false))
+          )
+        }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+        }
+        result <- traceFutureWithParent("EntityProvider.renameEntity", localContext) { s =>
+          entityProvider.renameEntity(entityType, entityName, newName, s)
+        }
       } yield result).recover(
         sqlLoggingRecover(s"renameEntity: $workspaceName $entityType $entityName")
       )
     }
 
-  def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
-    traceFutureWithParent("renameEntityType", ctx) { localContext =>
+  def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] =
+    traceFutureWithParent("EntityService.renameEntityType", ctx) { localContext =>
       validateEntityType(renameInfo.newName)
       (for {
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
-            SamWorkspaceActions.write,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.write,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
-        result <- traceFutureWithParent("EntityProvider.renameEntityType", localContext) { s => entityProvider.renameEntityType(oldName, renameInfo, s) }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+        }
+        result <- traceFutureWithParent("EntityProvider.renameEntityType", localContext) { s =>
+          entityProvider.renameEntityType(oldName, renameInfo, s)
+        }
       } yield result).recover(
         sqlLoggingRecover(s"renameEntityType: $workspaceName $workspaceName $oldName")
       )
     }
-  }
 
   def evaluateExpression(workspaceName: WorkspaceName,
                          entityType: String,
                          entityName: String,
                          expression: String
   ): Future[Seq[AttributeValue]] =
-    traceFutureWithParent("evaluateExpression", ctx) { localContext =>
+    traceFutureWithParent("EntityService.evaluateExpression", ctx) { localContext =>
       (for {
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
-            SamWorkspaceActions.read,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.read,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
-        result <- traceFutureWithParent("EntityProvider.evaluateExpression", localContext) { s => entityProvider.evaluateExpression(entityType, entityName, expression, s) }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+        }
+        result <- traceFutureWithParent("EntityProvider.evaluateExpression", localContext) { s =>
+          entityProvider.evaluateExpression(entityType, entityName, expression, s)
+        }
       } yield result).recover(
         sqlLoggingRecover(s"evaluateExpression: $workspaceName $entityType $entityName $expression")
       )
@@ -270,14 +307,22 @@ class EntityService(protected val ctx: RawlsRequestContext,
                          billingProject: Option[GoogleProjectId],
                          useCache: Boolean
   ): Future[Map[String, EntityTypeMetadata]] =
-    traceFutureWithParent("entityTypeMetadata", ctx) { localContext =>
-      (traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>  getV2WorkspaceContextAndPermissions(workspaceName,
-        SamWorkspaceActions.read,
-        Some(WorkspaceAttributeSpecs(all = false))
-      )} flatMap { workspaceContext =>
+    traceFutureWithParent("EntityService.entityTypeMetadata", ctx) { localContext =>
+      (traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
+        getV2WorkspaceContextAndPermissions(workspaceName,
+                                            SamWorkspaceActions.read,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+        )
+      } flatMap { workspaceContext =>
         val metadataFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s, dataReference, billingProject)) }
-          metadata <- traceFutureWithParent("EntityProvider.entityTypeMetadata", localContext) { s => entityProvider.entityTypeMetadata(useCache, s) }
+          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+            entityManager.resolveProviderFuture(
+              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+            )
+          }
+          metadata <- traceFutureWithParent("EntityProvider.entityTypeMetadata", localContext) { s =>
+            entityProvider.entityTypeMetadata(useCache, s)
+          }
         } yield metadata
 
         metadataFuture.recover(bigQueryRecover)
@@ -287,15 +332,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[Source[Entity, NotUsed]] =
-    traceFutureWithParent("listEntities", ctx) { localContext =>
+    traceFutureWithParent("EntityService.listEntities", ctx) { localContext =>
       (for {
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
-            SamWorkspaceActions.read,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.read,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+        }
         result = entityProvider.listEntities(entityType)
       } yield result).recover(
         sqlLoggingRecover(s"listEntities: $workspaceName $entityType")
@@ -307,56 +354,70 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           entityType: String,
                           query: EntityQuery,
                           billingProject: Option[GoogleProjectId]
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
-    traceFutureWithParent("queryEntitiesSource", ctx) { localContext =>
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    traceFutureWithParent("EntityService.queryEntitiesSource", ctx) { localContext =>
       if (query.pageSize > pageSizeLimit) {
         throw new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $pageSizeLimit")
         )
       }
 
-      traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ => getV2WorkspaceContextAndPermissions(workspaceName,
-        SamWorkspaceActions.read,
-        Some(WorkspaceAttributeSpecs(all = false))
-      )} flatMap { workspaceContext =>
+      traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
+        getV2WorkspaceContextAndPermissions(workspaceName,
+                                            SamWorkspaceActions.read,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+        )
+      } flatMap { workspaceContext =>
         val queryFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s, dataReference, billingProject)) }
-          metadataAndEntitySource <- traceFutureWithParent("EntityProvider.queryEntitiesSource", localContext) { s => entityProvider.queryEntitiesSource(entityType, query, s) }
+          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+            entityManager.resolveProviderFuture(
+              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+            )
+          }
+          metadataAndEntitySource <- traceFutureWithParent("EntityProvider.queryEntitiesSource", localContext) { s =>
+            entityProvider.queryEntitiesSource(entityType, query, s)
+          }
         } yield metadataAndEntitySource
 
         queryFuture.recover(bigQueryRecover)
       }
     }
-  }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, linkExistingEntities: Boolean): Future[EntityCopyResponse] =
-    traceFutureWithParent("copyEntities", ctx) { localContext =>
+    traceFutureWithParent("EntityService.copyEntities", ctx) { localContext =>
       (for {
         destWsCtx <- traceFutureWithParent("getV2WorkspaceContextAndPermissions destWs", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
-            SamWorkspaceActions.write,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.write,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
         sourceWsCtx <- traceFutureWithParent("getV2WorkspaceContextAndPermissions sourceWs", localContext) { _ =>
           getV2WorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,
-            SamWorkspaceActions.read,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.read,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        sourceAD <- traceFutureWithParent("getSourceAuthDomain", localContext) { s => samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWsCtx.workspaceId, s) }
-        destAD <- traceFutureWithParent("getDestAuthDomain", localContext) { s => samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWsCtx.workspaceId, s) }
+        sourceAD <- traceFutureWithParent("getSourceAuthDomain", localContext) { s =>
+          samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWsCtx.workspaceId, s)
+        }
+        destAD <- traceFutureWithParent("getDestAuthDomain", localContext) { s =>
+          samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWsCtx.workspaceId, s)
+        }
         _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(destWsCtx, s, None, None)) }
-        entityCopyResponse <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityProvider
-          .copyEntities(sourceWsCtx,
-            destWsCtx,
-            entityCopyDef.entityType,
-            entityCopyDef.entityNames,
-            linkExistingEntities,
-            s
-          )
-          .recover(bigQueryRecover)
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(destWsCtx, s, None, None))
+        }
+        entityCopyResponse <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityProvider
+            .copyEntities(sourceWsCtx,
+                          destWsCtx,
+                          entityCopyDef.entityType,
+                          entityCopyDef.entityNames,
+                          linkExistingEntities,
+                          s
+            )
+            .recover(bigQueryRecover)
         }
       } yield entityCopyResponse)
         .recover(
@@ -371,17 +432,27 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                   billingProject: Option[GoogleProjectId],
                                   parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]] =
-    traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext) { _ => getV2WorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
-    ) } flatMap { workspaceContext =>
+    traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext) { _ =>
+      getV2WorkspaceContextAndPermissions(workspaceName,
+                                          SamWorkspaceActions.write,
+                                          Some(WorkspaceAttributeSpecs(all = false))
+      )
+    } flatMap { workspaceContext =>
       for {
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", parentContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s, dataReference, billingProject)) }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", parentContext) { s =>
+          entityManager.resolveProviderFuture(
+            EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+          )
+        }
         entities <-
           if (upsert) {
-            traceFutureWithParent("EntityProvider.batchUpsertEntities", parentContext) { s => entityProvider.batchUpsertEntities(entityUpdates, s) }
+            traceFutureWithParent("EntityProvider.batchUpsertEntities", parentContext) { s =>
+              entityProvider.batchUpsertEntities(entityUpdates, s)
+            }
           } else {
-            traceFutureWithParent("EntityProvider.batchUpdateEntities", parentContext) { s => entityProvider.batchUpdateEntities(entityUpdates, s) }
+            traceFutureWithParent("EntityProvider.batchUpdateEntities", parentContext) { s =>
+              entityProvider.batchUpdateEntities(entityUpdates, s)
+            }
           }
       } yield entities
     }
@@ -391,7 +462,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
-    traceFutureWithParent("batchUpdateEntities", ctx) { s =>
+    traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
         .recover(
           sqlLoggingRecover(s"batchUpdateEntities: $workspaceName ${entityUpdates.size} updates")
@@ -403,7 +474,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
-    traceFutureWithParent("batchUpsertEntities", ctx) { s =>
+    traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
         .recover(
           sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
@@ -414,17 +485,21 @@ class EntityService(protected val ctx: RawlsRequestContext,
                       entityType: String,
                       oldAttributeName: AttributeName,
                       attributeRenameRequest: AttributeRename
-  ): Future[Int] = traceFutureWithParent("renameAttribute", ctx) { localContext =>
+  ): Future[Int] = traceFutureWithParent("EntityService.renameAttribute", ctx) { localContext =>
     withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
       for {
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", ctx) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
-            SamWorkspaceActions.write,
-            Some(WorkspaceAttributeSpecs(all = false))
+                                              SamWorkspaceActions.write,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s)) }
-        result <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s => entityProvider.renameAttribute(entityType, oldAttributeName, attributeRenameRequest, s) }
+        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
+        }
+        result <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+          entityProvider.renameAttribute(entityType, oldAttributeName, attributeRenameRequest, s)
+        }
       } yield result
     }.recover(
       sqlLoggingRecover(s"renameAttribute: $workspaceName $oldAttributeName $attributeRenameRequest")
