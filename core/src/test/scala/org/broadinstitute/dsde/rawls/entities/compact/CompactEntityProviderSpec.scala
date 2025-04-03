@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, DbResource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
@@ -28,6 +28,7 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
+// TODO CORE-362: API-level or service-level equivalence test for LocalEntityProvider vs. CompactEntityProvider?
 class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
@@ -62,7 +63,210 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
   "batchUpdateEntities" should "have tests" is pending
   "batchUpsertEntities" should "have tests" is pending
   "copyEntities" should "have tests" is pending
-  "createEntity" should "have tests" is pending
+
+  behavior of "createEntity"
+
+  it should "persist an entity with no attributes" in {
+    val entityToCreate = Entity("name", "type", Map())
+    val createdEntityRec =
+      CompactEntityRecord(42,
+                          entityToCreate.name,
+                          entityToCreate.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("{}")
+      )
+
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getReferencedIds(any(), any())).thenReturn(Future.successful(Seq()))
+    when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(Some(createdEntityRec)))
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.createEntity(entityToCreate), atMost)
+
+    actual shouldBe entityToCreate
+
+    verify(mockRepository, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                               entityToCreate.entityType,
+                                               entityToCreate.name
+    )
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, never()).upsertReferences(any(), any())
+  }
+
+  it should "persist an entity with simple attributes" in {
+    val entityToCreate = Entity("name",
+                                "type",
+                                Map(
+                                  AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                                  AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                                )
+    )
+    val createdEntityRec =
+      CompactEntityRecord(42,
+                          entityToCreate.name,
+                          entityToCreate.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":123,"foo":"bar"}""")
+      )
+
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getReferencedIds(any(), any())).thenReturn(Future.successful(Seq()))
+    when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(Some(createdEntityRec)))
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.createEntity(entityToCreate), atMost)
+
+    actual shouldBe entityToCreate
+
+    verify(mockRepository, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                               entityToCreate.entityType,
+                                               entityToCreate.name
+    )
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, never()).upsertReferences(any(), any())
+  }
+
+  it should "persist an entity with references" in {
+    val entityToCreate = Entity(
+      "name",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference("referencedType", "referencedName0"),
+        AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("referencedType", "referencedName1"),
+            AttributeEntityReference("referencedType", "referencedName2")
+          )
+        )
+      )
+    )
+
+    val createdEntityRec =
+      CompactEntityRecord(
+        42,
+        entityToCreate.name,
+        entityToCreate.entityType,
+        defaultWorkspace.workspaceIdAsUUID,
+        1,
+        deleted = false,
+        // {"ref": {"entityName": "one", "entityType": "target"}}
+        Some(
+          """{"foo":"bar","ref":{"entityName":"referencedName0","entityType":"referencedType"},"refs":{"itemsType":"EntityReference","items":[{"entityName":"referencedName1","entityType":"referencedType"},{"entityName":"referencedName2","entityType":"referencedType"}]}}"""
+        )
+      )
+
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getReferencedIds(any(), any()))
+      .thenReturn(Future.successful(Seq(0, 1, 2))) // reference lookup returns ids
+    when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(Some(createdEntityRec)))
+    when(mockRepository.upsertReferences(any(), any()))
+      .thenReturn(Future.successful(2))
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = Await.result(provider.createEntity(entityToCreate), atMost)
+
+    actual shouldBe entityToCreate
+
+    verify(mockRepository, times(1)).getReferencedIds(
+      defaultWorkspace.workspaceIdAsUUID,
+      Set(
+        AttributeEntityReference("referencedType", "referencedName0"),
+        AttributeEntityReference("referencedType", "referencedName1"),
+        AttributeEntityReference("referencedType", "referencedName2")
+      )
+    )
+    verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                               entityToCreate.entityType,
+                                               entityToCreate.name
+    )
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, times(1)).upsertReferences(42,
+                                                      Set(0, 1, 2)
+    ) // 42 is the entity id from createdEntityRec; Set(0, 1, 2) are the ids returned from getReferencedIds
+  }
+
+  it should "throw EntityReferenceNotFoundException if this entity's references are missing" in {
+    // entity to create specifies three references
+    val entityToCreate = Entity(
+      "name",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference("referencedType", "referencedName0"),
+        AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("referencedType", "referencedName1"),
+            AttributeEntityReference("referencedType", "referencedName2")
+          )
+        )
+      )
+    )
+
+    val createdEntityRec =
+      CompactEntityRecord(
+        42,
+        entityToCreate.name,
+        entityToCreate.entityType,
+        defaultWorkspace.workspaceIdAsUUID,
+        1,
+        deleted = false,
+        // {"ref": {"entityName": "one", "entityType": "target"}}
+        Some(
+          """{"foo":"bar","ref":{"entityName":"referencedName0","entityType":"referencedType"},"refs":{"itemsType":"EntityReference","items":[{"entityName":"referencedName1","entityType":"referencedType"},{"entityName":"referencedName2","entityType":"referencedType"}]}}"""
+        )
+      )
+
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getReferencedIds(any(), any()))
+      .thenReturn(Future.successful(Seq(0, 1))) // reference lookup returns only two of the three desired references
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = intercept[EntityReferenceNotFoundException] {
+      Await.result(provider.createEntity(entityToCreate), atMost)
+    }
+
+    actual shouldBe a[EntityReferenceNotFoundException]
+
+    verify(mockRepository, times(1)).getReferencedIds(
+      defaultWorkspace.workspaceIdAsUUID,
+      Set(
+        AttributeEntityReference("referencedType", "referencedName0"),
+        AttributeEntityReference("referencedType", "referencedName1"),
+        AttributeEntityReference("referencedType", "referencedName2")
+      )
+    )
+    verify(mockRepository, never()).createEntity(any(), any())
+    verify(mockRepository, never()).getEntity(any(), any(), any())
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, never()).upsertReferences(any(), any())
+  }
+
+  it should "throw something(???) if this type&name already exists" is pending
+
   "deleteEntities" should "have tests" is pending
   "deleteEntitiesOfType" should "have tests" is pending
   "deleteEntityAttributes" should "have tests" is pending

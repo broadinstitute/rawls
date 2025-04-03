@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
@@ -16,6 +17,8 @@ import spray.json._
 import java.util.UUID
 import slick.jdbc.MySQLProfile.api._
 
+import scala.util.{Failure, Success, Try}
+
 /**
   * model class for rows in the ENTITY table, used for high-level Slick operations
   */
@@ -28,8 +31,16 @@ case class CompactEntityRecord(id: Long,
                                deleted: Boolean,
                                attributes: Option[String]
 ) {
-  def toEntity: Entity =
-    Entity(name, entityType, attributes.getOrElse("{}").parseJson.convertTo[AttributeMap])
+  def toEntity: Entity = {
+    val attrs: AttributeMap = Try(attributes.getOrElse("{}").parseJson.convertTo[AttributeMap]) match {
+      case Success(attrMap) => attrMap
+      case Failure(ex)      =>
+        // best-effort attempt to sanely truncate the error message and not include the entire payload
+        val errMsg = ex.getMessage.split('{').head
+        throw new DataEntityException(s"Error parsing attribute json for entity $entityType/$name: $errMsg")
+    }
+    Entity(name, entityType, attrs)
+  }
 }
 
 /**

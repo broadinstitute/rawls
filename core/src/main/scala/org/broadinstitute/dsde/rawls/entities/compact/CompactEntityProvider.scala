@@ -71,30 +71,33 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = ???
 
-  // TODO CORE-362: unit tests
+  // TODO CORE-362: validate entity name, type, attribute names, etc.
+  // TODO CORE-362: update workspace last-updated date?
+  // TODO CORE-362: verify entity does not already exist vs. handle insert conflicts?
   override def createEntity(entity: Entity): Future[Entity] = {
     // find all references in this entity
     val refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
     // find all unique references in this entity
     val uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
 
-    dataSource.inTransaction { dataAccess =>
-      val query = dataAccess.getCompactEntityQuery
-      for {
+    dataSource.inTransaction { _ =>
+      val createFuture = for {
         // verify that all references in the entity-to-be-saved actually exist
-        referencedIds <- query.getReferencedIds(workspaceId, uniqueRefs)
+        referencedIds <- repository.getReferencedIds(workspaceId, uniqueRefs)
         _ = if (uniqueRefs.size != referencedIds.size)
           throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
-        _ <- query.createEntity(workspaceId, entity)
+        _ <- repository.createEntity(workspaceId, entity)
         // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
         // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
         // normalized version.
-        savedEntityRecordOption <- query.getEntity(workspaceId, entity.entityType, entity.name)
+        savedEntityRecordOption <- repository.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
         // save all references from this entity to other entities
-        _ <- DBIO.from(replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true))
+        _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
       } yield savedEntityRecord.toEntity
+
+      DBIO.from(createFuture)
     }
   }
 
@@ -153,8 +156,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================
-
-  def getRepository(dataSource: SlickDataSource) = new CompactEntityRepository(dataSource)
 
   // given an entity, finds all references in that entity, grouped by their attribute names
   protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
