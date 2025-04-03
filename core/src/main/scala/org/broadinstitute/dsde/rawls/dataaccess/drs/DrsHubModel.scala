@@ -4,13 +4,13 @@ import spray.json.RootJsonFormat
 
 case class DrsHubRequest(url: String, fields: Array[String])
 
-case class DrsHubMinimalResponse(googleServiceAccount: Option[ServiceAccountPayload])
+case class DrsHubAccessUrl(url: Option[String], headers: Option[Map[String, String]])
+case class DrsHubMinimalResponse(accessUrl: Option[DrsHubAccessUrl])
 
 object DrsHubJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
   implicit val DrsHubRequestFormat: RootJsonFormat[DrsHubRequest] = jsonFormat2(DrsHubRequest)
-  implicit val ServiceAccountEmailFormat: RootJsonFormat[ServiceAccountEmail] = jsonFormat1(ServiceAccountEmail)
-  implicit val DrsHubV2ResponseDataFormat: RootJsonFormat[ServiceAccountPayload] = jsonFormat1(ServiceAccountPayload)
+  implicit val DrsHubAccessUrlFormat: RootJsonFormat[DrsHubAccessUrl] = jsonFormat2(DrsHubAccessUrl)
   implicit val DrsHubV2ResponseFormat: RootJsonFormat[DrsHubMinimalResponse] = jsonFormat1(DrsHubMinimalResponse)
 }
