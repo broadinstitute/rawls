@@ -2,12 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
-  AttributeFormat,
-  Entity,
-  PlainArrayAttributeListSerializer
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import spray.json.DefaultJsonProtocol._
@@ -19,7 +14,7 @@ trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
 
   // json codec for entity attributes
-  implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
+  implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
 
   /** low-level raw SQL queries for ENTITY */
   object compactEntityQuery extends RawSqlQuery {
@@ -41,6 +36,9 @@ trait CompactEntityComponent extends LazyLogging {
 
     implicit val getJsonEntityRefRecord: GetResult[CompactEntityRefRecord] =
       GetResult(r => CompactEntityRefRecord(r.<<, r.<<, r.<<))
+
+    implicit val getKeysRecord: GetResult[KeysRecord] =
+      GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
     /**
       * Insert a single entity to the db.
@@ -136,16 +134,18 @@ trait CompactEntityComponent extends LazyLogging {
       val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
         sql"($fromId,$toId)"
       }
-      val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",\n")
+      val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
 
       val query = concatSqlActions(
         sql"""insert into ENTITY_REFS(from_id, to_id)
-              values (
+              values
               """,
         allInsertValues,
         sql"""
-             ) on duplicate key update from_id=from_id;"""
+              on duplicate key update from_id=from_id;"""
       )
+      // The `on duplicate key update ...` makes this `insert` an upsert, not throwing errors on any
+      // pre-existing rows. The `update from_id=from_id` is a noop update, saying "leave this row alone"
 
       query.asUpdate
     }
@@ -154,8 +154,17 @@ trait CompactEntityComponent extends LazyLogging {
     //  testing helpers
     // ====================================================================================================
 
+    // return all reference targets for a given reference source
     def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
       sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
+
+    // return the ENTITY_KEYS row for a given entity
+    def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
+      val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
+            from ENTITY_KEYS
+            where id = $entityId;""".as[KeysRecord]
+      uniqueResult(query)
+    }
 
   }
 
