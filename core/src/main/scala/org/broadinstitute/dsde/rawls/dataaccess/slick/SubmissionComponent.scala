@@ -123,23 +123,7 @@ trait SubmissionComponent {
     def workflow = foreignKey("FK_SUB_VALIDATION_WF", workflowId, workflowQuery)(_.id)
   }
 
-  // this table records the timestamp and status of every submission, each time a submission changes status.
-  // it is populated via triggers on the SUBMISSION table. We never write to it from Scala; we only read.
-  class SubmissionAuditStatusTable(tag: Tag)
-      extends Table[SubmissionAuditStatusRecord](tag, "AUDIT_SUBMISSION_STATUS") {
-    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def submissionId = column[UUID]("submission_id")
-    def status = column[String]("status", O.Length(32))
-    def timestamp = column[Timestamp]("timestamp", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
-
-    def * =
-      (id, submissionId, status, timestamp) <> (SubmissionAuditStatusRecord.tupled, SubmissionAuditStatusRecord.unapply)
-
-    def statusIndex = index("IDX_AUDIT_SUBMISSION_STATUS_SUBMISSION_ID", submissionId)
-  }
-
   protected val submissionValidationQuery = TableQuery[SubmissionValidationTable]
-  protected val submissionAuditStatusQuery = TableQuery[SubmissionAuditStatusTable]
 
   object submissionQuery extends TableQuery(new SubmissionTable(_)) {
 

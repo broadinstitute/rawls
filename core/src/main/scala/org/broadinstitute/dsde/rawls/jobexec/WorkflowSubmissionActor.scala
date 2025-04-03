@@ -4,6 +4,7 @@ import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
+import io.lemonlabs.uri.Uri
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -380,20 +381,29 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case err: JsValue  => AttributeString(err.toString)
     }
 
-  private def resolveDrsUriServiceAccounts(drsUris: Set[String], userInfo: UserInfo)(implicit
+  def validateDrsProviderAccess(drsUris: Set[String], userInfo: UserInfo)(implicit
     executionContext: ExecutionContext
-  ): Future[Set[String]] =
+  ): Future[Set[String]] = {
+
+    val urisByProvider: Map[Option[String], List[String]] = drsUris.toList.groupBy(DrsResolver.getProvider)
+
+    if (urisByProvider.contains(None)) {
+      throw new RawlsExceptionWithErrorReport(errorReport =
+        ErrorReport(StatusCodes.BadRequest, s"Unable to parse URIs: ${urisByProvider(None)}")
+      )
+    }
+
+    val urisToParse = urisByProvider.values.map(_.head).toList
+
     Future
-      .traverse(drsUris) { drsUri =>
-        drsResolver.drsServiceAccountEmail(drsUri, userInfo)
+      .traverse(urisToParse) { drsUri =>
+        drsResolver.drsSignedUrl(drsUri, userInfo)
       }
-      .map { emails =>
-        val collected = emails.collect { case Some(email) =>
-          email
-        }
-        logger.debug(s"resolveDrsUriServiceAccounts found ${collected.size} emails for ${drsUris.size} DRS URIs")
-        collected
+      .map { urls =>
+        logger.debug(s"resolveDrsSignedUrls found ${urls.size} urls for ${drsUris.size} DRS URIs")
+        urls.toSet
       }
+  }
 
   private def collectDosUris(workflowBatch: Seq[Workflow]): Set[String] = {
     val dosUris = for {
@@ -511,17 +521,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
         workflowBatchFuture
-      dosServiceAccounts <- resolveDrsUriServiceAccounts(dosUris, petUserInfo)
-      // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
-      // We still call DRSHub for those because we can verify the user has permission on the DRS object as
-      // early as possible, rather than letting the workflow(s) launch and fail
-      // AEN 2020-09-08 [WA-325]
-      _ <-
-        if (dosServiceAccounts.isEmpty) Future.successful(false)
-        else
-          googleServicesDAO.addPolicyBindings(GoogleProjectId(wfOpts.google_project),
-                                              Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:" + _))
-          )
+      _ <- validateDrsProviderAccess(dosUris, petUserInfo)
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs,
                                                                       wdl,

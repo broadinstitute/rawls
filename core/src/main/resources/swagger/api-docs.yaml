@@ -1830,23 +1830,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/submissions/queueStatus:
-    get:
-      tags:
-        - submissions
-      summary: workflow queue status
-      description: List workflow counts by queueing state
-      operationId: workflowQueueStatus
-      deprecated: true
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/WorkflowQueueStatusResponse'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entityQuery/{entityType}:
     get:
       tags:
@@ -5494,25 +5477,6 @@ components:
           type: string
           description: The id of this workflow
       description: Outputs and logs from all tasks in a workflow
-    WorkflowQueueStatusResponse:
-      required:
-        - estimatedQueueTimeMS
-        - workflowCountsByStatus
-        - workflowsBeforeNextUserWorkflow
-      type: object
-      properties:
-        estimatedQueueTimeMS:
-          type: integer
-          description: estimated milliseconds until the current queue is submitted
-        workflowsBeforeNextUserWorkflow:
-          type: integer
-          description: the number of workflows in the queue ahead of the user's first
-            workflow
-        workflowCountsByStatus:
-          type: object
-          properties: {}
-          description: Map[String,Int]
-      description: Information about the status of workflows and the workflow queue
     WorkflowQueueStatusByUserResponse:
       required:
         - maxActiveWorkflowsPerUser
@@ -7091,9 +7055,6 @@ components:
         billingProfileId:
           type: string
           description: the billing profile ID associated with the project
-        cromwellBackend:
-          type: string
-          description: the cromwell backend to use for this billing project
         servicePerimeter:
           type: string
           description: the name of the service perimeter for this billing project (cloudPlatform GCP only)

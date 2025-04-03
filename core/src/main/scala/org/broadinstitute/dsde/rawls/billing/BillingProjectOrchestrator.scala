@@ -165,7 +165,6 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           CreationStatuses.Creating,
           createProjectRequest.billingAccount,
           None,
-          None,
           createProjectRequest.servicePerimeter
         )
       )

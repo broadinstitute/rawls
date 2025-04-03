@@ -35,8 +35,6 @@ case class WorkflowRecord(id: Long,
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
 
-case class WorkflowAuditStatusRecord(id: Long, workflowId: Long, status: String, timestamp: Timestamp)
-
 case class WorkflowId(id: Long)
 
 trait WorkflowComponent {
@@ -84,19 +82,6 @@ trait WorkflowComponent {
     def * = (workflowId, message) <> (WorkflowMessageRecord.tupled, WorkflowMessageRecord.unapply)
 
     def workflow = foreignKey("FK_WF_MSG_WF", workflowId, workflowQuery)(_.id)
-  }
-
-  // this table records the timestamp and status of every workflow, each time a workflow changes status.
-  // it is populated via triggers on the WORKFLOW table. We never write to it from Scala; we only read.
-  class WorkflowAuditStatusTable(tag: Tag) extends Table[WorkflowAuditStatusRecord](tag, "AUDIT_WORKFLOW_STATUS") {
-    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def workflowId = column[Long]("workflow_id")
-    def status = column[String]("status", O.Length(32))
-    def timestamp = column[Timestamp]("timestamp", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
-
-    def * = (id, workflowId, status, timestamp) <> (WorkflowAuditStatusRecord.tupled, WorkflowAuditStatusRecord.unapply)
-
-    def statusIndex = index("IDX_AUDIT_WORKFLOW_STATUS_WORKFLOW_ID", workflowId)
   }
 
   protected val workflowMessageQuery = TableQuery[WorkflowMessageTable]
@@ -478,15 +463,6 @@ trait WorkflowComponent {
       })
     }
 
-    def countWorkflowsAheadOfUserInQueue(userInfo: UserInfo): ReadAction[Int] =
-      getFirstQueuedWorkflow(userInfo.userEmail.value) flatMap { optRec =>
-        val query = optRec match {
-          case Some(workflow) => findWorkflowsQueuedBefore(workflow.statusLastChangedDate)
-          case _              => findQueuedWorkflows(Seq.empty, Seq.empty)
-        }
-        query.length.result
-      }
-
     def getFirstQueuedWorkflow(submitter: String): ReadAction[Option[WorkflowRecord]] = {
       val query = for {
         submission <- submissionQuery.filter(_.submitterId === submitter)
@@ -777,37 +753,6 @@ trait WorkflowComponent {
       concatSqlActions(update(newStatus, executionServiceId), where, workflowTuples, sql")").as[Int]
     }
 
-  }
-
-  object workflowAuditStatusQuery extends TableQuery(new WorkflowAuditStatusTable(_)) {
-
-    def queueTimeMostRecentSubmittedWorkflow: ReadAction[Long] =
-      uniqueResult[WorkflowAuditStatusRecord](
-        workflowAuditStatusQuery
-          .filter(_.status === WorkflowStatuses.Submitted.toString)
-          .sortBy(_.timestamp.desc)
-          .take(1)
-      ).flatMap {
-        case Some(mostRecentlySubmitted) =>
-          // we could query specifically for the time this workflow was Queued, but we'll just use the earliest time
-          // for resiliency, in case the workflow somehow skipped Queued status.
-          uniqueResult[WorkflowAuditStatusRecord](
-            workflowAuditStatusQuery
-              .filter(_.workflowId === mostRecentlySubmitted.workflowId)
-              .sortBy(_.timestamp.asc)
-              .take(1)
-          ).map {
-            case Some(earliestForThisWorkflow) =>
-              mostRecentlySubmitted.timestamp.getTime - earliestForThisWorkflow.timestamp.getTime
-            case _ => 0L
-          }
-        case _ => DBIO.successful(0L)
-      }
-
-    // this method used only inside unit tests. At runtime, the table is populated only via triggers.
-    def save(wasr: WorkflowAuditStatusRecord): WriteAction[WorkflowAuditStatusRecord] = {
-      (workflowAuditStatusQuery returning workflowAuditStatusQuery.map(_.id)) += wasr
-    } map { newid => wasr.copy(id = newid) }
   }
 
 }
