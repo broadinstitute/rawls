@@ -224,20 +224,6 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       )
     )
 
-    val createdEntityRec =
-      CompactEntityRecord(
-        42,
-        entityToCreate.name,
-        entityToCreate.entityType,
-        defaultWorkspace.workspaceIdAsUUID,
-        1,
-        deleted = false,
-        // {"ref": {"entityName": "one", "entityType": "target"}}
-        Some(
-          """{"foo":"bar","ref":{"entityName":"referencedName0","entityType":"referencedType"},"refs":{"itemsType":"EntityReference","items":[{"entityName":"referencedName1","entityType":"referencedType"},{"entityName":"referencedName2","entityType":"referencedType"}]}}"""
-        )
-      )
-
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.getReferencedIds(any(), any()))
       .thenReturn(Future.successful(Seq(0, 1))) // reference lookup returns only two of the three desired references

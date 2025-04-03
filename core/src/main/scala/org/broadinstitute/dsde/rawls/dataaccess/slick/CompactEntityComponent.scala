@@ -1,57 +1,19 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeFormat,
   Entity,
   PlainArrayAttributeListSerializer
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import slick.jdbc.{GetResult, JdbcProfile, PositionedParameters, SQLActionBuilder, SetParameter}
+import slick.jdbc.MySQLProfile.api._
+import slick.jdbc._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
-import slick.jdbc.MySQLProfile.api._
-
-import scala.util.{Failure, Success, Try}
-
-/**
-  * model class for rows in the ENTITY table, used for high-level Slick operations
-  */
-// TODO CORE-362: move models to another file?
-case class CompactEntityRecord(id: Long,
-                               name: String,
-                               entityType: String,
-                               workspaceId: UUID,
-                               recordVersion: Long,
-                               deleted: Boolean,
-                               attributes: Option[String]
-) {
-  def toEntity: Entity = {
-    val attrs: AttributeMap = Try(attributes.getOrElse("{}").parseJson.convertTo[AttributeMap]) match {
-      case Success(attrMap) => attrMap
-      case Failure(ex)      =>
-        // best-effort attempt to sanely truncate the error message and not include the entire payload
-        val errMsg = ex.getMessage.split('{').head
-        throw new DataEntityException(s"Error parsing attribute json for entity $entityType/$name: $errMsg")
-    }
-    Entity(name, entityType, attrs)
-  }
-}
-
-/**
-  * abbreviated model for rows in the ENTITY table when we don't need all the columns
-  */
-case class CompactEntityRefRecord(id: Long, name: String, entityType: String)
-
-/**
-  * model class for rows in the ENTITY_REFS table
-  */
-case class RefPointerRecord(fromId: Long, toId: Long)
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -59,47 +21,8 @@ trait CompactEntityComponent extends LazyLogging {
   // json codec for entity attributes
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
-  /** high-level Slick table for ENTITY */
-  // TODO CORE-362: delete?
-//  class CompactEntityTable(tag: Tag) extends Table[CompactEntityRecord](tag, "ENTITY") {
-//    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-//    def name = column[String]("name", O.Length(254))
-//    def entityType = column[String]("entity_type", O.Length(254))
-//    def workspaceId = column[UUID]("workspace_id")
-//    def version = column[Long]("record_version")
-//    def deleted = column[Boolean]("deleted")
-//    def attributes = column[Option[String]]("attributes")
-//
-//    def * =
-//      (id, name, entityType, workspaceId, version, deleted, attributes) <> (CompactEntityRecord.tupled,
-//                                                                            CompactEntityRecord.unapply
-//      )
-//  }
-
-  /** high-level Slick table for ENTITY_REFS */
-  // TODO CORE-362: delete?
-//  class CompactEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
-//    def fromId = column[Long]("from_id")
-//    def toId = column[Long]("to_id")
-//
-//    def * =
-//      (fromId, toId) <> (RefPointerRecord.tupled, RefPointerRecord.unapply)
-//  }
-
-  /** high-level Slick query object for ENTITY */
-  // TODO CORE-362: delete?
-//  object compactEntitySlickQuery extends TableQuery(new CompactEntityTable(_)) {}
-
-  /** high-level Slick query object for ENTITY_REFS */
-  // TODO CORE-362: delete?
-//  object compactEntityRefSlickQuery extends TableQuery(new CompactEntityRefTable(_)) {}
-
   /** low-level raw SQL queries for ENTITY */
-  // getter and trait allow for easy unit testing
-  def getCompactEntityQuery: CompactEntityQuery = compactEntityQuery
-  object compactEntityQuery extends CompactEntityQuery
-
-  trait CompactEntityQuery extends RawSqlQuery {
+  object compactEntityQuery extends RawSqlQuery {
     val driver: JdbcProfile = CompactEntityComponent.this.driver
 
     // read a json column from the db and translate into a JsValue
