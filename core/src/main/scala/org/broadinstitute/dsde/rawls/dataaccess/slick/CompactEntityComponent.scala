@@ -10,6 +10,7 @@ import spray.json._
 
 import java.util.UUID
 
+// TODO CORE-362: add Slick tables for use in DataAccess.truncateAll
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
 
@@ -107,21 +108,29 @@ trait CompactEntityComponent extends LazyLogging {
       }
 
     /**
+      * Delete all rows in ENTITY_REFS for the specified "from" id, _except_ for those
+      * rows in "idsToKeep"
+      *
       * Delete from ENTITY_REFS where to_id not in (toIds) and from_id = ?
       *
       * Returns the number of rows deleted.
       */
-    def deleteReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
-      val allValues =
-        reduceSqlActionsWithDelim(toIds.map(x => sql"$x").toSeq, sql",")
+    def deleteReferences(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
+      val query = if (idsToKeep.isEmpty) {
+        sql"""delete from ENTITY_REFS where from_id = $fromId;"""
+      } else {
+        val allValues =
+          reduceSqlActionsWithDelim(idsToKeep.map(x => sql"$x").toSeq, sql",")
 
-      val query = concatSqlActions(
-        sql"""delete from ENTITY_REFS
+        concatSqlActions(
+          sql"""delete from ENTITY_REFS
            where from_id = $fromId
-           and to_ids not in (""",
-        allValues,
-        sql""");"""
-      )
+           and to_id not in (""",
+          allValues,
+          sql""");"""
+        )
+      }
+
       query.asUpdate
     }
 

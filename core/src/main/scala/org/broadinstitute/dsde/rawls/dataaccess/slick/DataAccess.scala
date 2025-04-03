@@ -14,6 +14,7 @@ trait DataAccess
     with WorkspaceComponent
     with EntityComponent
     with CompactEntityComponent
+    with CompactEntitySlickComponent
     with AttributeComponent
     with MethodConfigurationComponent
     with SubmissionComponent
@@ -64,6 +65,7 @@ trait DataAccess
     }.toSeq
 
     DBIO.sequence(shardDeletes) andThen // FK to entity
+      TableQuery[CompactEntityKeysTable].delete andThen // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen // FK to entity, submissionvalidation
       TableQuery[MethodConfigurationInputTable].delete andThen // FK to MC
@@ -88,7 +90,8 @@ trait DataAccess
       TableQuery[PendingBucketDeletionTable].delete andThen
       TableQuery[EntityAttributeTempTable].delete andThen
       TableQuery[WorkspaceAttributeTempTable].delete andThen
-      TableQuery[ExprEvalScratch].delete
+      TableQuery[ExprEvalScratch].delete andThen
+      TableQuery[CompactEntityRefTable].delete
   }
 
   def sqlDBStatus() =
