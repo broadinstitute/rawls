@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.NotUsed
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -27,6 +29,8 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResultMetadata,
   EntityTypeMetadata,
   EntityTypeRename,
+  ErrorReport,
+  ErrorReportSource,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
   Workspace
@@ -71,17 +75,24 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = ???
 
-  // TODO CORE-362: validate entity name, type, attribute names, etc.
-  // TODO CORE-362: update workspace last-updated date?
-  // TODO CORE-362: verify entity does not already exist vs. handle insert conflicts?
+  // TODO CORE-362: update workspace last-updated date? Revisit this functionality.
   override def createEntity(entity: Entity): Future[Entity] = {
-    // find all references in this entity
-    val refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
-    // find all unique references in this entity
-    val uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
-
+    EntityUtils.validateEntity(entity)
     dataSource.inTransaction { _ =>
       val createFuture = for {
+        // does this entity already exist?
+        preExisting <- repository.getEntity(workspaceId, entity.entityType, entity.name)
+        _ = if (preExisting.nonEmpty)
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Conflict,
+              s"${entity.entityType} ${entity.name} already exists in ${requestArguments.workspace.toWorkspaceName}"
+            )
+          )
+        // find all references in this entity
+        refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
+        // find all unique references in this entity
+        uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
         // verify that all references in the entity-to-be-saved actually exist
         referencedIds <- repository.getReferencedIds(workspaceId, uniqueRefs)
         _ = if (uniqueRefs.size != referencedIds.size)

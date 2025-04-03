@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, DbResource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
@@ -82,7 +83,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     when(mockRepository.getReferencedIds(any(), any())).thenReturn(Future.successful(Seq()))
     when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
     when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(Some(createdEntityRec)))
+      .thenReturn(Future.successful(None)) // first request finds nothing
+      .thenReturn(Future.successful(Some(createdEntityRec))) // second request finds the entity we saved
 
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
@@ -93,7 +95,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
     verify(mockRepository, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+    verify(mockRepository, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
                                                entityToCreate.entityType,
                                                entityToCreate.name
     )
@@ -123,7 +125,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     when(mockRepository.getReferencedIds(any(), any())).thenReturn(Future.successful(Seq()))
     when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
     when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(Some(createdEntityRec)))
+      .thenReturn(Future.successful(None)) // first request finds nothing
+      .thenReturn(Future.successful(Some(createdEntityRec))) // second request finds the entity we saved
 
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
@@ -134,7 +137,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
     verify(mockRepository, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+    verify(mockRepository, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
                                                entityToCreate.entityType,
                                                entityToCreate.name
     )
@@ -166,9 +169,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
         defaultWorkspace.workspaceIdAsUUID,
         1,
         deleted = false,
-        // {"ref": {"entityName": "one", "entityType": "target"}}
         Some(
-          """{"foo":"bar","ref":{"entityName":"referencedName0","entityType":"referencedType"},"refs":{"itemsType":"EntityReference","items":[{"entityName":"referencedName1","entityType":"referencedType"},{"entityName":"referencedName2","entityType":"referencedType"}]}}"""
+          """{"foo":"bar","ref":{"entityName":"referencedName0","entityType":"referencedType"},"refs":[{"entityName":"referencedName1","entityType":"referencedType"},{"entityName":"referencedName2","entityType":"referencedType"}]}"""
         )
       )
 
@@ -177,7 +179,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       .thenReturn(Future.successful(Seq(0, 1, 2))) // reference lookup returns ids
     when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
     when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(Some(createdEntityRec)))
+      .thenReturn(Future.successful(None)) // first request finds nothing
+      .thenReturn(Future.successful(Some(createdEntityRec))) // second request finds the entity we saved
     when(mockRepository.upsertReferences(any(), any()))
       .thenReturn(Future.successful(2))
 
@@ -197,7 +200,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       )
     )
     verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+    verify(mockRepository, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
                                                entityToCreate.entityType,
                                                entityToCreate.name
     )
@@ -225,6 +228,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     )
 
     val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(None)) // first request finds nothing
     when(mockRepository.getReferencedIds(any(), any()))
       .thenReturn(Future.successful(Seq(0, 1))) // reference lookup returns only two of the three desired references
 
@@ -246,12 +251,81 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       )
     )
     verify(mockRepository, never()).createEntity(any(), any())
-    verify(mockRepository, never()).getEntity(any(), any(), any())
+    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                               entityToCreate.entityType,
+                                               entityToCreate.name
+    )
     verify(mockRepository, never()).deleteReferences(any(), any())
     verify(mockRepository, never()).upsertReferences(any(), any())
   }
 
-  it should "throw something(???) if this type&name already exists" is pending
+  it should "throw RawlsExceptionWithErrorReport if this type & name already exists" in {
+    val entityToCreate = Entity("name", "type", Map())
+    val createdEntityRec =
+      CompactEntityRecord(42,
+                          entityToCreate.name,
+                          entityToCreate.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("{}")
+      )
+
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(Future.successful(Some(createdEntityRec)))
+
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+    val actual = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.createEntity(entityToCreate), atMost)
+    }
+
+    actual shouldBe a[RawlsExceptionWithErrorReport]
+
+    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                               entityToCreate.entityType,
+                                               entityToCreate.name
+    )
+
+    verify(mockRepository, never()).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockRepository, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockRepository, never()).deleteReferences(any(), any())
+    verify(mockRepository, never()).upsertReferences(any(), any())
+  }
+
+  val illegalEntities = Map(
+    "illegal entity name" -> Entity("no! @@bad@@", "type", Map()),
+    "illegal entity type" -> Entity("name", "no! @@bad@@", Map()),
+    "illegal attribute name" -> Entity("name",
+                                       "type",
+                                       Map(
+                                         AttributeName.withDefaultNS("no! @@bad@@") -> AttributeNumber(42)
+                                       )
+    )
+  )
+
+  illegalEntities foreach { case (hint, entityToCreate) =>
+    it should s"throw RawlsExceptionWithErrorReport when presented with a(n) $hint" in {
+      val mockRepository = mock[CompactEntityRepository]
+
+      // provider using mocks
+      val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(provider.createEntity(entityToCreate), atMost)
+      }
+
+      actual shouldBe a[RawlsExceptionWithErrorReport]
+
+      verify(mockRepository, never()).getEntity(any(), any(), any())
+      verify(mockRepository, never()).getReferencedIds(any(), any())
+      verify(mockRepository, never()).createEntity(any(), any())
+      verify(mockRepository, never()).deleteReferences(any(), any())
+      verify(mockRepository, never()).upsertReferences(any(), any())
+    }
+  }
 
   "deleteEntities" should "have tests" is pending
   "deleteEntitiesOfType" should "have tests" is pending

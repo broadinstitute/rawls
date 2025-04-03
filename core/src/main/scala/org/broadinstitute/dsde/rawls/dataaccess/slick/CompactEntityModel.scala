@@ -9,9 +9,11 @@ import spray.json._
 
 import java.sql.Timestamp
 import java.util.UUID
+import scala.annotation.unused
 import scala.util.{Failure, Success, Try}
 
 // unused; helps find this file in IntelliJ searches
+@unused
 object CompactEntityModel {}
 
 /**

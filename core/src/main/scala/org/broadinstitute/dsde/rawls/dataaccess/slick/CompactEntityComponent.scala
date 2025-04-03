@@ -10,7 +10,6 @@ import spray.json._
 
 import java.util.UUID
 
-// TODO CORE-362: add Slick tables for use in DataAccess.truncateAll
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
 
