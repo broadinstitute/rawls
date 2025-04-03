@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
 
+    <changeSet logicalFilePath="dummy" author="davidan" id="drop_status_change_log_triggers">
+        <sql stripComments="true">
+            DROP TRIGGER IF EXISTS after_workflow_insert;
+            DROP TRIGGER IF EXISTS after_workflow_update;
+            DROP TRIGGER IF EXISTS after_submission_insert;
+            DROP TRIGGER IF EXISTS after_submission_update;
+        </sql>
+    </changeSet>
+
     <changeSet logicalFilePath="dummy" author="sehsan" id="drop-AUDIT_WORKFLOW_STATUS">
         <sql stripComments="true">
             drop table AUDIT_WORKFLOW_STATUS;
@@ -10,15 +19,6 @@
     <changeSet logicalFilePath="dummy" author="sehsan" id="drop-AUDIT_SUBMISSION_STATUS">
         <sql stripComments="true">
             drop table AUDIT_SUBMISSION_STATUS;
-        </sql>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="davidan" id="drop_status_change_log_triggers">
-        <sql stripComments="true">
-            DROP TRIGGER IF EXISTS after_workflow_insert;
-            DROP TRIGGER IF EXISTS after_workflow_update;
-            DROP TRIGGER IF EXISTS after_submission_insert;
-            DROP TRIGGER IF EXISTS after_submission_update;
         </sql>
     </changeSet>
 
