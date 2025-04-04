@@ -106,7 +106,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                  "metricsBaseName"
           )
           // get metadata
-          val metadata = provider.entityTypeMetadata(false).futureValue
+          val metadata = provider.entityTypeMetadata(false, testContext).futureValue
           metadata.keySet shouldBe exemplarTypes
         }
 
@@ -179,7 +179,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                    testConf.getDuration("entities.queryTimeout"),
                                                    "metricsBaseName"
             )
-            provider.deleteEntitiesOfType(typeUnderTest).futureValue
+            provider.deleteEntitiesOfType(typeUnderTest, testContext).futureValue
 
             // get actual entity types from the db
             val actualEntityTypes = getAllEntityTypes(testWorkspace.workspace)
@@ -298,7 +298,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           )
           // test gets
           exemplarDataWithCommonNames foreach { entityUnderTest =>
-            val actual = provider.getEntity(entityUnderTest.entityType, entityUnderTest.name).futureValue
+            val actual = provider.getEntity(entityUnderTest.entityType, entityUnderTest.name, testContext).futureValue
             actual shouldBe entityUnderTest
           }
         }
@@ -433,7 +433,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // delete two entities of target type
             val entRefs =
               Seq(AttributeEntityReference(typeUnderTest, "001"), AttributeEntityReference(typeUnderTest, "002"))
-            provider.deleteEntities(entRefs).futureValue
+            provider.deleteEntities(entRefs, testContext).futureValue
 
             // count actual entities by type
             val actualEntities = getAllEntities(testWorkspace.workspace)
@@ -485,7 +485,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             )
             val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
             // perform upsert
-            provider.batchUpsertEntities(Seq(upsert)).futureValue
+            provider.batchUpsertEntities(Seq(upsert), testContext).futureValue
 
             // get database-level entity record for the entity containing the reference
             val entityRecordContainingReference = runAndWait(
@@ -534,7 +534,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val op = AddUpdateAttribute(fooAttribute, AttributeString("updated"))
             val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
             // perform upsert
-            provider.batchUpsertEntities(Seq(upsert)).futureValue
+            provider.batchUpsertEntities(Seq(upsert), testContext).futureValue
 
             // get actual entities, after upsert
             val entitiesAfterUpsert = getAllEntities(testWorkspace.workspace)
@@ -578,7 +578,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val op = AddUpdateAttribute(fooAttribute, AttributeString("updated"))
             val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
             // perform upsert
-            provider.batchUpdateEntities(Seq(upsert)).futureValue
+            provider.batchUpdateEntities(Seq(upsert), testContext).futureValue
 
             // get actual entities, after upsert
             val entitiesAfterUpdate = getAllEntities(testWorkspace.workspace)
@@ -621,7 +621,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                "metricsBaseName"
         )
         // get metadata
-        val metadata = provider.entityTypeMetadata(false).futureValue
+        val metadata = provider.entityTypeMetadata(false, testContext).futureValue
         metadata("cat").attributeNames.size shouldEqual exemplarAttributeNames.size
         metadata("cat").attributeNames should contain theSameElementsAs exemplarAttributeNames
       }
@@ -640,7 +640,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
-        provider.entityTypeMetadata(true).futureValue
+        provider.entityTypeMetadata(true, testContext).futureValue
 
         // cache is now populated
         assert(runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)).isDefined)
@@ -686,7 +686,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         )
 
         // delete our test entity
-        provider.deleteEntities(Seq(AttributeEntityReference("cat", "005"))).futureValue shouldBe 1
+        provider.deleteEntities(Seq(AttributeEntityReference("cat", "005")), testContext).futureValue shouldBe 1
 
         // make sure all attributes are marked as deleted
         import driver.api._
@@ -706,7 +706,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         )
 
         // create our entity
-        provider.createEntity(caseInsensitiveAttributeData.head).futureValue // Entity
+        provider.createEntity(caseInsensitiveAttributeData.head, testContext).futureValue // Entity
 
         // make sure all attributes are created
         import driver.api._
@@ -779,7 +779,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         )
 
         // get our entity
-        val entity = provider.getEntity("cat", "005").futureValue // Entity
+        val entity = provider.getEntity("cat", "005", testContext).futureValue // Entity
 
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
@@ -824,10 +824,10 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
-        provider.batchUpsertEntities(updateDefinition).futureValue
+        provider.batchUpsertEntities(updateDefinition, testContext).futureValue
 
         // get our entity
-        val entity = provider.getEntity("cat", "005").futureValue
+        val entity = provider.getEntity("cat", "005", testContext).futureValue
 
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
@@ -853,10 +853,10 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
-        provider.batchUpdateEntities(updateDefinition).futureValue
+        provider.batchUpdateEntities(updateDefinition, testContext).futureValue
 
         // get our entity
-        val entity = provider.getEntity("cat", "005").futureValue
+        val entity = provider.getEntity("cat", "005", testContext).futureValue
 
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)

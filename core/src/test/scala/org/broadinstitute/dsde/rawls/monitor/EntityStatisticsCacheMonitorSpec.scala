@@ -166,11 +166,11 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       )
 
       // Load the current cache entries
-      val originalCache = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+      val originalCache = Await.result(localEntityProvider.entityTypeMetadata(true, testContext), Duration.Inf)
 
       // Save a new entity to the workspace
       val newEntity = Entity("new-entity-name", "new-entity-tpe", Map.empty)
-      Await.result(localEntityProvider.createEntity(newEntity), Duration.Inf)
+      Await.result(localEntityProvider.createEntity(newEntity, testContext), Duration.Inf)
 
       // Force the monitor to sweep and update the oldest stale cache
       // In this scenario, it's the only workspace so we know it will be picked up
@@ -179,7 +179,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       }
 
       // Load the latest cache
-      val newCache = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+      val newCache = Await.result(localEntityProvider.entityTypeMetadata(true, testContext), Duration.Inf)
 
       // Assert that the new cache is different than the old one and contains the new entity type that we added earlier
       originalCache should not be newCache
@@ -220,7 +220,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       )
 
       // Load the current entityMetadata (which should not use the cache)
-      val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+      val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true, testContext), Duration.Inf)
 
       // Note that the call to entityTypeMetadata updated the cache as a side effect, since the cache was out of date.
       // Therefore, once again update the entityCacheLastUpdated field to be older than lastModified, so
@@ -247,7 +247,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       }
 
       // Load the latest entityMetadata, which should use the cache
-      val latestResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+      val latestResult = Await.result(localEntityProvider.entityTypeMetadata(true, testContext), Duration.Inf)
 
       // Assert that the new cache is different than the old one and contains the new entity type that we added earlier
       originalResult shouldBe latestResult
