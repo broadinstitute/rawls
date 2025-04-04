@@ -34,9 +34,13 @@ trait EntityProvider {
 
   // ----- implementation methods follow:
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentContext: RawlsRequestContext): Future[Traversable[Entity]]
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                          parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentContext: RawlsRequestContext): Future[Traversable[Entity]]
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                          parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]]
 
   def copyEntities(sourceWorkspaceContext: Workspace,
                    destWorkspaceContext: Workspace,
@@ -52,11 +56,18 @@ trait EntityProvider {
 
   def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int]
 
-  def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName], parentContext: RawlsRequestContext): Future[Unit]
+  def deleteEntityAttributes(entityType: String,
+                             attributeNames: Set[AttributeName],
+                             parentContext: RawlsRequestContext
+  ): Future[Unit]
 
   def entityTypeMetadata(useCache: Boolean, parentContext: RawlsRequestContext): Future[Map[String, EntityTypeMetadata]]
 
-  def evaluateExpression(entityType: String, entityName: String, expression: String, parentContext: RawlsRequestContext): Future[Seq[AttributeValue]]
+  def evaluateExpression(entityType: String,
+                         entityName: String,
+                         expression: String,
+                         parentContext: RawlsRequestContext
+  ): Future[Seq[AttributeValue]]
 
   /**
   The overall approach is:
@@ -107,9 +118,17 @@ trait EntityProvider {
                       parentContext: RawlsRequestContext
   ): Future[Int]
 
-  def renameEntity(entityType: String, entityName: String, newName: String, parentContext: RawlsRequestContext): Future[Int]
+  def renameEntity(entityType: String,
+                   entityName: String,
+                   newName: String,
+                   parentContext: RawlsRequestContext
+  ): Future[Int]
 
   def renameEntityType(oldName: String, renameInfo: EntityTypeRename, parentContext: RawlsRequestContext): Future[Int]
 
-  def updateEntity(entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation], parentContext: RawlsRequestContext): Future[Entity]
+  def updateEntity(entityType: String,
+                   entityName: String,
+                   operations: Seq[AttributeUpdateOperation],
+                   parentContext: RawlsRequestContext
+  ): Future[Entity]
 }

@@ -89,7 +89,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
 
   final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
 
-  override def entityTypeMetadata(useCache: Boolean, parentContext: RawlsRequestContext): Future[Map[String, EntityTypeMetadata]] =
+  override def entityTypeMetadata(useCache: Boolean,
+                                  parentContext: RawlsRequestContext
+  ): Future[Map[String, EntityTypeMetadata]] =
     // start performance tracing
     traceFutureWithParent("LocalEntityProvider.entityTypeMetadata", parentContext) { localContext =>
       setTraceSpanAttribute(localContext,
@@ -170,7 +172,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] =
     dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-      traceDBIOWithParent("getEntity", parentContext) { _ => dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) } flatMap {
+      traceDBIOWithParent("getEntity", parentContext) { _ =>
+        dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name)
+      } flatMap {
         case Some(_) =>
           DBIO.failed(
             new RawlsExceptionWithErrorReport(
@@ -180,7 +184,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                 )
             )
           )
-        case None => traceDBIOWithParent("saveEntity", parentContext) { _ => dataAccess.entityQuery.save(workspaceContext, entity) }
+        case None =>
+          traceDBIOWithParent("saveEntity", parentContext)(_ => dataAccess.entityQuery.save(workspaceContext, entity))
       }
     }
 
@@ -229,11 +234,16 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  override def deleteEntityAttributes(entityType: EntityName, attributeNames: Set[AttributeName], parentContext: RawlsRequestContext): Future[Unit] =
+  override def deleteEntityAttributes(entityType: EntityName,
+                                      attributeNames: Set[AttributeName],
+                                      parentContext: RawlsRequestContext
+  ): Future[Unit] =
     dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("deleteEntityAttributes", parentContext) { _ => dataAccess
-        .entityAttributeShardQuery(workspaceContext)
-        .deleteAttributes(workspaceContext, entityType, attributeNames) } flatMap {
+      traceDBIOWithParent("deleteEntityAttributes", parentContext) { _ =>
+        dataAccess
+          .entityAttributeShardQuery(workspaceContext)
+          .deleteAttributes(workspaceContext, entityType, attributeNames)
+      } flatMap {
         case Vector(0) =>
           throw new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names.")
@@ -250,37 +260,40 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[Seq[AttributeValue]] =
     dataSource.inTransaction(
       dataAccess =>
-        traceDBIOWithParent("withSingleEntityRec", parentContext) { _ => withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          traceDBIOWithParent("withNewExpressionEvaluator", parentContext) { _ => ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-              traceDBIOWithParent("evalFinalAttribute", parentContext) { _ => evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
-                  // parsing failure
-                  case Failure(regret) =>
-                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                  case Success(valuesByEntity) =>
-                    if (valuesByEntity.size != 1) {
-                      // wrong number of entities?!
-                      throw new RawlsException(
-                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                      )
-                    } else {
-                      assert(valuesByEntity.head._1 == entityName)
-                      valuesByEntity.head match {
-                        case (_, Success(result)) => result.toSeq
-                        case (_, Failure(regret)) =>
-                          throw new RawlsExceptionWithErrorReport(
-                            errorReport = ErrorReport(
-                              StatusCodes.BadRequest,
-                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                              ErrorReport(regret)
+        traceDBIOWithParent("withSingleEntityRec", parentContext) { _ =>
+          withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+            traceDBIOWithParent("withNewExpressionEvaluator", parentContext) { _ =>
+              ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
+                traceDBIOWithParent("evalFinalAttribute", parentContext) { _ =>
+                  evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
+                    // parsing failure
+                    case Failure(regret) =>
+                      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
+                    case Success(valuesByEntity) =>
+                      if (valuesByEntity.size != 1) {
+                        // wrong number of entities?!
+                        throw new RawlsException(
+                          s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
+                        )
+                      } else {
+                        assert(valuesByEntity.head._1 == entityName)
+                        valuesByEntity.head match {
+                          case (_, Success(result)) => result.toSeq
+                          case (_, Failure(regret)) =>
+                            throw new RawlsExceptionWithErrorReport(
+                              errorReport = ErrorReport(
+                                StatusCodes.BadRequest,
+                                "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
+                                ErrorReport(regret)
+                              )
                             )
-                          )
+                        }
                       }
-                    }
+                  }
                 }
               }
             }
           }
-        }
         },
       TransactionIsolation.ReadCommitted
     )
@@ -348,13 +361,14 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
-    dataSource.inTransaction(dataAccess =>
-                               traceDBIOWithParent("withEntity", parentContext) { _ =>
-                                 withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-                                   DBIO.successful(entity)
-                                 }
-                               },
-                             TransactionIsolation.ReadCommitted
+    dataSource.inTransaction(
+      dataAccess =>
+        traceDBIOWithParent("withEntity", parentContext) { _ =>
+          withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+            DBIO.successful(entity)
+          }
+        },
+      TransactionIsolation.ReadCommitted
     )
 
   /*
@@ -614,10 +628,14 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentContext: RawlsRequestContext): Future[Traversable[Entity]] =
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                                   parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = false, parentContext)
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentContext: RawlsRequestContext): Future[Traversable[Entity]] =
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                                   parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = true, parentContext)
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
@@ -683,7 +701,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     dataSource.inTransaction { dataAccess =>
       val newAttributeName = attributeRenameRequest.newAttributeName
       for {
-        _ <- traceDBIOWithParent("validateNewAttributeName", parentContext) { _ => validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName) }
+        _ <- traceDBIOWithParent("validateNewAttributeName", parentContext) { _ =>
+          validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
+        }
         rowsUpdated <- traceDBIOWithParent("renameAttribute", parentContext) { _ =>
           dataAccess
             .entityAttributeShardQuery(workspaceContext)
@@ -694,12 +714,21 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
-  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName, parentContext: RawlsRequestContext): Future[Int] =
+  override def renameEntity(entityType: EntityName,
+                            entityName: EntityName,
+                            newName: EntityName,
+                            parentContext: RawlsRequestContext
+  ): Future[Int] =
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("withEntity", parentContext) { s =>
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          traceDBIOWithParent("checkNameConflict getEntity", s) { _ => dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) } flatMap {
-            case None => traceDBIOWithParent("renameEntity", s) { _ => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName) }
+          traceDBIOWithParent("checkNameConflict getEntity", s) { _ =>
+            dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName)
+          } flatMap {
+            case None =>
+              traceDBIOWithParent("renameEntity", s) { _ =>
+                dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
+              }
             case Some(_) =>
               throw new RawlsExceptionWithErrorReport(
                 errorReport =
@@ -710,7 +739,10 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename, parentContext: RawlsRequestContext): Future[Int] = {
+  override def renameEntityType(oldName: EntityName,
+                                renameInfo: EntityTypeRename,
+                                parentContext: RawlsRequestContext
+  ): Future[Int] = {
     def validateExistingType(dataAccess: DataAccess,
                              workspaceContext: Workspace,
                              oldName: String
@@ -763,7 +795,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
           val updateAction = Try {
             val updatedEntity = applyOperationsToEntity(entity, operations)
-            traceDBIOWithParent("saveEntity", s) { _ => dataAccess.entityQuery.save(workspaceContext, updatedEntity) }
+            traceDBIOWithParent("saveEntity", s)(_ => dataAccess.entityQuery.save(workspaceContext, updatedEntity))
           } match {
             case Success(result) => result
             case Failure(e: AttributeUpdateOperationException) =>
