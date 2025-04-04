@@ -73,9 +73,11 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     * @tparam T type returned by the query
     * @return query results
     */
+  // the `null` default for concurrency is ugly. However, it is the value specified by
+  // the .withStatementParameters implementation, so that ugliness is carried up to here
   def inTransaction[T](f: (DataAccess) => ReadWriteAction[T],
                        isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
-                       concurrency: ResultSetConcurrency = ResultSetConcurrency.Auto
+                       concurrency: ResultSetConcurrency = null
   ): Future[T] =
     database.run(
       f(dataAccess).transactionally
