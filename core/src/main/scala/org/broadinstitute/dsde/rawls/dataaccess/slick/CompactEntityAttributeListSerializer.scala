@@ -7,6 +7,6 @@ import org.broadinstitute.dsde.rawls.model.PlainArrayAttributeListSerializer
   * PlainArrayAttributeListSerializer. We are giving it its own name to centralize and standardize compact
   * entity code on a consistent serializer.
   *
-  * @link org.broadinstitute.dsde.rawls.model.AttributeListSerializer
+  * See [[org.broadinstitute.dsde.rawls.model.AttributeListSerializer]] for details on this serialization.
   */
 trait CompactEntityAttributeListSerializer extends PlainArrayAttributeListSerializer {}

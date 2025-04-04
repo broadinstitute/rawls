@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, Entity}
@@ -45,6 +46,7 @@ trait CompactEntityComponent extends LazyLogging {
       *
       * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
       */
+    // TODO CORE-362: execution plan
     def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
       val attributesJson: JsValue = entity.attributes.toJson
 
@@ -55,6 +57,7 @@ trait CompactEntityComponent extends LazyLogging {
     /**
       * Read a single entity from the db
       */
+    // TODO CORE-362: execution plan
     def getEntity(workspaceId: UUID,
                   entityType: String,
                   entityName: String
@@ -71,6 +74,7 @@ trait CompactEntityComponent extends LazyLogging {
       */
     // should this return CompactEntityRefRecord instead of Long? Do we ever need to know which ids
     // belong to which reference?
+    // TODO CORE-362: execution plan
     def getReferencedIds(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[Long]] =
       // short-circuit
       if (refs.isEmpty) {
@@ -114,6 +118,7 @@ trait CompactEntityComponent extends LazyLogging {
       *
       * Returns the number of rows deleted.
       */
+    // TODO CORE-362: execution plan
     def deleteReferences(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
       val query = if (idsToKeep.isEmpty) {
         sql"""delete from ENTITY_REFS where from_id = $fromId;"""
@@ -138,6 +143,7 @@ trait CompactEntityComponent extends LazyLogging {
       *
       * Returns the number of rows upserted.
       */
+    // TODO CORE-362: execution plan
     def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
       val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
         sql"($fromId,$toId)"
@@ -163,11 +169,15 @@ trait CompactEntityComponent extends LazyLogging {
     // ====================================================================================================
 
     // return all reference targets for a given reference source
-    def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
+    // TODO CORE-362: execution plan
+    @VisibleForTesting
+    protected[slick] def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
       sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
 
     // return the ENTITY_KEYS row for a given entity
-    def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
+    // TODO CORE-362: execution plan
+    @VisibleForTesting
+    protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
       val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
             from ENTITY_KEYS
             where id = $entityId;""".as[KeysRecord]
