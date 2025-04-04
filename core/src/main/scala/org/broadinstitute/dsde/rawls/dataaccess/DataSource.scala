@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import _root_.slick.basic.DatabaseConfig
-import _root_.slick.jdbc.{JdbcProfile, TransactionIsolation}
+import _root_.slick.jdbc.{JdbcProfile, ResultSetConcurrency, TransactionIsolation}
 import com.google.common.base.Throwables
 import com.typesafe.scalalogging.LazyLogging
 import liquibase.database.jvm.JdbcConnection
@@ -33,10 +33,55 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
 
   import dataAccess.driver.api._
 
-  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T],
-                       isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead
+  /**
+    * Execute a database query inside a transaction
+    * @param f the database query to execute
+    * @param concurrency read-only vs. updatable. Default: the driver's default
+    * @tparam T type returned by the query
+    * @return query results
+    */
+  def inTransaction[T](concurrency: ResultSetConcurrency)(f: DataAccess => ReadWriteAction[T]): Future[T] =
+    inTransaction[T](f, concurrency = concurrency)
+
+  /**
+    * Execute a database query inside a transaction
+    * @param f the database query to execute
+    * @param isolationLevel isolation level for the transaction. Default: repeatable read
+    * @tparam T type returned by the query
+    * @return query results
+    */
+  def inTransaction[T](isolationLevel: TransactionIsolation)(f: DataAccess => ReadWriteAction[T]): Future[T] =
+    inTransaction[T](f, isolationLevel = isolationLevel)
+
+  /**
+    * Execute a database query inside a transaction
+    * @param f the database query to execute
+    * @param isolationLevel isolation level for the transaction. Default: repeatable read
+    * @tparam T type returned by the query
+    * @return query results
+    */
+  def inTransaction[T](concurrency: ResultSetConcurrency, isolationLevel: TransactionIsolation)(
+    f: DataAccess => ReadWriteAction[T]
   ): Future[T] =
-    database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
+    inTransaction[T](f, isolationLevel, concurrency)
+
+  /**
+    * Execute a database query inside a transaction
+    * @param f the database query to execute
+    * @param isolationLevel isolation level for the transaction. Default: repeatable read
+    * @param concurrency read-only vs. updatable. Default: the driver's default
+    * @tparam T type returned by the query
+    * @return query results
+    */
+  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T],
+                       isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                       concurrency: ResultSetConcurrency = ResultSetConcurrency.Auto
+  ): Future[T] =
+    database.run(
+      f(dataAccess).transactionally
+        .withTransactionIsolation(isolationLevel)
+        .withStatementParameters(rsConcurrency = concurrency)
+    )
 
   def createEntityAttributeTempTable =
     sql"""call createEntityAttributeTempTable()""".as[Boolean]
