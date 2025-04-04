@@ -45,8 +45,9 @@ trait CompactEntityComponent extends LazyLogging {
       * Insert a single entity to the db.
       *
       * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
+      *
+      * `execution plan: single-row insert`
       */
-    // TODO CORE-362: execution plan
     def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
       val attributesJson: JsValue = entity.attributes.toJson
 
@@ -56,25 +57,31 @@ trait CompactEntityComponent extends LazyLogging {
 
     /**
       * Read a single entity from the db
+      *
+      * `execution plan: single row constant; fully indexed by idx_entity_type_name`
       */
-    // TODO CORE-362: execution plan
     def getEntity(workspaceId: UUID,
                   entityType: String,
                   entityName: String
     ): ReadAction[Option[CompactEntityRecord]] = {
       val selectStatement: SQLActionBuilder =
         sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
-              from ENTITY where workspace_id = $workspaceId and entity_type = $entityType and name = $entityName"""
+              from ENTITY
+              where workspace_id = $workspaceId
+              and entity_type = $entityType
+              and name = $entityName
+              and deleted = 0;"""
 
       uniqueResult(selectStatement.as[CompactEntityRecord])
     }
 
     /** Given a set of entity references, return the ids being referenced.
       * Ignores deleted entities.
+      *
+      * `execution plan: Using index condition; Using where. Covered by idx_entity_type_name`
       */
     // should this return CompactEntityRefRecord instead of Long? Do we ever need to know which ids
     // belong to which reference?
-    // TODO CORE-362: execution plan
     def getReferencedIds(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[Long]] =
       // short-circuit
       if (refs.isEmpty) {
@@ -89,9 +96,9 @@ trait CompactEntityComponent extends LazyLogging {
             // build the "IN" clause values
             val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
             concatSqlActions(
-              sql""" entity_type = $entityType and name in (""",
+              sql""" (entity_type = $entityType and name in (""",
               entityNamesSql,
-              sql") "
+              sql")) "
             )
         }
 
@@ -117,8 +124,11 @@ trait CompactEntityComponent extends LazyLogging {
       * Delete from ENTITY_REFS where to_id not in (toIds) and from_id = ?
       *
       * Returns the number of rows deleted.
+      *
+      * `execution plan: Index range scan; using where. Possible indexes: unq_from_to,idx_to; actual index: unq_from_to.`
       */
-    // TODO CORE-362: execution plan
+    // The index range scan is caused by the "not in" clause. I believe this is still optimal as compared to
+    // performing a select, performing a diff in the Scala layer, then sending an optimized delete query back to MySQL
     def deleteReferences(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
       val query = if (idsToKeep.isEmpty) {
         sql"""delete from ENTITY_REFS where from_id = $fromId;"""
@@ -142,8 +152,9 @@ trait CompactEntityComponent extends LazyLogging {
       * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
       *
       * Returns the number of rows upserted.
+      *
+      * `execution plan: batched insert (one statement, multiple rows)`
       */
-    // TODO CORE-362: execution plan
     def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
       val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
         sql"($fromId,$toId)"
@@ -169,13 +180,13 @@ trait CompactEntityComponent extends LazyLogging {
     // ====================================================================================================
 
     // return all reference targets for a given reference source
-    // TODO CORE-362: execution plan
+    // `execution plan: non-unique key lookup; fully indexed by unq_from_to`
     @VisibleForTesting
     protected[slick] def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
       sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
 
     // return the ENTITY_KEYS row for a given entity
-    // TODO CORE-362: execution plan
+    // `execution plan: single row constant; fully indexed by primary key`
     @VisibleForTesting
     protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
       val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
