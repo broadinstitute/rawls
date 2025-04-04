@@ -163,11 +163,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
     val expectedFailureInputs = Map(
-      "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
     val expectedFailureOutputs = Map(
-      "goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'also' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -219,7 +219,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
       val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
       val expectedFailureInputs = Map(
-        "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'blah' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+        "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
       )
       val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
       val expectedFailureOutputs = Map(
@@ -786,11 +786,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
     val expectedFailureInputs = Map(
-      "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
     val expectedFailureOutputs = Map(
-      "goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'also' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
 
     httpMethod(testData.goodAndBadMethodConfig.path(testData.workspace), httpJson(testData.goodAndBadMethodConfig)) ~>
@@ -924,11 +924,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
     val expectedFailureInputs = Map(
-      "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
     val expectedFailureOutputs = Map(
-      "goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'also' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
 
     val mc = testData.goodAndBadMethodConfig.copy(name = "blah",
@@ -970,7 +970,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
       val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
       val expectedFailureInputs = Map(
-        "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+        "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
       )
       val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
       val expectedFailureOutputs = Map(
