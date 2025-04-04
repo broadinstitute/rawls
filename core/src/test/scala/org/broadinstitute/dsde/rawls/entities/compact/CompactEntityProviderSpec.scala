@@ -88,7 +88,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(provider.createEntity(entityToCreate), atMost)
+    val actual = Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
 
     actual shouldBe entityToCreate
 
@@ -130,7 +130,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(provider.createEntity(entityToCreate), atMost)
+    val actual = Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
 
     actual shouldBe entityToCreate
 
@@ -186,7 +186,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(provider.createEntity(entityToCreate), atMost)
+    val actual = Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
 
     actual shouldBe entityToCreate
 
@@ -236,7 +236,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
     val actual = intercept[EntityReferenceNotFoundException] {
-      Await.result(provider.createEntity(entityToCreate), atMost)
+      Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
     }
 
     actual shouldBe a[EntityReferenceNotFoundException]
@@ -278,7 +278,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(provider.createEntity(entityToCreate), atMost)
+      Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
     }
 
     actual shouldBe a[RawlsExceptionWithErrorReport]
@@ -313,7 +313,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(provider.createEntity(entityToCreate), atMost)
+        Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
       }
 
       actual shouldBe a[RawlsExceptionWithErrorReport]
@@ -348,7 +348,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name"), atMost)
+    val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
     val expected = Entity(rec.name, rec.entityType, Map())
 
     actual shouldBe expected
@@ -366,7 +366,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     // provider using mocks
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
-    val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name"), atMost)
+    val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
 
     val expected = Entity(rec.name,
                           rec.entityType,
@@ -388,7 +388,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
 
     val actual = intercept[EntityNotFoundException] {
-      Await.result(provider.getEntity("nonexistent-type", "nonexistent-name"), atMost)
+      Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
     }
     actual shouldBe a[EntityNotFoundException]
   }
