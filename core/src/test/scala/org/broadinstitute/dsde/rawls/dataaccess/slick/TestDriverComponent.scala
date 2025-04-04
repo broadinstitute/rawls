@@ -186,14 +186,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submissionRoot = s"gs://${workspace.bucketName}/${submissionId}",
       workflows = workflows,
       status = SubmissionStatuses.Submitted,
-      useCallCache = useCallCache,
-      deleteIntermediateOutputFiles = deleteIntermediateOutputFiles,
-      useReferenceDisks = useReferenceDisks,
-      memoryRetryMultiplier = memoryRetryMultiplier,
       workflowFailureMode = workflowFailureMode,
       cost = individualWorkflowCost.map(_ * workflows.length),
-      externalEntityInfo,
-      ignoreEmptyOutputs = ignoreEmptyOutputs
+      externalEntityInfo = externalEntityInfo,
+      options = SubmissionOptions(
+        useCallCache = useCallCache,
+        deleteIntermediateOutputFiles = deleteIntermediateOutputFiles,
+        useReferenceDisks = useReferenceDisks,
+        memoryRetryMultiplier = memoryRetryMultiplier,
+        ignoreEmptyOutputs = ignoreEmptyOutputs
+      )
     )
   }
 
@@ -1342,8 +1344,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTerminateTest = Submission(
@@ -1385,8 +1386,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with a succeeeded workflow
@@ -1408,8 +1408,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with a succeeeded workflow
@@ -1431,8 +1430,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with a failed workflow
@@ -1454,8 +1452,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with a submitted workflow
@@ -1477,8 +1474,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with an aborted workflow
@@ -1500,8 +1496,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Aborted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with an aborted workflow
@@ -1523,8 +1518,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Aborted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with multiple failed and succeeded workflows
@@ -1581,8 +1575,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // two submissions interleaved in time
@@ -1608,8 +1601,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
     val innerSubmission = Submission(
       submissionId = UUID.randomUUID().toString,
@@ -1629,8 +1621,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with a submitted workflow and a custom workflow failure mode
@@ -1652,8 +1643,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false,
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
       workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
     )
 

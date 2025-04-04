@@ -104,8 +104,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     override def save() =

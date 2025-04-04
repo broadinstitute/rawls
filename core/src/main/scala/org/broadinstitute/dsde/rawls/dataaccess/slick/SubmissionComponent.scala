@@ -488,20 +488,20 @@ trait SubmissionComponent {
         configId,
         entityId,
         submission.status.toString,
-        submission.useCallCache,
-        submission.deleteIntermediateOutputFiles,
-        submission.useReferenceDisks,
-        submission.memoryRetryMultiplier,
+        submission.options.useCallCache,
+        submission.options.deleteIntermediateOutputFiles,
+        submission.options.useReferenceDisks,
+        submission.options.memoryRetryMultiplier,
         submission.workflowFailureMode.map(_.toString),
         submission.externalEntityInfo.map(_.dataStoreId),
         submission.externalEntityInfo.map(_.rootEntityType),
         submission.userComment,
         submission.submissionRoot,
-        submission.ignoreEmptyOutputs,
+        submission.options.ignoreEmptyOutputs,
         submission.monitoringScript,
         submission.monitoringImage,
         submission.monitoringImageScript,
-        submission.perWorkflowCostCap
+        submission.options.perWorkflowCostCap
       )
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord,
@@ -519,21 +519,23 @@ trait SubmissionComponent {
         submissionRec.submissionRoot,
         workflows.toList.sortBy(wf => wf.workflowEntity.map(_.entityName).getOrElse("")),
         SubmissionStatuses.withName(submissionRec.status),
-        submissionRec.useCallCache,
-        submissionRec.deleteIntermediateOutputFiles,
-        submissionRec.useReferenceDisks,
-        submissionRec.memoryRetryMultiplier,
         WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
         externalEntityInfo = for {
           entityStoreId <- submissionRec.entityStoreId
           rootEntityType <- submissionRec.rootEntityType
         } yield ExternalEntityInfo(entityStoreId, rootEntityType),
         userComment = submissionRec.userComment,
-        ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
         monitoringScript = submissionRec.monitoringScript,
         monitoringImage = submissionRec.monitoringImage,
         monitoringImageScript = submissionRec.monitoringImageScript,
-        perWorkflowCostCap = submissionRec.perWorkflowCostCap
+        options = SubmissionOptions(
+          submissionRec.useCallCache,
+          submissionRec.deleteIntermediateOutputFiles,
+          submissionRec.useReferenceDisks,
+          submissionRec.memoryRetryMultiplier,
+          ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
+          perWorkflowCostCap = submissionRec.perWorkflowCostCap
+        )
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,

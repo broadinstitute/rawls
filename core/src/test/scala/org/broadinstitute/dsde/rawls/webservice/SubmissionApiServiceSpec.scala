@@ -708,8 +708,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       submissionEntity = Option(testData.indiv1.toReference),
       workflows = workflows,
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     runAndWait(submissionQuery.create(testData.workspace, testSubmission))

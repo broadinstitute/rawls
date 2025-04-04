@@ -160,8 +160,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestAbortMalformedWorkflow = Submission(
@@ -182,8 +181,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestAbortGoodWorkflow = Submission(
@@ -204,8 +202,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestAbortTerminalWorkflow = Submission(
@@ -226,8 +223,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestAbortOneMissingWorkflow = Submission(
@@ -255,8 +251,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestAbortTwoGoodWorkflows = Submission(
@@ -284,8 +279,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestTwoCompletedWorkflows = Submission(
@@ -313,8 +307,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionToRetry = Submission(
@@ -342,8 +335,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val submissionTestCromwellBadWorkflows = Submission(
@@ -364,8 +356,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       ),
       status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     val extantWorkflowOutputs = WorkflowOutputs(

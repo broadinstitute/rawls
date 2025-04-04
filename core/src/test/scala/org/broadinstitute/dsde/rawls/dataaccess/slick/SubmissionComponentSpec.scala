@@ -92,9 +92,8 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       )
     ),
     status = SubmissionStatuses.Submitted,
-    useCallCache = true,
     externalEntityInfo = Option(ExternalEntityInfo(UUID.randomUUID().toString, "external")),
-    deleteIntermediateOutputFiles = true
+    options = SubmissionOptions(useCallCache = true, deleteIntermediateOutputFiles = true)
   )
 
   val inputResolutionsList = Seq(
@@ -180,17 +179,18 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "save, get and list a submission with a cost threshold (aka cost cap)" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
     val costThreshold = BigDecimal.valueOf(12.34)
-    val testSubmission = submission3.copy(perWorkflowCostCap = Option(costThreshold))
+    val submission3Options = submission3.options
+    val testSubmission = submission3.copy(options = submission3Options.copy(perWorkflowCostCap = Option(costThreshold)))
     // create submission with cost threshold
     runAndWait(submissionQuery.create(workspaceContext, testSubmission))
     // validate the .get method
     val actualGet = runAndWait(submissionQuery.get(workspaceContext, testSubmission.submissionId))
     actualGet should contain(testSubmission)
-    actualGet.get.perWorkflowCostCap should contain(costThreshold)
+    actualGet.get.options.perWorkflowCostCap should contain(costThreshold)
     // validate the .list method
     val actualList = runAndWait(submissionQuery.list(workspaceContext))
     actualList should contain(testSubmission)
-    actualList.filter(_.submissionId == testSubmission.submissionId).head.perWorkflowCostCap should contain(
+    actualList.filter(_.submissionId == testSubmission.submissionId).head.options.perWorkflowCostCap should contain(
       costThreshold
     )
   }
@@ -350,8 +350,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       submissionEntity = None,
       workflows = Seq(),
       status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     withWorkspaceContext(testData.workspace) { context =>

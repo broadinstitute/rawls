@@ -174,6 +174,14 @@ case class WorkflowCostBreakdown(id: String, cost: BigDecimal, currency: String,
 
 case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
 
+case class SubmissionOptions(useCallCache: Boolean,
+                             deleteIntermediateOutputFiles: Boolean,
+                             useReferenceDisks: Boolean = false,
+                             memoryRetryMultiplier: Double = 1.0,
+                             ignoreEmptyOutputs: Boolean = false,
+                             perWorkflowCostCap: Option[BigDecimal] = None
+)
+
 // Status of a submission
 case class Submission(
   submissionId: String,
@@ -185,19 +193,14 @@ case class Submission(
   submissionRoot: String,
   workflows: Seq[Workflow],
   status: SubmissionStatus,
-  useCallCache: Boolean,
-  deleteIntermediateOutputFiles: Boolean,
-  useReferenceDisks: Boolean = false,
-  memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
   userComment: Option[String] = None,
-  ignoreEmptyOutputs: Boolean = false,
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  perWorkflowCostCap: Option[BigDecimal] = None
+  options: SubmissionOptions = SubmissionOptions(false, false, false, 1.0, false, None)
 )
 
 case class SubmissionListResponse(
@@ -237,8 +240,8 @@ object SubmissionListResponse {
       submissionEntity = submission.submissionEntity,
       status = submission.status,
       workflowStatuses = workflowStatuses,
-      useCallCache = submission.useCallCache,
-      deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
+      useCallCache = submission.options.useCallCache,
+      deleteIntermediateOutputFiles = submission.options.deleteIntermediateOutputFiles,
       submissionRoot = submission.submissionRoot,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
@@ -533,7 +536,9 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat: RootJsonFormat[ExternalEntityInfo] = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat: RootJsonFormat[Submission] = jsonFormat22(Submission)
+  implicit val SubmissionOptionsFormat: RootJsonFormat[SubmissionOptions] = jsonFormat6(SubmissionOptions)
+
+  implicit val SubmissionFormat: RootJsonFormat[Submission] = jsonFormat17(Submission)
 
   implicit val SubmissionRetryFormat: RootJsonFormat[SubmissionRetry] = jsonFormat1(SubmissionRetry)
 

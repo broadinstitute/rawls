@@ -48,6 +48,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SeparateSubmissionFinalOutputsSetting,
   Submission,
   SubmissionListResponse,
+  SubmissionOptions,
   SubmissionReport,
   SubmissionRequest,
   SubmissionRetry,
@@ -621,6 +622,32 @@ class SubmissionsService(
         gatherInputsResult,
         workspaceExpressionResults
       )
+//      submissionParameters <- submissionRequest.entityName.flatten map { entityName =>
+//        entityProvider.evaluateExpressions(
+//          ExpressionEvaluationContext(submissionRequest.entityType,
+//                                      entityName,
+//                                      submissionRequest.expression,
+//                                      methodConfig.rootEntityType
+//          ),
+//          gatherInputsResult,
+//          workspaceExpressionResults
+//        )
+//      }
+//      submissionParameters <- {
+//        val entityNames = submissionRequest.entityName
+//        val futures: List[Future[LazyList[SubmissionValidationEntityInputs]]] = entityNames.map { entityName =>
+//          entityProvider.evaluateExpressions(
+//            ExpressionEvaluationContext(submissionRequest.entityType,
+//                                        Some(entityName),
+//                                        submissionRequest.expression,
+//                                        methodConfig.rootEntityType
+//            ),
+//            gatherInputsResult,
+//            workspaceExpressionResults
+//          )
+//        }.toList
+//        Future.sequence(futures).map(lists => LazyList.concat(lists: _*))
+//      }
       submissionPath <- submissionRootPath(workspaceContext, submissionId)
     } yield PreparedSubmission(
       workspaceContext,
@@ -814,15 +841,16 @@ class SubmissionsService(
         )
       }
 
-      val submissionEntityOpt = if (header.entityType.isEmpty || submissionRequest.entityName.isEmpty) {
-        None
-      } else {
-        Some(
-          AttributeEntityReference(entityType = submissionRequest.entityType.get,
-                                   entityName = submissionRequest.entityName.get
+      val submissionEntityOpt =
+        if (header.entityType.isEmpty || submissionRequest.entityName.isEmpty) {
+          None
+        } else {
+          Some(
+            AttributeEntityReference(entityType = submissionRequest.entityType.get,
+                                     entityName = submissionRequest.entityName.get
+            )
           )
-        )
-      }
+        }
 
       val submission = Submission(
         submissionId = submissionId.toString,
@@ -833,22 +861,24 @@ class SubmissionsService(
         submissionEntity = submissionEntityOpt,
         workflows = workflows ++ workflowFailures,
         status = SubmissionStatuses.Submitted,
-        useCallCache = submissionRequest.useCallCache,
-        deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
         submissionRoot = submissionRoot,
-        useReferenceDisks = submissionRequest.useReferenceDisks,
-        memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
         workflowFailureMode = workflowFailureMode,
         externalEntityInfo = for {
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
         userComment = submissionRequest.userComment,
-        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs,
         monitoringScript = submissionRequest.monitoringScript,
         monitoringImage = submissionRequest.monitoringImage,
         monitoringImageScript = submissionRequest.monitoringImageScript,
-        perWorkflowCostCap = submissionRequest.perWorkflowCostCap
+        options = SubmissionOptions(
+          useCallCache = submissionRequest.useCallCache,
+          deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+          useReferenceDisks = submissionRequest.useReferenceDisks,
+          memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
+          ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs,
+          perWorkflowCostCap = submissionRequest.perWorkflowCostCap
+        )
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
