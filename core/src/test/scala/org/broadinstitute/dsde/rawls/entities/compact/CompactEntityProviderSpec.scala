@@ -29,7 +29,6 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-// TODO CORE-362: API-level or service-level equivalence test for LocalEntityProvider vs. CompactEntityProvider?
 class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
