@@ -58,7 +58,8 @@ import org.broadinstitute.dsde.rawls.util.{
   CollectionUtils,
   EntitySupport
 }
-import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
+import slick.jdbc.{ResultSetConcurrency, ResultSetType}
+import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
@@ -105,69 +106,62 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       )
 
       // start transaction
-      dataSource.inTransaction(
-        dataAccess =>
-          if (!useCache || !cacheEnabled) {
-            if (!cacheEnabled) {
+      dataSource.inTransaction(ReadCommitted) { dataAccess =>
+        if (!useCache || !cacheEnabled) {
+          if (!cacheEnabled) {
+            logger.info(
+              s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]"
+            )
+          } else if (!useCache) {
+            logger.info(
+              s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]"
+            )
+          }
+          // retrieve metadata, bypassing cache
+          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
+        } else {
+          // system and request both have cache enabled. Check for existence and staleness of cache
+          cacheStaleness(dataAccess, localContext).flatMap {
+            case None =>
+              // cache does not exist - return uncached
               logger.info(
-                s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]"
+                s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]"
               )
-            } else if (!useCache) {
-              logger.info(
-                s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]"
-              )
-            }
-            // retrieve metadata, bypassing cache
-            calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-          } else {
-            // system and request both have cache enabled. Check for existence and staleness of cache
-            cacheStaleness(dataAccess, localContext).flatMap {
-              case None =>
-                // cache does not exist - return uncached
-                logger.info(
-                  s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]"
-                )
+              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
+            case Some(0) =>
+              // cache is up to date - return cached
+              logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
+              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
+            case Some(stalenessSeconds) =>
+              // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
+              cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
+                if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
+                  setTraceSpanAttribute(localContext,
+                                        AttributeKey.booleanKey("alwaysCacheTypeCountsFeatureFlag"),
+                                        java.lang.Boolean.valueOf(flags.alwaysCacheTypeCounts)
+                  )
+                  setTraceSpanAttribute(localContext,
+                                        AttributeKey.booleanKey("alwaysCacheAttributesFeatureFlag"),
+                                        java.lang.Boolean.valueOf(flags.alwaysCacheAttributes)
+                  )
+                  logger.info(
+                    s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
+                  )
+                } else {
+                  logger.info(
+                    s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
+                  )
+                  // and opportunistically save
+                }
                 calculateMetadataResponse(dataAccess,
-                                          countsFromCache = false,
-                                          attributesFromCache = false,
+                                          countsFromCache = flags.alwaysCacheTypeCounts,
+                                          attributesFromCache = flags.alwaysCacheAttributes,
                                           localContext
                 )
-              case Some(0) =>
-                // cache is up to date - return cached
-                logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-                calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
-              case Some(stalenessSeconds) =>
-                // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
-                cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
-                  if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                    setTraceSpanAttribute(localContext,
-                                          AttributeKey.booleanKey("alwaysCacheTypeCountsFeatureFlag"),
-                                          java.lang.Boolean.valueOf(flags.alwaysCacheTypeCounts)
-                    )
-                    setTraceSpanAttribute(localContext,
-                                          AttributeKey.booleanKey("alwaysCacheAttributesFeatureFlag"),
-                                          java.lang.Boolean.valueOf(flags.alwaysCacheAttributes)
-                    )
-                    logger.info(
-                      s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                    )
-                  } else {
-                    logger.info(
-                      s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                    )
-                    // and opportunistically save
-                  }
-                  calculateMetadataResponse(dataAccess,
-                                            countsFromCache = flags.alwaysCacheTypeCounts,
-                                            attributesFromCache = flags.alwaysCacheAttributes,
-                                            localContext
-                  )
-                } // end feature-flags lookup
-            } // end staleness lookup
-          } // end if useCache/cacheEnabled check
-        ,
-        TransactionIsolation.ReadCommitted
-      ) // end transaction
+              } // end feature-flags lookup
+          } // end staleness lookup
+        } // end if useCache/cacheEnabled check
+      } // end transaction
     } // end root trace
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] =
@@ -258,64 +252,60 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                   expression: EntityName,
                                   parentContext: RawlsRequestContext
   ): Future[Seq[AttributeValue]] =
-    dataSource.inTransaction(
-      dataAccess =>
-        traceDBIOWithParent("withSingleEntityRec", parentContext) { _ =>
-          withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-            traceDBIOWithParent("withNewExpressionEvaluator", parentContext) { _ =>
-              ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-                traceDBIOWithParent("evalFinalAttribute", parentContext) { _ =>
-                  evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
-                    // parsing failure
-                    case Failure(regret) =>
-                      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                    case Success(valuesByEntity) =>
-                      if (valuesByEntity.size != 1) {
-                        // wrong number of entities?!
-                        throw new RawlsException(
-                          s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                        )
-                      } else {
-                        assert(valuesByEntity.head._1 == entityName)
-                        valuesByEntity.head match {
-                          case (_, Success(result)) => result.toSeq
-                          case (_, Failure(regret)) =>
-                            throw new RawlsExceptionWithErrorReport(
-                              errorReport = ErrorReport(
-                                StatusCodes.BadRequest,
-                                "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                                ErrorReport(regret)
-                              )
+    dataSource.inTransaction(ReadCommitted) { dataAccess =>
+      traceDBIOWithParent("withSingleEntityRec", parentContext) { _ =>
+        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+          traceDBIOWithParent("withNewExpressionEvaluator", parentContext) { _ =>
+            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
+              traceDBIOWithParent("evalFinalAttribute", parentContext) { _ =>
+                evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
+                  // parsing failure
+                  case Failure(regret) =>
+                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
+                  case Success(valuesByEntity) =>
+                    if (valuesByEntity.size != 1) {
+                      // wrong number of entities?!
+                      throw new RawlsException(
+                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
+                      )
+                    } else {
+                      assert(valuesByEntity.head._1 == entityName)
+                      valuesByEntity.head match {
+                        case (_, Success(result)) => result.toSeq
+                        case (_, Failure(regret)) =>
+                          throw new RawlsExceptionWithErrorReport(
+                            errorReport = ErrorReport(
+                              StatusCodes.BadRequest,
+                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
+                              ErrorReport(regret)
                             )
-                        }
+                          )
                       }
-                  }
+                    }
                 }
               }
             }
           }
-        },
-      TransactionIsolation.ReadCommitted
-    )
+        }
+      }
+    }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
   ): Future[LazyList[SubmissionValidationEntityInputs]] =
-    dataSource.inTransaction(
-      dataAccess =>
-        withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
-          // Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-          evaluateExpressionsInternal(workspaceContext,
-                                      gatherInputsResult.processableInputs,
-                                      jobEntityRecs,
-                                      dataAccess
-          ) map { valuesByEntity =>
-            createSubmissionValidationEntityInputs(valuesByEntity)
-          }
-        },
-      TransactionIsolation.ReadCommitted
-    )
+    dataSource.inTransaction(ReadCommitted) { dataAccess =>
+      withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
+        // Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
+        evaluateExpressionsInternal(workspaceContext,
+                                    gatherInputsResult.processableInputs,
+                                    jobEntityRecs,
+                                    dataAccess
+        ) map { valuesByEntity =>
+          createSubmissionValidationEntityInputs(valuesByEntity)
+        }
+      }
+    }
 
   override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
 
@@ -361,15 +351,13 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
-    dataSource.inTransaction(
-      dataAccess =>
-        traceDBIOWithParent("withEntity", parentContext) { _ =>
-          withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-            DBIO.successful(entity)
-          }
-        },
-      TransactionIsolation.ReadCommitted
-    )
+    dataSource.inTransaction(ReadCommitted) { dataAccess =>
+      traceDBIOWithParent("withEntity", parentContext) { _ =>
+        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+          DBIO.successful(entity)
+        }
+      }
+    }
 
   /*
    * Queries the db for a stream of entity attributes.
@@ -381,7 +369,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     val allAttrsStream = dataSource.dataAccess.entityQuery
       .streamActiveEntityAttributesOfType(workspaceContext, entityType)
       .transactionally
-      .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+      .withTransactionIsolation(ReadCommitted)
       .withStatementParameters(rsType = ResultSetType.ForwardOnly,
                                rsConcurrency = ResultSetConcurrency.ReadOnly,
                                fetchSize = dataSource.dataAccess.fetchSize
@@ -429,10 +417,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     // if filtering by name, retrieve that entity directly, else do the full query:
     nameFilter match {
       case Some(entityName) =>
-        dataSource.inTransaction(
-          dataAccess => dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query),
-          TransactionIsolation.ReadCommitted
-        ) map { case (unfilteredCount, filteredCount, entity) =>
+        dataSource.inTransaction(ReadCommitted) { dataAccess =>
+          dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query)
+        } map { case (unfilteredCount, filteredCount, entity) =>
           val pageCount = if (entity.nonEmpty) 1 else 0
           val entitySource = if (entity.nonEmpty) Source.single(entity.head) else Source.empty
 
@@ -472,27 +459,25 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                query: EntityQuery,
                                parentContext: RawlsRequestContext
   ): Future[EntityQueryResultMetadata] =
-    dataSource.inTransaction(
-      dataAccess =>
-        for {
-          (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
-                                                                                          entityType,
-                                                                                          query,
-                                                                                          parentContext
+    dataSource.inTransaction(ReadCommitted) { dataAccess =>
+      for {
+        (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
+                                                                                        entityType,
+                                                                                        query,
+                                                                                        parentContext
+        )
+      } yield {
+        val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+        if (filteredCount > 0 && query.page > pageCount) {
+          throw new DataEntityException(
+            code = StatusCodes.BadRequest,
+            message = s"requested page ${query.page} is greater than the number of pages $pageCount"
           )
-        } yield {
-          val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-          if (filteredCount > 0 && query.page > pageCount) {
-            throw new DataEntityException(
-              code = StatusCodes.BadRequest,
-              message = s"requested page ${query.page} is greater than the number of pages $pageCount"
-            )
-          }
+        }
 
-          EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
-        },
-      TransactionIsolation.ReadCommitted
-    )
+        EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
+      }
+    }
 
   /**
    * generates a Source[Entity, _] representing the individual Entity results for the incoming query.
@@ -511,7 +496,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       dataSource.dataAccess.entityQuery
         .loadEntityPageSource(workspaceContext, entityType, query, parentContext)
         .transactionally
-        .withTransactionIsolation(TransactionIsolation.ReadCommitted)
+        .withTransactionIsolation(ReadCommitted)
         .withStatementParameters(rsType = ResultSetType.ForwardOnly,
                                  rsConcurrency = ResultSetConcurrency.ReadOnly,
                                  fetchSize = dataSource.dataAccess.fetchSize
