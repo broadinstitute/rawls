@@ -71,7 +71,7 @@ object Dependencies {
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.18"
-  val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0" exclude("org.typelevel", "cats-parse_2.13")
+  val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
@@ -157,7 +157,9 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     // override commons-codec to address a non-CVE warning from DefectDojo
-    "commons-codec"                 % "commons-codec"         % "1.18.0"
+    "commons-codec"                 % "commons-codec"         % "1.18.0",
+    // override cats-parse to address conflicting dependency versions for scala-uri
+    "org.typelevel" %% "cats-parse" % "1.1.0"
   )
 
   val extraOpenTelemetryDependencies = Seq(
