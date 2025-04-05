@@ -21,9 +21,11 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
+import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Millis, Seconds, Span}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
@@ -35,6 +37,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
   private val slickDataSource = DbResource.dataSource // needed for transactions in the provider
   private val atMost = Duration("60 seconds") // timeout for Await() in tests
+  implicit val patienceConfig: PatienceConfig =
+    PatienceConfig(timeout = scaled(Span(5, Seconds)), interval = scaled(Span(200, Millis))) // timeout for eventually()
 
   private val defaultRequestContext =
     RawlsRequestContext(
@@ -525,8 +529,61 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     verify(mockRepository, times(1)).upsertReferences(2, Set(7, 8, 9))
   }
 
-  // ====================================================================================================
-  //  helper methods
-  // ====================================================================================================
+  behavior of "withWorkspaceLastModified"
+
+  it should "trigger a last-modified update on success of the original future" in {
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.updateLastModified(any[UUID]()))
+      .thenReturn(Future.successful(1))
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val original = Future.successful(123)
+    // we have not yet called updateLastModified
+    verify(mockRepository, never()).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
+    provider.withWorkspaceLastModified(original)
+    // execute and verify original function
+    val actual = Await.result(original, atMost)
+    actual shouldBe 123
+    // we should now call updateLastModified within 1 second
+    verify(mockRepository, mockitotimeout(1000).times(1)).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
+  }
+
+  it should "not trigger a last-modified update on failure of the original future" in {
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.updateLastModified(any))
+      .thenReturn(Future.successful(1))
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    // original function throws an error
+    val original =
+      Future.failed(new RuntimeException("withWorkspaceLastModified intentional failure in original function"))
+    provider.withWorkspaceLastModified(original)
+    // execute and verify original function, which fails
+    val actual = intercept[RuntimeException] {
+      Await.result(original, atMost)
+    }
+    actual shouldBe a[RuntimeException]
+    // we want to test that the callback is NOT invoked. Since the callback happens asynchronously, we can't wait for it
+    // to NOT happen; we just add a sleep and have to be satisfied the callback isn't invoked in that time.
+    Thread.sleep(1000)
+    verify(mockRepository, never).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
+  }
+
+  it should "not fail if the last-modified update fails" in {
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.updateLastModified(any))
+      .thenThrow(new RuntimeException("withWorkspaceLastModified intentional failure in updateLastModified"))
+    // provider using mocks
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val original = Future.successful(123)
+    // we have not yet called updateLastModified
+    verify(mockRepository, never()).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
+    provider.withWorkspaceLastModified(original)
+    // execute and verify original function, which should return success even if updateLastModified errors
+    val actual = Await.result(original, atMost)
+    actual shouldBe 123
+    // we should now call updateLastModified within 1 second. This threw an error but it will be ignored.
+    verify(mockRepository, mockitotimeout(1000).times(1)).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
+  }
 
 }

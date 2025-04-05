@@ -6,7 +6,6 @@ import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -14,6 +13,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
@@ -76,7 +76,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = ???
 
-  // TODO CORE-362: update workspace last-updated date? Revisit this functionality.
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
     EntityUtils.validateEntity(entity)
     dataSource.inTransaction { _ =>
@@ -108,6 +107,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // save all references from this entity to other entities
         _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
       } yield savedEntityRecord.toEntity
+
+      withWorkspaceLastModified(createFuture)
 
       DBIO.from(createFuture)
     }
@@ -223,5 +224,22 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       } yield (deletes, upserts)
     }
   }
+
+  /**
+    * Update the workspace's last-modified timestamp - in a separate non-blocking transaction - upon successful
+    * completion of a given Future.
+    *
+    * @param func the original function
+    * @tparam T return type of original function
+    */
+  protected[compact] def withWorkspaceLastModified[T](func: Future[T]): Unit =
+    // update the workspace last modified date in a separate transaction
+    func.foreach(_ =>
+      repository.updateLastModified(workspaceId).recover { case t: Throwable =>
+        logger.warn(
+          s"Failed to update workspace last-modified timestamp. Workspace $workspaceId; message: ${t.getMessage}"
+        )
+      }
+    )
 
 }

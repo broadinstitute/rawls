@@ -40,4 +40,9 @@ class CompactEntityRepository(dataSource: SlickDataSource) {
     dataAccess.compactEntityQuery.upsertReferences(fromId, toIds)
   }
 
+  // used frequently by entity writes, so included here for convenience
+  def updateLastModified(workspaceId: UUID): Future[Int] = dataSource.inTransaction { dataAccess =>
+    dataAccess.workspaceQuery.updateLastModified(workspaceId)
+  }
+
 }
