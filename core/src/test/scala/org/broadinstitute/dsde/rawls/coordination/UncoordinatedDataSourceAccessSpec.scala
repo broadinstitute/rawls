@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.coordination
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.mockito.ArgumentMatchers.{any, eq => argeq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -51,7 +52,7 @@ class UncoordinatedDataSourceAccessSpec
       val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
       val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
       val transactionIsolation = TransactionIsolation.RepeatableRead
-      when(mockSlickDataSource.inTransaction(mockDataAccessFunction, transactionIsolation))
+      when(mockSlickDataSource.inTransaction(argeq(mockDataAccessFunction), argeq(transactionIsolation), any()))
         .thenReturn(Future(function()))
       val testAccess = new UncoordinatedDataSourceAccess(mockSlickDataSource)
       val future = testAccess.inTransaction[Any](mockDataAccessFunction, transactionIsolation)
