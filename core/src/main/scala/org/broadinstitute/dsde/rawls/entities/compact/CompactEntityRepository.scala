@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityRecord
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity}
+import slick.jdbc.ResultSetConcurrency.ReadOnly
 
 import java.util.UUID
 import scala.concurrent.Future
@@ -23,12 +24,12 @@ class CompactEntityRepository(dataSource: SlickDataSource) {
   }
 
   def getEntity(workspaceId: UUID, entityType: String, entityName: String): Future[Option[CompactEntityRecord]] =
-    dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction(ReadOnly) { dataAccess =>
       dataAccess.compactEntityQuery.getEntity(workspaceId, entityType, entityName)
     }
 
   def getReferencedIds(workspaceId: UUID, refs: Set[AttributeEntityReference]): Future[Seq[Long]] =
-    dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction(ReadOnly) { dataAccess =>
       dataAccess.compactEntityQuery.getReferencedIds(workspaceId, refs)
     }
 
