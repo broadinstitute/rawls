@@ -41,7 +41,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     * @return query results
     */
   def inTransaction[T](concurrency: ResultSetConcurrency)(f: DataAccess => ReadWriteAction[T]): Future[T] =
-    inTransaction[T](f, concurrency = concurrency)
+    inTransaction[T](f, concurrency = Option(concurrency))
 
   /**
     * Execute a database query inside a transaction
@@ -63,7 +63,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
   def inTransaction[T](concurrency: ResultSetConcurrency, isolationLevel: TransactionIsolation)(
     f: DataAccess => ReadWriteAction[T]
   ): Future[T] =
-    inTransaction[T](f, isolationLevel, concurrency)
+    inTransaction[T](f, isolationLevel, Option(concurrency))
 
   /**
     * Execute a database query inside a transaction
