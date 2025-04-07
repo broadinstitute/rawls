@@ -170,7 +170,7 @@ class BucketMigrationServiceImpl(val dataSource: SlickDataSource, val samDAO: Sa
       // get migration progress if it exists
       workspacesWithProgressOpt <- workspaces.traverse { workspace =>
         dataSource
-          .inTransaction(getBucketMigrationProgress(workspace))
+          .inTransaction(dataAccess => getBucketMigrationProgress(workspace)(dataAccess))
           .recover(_ => None)
           .map(workspace -> _)
       }
@@ -309,7 +309,7 @@ class BucketMigrationServiceImpl(val dataSource: SlickDataSource, val samDAO: Sa
     workspaces
       .traverse { workspace =>
         dataSource
-          .inTransaction(getBucketMigrationProgress(workspace))
+          .inTransaction(dataAccess => getBucketMigrationProgress(workspace)(dataAccess))
           .recover(_ => None)
           .map(workspace.toWorkspaceName.toString -> _)
       }

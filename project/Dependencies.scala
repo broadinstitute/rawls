@@ -37,7 +37,7 @@ object Dependencies {
   val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
 
   val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.9" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
-  val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.4.2" // Needed for connection pooling with the Bard client
+  val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.4.3" // Needed for connection pooling with the Bard client
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleApiV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20241011-" + googleV))
@@ -50,7 +50,7 @@ object Dependencies {
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20250211-" + googleV)
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20250208-" + googleV)
   val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20250212-" + googleV)
-  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.4.5-jre"
+  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.4.6-jre"
 
   val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % ("v3-rev20250130-" + googleV)
 
@@ -64,14 +64,14 @@ object Dependencies {
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.18.3"
-  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.13.1"
+  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.14.0"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.5.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.6.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.18"
-  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "4.0.3"
+  val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
@@ -129,10 +129,10 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1183-SNAPSHOT")
+  val workspaceManager = clientLibExclusions("bio.terra" % "workspace-manager-client" % "0.254.1186-SNAPSHOT")
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.42-SNAPSHOT")
-  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.615-SNAPSHOT")
+  val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.618-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.375")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
@@ -149,7 +149,7 @@ object Dependencies {
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.3").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
-  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.25"
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.26"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
@@ -157,7 +157,9 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     // override commons-codec to address a non-CVE warning from DefectDojo
-    "commons-codec"                 % "commons-codec"         % "1.18.0"
+    "commons-codec"                 % "commons-codec"         % "1.18.0",
+    // override cats-parse to address conflicting dependency versions for scala-uri
+    "org.typelevel" %% "cats-parse" % "1.1.0"
   )
 
   val extraOpenTelemetryDependencies = Seq(

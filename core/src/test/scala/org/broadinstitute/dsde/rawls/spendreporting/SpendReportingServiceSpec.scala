@@ -896,7 +896,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val bpmDAO = mock[BillingProfileManagerDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
-    when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any())).thenReturn(Future.successful(None))
+    when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any(), any()))
+      .thenReturn(Future.successful(None))
     val service = spy(
       new SpendReportingService(
         testContext,
@@ -926,7 +927,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
-    when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any()))
+    when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any(), any()))
       .thenReturn(Future.failed(new RawlsException()))
     val service = new SpendReportingService(
       testContext,
@@ -2388,7 +2389,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       "test.rawls"
     )
 
-    when(mockDataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any()))
+    when(mockDataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any(), any()))
       .thenReturn(
         Future.successful(
           Some(

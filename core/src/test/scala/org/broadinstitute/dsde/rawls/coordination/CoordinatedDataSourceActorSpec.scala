@@ -7,6 +7,7 @@ import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.coordination.CoordinatedDataSourceActorSpec._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.mockito.ArgumentMatchers.{any, eq => argeq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -69,7 +70,7 @@ class CoordinatedDataSourceActorSpec
       val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
       val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
       val transactionIsolation = TransactionIsolation.RepeatableRead
-      when(mockSlickDataSource.inTransaction(mockDataAccessFunction, transactionIsolation))
+      when(mockSlickDataSource.inTransaction(argeq(mockDataAccessFunction), argeq(transactionIsolation), any()))
         .thenReturn(Future(function()))
       val future = testActor ?
         CoordinatedDataSourceActor.Run(
@@ -103,7 +104,7 @@ class CoordinatedDataSourceActorSpec
     val transactionIsolation = TransactionIsolation.RepeatableRead
 
     val quickening = new Quickening(individualSleep)
-    when(mockSlickDataSource.inTransaction(mockDataAccessFunction, transactionIsolation))
+    when(mockSlickDataSource.inTransaction(argeq(mockDataAccessFunction), argeq(transactionIsolation), any()))
       .thenAnswer(_ => Future(quickening.highlander()))
 
     val futures = (0 until numTested) map { _ =>
@@ -137,9 +138,9 @@ class CoordinatedDataSourceActorSpec
     val transactionIsolation = TransactionIsolation.RepeatableRead
 
     val quickening = new Quickening(individualSleep)
-    when(mockSlickDataSource.inTransaction(mockDataAccessFunction, transactionIsolation))
+    when(mockSlickDataSource.inTransaction(argeq(mockDataAccessFunction), argeq(transactionIsolation), any()))
       .thenAnswer(_ => Future(quickening.highlander()))
-    when(mockSlickDataSource.inTransaction(slowDataAccessFunction, transactionIsolation))
+    when(mockSlickDataSource.inTransaction(argeq(slowDataAccessFunction), argeq(transactionIsolation), any()))
       .thenAnswer(_ => Future(Thread.sleep(1.second.toMillis)))
 
     // Create the runs with short deadlines first

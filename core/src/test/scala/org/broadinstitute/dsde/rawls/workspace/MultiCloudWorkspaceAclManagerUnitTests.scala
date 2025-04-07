@@ -59,7 +59,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
     val billingProfileId = UUID.randomUUID()
 
     val mockDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any())).thenReturn(
+    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any(), any())).thenReturn(
       Future.successful(
         Option(
           RawlsBillingProject(
@@ -120,7 +120,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
     )
 
     val mockDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any())).thenReturn(
+    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any(), any())).thenReturn(
       Future.successful(
         Option(
           RawlsBillingProject(
@@ -168,7 +168,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
     )
 
     val mockDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any())).thenReturn(
+    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any(), any())).thenReturn(
       Future.successful(
         None
       )
