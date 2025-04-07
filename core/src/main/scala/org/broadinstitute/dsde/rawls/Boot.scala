@@ -21,7 +21,7 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.samplers.Sampler
-import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
+import io.opentelemetry.sdk.{OpenTelemetrySdk, resources}
 import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
@@ -29,23 +29,18 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
-  HttpWorkspaceManagerClientProvider,
-  HttpWorkspaceManagerDAO
-}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+import org.broadinstitute.dsde.rawls.dataaccess.policyservice.HttpPolicyServiceDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.googleProject.{
-  GoogleProjectRegistrationRepository,
-  GoogleProjectRegistrationService
-}
+import org.broadinstitute.dsde.rawls.googleProject.{GoogleProjectRegistrationRepository, GoogleProjectRegistrationService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
@@ -61,16 +56,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceAdminService,
-  WorkspaceRepository,
-  WorkspaceService,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceAdminService, WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -259,6 +245,8 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
 
+      val policyServiceDAO = new HttpPolicyServiceDAO(appConfigManager.conf.getString("policyService.baseUrl"))
+
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
 
@@ -427,7 +415,8 @@ object Boot extends IOApp with LazyLogging {
           appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
-        fastPassServiceConstructor
+        fastPassServiceConstructor,
+        policyServiceDAO
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

@@ -4,20 +4,14 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  IamRole,
-  RoleBinding,
-  RoleBindingList,
-  WorkspaceDescription,
-  WorkspaceStageModel
-}
+import bio.terra.workspace.model.{AzureContext, IamRole, RoleBinding, RoleBindingList, WorkspaceDescription, WorkspaceStageModel}
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+import org.broadinstitute.dsde.rawls.dataaccess.policyservice.PolicyServiceDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -30,12 +24,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  UserDisabledException,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
@@ -118,7 +107,8 @@ class WorkspaceServiceUnitTests
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
     submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
-    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
+    policyServiceDAO: PolicyServiceDAO = mock[PolicyServiceDAO](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -147,7 +137,8 @@ class WorkspaceServiceUnitTests
       workspaceRepository,
       billingRepository,
       submissionsRepository,
-      workspaceSettingRepository
+      workspaceSettingRepository,
+      policyServiceDAO
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"

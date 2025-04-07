@@ -7,27 +7,10 @@ import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+import org.broadinstitute.dsde.rawls.dataaccess.policyservice.PolicyServiceDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.model.{
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  SamResourcePolicyName,
-  SamResourceTypeName,
-  SamResourceTypeNames,
-  SamUserStatusResponse,
-  SamWorkspaceActions,
-  SamWorkspacePolicyNames,
-  UserIdInfo,
-  UserInfo,
-  Workspace,
-  WorkspaceACLUpdate,
-  WorkspaceACLUpdateResponseList,
-  WorkspaceAccessLevels,
-  WorkspaceName,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceActions, SamWorkspacePolicyNames, UserIdInfo, UserInfo, Workspace, WorkspaceACLUpdate, WorkspaceACLUpdateResponseList, WorkspaceAccessLevels, WorkspaceName, WorkspaceType}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
@@ -102,7 +85,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
     submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
-    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
+    policyServiceDAO: PolicyServiceDAO = mock[PolicyServiceDAO](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -131,7 +115,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       workspaceRepository,
       billingRepository,
       submissionsRepository,
-      workspaceSettingRepository
+      workspaceSettingRepository,
+      policyServiceDAO
     )(scala.concurrent.ExecutionContext.global)
 
   // Return mocks with reasonable defaults for basic usage. Override mocked behavior as needed.
