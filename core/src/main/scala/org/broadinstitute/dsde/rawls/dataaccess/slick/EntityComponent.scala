@@ -4,18 +4,12 @@ import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceDBIOWithParent}
-import org.broadinstitute.dsde.rawls.{
-  model,
-  RawlsException,
-  RawlsExceptionWithErrorReport,
-  RawlsFatalExceptionWithErrorReport
-}
+import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
 import slick.dbio.Effect.Read
-import slick.jdbc.{GetResult, JdbcProfile, ResultSetConcurrency, ResultSetType, SQLActionBuilder, TransactionIsolation}
+import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 import slick.sql.SqlStreamingAction
 
 import java.nio.charset.StandardCharsets
@@ -872,7 +866,7 @@ trait EntityComponent {
       filter(_.id === id)
 
     def findEntitiesByIds(ids: Seq[Long]): EntityQuery =
-      filter(_.id in ids)
+      filter(_.id inSet ids)
 
     // Actions
 

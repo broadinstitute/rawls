@@ -16,6 +16,7 @@ import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
 import scala.language.postfixOps
+import scala.reflect.runtime.universe.Try
 
 /**
  * Created by mbemis on 2/18/16.
@@ -384,7 +385,14 @@ trait SubmissionComponent {
           workflows <- loadSubmissionWorkflows(rec.get.id)
           entity <- DBIO.sequenceOption(rec.get.submissionEntityId.map(loadEntity))
           workspace <- workspaceQuery.findById(rec.get.workspaceId.toString)
-        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows)
+          entities <- rec.get.submissionEntities match {
+            case Some(entitiesString) =>
+              val entityIds = entitiesString.split(",").toSeq.map(_.toLong) // Adjust the delimiter if necessary
+              loadEntities(entityIds).map(Some(_))
+            case None =>
+              DBIO.successful(None)
+          }
+        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows, entities)
       }
 
     def loadSubmissionWorkflowsWithIds(submissionId: UUID): ReadAction[Seq[(Long, Workflow)]] = {
@@ -585,7 +593,8 @@ trait SubmissionComponent {
                                           workspace: Workspace,
                                           config: MethodConfiguration,
                                           entity: Option[AttributeEntityReference],
-                                          workflows: Seq[Workflow]
+                                          workflows: Seq[Workflow],
+                                          entities: Option[Seq[AttributeEntityReference]]
     ): ActiveSubmission =
       ActiveSubmission(
         workspace.namespace,
@@ -594,7 +603,7 @@ trait SubmissionComponent {
                             config,
                             entity,
                             workflows.toList.sortBy(wf => wf.workflowEntity.map(_.entityName).getOrElse("")),
-                            None // TODO get these
+                            entities
         )
       )
 
