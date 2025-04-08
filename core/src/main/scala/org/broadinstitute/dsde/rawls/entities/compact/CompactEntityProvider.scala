@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -35,6 +35,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import slick.dbio.DBIO
+import slick.jdbc.ResultSetConcurrency.ReadOnly
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -47,10 +48,7 @@ import scala.util.Try
   *
   * @param executionContext scala concurrency context
   */
-class CompactEntityProvider(requestArguments: EntityRequestArguments,
-                            repository: CompactEntityRepository,
-                            dataSource: SlickDataSource
-)(implicit
+class CompactEntityProvider(requestArguments: EntityRequestArguments, repository: CompactEntityRepository)(implicit
   protected val executionContext: ExecutionContext
 ) extends EntityProvider
     with LazyLogging {
@@ -78,10 +76,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
     EntityUtils.validateEntity(entity)
-    dataSource.inTransaction { _ =>
-      val createFuture = for {
+    val createFuture = repository.dataSource.inTransaction { _ =>
+      for {
         // does this entity already exist?
-        preExisting <- repository.getEntity(workspaceId, entity.entityType, entity.name)
+        preExisting <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         _ = if (preExisting.nonEmpty)
           throw new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(
@@ -94,24 +92,24 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // find all unique references in this entity
         uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
         // verify that all references in the entity-to-be-saved actually exist
-        referencedIds <- repository.getReferencedIds(workspaceId, uniqueRefs)
+        referencedIds <- repository.queries.getReferencedIds(workspaceId, uniqueRefs)
         _ = if (uniqueRefs.size != referencedIds.size)
           throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
-        _ <- repository.createEntity(workspaceId, entity)
+        _ <- repository.queries.createEntity(workspaceId, entity)
         // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
         // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
         // normalized version.
-        savedEntityRecordOption <- repository.getEntity(workspaceId, entity.entityType, entity.name)
+        savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
         // save all references from this entity to other entities
         _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
       } yield savedEntityRecord.toEntity
-
-      withWorkspaceLastModified(createFuture)
-
-      DBIO.from(createFuture)
     }
+
+    withWorkspaceLastModified(createFuture)
+
+    createFuture
   }
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
@@ -142,11 +140,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   override def expressionValidator: ExpressionValidator = ???
 
-  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
-    repository.getEntity(workspaceId, entityType, entityName) map {
+  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
+    val queryResult = repository.dataSource.inTransaction(ReadOnly) { _ =>
+      repository.queries.getEntity(workspaceId, entityType, entityName)
+    }
+    queryResult map {
       case Some(entityRec) => entityRec.toEntity
       case None            => throw new EntityNotFoundException()
     }
+  }
 
   override def listEntities(entityType: String): Source[Entity, NotUsed] = ???
 
@@ -200,46 +202,51 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
   // entity
-  protected[compact] def replaceReferences(fromId: Long, toIds: Set[Long], isInsert: Boolean): Future[(Int, Int)] = {
+  protected[compact] def replaceReferences(fromId: Long,
+                                           toIds: Set[Long],
+                                           isInsert: Boolean
+  ): ReadWriteAction[(Int, Int)] = {
     // short-circuit
     if (isInsert && toIds.isEmpty) {
-      Future.successful((0, 0))
+      DBIO.successful((0, 0))
     }
-    dataSource.inTransaction { _ =>
-      for {
-        // delete any reference pointers that should no longer exist
-        deletes <-
-          if (isInsert) {
-            DBIO.successful(0)
-          } else {
-            DBIO.from(repository.deleteReferences(fromId, toIds))
-          }
-        // upsert all reference pointers that do exist
-        upserts <-
-          if (toIds.isEmpty) {
-            DBIO.successful(0)
-          } else {
-            DBIO.from(repository.upsertReferences(fromId, toIds))
-          }
-      } yield (deletes, upserts)
-    }
+
+    for {
+      // delete any reference pointers that should no longer exist
+      deletes <-
+        if (isInsert) {
+          DBIO.successful(0)
+        } else {
+          repository.queries.deleteReferences(fromId, toIds)
+        }
+      // upsert all reference pointers that do exist
+      upserts <-
+        if (toIds.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          repository.queries.upsertReferences(fromId, toIds)
+        }
+    } yield (deletes, upserts)
   }
 
   /**
-    * Update the workspace's last-modified timestamp - in a separate non-blocking transaction - upon successful
+    * Update the workspace's last-modified timestamp - in a separate transaction - upon successful
     * completion of a given Future.
     *
     * @param func the original function
     * @tparam T return type of original function
     */
   protected[compact] def withWorkspaceLastModified[T](func: Future[T]): Unit =
-    // update the workspace last modified date in a separate transaction
     func.foreach(_ =>
-      repository.updateLastModified(workspaceId).recover { case t: Throwable =>
-        logger.warn(
-          s"Failed to update workspace last-modified timestamp. Workspace $workspaceId; message: ${t.getMessage}"
-        )
-      }
+      repository.dataSource
+        .inTransaction { _ =>
+          repository.updateLastModified(workspaceId)
+        }
+        .recover { case t: Throwable =>
+          logger.warn(
+            s"Failed to update workspace last-modified timestamp. Workspace $workspaceId; message: ${t.getMessage}"
+          )
+        }
     )
 
 }

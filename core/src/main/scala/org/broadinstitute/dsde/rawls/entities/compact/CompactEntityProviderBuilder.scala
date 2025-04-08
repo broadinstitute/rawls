@@ -19,5 +19,5 @@ class CompactEntityProviderBuilder(dataSource: SlickDataSource)(implicit
   /** create the EntityProvider this builder knows how to create.
     */
   override def build(requestArguments: EntityRequestArguments): Try[CompactEntityProvider] =
-    Success(new CompactEntityProvider(requestArguments, new CompactEntityRepository(dataSource), dataSource))
+    Success(new CompactEntityProvider(requestArguments, new CompactEntityRepository(dataSource)))
 }

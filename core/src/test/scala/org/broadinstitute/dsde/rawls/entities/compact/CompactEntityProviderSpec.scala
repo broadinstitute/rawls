@@ -2,7 +2,12 @@ package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, DbResource}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  CompactEntityQuery,
+  CompactEntityRecord,
+  ReadWriteAction,
+  TestDriverComponentWithFlatSpecAndMatchers
+}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{
@@ -23,19 +28,18 @@ import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
+import slick.dbio.DBIO
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
+class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatchers with MockitoTestUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  private val slickDataSource = DbResource.dataSource // needed for transactions in the provider
+  // private val slickDataSource = DbResource.dataSource // needed for transactions in the provider
   private val atMost = Duration("60 seconds") // timeout for Await() in tests
   implicit val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = scaled(Span(5, Seconds)), interval = scaled(Span(200, Millis))) // timeout for eventually()
@@ -60,6 +64,8 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
   private val defaultEntityRequestArguments =
     EntityRequestArguments(defaultWorkspace, defaultRequestContext)
 
+  // extender for
+
   // ====================================================================================================
   // tests for CompactEntityProvider public implementations of EntityProvider methods
   // ====================================================================================================
@@ -82,28 +88,29 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
                           Some("{}")
       )
 
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getReferencedIds(any(), any())).thenReturn(Future.successful(Seq()))
-    when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(None)) // first request finds nothing
-      .thenReturn(Future.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    // mocks
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
 
     actual shouldBe entityToCreate
 
-    verify(mockRepository, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
-    verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
-                                               entityToCreate.entityType,
-                                               entityToCreate.name
+    verify(mockQuery, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockQuery, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                          entityToCreate.entityType,
+                                          entityToCreate.name
     )
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any(), any())
   }
 
   it should "persist an entity with simple attributes" in {
@@ -124,28 +131,28 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
                           Some("""{"baz":123,"foo":"bar"}""")
       )
 
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getReferencedIds(any(), any())).thenReturn(Future.successful(Seq()))
-    when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(None)) // first request finds nothing
-      .thenReturn(Future.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
 
     actual shouldBe entityToCreate
 
-    verify(mockRepository, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
-    verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
-                                               entityToCreate.entityType,
-                                               entityToCreate.name
+    verify(mockQuery, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockQuery, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                          entityToCreate.entityType,
+                                          entityToCreate.name
     )
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any(), any())
   }
 
   it should "persist an entity with references" in {
@@ -177,24 +184,24 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
         )
       )
 
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getReferencedIds(any(), any()))
-      .thenReturn(Future.successful(Seq(0, 1, 2))) // reference lookup returns ids
-    when(mockRepository.createEntity(any(), any())).thenReturn(Future.successful(1))
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(None)) // first request finds nothing
-      .thenReturn(Future.successful(Some(createdEntityRec))) // second request finds the entity we saved
-    when(mockRepository.upsertReferences(any(), any()))
-      .thenReturn(Future.successful(2))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencedIds(any(), any()))
+      .thenReturn(DBIO.successful(Seq(0, 1, 2))) // reference lookup returns ids
+    when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    when(mockQuery.upsertReferences(any(), any()))
+      .thenReturn(DBIO.successful(2))
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
 
     actual shouldBe entityToCreate
 
-    verify(mockRepository, times(1)).getReferencedIds(
+    verify(mockQuery, times(1)).getReferencedIds(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
         AttributeEntityReference("referencedType", "referencedName0"),
@@ -202,14 +209,14 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
         AttributeEntityReference("referencedType", "referencedName2")
       )
     )
-    verify(mockRepository, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
-                                               entityToCreate.entityType,
-                                               entityToCreate.name
+    verify(mockQuery, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockQuery, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                          entityToCreate.entityType,
+                                          entityToCreate.name
     )
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, times(1)).upsertReferences(42,
-                                                      Set(0, 1, 2)
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, times(1)).upsertReferences(42,
+                                                 Set(0, 1, 2)
     ) // 42 is the entity id from createdEntityRec; Set(0, 1, 2) are the ids returned from getReferencedIds
   }
 
@@ -230,14 +237,14 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       )
     )
 
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(None)) // first request finds nothing
-    when(mockRepository.getReferencedIds(any(), any()))
-      .thenReturn(Future.successful(Seq(0, 1))) // reference lookup returns only two of the three desired references
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+    when(mockQuery.getReferencedIds(any(), any()))
+      .thenReturn(DBIO.successful(Seq(0, 1))) // reference lookup returns only two of the three desired references
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = intercept[EntityReferenceNotFoundException] {
       Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
@@ -245,7 +252,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
     actual shouldBe a[EntityReferenceNotFoundException]
 
-    verify(mockRepository, times(1)).getReferencedIds(
+    verify(mockQuery, times(1)).getReferencedIds(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
         AttributeEntityReference("referencedType", "referencedName0"),
@@ -253,13 +260,13 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
         AttributeEntityReference("referencedType", "referencedName2")
       )
     )
-    verify(mockRepository, never()).createEntity(any(), any())
-    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
-                                               entityToCreate.entityType,
-                                               entityToCreate.name
+    verify(mockQuery, never()).createEntity(any(), any())
+    verify(mockQuery, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                          entityToCreate.entityType,
+                                          entityToCreate.name
     )
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any(), any())
   }
 
   it should "throw RawlsExceptionWithErrorReport if this type & name already exists" in {
@@ -274,12 +281,12 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
                           Some("{}")
       )
 
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(Some(createdEntityRec)))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(Some(createdEntityRec)))
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
@@ -287,18 +294,18 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
     actual shouldBe a[RawlsExceptionWithErrorReport]
 
-    verify(mockRepository, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
-                                               entityToCreate.entityType,
-                                               entityToCreate.name
+    verify(mockQuery, times(1)).getEntity(defaultWorkspace.workspaceIdAsUUID,
+                                          entityToCreate.entityType,
+                                          entityToCreate.name
     )
 
-    verify(mockRepository, never()).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
-    verify(mockRepository, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any(), any())
   }
 
-  val illegalEntities = Map(
+  private val illegalEntities = Map(
     "illegal entity name" -> Entity("no! @@bad@@", "type", Map()),
     "illegal entity type" -> Entity("name", "no! @@bad@@", Map()),
     "illegal attribute name" -> Entity("name",
@@ -311,10 +318,9 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
   illegalEntities foreach { case (hint, entityToCreate) =>
     it should s"throw RawlsExceptionWithErrorReport when presented with a(n) $hint" in {
-      val mockRepository = mock[CompactEntityRepository]
-
       // provider using mocks
-      val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+      val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+      val provider = providerWithMocks(mockQuery)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
         Await.result(provider.createEntity(entityToCreate, defaultRequestContext), atMost)
@@ -322,11 +328,11 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
       actual shouldBe a[RawlsExceptionWithErrorReport]
 
-      verify(mockRepository, never()).getEntity(any(), any(), any())
-      verify(mockRepository, never()).getReferencedIds(any(), any())
-      verify(mockRepository, never()).createEntity(any(), any())
-      verify(mockRepository, never()).deleteReferences(any(), any())
-      verify(mockRepository, never()).upsertReferences(any(), any())
+      verify(mockQuery, never()).getEntity(any(), any(), any())
+      verify(mockQuery, never()).getReferencedIds(any(), any())
+      verify(mockQuery, never()).createEntity(any(), any())
+      verify(mockQuery, never()).deleteReferences(any(), any())
+      verify(mockQuery, never()).upsertReferences(any(), any())
     }
   }
 
@@ -345,12 +351,12 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some("{}"))
 
     // mocks
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(Some(rec)))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(Some(rec)))
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
     val expected = Entity(rec.name, rec.entityType, Map())
@@ -364,11 +370,12 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some(attrString))
 
     // mocks
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(Some(rec)))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(Some(rec)))
+
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
 
@@ -385,11 +392,11 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
 
   it should "throw EntityNotFoundException if row not found in db" in {
     // mocks
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.getEntity(any[UUID], anyString(), anyString()))
-      .thenReturn(Future.successful(None))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
+      .thenReturn(DBIO.successful(None))
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
     val actual = intercept[EntityNotFoundException] {
       Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
@@ -417,8 +424,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
     )
     val entity = Entity("name", "type", attributes)
-    val provider =
-      new CompactEntityProvider(defaultEntityRequestArguments, mock[CompactEntityRepository], slickDataSource)
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
     val actual: Map[AttributeName, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
 
@@ -438,8 +444,7 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
       )
     )
     val entity = Entity("name", "type", attributes)
-    val provider =
-      new CompactEntityProvider(defaultEntityRequestArguments, mock[CompactEntityRepository], slickDataSource)
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
     val actual: Map[AttributeName, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
 
@@ -458,85 +463,87 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
   behavior of "replaceReferences"
 
   it should "skip deletes and upserts when isInsert=true and references are empty" in {
-    // mocks
-    val mockRepository = mock[CompactEntityRepository]
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.replaceReferences(2, Set(), isInsert = true), atMost)
+    val actual = runAndWait(provider.replaceReferences(2, Set(), isInsert = true), atMost)
 
     actual shouldBe (0, 0)
 
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any(), any())
   }
 
   it should "skip deletes when isInsert=true and non-empty references" in {
     // mocks
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.upsertReferences(any(), any()))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.upsertReferences(any(), any()))
       .thenAnswer { invocation =>
-        Future.successful(invocation.getArgument[Set[Long]](1).size)
+        DBIO.successful(invocation.getArgument[Set[Long]](1).size)
       }
-    when(mockRepository.deleteReferences(any(), any()))
-      .thenReturn(Future.successful(Int.MinValue))
+    when(mockQuery.deleteReferences(any(), any()))
+      .thenReturn(DBIO.successful(Int.MinValue))
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.replaceReferences(2, Set(7, 8, 9), isInsert = true), atMost)
+    val actual = runAndWait(provider.replaceReferences(2, Set(7, 8, 9), isInsert = true), atMost)
 
     actual shouldBe (0, 3)
 
-    verify(mockRepository, never()).deleteReferences(any(), any())
-    verify(mockRepository, times(1)).upsertReferences(2, Set(7, 8, 9))
+    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, times(1)).upsertReferences(2, Set(7, 8, 9))
   }
 
   it should "skip upserts when isInsert=false and references are empty" in {
     // mocks
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.deleteReferences(any(), any()))
-      .thenReturn(Future.successful(Int.MinValue))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.deleteReferences(any(), any()))
+      .thenReturn(DBIO.successful(Int.MinValue))
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.replaceReferences(2, Set(), isInsert = false), atMost)
+    val actual = runAndWait(provider.replaceReferences(2, Set(), isInsert = false), atMost)
 
     actual shouldBe (Int.MinValue, 0)
 
-    verify(mockRepository, times(1)).deleteReferences(2, Set())
-    verify(mockRepository, never()).upsertReferences(any(), any())
+    verify(mockQuery, times(1)).deleteReferences(2, Set())
+    verify(mockQuery, never()).upsertReferences(any(), any())
   }
 
   it should "both delete and upsert when isInsert=false and non-empty references" in {
     // mocks
-    val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.upsertReferences(any(), any()))
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.upsertReferences(any(), any()))
       .thenAnswer { invocation =>
-        Future.successful(invocation.getArgument[Set[Long]](1).size)
+        DBIO.successful(invocation.getArgument[Set[Long]](1).size)
       }
-    when(mockRepository.deleteReferences(any(), any()))
-      .thenReturn(Future.successful(Int.MinValue))
+    when(mockQuery.deleteReferences(any(), any()))
+      .thenReturn(DBIO.successful(Int.MinValue))
 
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.replaceReferences(2, Set(7, 8, 9), isInsert = false), atMost)
+    val actual = runAndWait(provider.replaceReferences(2, Set(7, 8, 9), isInsert = false), atMost)
 
     actual shouldBe (Int.MinValue, 3)
 
-    verify(mockRepository, times(1)).deleteReferences(2, Set(7, 8, 9))
-    verify(mockRepository, times(1)).upsertReferences(2, Set(7, 8, 9))
+    verify(mockQuery, times(1)).deleteReferences(2, Set(7, 8, 9))
+    verify(mockQuery, times(1)).upsertReferences(2, Set(7, 8, 9))
   }
 
   behavior of "withWorkspaceLastModified"
 
   it should "trigger a last-modified update on success of the original future" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.updateLastModified(any[UUID]()))
-      .thenReturn(Future.successful(1))
+    when(mockRepository.queries).thenReturn(mockQuery)
+    when(mockRepository.dataSource).thenReturn(slickDataSource)
+    when[ReadWriteAction[Int]](mockRepository.updateLastModified(any[UUID]()))
+      .thenReturn(DBIO.successful(1))
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
     val original = Future.successful(123)
     // we have not yet called updateLastModified
     verify(mockRepository, never()).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
@@ -549,11 +556,15 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
   }
 
   it should "not trigger a last-modified update on failure of the original future" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.updateLastModified(any))
-      .thenReturn(Future.successful(1))
+    when(mockRepository.queries).thenReturn(mockQuery)
+    when(mockRepository.dataSource).thenReturn(slickDataSource)
+    when[ReadWriteAction[Int]](mockRepository.updateLastModified(any[UUID]()))
+      .thenReturn(DBIO.successful(1))
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
     // original function throws an error
     val original =
       Future.failed(new RuntimeException("withWorkspaceLastModified intentional failure in original function"))
@@ -570,11 +581,17 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
   }
 
   it should "not fail if the last-modified update fails" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     val mockRepository = mock[CompactEntityRepository]
-    when(mockRepository.updateLastModified(any))
-      .thenThrow(new RuntimeException("withWorkspaceLastModified intentional failure in updateLastModified"))
+    when(mockRepository.queries).thenReturn(mockQuery)
+    when(mockRepository.dataSource).thenReturn(slickDataSource)
+    when[ReadWriteAction[Int]](mockRepository.updateLastModified(any[UUID]()))
+      .thenReturn(
+        DBIO.failed(new RuntimeException("withWorkspaceLastModified intentional failure in updateLastModified"))
+      )
     // provider using mocks
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, mockRepository, slickDataSource)
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
     val original = Future.successful(123)
     // we have not yet called updateLastModified
     verify(mockRepository, never()).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
@@ -585,5 +602,24 @@ class CompactEntityProviderSpec extends AnyFlatSpec with Matchers with MockitoTe
     // we should now call updateLastModified within 1 second. This threw an error but it will be ignored.
     verify(mockRepository, mockitotimeout(1000).times(1)).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
   }
+
+  // ====================================================================================================
+  //  helper methods
+  // ====================================================================================================
+  private def providerWithMocks(queries: CompactEntityQuery,
+                                requestArguments: EntityRequestArguments = defaultEntityRequestArguments
+  ): CompactEntityProvider = {
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.queries)
+      .thenReturn(queries)
+    when(mockRepository.dataSource).thenReturn(slickDataSource)
+
+    providerWithMocks(mockRepository, requestArguments)
+  }
+
+  private def providerWithMocks(repository: CompactEntityRepository,
+                                requestArguments: EntityRequestArguments
+  ): CompactEntityProvider =
+    new CompactEntityProvider(requestArguments, repository)(ec)
 
 }
