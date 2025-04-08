@@ -130,6 +130,7 @@ class FastPassMonitorSpec
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val policyServiceDAO = mock[PolicyServiceDAO](RETURNS_SMART_NULLS)
+    when(policyServiceDAO.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))

@@ -203,6 +203,7 @@ trait ApiServiceSpec
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val policyServiceDAO = mock[PolicyServiceDAO](RETURNS_SMART_NULLS)
+    when(policyServiceDAO.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
