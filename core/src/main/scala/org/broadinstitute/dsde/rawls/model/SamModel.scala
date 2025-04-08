@@ -18,6 +18,7 @@ object SamResourceTypeNames {
   val workflowCollection = SamResourceTypeName("workflow-collection")
   val servicePerimeter = SamResourceTypeName("service-perimeter")
   val googleProject = SamResourceTypeName("google-project")
+  val tdrGoogleProject = SamResourceTypeName("datarepo-google-project")
 }
 
 /*
@@ -99,7 +100,7 @@ object SamResourceTypeAdminActions {
   val readSummaryInformation = SamResourceAction("admin_read_summary_information")
 }
 
-object SamGoogleProjectActions {
+object SamTdrGoogleProjectActions {
   val link = SamResourceAction("link")
   val delete = SamResourceAction("delete")
   val read = SamResourceAction("read")
