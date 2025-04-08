@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
-  SamTdrGoogleProjectActions,
-  SamResourceTypeNames
+  SamResourceTypeNames,
+  SamTdrGoogleProjectActions
 }
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -116,7 +116,11 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
     // 1. Check delete action on google-project resource.
     for {
       _ <- samDAO
-        .userHasAction(SamResourceTypeNames.tdrGoogleProject, googleProjectId.value, SamTdrGoogleProjectActions.delete, ctx)
+        .userHasAction(SamResourceTypeNames.tdrGoogleProject,
+                       googleProjectId.value,
+                       SamTdrGoogleProjectActions.delete,
+                       ctx
+        )
         .map(canDelete =>
           if (!canDelete)
             throw new RawlsExceptionWithErrorReport(errorReport =
@@ -154,7 +158,11 @@ class GoogleProjectRegistrationService(protected val ctx: RawlsRequestContext,
   def getGoogleProjectById(googleProjectId: GoogleProjectId): Future[Option[GoogleProjectRegistration]] =
     for {
       canRead <- samDAO
-        .userHasAction(SamResourceTypeNames.tdrGoogleProject, googleProjectId.value, SamTdrGoogleProjectActions.read, ctx)
+        .userHasAction(SamResourceTypeNames.tdrGoogleProject,
+                       googleProjectId.value,
+                       SamTdrGoogleProjectActions.read,
+                       ctx
+        )
       projectRegistration <-
         if (canRead) {
           googleProjectRegRepo.getGoogleProjectRegistration(googleProjectId)

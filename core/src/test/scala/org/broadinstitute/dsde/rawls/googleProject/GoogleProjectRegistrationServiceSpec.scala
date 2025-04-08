@@ -16,10 +16,10 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
-  SamTdrGoogleProjectActions,
   SamResourceAction,
   SamResourceTypeName,
-  SamResourceTypeNames
+  SamResourceTypeNames,
+  SamTdrGoogleProjectActions
 }
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -717,7 +717,10 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject, SamTdrGoogleProjectActions.read, mockContext)
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject,
+                                          SamTdrGoogleProjectActions.read,
+                                          mockContext
+      )
     )
       .thenReturn(
         Future.successful(
@@ -760,7 +763,10 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject, SamTdrGoogleProjectActions.read, mockContext)
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject,
+                                          SamTdrGoogleProjectActions.read,
+                                          mockContext
+      )
     )
       .thenReturn(
         Future.successful(
@@ -813,7 +819,10 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject, SamTdrGoogleProjectActions.read, mockContext)
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject,
+                                          SamTdrGoogleProjectActions.read,
+                                          mockContext
+      )
     )
       .thenReturn(
         Future.successful(
