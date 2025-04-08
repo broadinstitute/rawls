@@ -136,7 +136,7 @@ object Dependencies {
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.375")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
-  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.17-SNAPSHOT")
+  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.18-SNAPSHOT")
 
   // OpenTelemetry
   val openTelemetryInstrumentationVersion = "2.0.0"

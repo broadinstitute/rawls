@@ -35,7 +35,17 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{AttributeNotFoundException, AttributeSupport, AttributeUpdateOperationException, BillingProjectSupport, JsonFilterUtils, LibraryPermissionsSupport, UserUtils, UserWiths, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeNotFoundException,
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  BillingProjectSupport,
+  JsonFilterUtils,
+  LibraryPermissionsSupport,
+  UserUtils,
+  UserWiths,
+  WorkspaceSupport
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -202,7 +212,7 @@ class WorkspaceService(
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
-      // policies are not supported on GCP workspaces
+      // explicit policies in the request are not supported on GCP workspaces. instead, we derive the policies from other fields in the request
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       workspace <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
@@ -2004,6 +2014,12 @@ class WorkspaceService(
         case None => Future.successful(Seq.empty[String])
       })
       _ <- DBIO.from(Future.traverse(usersToInvite)(email => samDAO.inviteUser(email, ctx)))
+
+      _ <- traceDBIOWithParent("createTpsPao", parentContext) { span =>
+        DBIO.from(
+          policyServiceDAO.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
+        )
+      }
 
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,

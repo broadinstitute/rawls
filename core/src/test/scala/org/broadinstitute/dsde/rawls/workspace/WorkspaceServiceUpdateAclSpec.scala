@@ -10,7 +10,25 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.policyservice.PolicyServiceDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceActions, SamWorkspacePolicyNames, UserIdInfo, UserInfo, Workspace, WorkspaceACLUpdate, WorkspaceACLUpdateResponseList, WorkspaceAccessLevels, WorkspaceName, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamResourcePolicyName,
+  SamResourceTypeName,
+  SamResourceTypeNames,
+  SamUserStatusResponse,
+  SamWorkspaceActions,
+  SamWorkspacePolicyNames,
+  UserIdInfo,
+  UserInfo,
+  Workspace,
+  WorkspaceACLUpdate,
+  WorkspaceACLUpdateResponseList,
+  WorkspaceAccessLevels,
+  WorkspaceName,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
