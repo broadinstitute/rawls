@@ -387,7 +387,7 @@ trait SubmissionComponent {
           workspace <- workspaceQuery.findById(rec.get.workspaceId.toString)
           entities <- rec.get.submissionEntities match {
             case Some(entitiesString) =>
-              val entityIds = entitiesString.split(",").toSeq.map(_.toLong) // Adjust the delimiter if necessary
+              val entityIds = entitiesString.split(",").toSeq.map(_.toLong)
               loadEntities(entityIds).map(Some(_))
             case None =>
               DBIO.successful(None)
