@@ -34,9 +34,13 @@ trait EntityProvider {
 
   // ----- implementation methods follow:
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                          parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                          parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]]
 
   def copyEntities(sourceWorkspaceContext: Workspace,
                    destWorkspaceContext: Workspace,
@@ -46,17 +50,24 @@ trait EntityProvider {
                    parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse]
 
-  def createEntity(entity: Entity): Future[Entity]
+  def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity]
 
-  def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
+  def deleteEntities(entityRefs: Seq[AttributeEntityReference], parentContext: RawlsRequestContext): Future[Int]
 
-  def deleteEntitiesOfType(entityType: String): Future[Int]
+  def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int]
 
-  def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit]
+  def deleteEntityAttributes(entityType: String,
+                             attributeNames: Set[AttributeName],
+                             parentContext: RawlsRequestContext
+  ): Future[Unit]
 
-  def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
+  def entityTypeMetadata(useCache: Boolean, parentContext: RawlsRequestContext): Future[Map[String, EntityTypeMetadata]]
 
-  def evaluateExpression(entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]]
+  def evaluateExpression(entityType: String,
+                         entityName: String,
+                         expression: String,
+                         parentContext: RawlsRequestContext
+  ): Future[Seq[AttributeValue]]
 
   /**
   The overall approach is:
@@ -87,7 +98,7 @@ trait EntityProvider {
 
   def expressionValidator: ExpressionValidator
 
-  def getEntity(entityType: String, entityName: String): Future[Entity]
+  def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity]
 
   def listEntities(entityType: String): Source[Entity, NotUsed]
 
@@ -103,12 +114,21 @@ trait EntityProvider {
 
   def renameAttribute(entityType: String,
                       oldAttributeName: AttributeName,
-                      attributeRenameRequest: AttributeRename
+                      attributeRenameRequest: AttributeRename,
+                      parentContext: RawlsRequestContext
   ): Future[Int]
 
-  def renameEntity(entityType: String, entityName: String, newName: String): Future[Int]
+  def renameEntity(entityType: String,
+                   entityName: String,
+                   newName: String,
+                   parentContext: RawlsRequestContext
+  ): Future[Int]
 
-  def renameEntityType(oldName: String, renameInfo: EntityTypeRename): Future[Int]
+  def renameEntityType(oldName: String, renameInfo: EntityTypeRename, parentContext: RawlsRequestContext): Future[Int]
 
-  def updateEntity(entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[Entity]
+  def updateEntity(entityType: String,
+                   entityName: String,
+                   operations: Seq[AttributeUpdateOperation],
+                   parentContext: RawlsRequestContext
+  ): Future[Entity]
 }

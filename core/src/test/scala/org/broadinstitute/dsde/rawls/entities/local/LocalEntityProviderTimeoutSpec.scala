@@ -75,14 +75,15 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
     "enforce on deleteEntities" in withLocalEntityProviderTestDatabase { dataSource =>
       lockedEntitiesTest(dataSource, a[MySQLTimeoutException]) { localEntityProvider =>
         localEntityProvider.deleteEntities(
-          Seq(AttributeEntityReference(entityType = "unitTestType", entityName = "deleteTimeoutTest"))
+          Seq(AttributeEntityReference(entityType = "unitTestType", entityName = "deleteTimeoutTest")),
+          testContext
         )
       }
     }
 
     "enforce on deleteEntitiesOfType" in withLocalEntityProviderTestDatabase { dataSource =>
       lockedEntitiesTest(dataSource, a[MySQLTimeoutException]) { localEntityProvider =>
-        localEntityProvider.deleteEntitiesOfType("unitTestType")
+        localEntityProvider.deleteEntitiesOfType("unitTestType", testContext)
       }
     }
 
@@ -91,7 +92,7 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
         val attrUpdate = AddUpdateAttribute(AttributeName.withDefaultNS("newAttr"), AttributeString("whatever"))
         val entityUpdate =
           EntityUpdateDefinition(name = "deleteTimeoutTest", entityType = "unitTestType", Seq(attrUpdate))
-        localEntityProvider.batchUpsertEntities(Seq(entityUpdate))
+        localEntityProvider.batchUpsertEntities(Seq(entityUpdate), testContext)
       }
     }
 
@@ -100,7 +101,7 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
         val attrUpdate = AddUpdateAttribute(AttributeName.withDefaultNS("newAttr"), AttributeString("whatever"))
         val entityUpdate =
           EntityUpdateDefinition(name = "deleteTimeoutTest", entityType = "unitTestType", Seq(attrUpdate))
-        localEntityProvider.batchUpdateEntities(Seq(entityUpdate))
+        localEntityProvider.batchUpdateEntities(Seq(entityUpdate), testContext)
       }
     }
 //    "enforce on batchUpdateEntitiesImpl" ignore fail()

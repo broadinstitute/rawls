@@ -30,7 +30,7 @@ class ErrorThrowingListener extends BaseErrorListener {
                            e: RecognitionException
   ): Unit = {
     val errorMsg =
-      s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg"
+      s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     throw new RawlsException(errorMsg, new ParseCancellationException(errorMsg, e))
   }
   /*_*/

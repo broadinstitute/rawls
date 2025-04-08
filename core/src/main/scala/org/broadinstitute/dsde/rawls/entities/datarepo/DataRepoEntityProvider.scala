@@ -89,7 +89,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       case None          => requestArguments.workspace.googleProjectId
     }
 
-  override def entityTypeMetadata(useCache: Boolean = false): Future[Map[String, EntityTypeMetadata]] = {
+  override def entityTypeMetadata(useCache: Boolean = false,
+                                  parentContext: RawlsRequestContext
+  ): Future[Map[String, EntityTypeMetadata]] = {
 
     // TODO: AS-321 auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
@@ -104,19 +106,24 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   }
 
-  override def createEntity(entity: Entity): Future[Entity] =
+  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] =
     throw new UnsupportedEntityOperationException("create entity not supported by this provider.")
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
+  override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
+                              parentContext: RawlsRequestContext
+  ): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
 
-  override def deleteEntitiesOfType(entityType: String): Future[Int] =
+  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities of type not supported by this provider.")
 
-  override def deleteEntityAttributes(entityType: EntityName, attributeNames: Set[AttributeName]): Future[Unit] =
+  override def deleteEntityAttributes(entityType: EntityName,
+                                      attributeNames: Set[AttributeName],
+                                      parentContext: RawlsRequestContext
+  ): Future[Unit] =
     throw new UnsupportedEntityOperationException("delete entity attributes not supported by this provider.")
 
-  override def getEntity(entityType: String, entityName: String): Future[Entity] = {
+  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
 
@@ -291,7 +298,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def evaluateExpression(entityType: EntityName,
                                   entityName: EntityName,
-                                  expression: EntityName
+                                  expression: EntityName,
+                                  parentContext: RawlsRequestContext
   ): Future[Seq[AttributeValue]] =
     throw new UnsupportedEntityOperationException("evaluate expression not supported by this provider.")
 
@@ -550,10 +558,14 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def expressionValidator: ExpressionValidator = new DataRepoEntityExpressionValidator(snapshotModel)
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                                   parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+                                   parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
@@ -567,19 +579,28 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def renameAttribute(entityType: EntityName,
                                oldAttributeName: AttributeName,
-                               attributeRenameRequest: AttributeRename
+                               attributeRenameRequest: AttributeRename,
+                               parentContext: RawlsRequestContext
   ): Future[Int] =
     throw new UnsupportedEntityOperationException("rename attribute not supported by this provider.")
 
-  override def renameEntity(entityType: EntityName, entityName: EntityName, newName: EntityName): Future[Int] =
+  override def renameEntity(entityType: EntityName,
+                            entityName: EntityName,
+                            newName: EntityName,
+                            parentContext: RawlsRequestContext
+  ): Future[Int] =
     throw new UnsupportedEntityOperationException("rename entity not supported by this provider.")
 
-  override def renameEntityType(oldName: EntityName, renameInfo: EntityTypeRename): Future[Int] =
+  override def renameEntityType(oldName: EntityName,
+                                renameInfo: EntityTypeRename,
+                                parentContext: RawlsRequestContext
+  ): Future[Int] =
     throw new UnsupportedEntityOperationException("rename entity type not supported by this provider.")
 
   override def updateEntity(entityType: EntityName,
                             entityName: EntityName,
-                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation]
+                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation],
+                            parentContext: RawlsRequestContext
   ): Future[Entity] = throw new UnsupportedEntityOperationException("update entity not supported by this provider.")
 
 }

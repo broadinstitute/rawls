@@ -448,12 +448,14 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
-          upsertResults <- entityService(RawlsRequestContext(petUserInfo)).batchUpdateEntitiesInternal(
+          requestContext = RawlsRequestContext(petUserInfo)
+          upsertResults <- entityService(requestContext).batchUpdateEntitiesInternal(
             workspace.toWorkspaceName,
             upsertBatch,
             upsert = isUpsert,
             None,
-            None
+            None,
+            requestContext
           )
         } yield upsertResults
       }

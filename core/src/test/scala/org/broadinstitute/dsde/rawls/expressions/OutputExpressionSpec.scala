@@ -140,7 +140,7 @@ class OutputExpressionSpec extends AnyFlatSpec with Matchers {
     intercept[RawlsExceptionWithErrorReport] {
       OutputExpression.validate("foo.bar", None).get
     }.errorReport.message should be(
-      "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'foo' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
+      "Error while parsing the expression. Offending symbol is on line 1 at position 0. The value you entered is not in the correct format for this data type. For a string, format input as \"value\". For an array, format input as [value1, value2]. For a file, format input as \"gs://\" or \"drs://\". For a boolean, format input as `true` or `false`."
     )
   }
 }

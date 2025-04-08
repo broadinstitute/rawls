@@ -37,11 +37,13 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
   override def entityStoreId: Option[String] = ???
 
   override def batchUpdateEntities(
-    entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
+    entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition],
+    parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]] = ???
 
   override def batchUpsertEntities(
-    entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition]
+    entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition],
+    parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]] = ???
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
@@ -52,19 +54,27 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = ???
 
-  override def createEntity(entity: Entity): Future[Entity] = ???
+  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = ???
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = ???
+  override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
+                              parentContext: RawlsRequestContext
+  ): Future[Int] = ???
 
-  override def deleteEntitiesOfType(entityType: String): Future[Int] = ???
+  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] = ???
 
-  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit] = ???
+  override def deleteEntityAttributes(entityType: String,
+                                      attributeNames: Set[AttributeName],
+                                      parentContext: RawlsRequestContext
+  ): Future[Unit] = ???
 
-  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = ???
+  override def entityTypeMetadata(useCache: Boolean,
+                                  parentContext: RawlsRequestContext
+  ): Future[Map[String, EntityTypeMetadata]] = ???
 
   override def evaluateExpression(entityType: String,
                                   entityName: String,
-                                  expression: String
+                                  expression: String,
+                                  parentContext: RawlsRequestContext
   ): Future[Seq[AttributeValue]] = ???
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
@@ -74,7 +84,8 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
 
   override def expressionValidator: ExpressionValidator = ???
 
-  override def getEntity(entityType: String, entityName: String): Future[Entity] = ???
+  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
+    ???
 
   override def listEntities(entityType: String): Source[Entity, NotUsed] = ???
 
@@ -90,15 +101,24 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
 
   override def renameAttribute(entityType: String,
                                oldAttributeName: AttributeName,
-                               attributeRenameRequest: AttributeRename
+                               attributeRenameRequest: AttributeRename,
+                               parentContext: RawlsRequestContext
   ): Future[Int] = ???
 
-  override def renameEntity(entityType: String, entityName: String, newName: String): Future[Int] = ???
+  override def renameEntity(entityType: String,
+                            entityName: String,
+                            newName: String,
+                            parentContext: RawlsRequestContext
+  ): Future[Int] = ???
 
-  override def renameEntityType(oldName: String, renameInfo: EntityTypeRename): Future[Int] = ???
+  override def renameEntityType(oldName: String,
+                                renameInfo: EntityTypeRename,
+                                parentContext: RawlsRequestContext
+  ): Future[Int] = ???
 
   override def updateEntity(entityType: String,
                             entityName: String,
-                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation]
+                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation],
+                            parentContext: RawlsRequestContext
   ): Future[Entity] = ???
 }
