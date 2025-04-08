@@ -63,23 +63,35 @@ object SubmissionRequestValidation extends StringValidationUtils {
   ).flatten
 
   def validateEntityNameAndType(submission: SubmissionRequest): Option[ErrorReport] =
-    if (submission.entityName.isDefined != submission.entityType.isDefined)
-      Some(
-        ErrorReport(
-          StatusCodes.BadRequest,
-          s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."
+    if (submission.entityType.isDefined) {
+      if (submission.entityName.isDefined && submission.entityNames.isDefined) {
+        Some(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"You must set either entityName or entityNames if running on an entity, but not both."
+          )
         )
-      )
-    else None
+      } else if (!submission.entityName.isDefined || !submission.entityNames.isDefined) {
+        Some(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"You must set both entityType and entityName(s) to run on an entity, or neither (to run with literal or workspace inputs)."
+          )
+        )
+      }
+      None
+    } else None
 
+  // TODO make sure you've covered all cases correctly, this probably isn't right
   def validateMethodConfigRootEntity(submission: SubmissionRequest,
                                      methodConfig: MethodConfiguration
   ): Option[ErrorReport] =
-    (methodConfig.dataReferenceName, methodConfig.rootEntityType, submission.entityName) match {
-      case (Some(_), _, _)          => None
-      case (None, Some(_), Some(_)) => None
-      case (None, None, None)       => None
-      case (None, Some(_), None) =>
+    (methodConfig.dataReferenceName, methodConfig.rootEntityType, submission.entityName, submission.entityNames) match {
+      case (Some(_), _, _, _)          => None
+      case (None, Some(_), Some(_), _) => None
+      case (None, Some(_), _, Some(_)) => None
+      case (None, None, None, None)    => None
+      case (None, Some(_), None, None) =>
         Some(
           ErrorReport(StatusCodes.BadRequest,
                       s"Your method config defines a root entity but you haven't passed one to the submission."
@@ -90,7 +102,13 @@ object SubmissionRequestValidation extends StringValidationUtils {
       // 1. you'd have to write an expression from your submission entity to an entity of "no entity necessary" type
       // 2. even if you _could_ do this, you'd kick off a bunch of identical workflows.
       // More likely than not, an MC with no root entity + a submission entity = you're doing something wrong. So we'll just say no here.
-      case (None, None, Some(_)) =>
+      case (None, None, _, Some(_)) =>
+        Some(
+          ErrorReport(StatusCodes.BadRequest,
+                      s"Your method config uses no root entity, but you passed one to the submission."
+          )
+        )
+      case (None, None, Some(_), _) =>
         Some(
           ErrorReport(StatusCodes.BadRequest,
                       s"Your method config uses no root entity, but you passed one to the submission."

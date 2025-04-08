@@ -41,7 +41,8 @@ case class SubmissionRecord(id: UUID,
                             monitoringScript: Option[String],
                             monitoringImage: Option[String],
                             monitoringImageScript: Option[String],
-                            perWorkflowCostCap: Option[BigDecimal]
+                            perWorkflowCostCap: Option[BigDecimal],
+                            submissionEntities: Option[String]
 )
 
 case class SubmissionValidationRecord(id: Long, workflowId: Long, errorText: Option[String], inputName: String)
@@ -81,6 +82,7 @@ trait SubmissionComponent {
     def monitoringImage = column[Option[String]]("MONITORING_IMAGE")
     def monitoringImageScript = column[Option[String]]("MONITORING_IMAGE_SCRIPT")
     def perWorkflowCostCap = column[Option[BigDecimal]]("PER_WORKFLOW_COST_CAP")
+    def submissionEntitiesIds: Rep[Option[String]] = column[Option[String]]("ENTITIES_IDS")
 
     def * = (
       id,
@@ -103,7 +105,8 @@ trait SubmissionComponent {
       monitoringScript,
       monitoringImage,
       monitoringImageScript,
-      perWorkflowCostCap
+      perWorkflowCostCap,
+      submissionEntitiesIds
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -173,10 +176,11 @@ trait SubmissionComponent {
           .foldLeft(Map.empty[String, Int])(_ |+| _)
         val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
         val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
-        SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty),
-                               workflowIds,
-                               statusCounts,
-                               config.deleted
+        SubmissionListResponse(
+          unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty, None), // TODO get these
+          workflowIds,
+          statusCounts,
+          config.deleted
         )
       }
     }
@@ -220,24 +224,40 @@ trait SubmissionComponent {
               .map(_.id)
           )
 
-          DBIO.sequenceOption(
+          val entityIdAction = DBIO.sequenceOption(
             submission.submissionEntity.map(loadSubmissionEntityId(workspaceContext.workspaceIdAsUUID, _))
-          ) flatMap { entityId =>
-            configIdAction flatMap { configId =>
-              if (configId.isEmpty) {
-                throw new RawlsExceptionWithErrorReport(
-                  ErrorReport(
-                    StatusCodes.BadRequest,
-                    s"Can't find this submission's method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}."
+          )
+
+          val entitiesIdsAction = submission.submissionEntities match {
+            case None =>
+              DBIO.successful(None)
+            case Some(entities) =>
+              DBIO
+                .sequence(
+                  entities.map(loadSubmissionEntityId(workspaceContext.workspaceIdAsUUID, _))
+                )
+                .map(seq => if (seq.isEmpty) None else Some(seq))
+          }
+
+          entityIdAction flatMap { entityId =>
+            entitiesIdsAction flatMap { entitiesIds =>
+              configIdAction flatMap { configId =>
+                if (configId.isEmpty) {
+                  throw new RawlsExceptionWithErrorReport(
+                    ErrorReport(
+                      StatusCodes.BadRequest,
+                      s"Can't find this submission's method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}."
+                    )
                   )
-                )
-              }
-              submissionStatusCounter(submission.status).countDBResult {
-                submissionQuery += marshalSubmission(workspaceContext.workspaceIdAsUUID,
-                                                     submission,
-                                                     entityId,
-                                                     configId.get
-                )
+                }
+                submissionStatusCounter(submission.status).countDBResult {
+                  submissionQuery += marshalSubmission(workspaceContext.workspaceIdAsUUID,
+                                                       submission,
+                                                       entityId,
+                                                       configId.get,
+                                                       entitiesIds
+                  )
+                }
               }
             } andThen
               saveSubmissionWorkflows(submission.workflows)
@@ -347,7 +367,14 @@ trait SubmissionComponent {
             config <- methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
             workflows <- loadSubmissionWorkflows(submissionRec.id)
             entity <- DBIO.sequenceOption(submissionRec.submissionEntityId.map(loadEntity))
-          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows))
+            entities <- submissionRec.submissionEntities match {
+              case Some(entitiesString) =>
+                val entityIds = entitiesString.split(",").toSeq.map(_.toLong) // Adjust the delimiter if necessary
+                loadEntities(entityIds).map(Some(_))
+              case None =>
+                DBIO.successful(None)
+            }
+          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows, entities))
       }
 
     def loadActiveSubmission(submissionId: UUID): ReadAction[ActiveSubmission] =
@@ -437,6 +464,13 @@ trait SubmissionComponent {
         unmarshalEntity(rec.getOrElse(throw new RawlsException(s"entity with id $entityId does not exist")))
       }
 
+    def loadEntities(entityIds: Seq[Long]): ReadAction[Seq[AttributeEntityReference]] =
+      entityQuery.findEntitiesByIds(entityIds).result.map { recs =>
+        recs.map { entityRec =>
+          unmarshalEntity(entityRec)
+        }
+      }
+
     def loadSubmissionEntityId(workspaceId: UUID, entityRef: AttributeEntityReference): ReadAction[Long] = {
       val idOp: ReadAction[Option[Long]] = uniqueResult(
         entityQuery.findEntityByName(workspaceId, entityRef.entityType, entityRef.entityName).map(_.id)
@@ -478,8 +512,13 @@ trait SubmissionComponent {
     private def marshalSubmission(workspaceId: UUID,
                                   submission: Submission,
                                   entityId: Option[Long],
-                                  configId: Long
-    ): SubmissionRecord =
+                                  configId: Long,
+                                  entitiesIds: Option[Seq[Long]]
+    ): SubmissionRecord = {
+      val formattedEntitiesIds = entitiesIds match {
+        case Some(seq) if seq.nonEmpty => Some(seq.mkString(","))
+        case _                         => None
+      }
       SubmissionRecord(
         UUID.fromString(submission.submissionId),
         workspaceId,
@@ -501,13 +540,16 @@ trait SubmissionComponent {
         submission.monitoringScript,
         submission.monitoringImage,
         submission.monitoringImageScript,
-        submission.options.perWorkflowCostCap
+        submission.options.perWorkflowCostCap,
+        formattedEntitiesIds
       )
+    }
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord,
                                     config: MethodConfiguration,
                                     entity: Option[AttributeEntityReference],
-                                    workflows: Seq[Workflow]
+                                    workflows: Seq[Workflow],
+                                    entities: Option[Seq[AttributeEntityReference]]
     ): Submission =
       Submission(
         submissionRec.id.toString,
@@ -535,7 +577,8 @@ trait SubmissionComponent {
           submissionRec.memoryRetryMultiplier,
           ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs,
           perWorkflowCostCap = submissionRec.perWorkflowCostCap
-        )
+        ),
+        submissionEntities = entities
       )
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord,
@@ -550,7 +593,8 @@ trait SubmissionComponent {
         unmarshalSubmission(submissionRec,
                             config,
                             entity,
-                            workflows.toList.sortBy(wf => wf.workflowEntity.map(_.entityName).getOrElse(""))
+                            workflows.toList.sortBy(wf => wf.workflowEntity.map(_.entityName).getOrElse("")),
+                            None // TODO get these
         )
       )
 

@@ -37,7 +37,8 @@ case class SubmissionRequest(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  perWorkflowCostCap: Option[BigDecimal] = None
+  perWorkflowCostCap: Option[BigDecimal] = None,
+  entityNames: Option[Seq[String]] = None
 )
 
 // This class contains values from the submission REST request
@@ -200,7 +201,8 @@ case class Submission(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  options: SubmissionOptions = SubmissionOptions(false, false, false, 1.0, false, None)
+  options: SubmissionOptions = SubmissionOptions(false, false, false, 1.0, false, None),
+  submissionEntities: Option[Seq[AttributeEntityReference]] = None
 )
 
 case class SubmissionListResponse(
@@ -430,7 +432,8 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("monitoringScript" -> obj.monitoringScript.toJson),
           Option("monitoringImage" -> obj.monitoringImage.toJson),
           Option("monitoringImageScript" -> obj.monitoringImageScript.toJson),
-          obj.perWorkflowCostCap.map("perWorkflowCostCap" -> _.toJson)
+          obj.perWorkflowCostCap.map("perWorkflowCostCap" -> _.toJson),
+          obj.entityNames.map("entityNames" -> _.toJson)
         ).flatten: _*
       )
 
@@ -458,7 +461,8 @@ trait ExecutionJsonSupport extends JsonSupport {
         monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
         monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
         monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]]),
-        perWorkflowCostCap = fields.get("perWorkflowCostCap").map(_.convertTo[BigDecimal])
+        perWorkflowCostCap = fields.get("perWorkflowCostCap").map(_.convertTo[BigDecimal]),
+        entityNames = fields.get("entityNames").map(_.convertTo[Seq[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
@@ -538,7 +542,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionOptionsFormat: RootJsonFormat[SubmissionOptions] = jsonFormat6(SubmissionOptions)
 
-  implicit val SubmissionFormat: RootJsonFormat[Submission] = jsonFormat17(Submission)
+  implicit val SubmissionFormat: RootJsonFormat[Submission] = jsonFormat18(Submission)
 
   implicit val SubmissionRetryFormat: RootJsonFormat[SubmissionRetry] = jsonFormat1(SubmissionRetry)
 

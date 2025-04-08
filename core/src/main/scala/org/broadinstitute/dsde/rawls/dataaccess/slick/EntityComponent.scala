@@ -871,6 +871,9 @@ trait EntityComponent {
     def findEntityById(id: Long): EntityQuery =
       filter(_.id === id)
 
+    def findEntitiesByIds(ids: Seq[Long]): EntityQuery =
+      filter(_.id in ids)
+
     // Actions
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"

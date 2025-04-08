@@ -613,41 +613,36 @@ class SubmissionsService(
       header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs, entityProvider.entityStoreId)
 
       workspaceExpressionResults <- evaluateWorkspaceExpressions(workspaceContext, gatherInputsResult)
-      submissionParameters <- entityProvider.evaluateExpressions(
-        ExpressionEvaluationContext(submissionRequest.entityType,
-                                    submissionRequest.entityName,
-                                    submissionRequest.expression,
-                                    methodConfig.rootEntityType
-        ),
-        gatherInputsResult,
-        workspaceExpressionResults
-      )
-//      submissionParameters <- submissionRequest.entityName.flatten map { entityName =>
-//        entityProvider.evaluateExpressions(
-//          ExpressionEvaluationContext(submissionRequest.entityType,
-//                                      entityName,
-//                                      submissionRequest.expression,
-//                                      methodConfig.rootEntityType
-//          ),
-//          gatherInputsResult,
-//          workspaceExpressionResults
-//        )
-//      }
-//      submissionParameters <- {
-//        val entityNames = submissionRequest.entityName
-//        val futures: List[Future[LazyList[SubmissionValidationEntityInputs]]] = entityNames.map { entityName =>
-//          entityProvider.evaluateExpressions(
-//            ExpressionEvaluationContext(submissionRequest.entityType,
-//                                        Some(entityName),
-//                                        submissionRequest.expression,
-//                                        methodConfig.rootEntityType
-//            ),
-//            gatherInputsResult,
-//            workspaceExpressionResults
-//          )
-//        }.toList
-//        Future.sequence(futures).map(lists => LazyList.concat(lists: _*))
-//      }
+      submissionParameters <-
+        if (submissionRequest.entityNames.isEmpty) {
+          entityProvider.evaluateExpressions(
+            ExpressionEvaluationContext(submissionRequest.entityType,
+                                        submissionRequest.entityName,
+                                        submissionRequest.expression,
+                                        methodConfig.rootEntityType
+            ),
+            gatherInputsResult,
+            workspaceExpressionResults
+          )
+        } else {
+          submissionRequest.entityNames match {
+            case Some(entityNames) =>
+              Future
+                .sequence(entityNames.map { entityName =>
+                  entityProvider.evaluateExpressions(
+                    ExpressionEvaluationContext(submissionRequest.entityType,
+                                                Some(entityName),
+                                                submissionRequest.expression,
+                                                methodConfig.rootEntityType
+                    ),
+                    gatherInputsResult,
+                    workspaceExpressionResults
+                  )
+                })
+                .map(_.flatten.to(LazyList))
+            case None => Future.successful(LazyList.empty[SubmissionValidationEntityInputs])
+          }
+        }
       submissionPath <- submissionRootPath(workspaceContext, submissionId)
     } yield PreparedSubmission(
       workspaceContext,
@@ -852,6 +847,18 @@ class SubmissionsService(
           )
         }
 
+      val submissionEntitiesOpt =
+        if (header.entityType.isEmpty || submissionRequest.entityNames.isEmpty) {
+          None
+        } else {
+          Some(
+            submissionRequest.entityNames.get
+              .map(entityName =>
+                AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = entityName)
+              )
+          )
+        }
+
       val submission = Submission(
         submissionId = submissionId.toString,
         submissionDate = DateTime.now(),
@@ -878,7 +885,8 @@ class SubmissionsService(
           memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
           ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs,
           perWorkflowCostCap = submissionRequest.perWorkflowCostCap
-        )
+        ),
+        submissionEntities = submissionEntitiesOpt
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
