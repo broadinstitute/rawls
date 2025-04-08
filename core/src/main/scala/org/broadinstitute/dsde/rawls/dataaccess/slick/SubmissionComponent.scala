@@ -370,7 +370,7 @@ trait SubmissionComponent {
             entity <- DBIO.sequenceOption(submissionRec.submissionEntityId.map(loadEntity))
             entities <- submissionRec.submissionEntities match {
               case Some(entitiesString) =>
-                val entityIds = entitiesString.split(",").toSeq.map(_.toLong) // Adjust the delimiter if necessary
+                val entityIds = entitiesString.split(",").toSeq.map(_.toLong)
                 loadEntities(entityIds).map(Some(_))
               case None =>
                 DBIO.successful(None)
