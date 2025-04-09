@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.policyservice.PolicyServiceDAO
+import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -91,7 +91,7 @@ object WorkspaceService {
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
-                  policyServiceDAO: PolicyServiceDAO
+                  tpsDAO: TpsDAO
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -123,7 +123,7 @@ object WorkspaceService {
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
-      policyServiceDAO
+      tpsDAO
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -146,34 +146,34 @@ object WorkspaceService {
 }
 
 class WorkspaceService(
-  val ctx: RawlsRequestContext,
-  val dataSource: SlickDataSource,
-  executionServiceCluster: ExecutionServiceCluster,
-  val workspaceManagerDAO: WorkspaceManagerDAO,
-  val leonardoService: LeonardoService,
-  val gcsDAO: GoogleServicesDAO,
-  val samDAO: SamDAO,
-  notificationDAO: NotificationDAO,
-  userServiceConstructor: RawlsRequestContext => UserService,
-  override val workbenchMetricBaseName: String,
-  config: WorkspaceServiceConfig,
-  requesterPaysSetupService: RequesterPaysSetupService,
-  resourceBufferService: ResourceBufferService,
-  servicePerimeterService: ServicePerimeterService,
-  googleIamDao: GoogleIamDAO,
-  val terraBillingProjectOwnerRole: String,
-  val terraWorkspaceCanComputeRole: String,
-  val terraWorkspaceNextflowRole: String,
-  val terraBucketReaderRole: String,
-  val terraBucketWriterRole: String,
-  rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-  val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
-  val workspaceRepository: WorkspaceRepository,
-  val billingRepository: BillingRepository,
-  val submissionsRepository: SubmissionsRepository,
-  val workspaceSettingsRepository: WorkspaceSettingRepository,
-  policyServiceDAO: PolicyServiceDAO
+                        val ctx: RawlsRequestContext,
+                        val dataSource: SlickDataSource,
+                        executionServiceCluster: ExecutionServiceCluster,
+                        val workspaceManagerDAO: WorkspaceManagerDAO,
+                        val leonardoService: LeonardoService,
+                        val gcsDAO: GoogleServicesDAO,
+                        val samDAO: SamDAO,
+                        notificationDAO: NotificationDAO,
+                        userServiceConstructor: RawlsRequestContext => UserService,
+                        override val workbenchMetricBaseName: String,
+                        config: WorkspaceServiceConfig,
+                        requesterPaysSetupService: RequesterPaysSetupService,
+                        resourceBufferService: ResourceBufferService,
+                        servicePerimeterService: ServicePerimeterService,
+                        googleIamDao: GoogleIamDAO,
+                        val terraBillingProjectOwnerRole: String,
+                        val terraWorkspaceCanComputeRole: String,
+                        val terraWorkspaceNextflowRole: String,
+                        val terraBucketReaderRole: String,
+                        val terraBucketWriterRole: String,
+                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
+                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+                        val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
+                        val workspaceRepository: WorkspaceRepository,
+                        val billingRepository: BillingRepository,
+                        val submissionsRepository: SubmissionsRepository,
+                        val workspaceSettingsRepository: WorkspaceSettingRepository,
+                        tpsDAO: TpsDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with LibraryPermissionsSupport
@@ -2017,7 +2017,7 @@ class WorkspaceService(
 
       _ <- traceDBIOWithParent("createTpsPao", parentContext) { span =>
         DBIO.from(
-          policyServiceDAO.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
+          tpsDAO.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
         )
       }
 

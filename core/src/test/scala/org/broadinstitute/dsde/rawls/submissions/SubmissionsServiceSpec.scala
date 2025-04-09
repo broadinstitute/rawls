@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.policyservice.PolicyServiceDAO
+import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -136,7 +136,7 @@ class SubmissionsServiceSpec
     )
       .thenReturn(Future.successful())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
-    val policyServiceDAO = mock[PolicyServiceDAO](RETURNS_SMART_NULLS)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
@@ -295,7 +295,7 @@ class SubmissionsServiceSpec
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyServiceDAO
+      tpsDAO
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

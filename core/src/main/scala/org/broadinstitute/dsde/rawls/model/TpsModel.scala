@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
-object PolicyServiceModel {
+object TpsModel {
   val TERRA_POLICY_NAMESPACE: String = "terra"
 
   object TpsPolicies {

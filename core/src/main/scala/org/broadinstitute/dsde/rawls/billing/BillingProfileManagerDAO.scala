@@ -9,7 +9,7 @@ import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.TERRA_POLICY_NAMESPACE
+import org.broadinstitute.dsde.rawls.model.TpsModel.TERRA_POLICY_NAMESPACE
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,

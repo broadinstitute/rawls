@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
-import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.TpsPolicies
+import org.broadinstitute.dsde.rawls.model.TpsModel.TpsPolicies
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,

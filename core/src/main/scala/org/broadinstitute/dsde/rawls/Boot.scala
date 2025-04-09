@@ -39,7 +39,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.policyservice.HttpPolicyServiceDAO
+import org.broadinstitute.dsde.rawls.dataaccess.tps.HttpTpsDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -260,7 +260,7 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
 
-      val policyServiceDAO = new HttpPolicyServiceDAO(appConfigManager.conf.getString("policyService.baseUrl"))
+      val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"))
 
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
@@ -431,7 +431,7 @@ object Boot extends IOApp with LazyLogging {
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor,
-        policyServiceDAO
+        tpsDAO
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

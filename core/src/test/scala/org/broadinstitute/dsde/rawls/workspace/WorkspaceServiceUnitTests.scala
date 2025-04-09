@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingR
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.policyservice.PolicyServiceDAO
+import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -94,33 +94,33 @@ class WorkspaceServiceUnitTests
 
   // This is just for convenience, so we only need to specify mocks we care about
   def workspaceServiceConstructor(
-    executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
-    workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
-    leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
-    gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
-    samDAO: SamDAO = mock[SamDAO],
-    notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
-    userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
-    workbenchMetricBaseName: String = "",
-    config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
-    requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS),
-    resourceBufferService: ResourceBufferService = mock[ResourceBufferService](RETURNS_SMART_NULLS),
-    servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS),
-    googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
-    terraBillingProjectOwnerRole: String = "",
-    terraWorkspaceCanComputeRole: String = "",
-    terraWorkspaceNextflowRole: String = "",
-    terraBucketReaderRole: String = "",
-    terraBucketWriterRole: String = "",
-    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
-    aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-    fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
+                                   executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
+                                   workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+                                   leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
+                                   gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
+                                   samDAO: SamDAO = mock[SamDAO],
+                                   notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
+                                   userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
+                                   workbenchMetricBaseName: String = "",
+                                   config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
+                                   requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS),
+                                   resourceBufferService: ResourceBufferService = mock[ResourceBufferService](RETURNS_SMART_NULLS),
+                                   servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS),
+                                   googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
+                                   terraBillingProjectOwnerRole: String = "",
+                                   terraWorkspaceCanComputeRole: String = "",
+                                   terraWorkspaceNextflowRole: String = "",
+                                   terraBucketReaderRole: String = "",
+                                   terraBucketWriterRole: String = "",
+                                   billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
+                                   aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
+                                   fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
       mock[FastPassService](RETURNS_SMART_NULLS),
-    workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-    billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
-    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
-    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
-    policyServiceDAO: PolicyServiceDAO = mock[PolicyServiceDAO](RETURNS_SMART_NULLS)
+                                   workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+                                   billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
+                                   submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
+                                   workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
+                                   tpsDAO: TpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -150,7 +150,7 @@ class WorkspaceServiceUnitTests
       billingRepository,
       submissionsRepository,
       workspaceSettingRepository,
-      policyServiceDAO
+      tpsDAO
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"

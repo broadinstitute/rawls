@@ -1,9 +1,9 @@
-package org.broadinstitute.dsde.rawls.dataaccess.policyservice
+package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
+import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -14,12 +14,12 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 import scala.jdk.CollectionConverters._
 
-class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
+class HttpTpsDAOSpec extends AnyFlatSpec {
   val baseWorkspaceRequest = WorkspaceRequest("workspace-namespace", "workspace-name", Map.empty)
   implicit val ec: ExecutionContext = TestExecutionContext.testExecutionContext
 
-  def getPolicyServiceDAO(mockTpsApi: TpsApi): HttpPolicyServiceDAO =
-    new HttpPolicyServiceDAO("http://example.com") {
+  def getTpsDAO(mockTpsApi: TpsApi): HttpTpsDAO =
+    new HttpTpsDAO("http://example.com") {
       override protected def getTpsApi(ctx: RawlsRequestContext): TpsApi = mockTpsApi
     }
 
@@ -31,7 +31,7 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
       baseWorkspaceRequest.copy(authorizationDomain = Option(Set(ManagedGroupRef(RawlsGroupName("test-group")))))
 
     val tpsApi = mock[TpsApi](RETURNS_SMART_NULLS)
-    val policyServiceDAO = getPolicyServiceDAO(tpsApi)
+    val tpsDAO = getTpsDAO(tpsApi)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
@@ -51,7 +51,7 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
         )
       )
 
-    Await.result(policyServiceDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+    Await.result(tpsDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
                  Duration.Inf
     )
 
@@ -63,7 +63,7 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(true))
 
     val tpsApi = mock[TpsApi](RETURNS_SMART_NULLS)
-    val policyServiceDAO = getPolicyServiceDAO(tpsApi)
+    val tpsDAO = getTpsDAO(tpsApi)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
@@ -77,7 +77,7 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
         )
       )
 
-    Await.result(policyServiceDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+    Await.result(tpsDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
                  Duration.Inf
     )
 
@@ -89,14 +89,14 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(false))
 
     val tpsApi = mock[TpsApi](RETURNS_SMART_NULLS)
-    val policyServiceDAO = getPolicyServiceDAO(tpsApi)
+    val tpsDAO = getTpsDAO(tpsApi)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
       .objectId(workspaceId)
       .component(TpsComponent.RAWLS)
 
-    Await.result(policyServiceDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+    Await.result(tpsDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
                  Duration.Inf
     )
 

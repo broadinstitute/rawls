@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.policyservice
+package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.client.ApiClient
@@ -11,7 +11,7 @@ import bio.terra.policy.model.{
   TpsPolicyPair
 }
 import jakarta.ws.rs.client.ClientBuilder
-import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
+import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.TracingUtils
 import org.glassfish.jersey.client.ClientConfig
@@ -21,7 +21,7 @@ import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
-class HttpPolicyServiceDAO(policyServiceUrl: String)(implicit val ec: ExecutionContext) extends PolicyServiceDAO {
+class HttpTpsDAO(tpsUrl: String)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
@@ -34,7 +34,7 @@ class HttpPolicyServiceDAO(policyServiceUrl: String)(implicit val ec: ExecutionC
     client.setHttpClient(ClientBuilder.newClient(clientConfig))
 
     TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
-    client.setBasePath(policyServiceUrl)
+    client.setBasePath(tpsUrl)
     client.setAccessToken(ctx.userInfo.accessToken.token)
     client
   }
