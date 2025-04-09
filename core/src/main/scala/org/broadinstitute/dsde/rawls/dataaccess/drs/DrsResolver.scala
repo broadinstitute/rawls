@@ -20,24 +20,17 @@ object DrsResolver {
    */
   val compactIdRegex: Regex = "(?<scheme>dos|drs)://(?<compactIdPrefix>(dg|drs)\\.[0-9a-z-]+):(?<path>.*)".r
   val hostNameRegex: Regex = "(?<scheme>dos|drs)://(?<hostname>[^?/:]+\\.[^?/:]+)/(?<path>.*)".r
-  def getProvider(uri: String): Option[String] =
-    try
-      Option(new URI(uri).getHost) match {
-        case Some(host) => Some(host)
-        case None       => getProviderFromId(uri)
-      }
-    catch {
-      case _: URISyntaxException => getProviderFromId(uri)
-    }
 
-  def getProviderFromId(uri: String): Option[String] =
-    hostNameRegex.findFirstMatchIn(uri) match {
+  def getProvider(uri: String): Option[String] = {
+    val lowerUri = uri.toLowerCase
+    hostNameRegex.findFirstMatchIn(lowerUri) match {
       case Some(matchGroup) => Some(matchGroup.group("hostname"))
       case None =>
-        compactIdRegex.findFirstMatchIn(uri) match {
+        compactIdRegex.findFirstMatchIn(lowerUri) match {
           case Some(matchGroup) => Some(matchGroup.group("compactIdPrefix"))
           case None             => None
         }
     }
+  }
 
 }
