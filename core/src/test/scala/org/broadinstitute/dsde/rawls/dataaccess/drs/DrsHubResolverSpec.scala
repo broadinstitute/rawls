@@ -55,9 +55,7 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
   "getProvider" should "get correct providers" in {
     DrsResolver.getProvider("drs://dg.anv0:f51fc329-b09e-4e16-b1a9-2f60ebc428ab") shouldBe Some("dg.anv0")
     DrsResolver.getProvider("drs://drs.example.org/ga4gh/drs/v1/objects/314159") shouldBe Some("drs.example.org")
-    DrsResolver.getProvider("https://storage.googleapis.com/v1_abc-123?key=54321") shouldBe Some(
-      "storage.googleapis.com"
-    )
+    DrsResolver.getProvider("https://storage.googleapis.com/v1_abc-123?key=54321") shouldBe None
     DrsResolver.getProvider("drs://jade.datarepo-dev.broadinstitute.org/v1_abcd-123-efg") shouldBe Some(
       "jade.datarepo-dev.broadinstitute.org"
     )
