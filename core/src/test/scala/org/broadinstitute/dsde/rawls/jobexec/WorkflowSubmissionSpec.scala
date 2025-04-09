@@ -76,7 +76,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val jdrDevUrl = "drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4"
     val dgUrl = "drs://dg.712C/fa640b0e-9779-452f-99a6-16d833d15bd0"
 
-    val dosUrl = "dos://foo/bar"
+    val dosUrl = "dos://foo.com/bar"
     val dosSignedUrl = "https://dos.com/signed-url?key=12345"
     val drsUrlTDR1 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-1234"
     val drsSignedUrl1 = "https://storage.googleapis.com/v1_abc-1234?key=65432"
