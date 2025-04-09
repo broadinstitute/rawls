@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.policyservice
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -39,11 +40,13 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
       .attributes(
         new TpsPolicyInputs().inputs(
           List(
-            new TpsPolicyInput().namespace("terra").name("protected-data"),
+            new TpsPolicyInput().namespace(TERRA_POLICY_NAMESPACE).name(TpsPolicies.ProtectedData.name),
             new TpsPolicyInput()
-              .namespace("terra")
-              .name("group-constraint")
-              .additionalData(List(new TpsPolicyPair().key("group").value("test-group")).asJava)
+              .namespace(TERRA_POLICY_NAMESPACE)
+              .name(TpsPolicies.GroupConstraint.name)
+              .additionalData(
+                List(new TpsPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value("test-group")).asJava
+              )
           ).asJava
         )
       )
@@ -69,7 +72,7 @@ class HttpPolicyServiceDAOSpec extends AnyFlatSpec {
       .attributes(
         new TpsPolicyInputs().inputs(
           List(
-            new TpsPolicyInput().namespace("terra").name("protected-data")
+            new TpsPolicyInput().namespace(TERRA_POLICY_NAMESPACE).name(TpsPolicies.ProtectedData.name)
           ).asJava
         )
       )

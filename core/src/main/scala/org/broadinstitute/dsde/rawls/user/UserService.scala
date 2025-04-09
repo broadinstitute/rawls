@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingR
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
@@ -352,7 +353,9 @@ class UserService(
         case Some(policies) =>
           Option(
             policies.getInputs.asScala.exists(policy =>
-              policy.getNamespace.equals("terra") && policy.getName.equals("protected-data")
+              policy.getNamespace.equals(TERRA_POLICY_NAMESPACE) && policy.getName.equals(
+                TpsPolicies.ProtectedData.name
+              )
             )
           )
         case None => Option(false)

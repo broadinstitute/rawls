@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.TpsPolicies
 import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext}
 
 import scala.concurrent.{blocking, ExecutionContext, Future}
@@ -45,7 +46,8 @@ trait BillingProjectLifecycle extends LazyLogging {
   ): Future[ProfileModel] =
     Future(blocking {
       val policies: Map[String, List[(String, String)]] =
-        if (createProjectRequest.protectedData.getOrElse(false)) Map("protected-data" -> List[(String, String)]())
+        if (createProjectRequest.protectedData.getOrElse(false))
+          Map(TpsPolicies.ProtectedData.name -> List[(String, String)]())
         else Map.empty
       val profileModel = billingProfileManagerDAO.createBillingProfile(
         createProjectRequest.projectName.value,

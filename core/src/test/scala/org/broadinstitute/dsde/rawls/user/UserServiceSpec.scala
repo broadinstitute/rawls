@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingR
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -1561,7 +1562,12 @@ class UserServiceSpec
 
     // Azure, BPM-backed, protected project
     val policies = new BpmApiPolicyInputs().inputs(
-      List(new BpmApiPolicyInput().namespace("terra").name("protected-data").additionalData(List.empty.asJava)).asJava
+      List(
+        new BpmApiPolicyInput()
+          .namespace(TERRA_POLICY_NAMESPACE)
+          .name(TpsPolicies.ProtectedData.name)
+          .additionalData(List.empty.asJava)
+      ).asJava
     )
     val bpmProtectedDataBillingProfile =
       new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE).policies(policies)

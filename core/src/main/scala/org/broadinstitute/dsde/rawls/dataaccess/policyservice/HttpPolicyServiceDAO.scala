@@ -11,6 +11,7 @@ import bio.terra.policy.model.{
   TpsPolicyPair
 }
 import jakarta.ws.rs.client.ClientBuilder
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.TracingUtils
 import org.glassfish.jersey.client.ClientConfig
@@ -51,16 +52,17 @@ class HttpPolicyServiceDAO(policyServiceUrl: String)(implicit val ec: ExecutionC
           .objectType(TpsObjectType.WORKSPACE)
           .objectId(workspaceId)
           .component(TpsComponent.RAWLS)
-      val protectedDataPolicy = new TpsPolicyInput().namespace("terra").name("protected-data")
+      val protectedDataPolicy =
+        new TpsPolicyInput().namespace(TERRA_POLICY_NAMESPACE).name(TpsPolicies.ProtectedData.name)
 
       (workspaceRequest.authorizationDomain, workspaceRequest.enhancedBucketLogging) match {
         case (Some(authDomain), _) if authDomain.nonEmpty =>
           val authDomainGroups = authDomain.map { case ManagedGroupRef(RawlsGroupName(membersGroupName)) =>
-            new TpsPolicyPair().key("group").value(membersGroupName)
+            new TpsPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value(membersGroupName)
           }
           val groupConstraintPolicy = new TpsPolicyInput()
-            .namespace("terra")
-            .name("group-constraint")
+            .namespace(TERRA_POLICY_NAMESPACE)
+            .name(TpsPolicies.GroupConstraint.name)
             .additionalData(authDomainGroups.toList.asJava)
           req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy, groupConstraintPolicy).asJava))
         case (None, Some(enhancedBucketLogging)) if enhancedBucketLogging =>

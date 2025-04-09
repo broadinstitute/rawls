@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.BpmAzureReportErrorMessageJsonProtocol._
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   RawlsBillingAccountName,
@@ -196,8 +197,11 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
     when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(dummyProfile)
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
-    val policies = Map("protected-data" -> List[(String, String)](),
-                       "group-constraint" -> List(("group", "myFakeGroup"), ("group", "myOtherFakeGroup"))
+    val policies = Map(
+      TpsPolicies.ProtectedData.name -> List[(String, String)](),
+      TpsPolicies.GroupConstraint.name -> List((TpsPolicies.GroupConstraint.additionalDataKey, "myFakeGroup"),
+                                               (TpsPolicies.GroupConstraint.additionalDataKey, "myOtherFakeGroup")
+      )
     )
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, multiCloudWorkspaceConfig)
 
@@ -206,13 +210,17 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoTestUtils {
 
     val expectedPolicies = new BpmApiPolicyInputs().inputs(
       List(
-        new BpmApiPolicyInput().namespace("terra").name("protected-data").additionalData(List.empty.asJava),
         new BpmApiPolicyInput()
-          .namespace("terra")
-          .name("group-constraint")
+          .namespace(TERRA_POLICY_NAMESPACE)
+          .name(TpsPolicies.ProtectedData.name)
+          .additionalData(List.empty.asJava),
+        new BpmApiPolicyInput()
+          .namespace(TERRA_POLICY_NAMESPACE)
+          .name(TpsPolicies.GroupConstraint.name)
           .additionalData(
-            List(new BpmApiPolicyPair().key("group").value("myFakeGroup"),
-                 new BpmApiPolicyPair().key("group").value("myOtherFakeGroup")
+            List(
+              new BpmApiPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value("myFakeGroup"),
+              new BpmApiPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value("myOtherFakeGroup")
             ).asJava
           )
       ).asJava

@@ -5,6 +5,7 @@ import bio.terra.workspace.api._
 import bio.terra.workspace.client.{ApiClient, ApiException}
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -264,7 +265,7 @@ class HttpWorkspaceManagerDAOSpec
           Seq(
             new WsmPolicyInput()
               .name("dummy-policy")
-              .namespace("terra")
+              .namespace(TERRA_POLICY_NAMESPACE)
               .additionalData(List().asJava)
           ).asJava
         );
@@ -296,8 +297,8 @@ class HttpWorkspaceManagerDAOSpec
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
     val policyInputs = new WsmPolicyInputs()
     val protectedPolicyInput = new WsmPolicyInput()
-    protectedPolicyInput.name("protected-data")
-    protectedPolicyInput.namespace("terra")
+    protectedPolicyInput.name(TpsPolicies.ProtectedData.name)
+    protectedPolicyInput.namespace(TERRA_POLICY_NAMESPACE)
     protectedPolicyInput.additionalData(List().asJava)
 
     policyInputs.addInputsItem(protectedPolicyInput)

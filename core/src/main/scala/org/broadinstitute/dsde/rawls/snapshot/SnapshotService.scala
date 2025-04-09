@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceName,
   ErrorReport,
@@ -116,10 +117,14 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
               new WsmPolicyInputs().inputs(
                 List(
                   new WsmPolicyInput()
-                    .namespace("terra")
-                    .name("group-constraint")
+                    .namespace(TERRA_POLICY_NAMESPACE)
+                    .name(TpsPolicies.GroupConstraint.name)
                     .additionalData(
-                      authDomainGroups.map(groupName => new WsmPolicyPair().key("group").value(groupName)).asJava
+                      authDomainGroups
+                        .map(groupName =>
+                          new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value(groupName)
+                        )
+                        .asJava
                     )
                 ).asJava
               )
@@ -136,7 +141,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
           // has an auth domain, backfill the group-constraint policy on the existing WSM workspace
           if (
             !wsmWorkspace.policies.exists(policy =>
-              policy.namespace.equals("terra") && policy.name.equals("group-constraint")
+              policy.namespace.equals(TERRA_POLICY_NAMESPACE) && policy.name.equals(TpsPolicies.GroupConstraint.name)
             ) && wsmPolicyInputs.isDefined
           ) {
             workspaceManagerDAO.updateWorkspacePolicies(rawlsWorkspace.workspaceIdAsUUID, wsmPolicyInputs.get, ctx)

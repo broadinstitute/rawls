@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingR
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.model.PolicyServiceModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
@@ -798,7 +799,10 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   it should "transform the policy inputs from the request" in {
     val requestPolicies = List(
-      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
+      WorkspacePolicy(TpsPolicies.GroupConstraint.name,
+                      TERRA_POLICY_NAMESPACE,
+                      List(Map(TpsPolicies.GroupConstraint.additionalDataKey -> "myFakeGroup"))
+      ),
       WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
     )
     val request = WorkspaceRequest(namespace, name, Map.empty, policies = Some(requestPolicies))
@@ -810,9 +814,11 @@ class MultiCloudWorkspaceServiceCreateSpec
         .inputs(
           Seq(
             new WsmPolicyInput()
-              .name("group-constraint")
-              .namespace("terra")
-              .additionalData(List(new WsmPolicyPair().key("group").value("myFakeGroup")).asJava),
+              .name(TpsPolicies.GroupConstraint.name)
+              .namespace(TERRA_POLICY_NAMESPACE)
+              .additionalData(
+                List(new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value("myFakeGroup")).asJava
+              ),
             new WsmPolicyInput()
               .name("region-constraint")
               .namespace("other-namespace")
@@ -836,8 +842,8 @@ class MultiCloudWorkspaceServiceCreateSpec
         .inputs(
           Seq(
             new WsmPolicyInput()
-              .name("protected-data")
-              .namespace("terra")
+              .name(TpsPolicies.ProtectedData.name)
+              .namespace(TERRA_POLICY_NAMESPACE)
               .additionalData(List().asJava)
           ).asJava
         )
@@ -846,7 +852,10 @@ class MultiCloudWorkspaceServiceCreateSpec
 
   it should "merge the protected data policy with other inputs in the request" in {
     val requestPolicies = List(
-      WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup"))),
+      WorkspacePolicy(TpsPolicies.GroupConstraint.name,
+                      TERRA_POLICY_NAMESPACE,
+                      List(Map(TpsPolicies.GroupConstraint.additionalDataKey -> "myFakeGroup"))
+      ),
       WorkspacePolicy("region-constraint", "other-namespace", List(Map("key1" -> "value1"), Map("key2" -> "value2")))
     )
     val request = WorkspaceRequest(
@@ -862,13 +871,15 @@ class MultiCloudWorkspaceServiceCreateSpec
         .inputs(
           Seq(
             new WsmPolicyInput()
-              .name("protected-data")
-              .namespace("terra")
+              .name(TpsPolicies.ProtectedData.name)
+              .namespace(TERRA_POLICY_NAMESPACE)
               .additionalData(List().asJava),
             new WsmPolicyInput()
-              .name("group-constraint")
-              .namespace("terra")
-              .additionalData(List(new WsmPolicyPair().key("group").value("myFakeGroup")).asJava),
+              .name(TpsPolicies.GroupConstraint.name)
+              .namespace(TERRA_POLICY_NAMESPACE)
+              .additionalData(
+                List(new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value("myFakeGroup")).asJava
+              ),
             new WsmPolicyInput()
               .name("region-constraint")
               .namespace("other-namespace")
