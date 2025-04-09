@@ -61,6 +61,8 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
     DrsResolver.getProvider("drs://jade.datarepo-dev.broadinstitute.org/v1_abcd-123-efg") shouldBe Some(
       "jade.datarepo-dev.broadinstitute.org"
     )
+    DrsResolver.getProvider("drs://dg.A12B3C:1a234b56-cdef-7a89-b0c1-2345678d90e1") shouldBe Some("dg.A12B3C")
+
     DrsResolver.getProvider("invalid-url") shouldBe None
   }
 }

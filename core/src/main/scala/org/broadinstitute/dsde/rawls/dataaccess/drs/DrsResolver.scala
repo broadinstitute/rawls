@@ -18,7 +18,7 @@ object DrsResolver {
    * <p>Compact ID: drs://prefix:accession
    * <p>drs://dg.anv0:f51fc329-b09e-4e16-b1a9-2f60ebc428ab
    */
-  val compactIdRegex: Regex = "(?<scheme>dos|drs)://(?<compactIdPrefix>(dg|drs)\\.[0-9a-z-]+):(?<path>.*)".r
+  val compactIdRegex: Regex = "(?<scheme>dos|drs)://(?<compactIdPrefix>(dg|drs)\\.[0-9a-zA-Z-]+):(?<path>.*)".r
   val hostNameRegex: Regex = "(?<scheme>dos|drs)://(?<hostname>[^?/:]+\\.[^?/:]+)/(?<path>.*)".r
   def getProvider(uri: String): Option[String] =
     try
