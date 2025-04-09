@@ -35,7 +35,17 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{AttributeNotFoundException, AttributeSupport, AttributeUpdateOperationException, BillingProjectSupport, JsonFilterUtils, LibraryPermissionsSupport, UserUtils, UserWiths, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeNotFoundException,
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  BillingProjectSupport,
+  JsonFilterUtils,
+  LibraryPermissionsSupport,
+  UserUtils,
+  UserWiths,
+  WorkspaceSupport
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -136,34 +146,34 @@ object WorkspaceService {
 }
 
 class WorkspaceService(
-                        val ctx: RawlsRequestContext,
-                        val dataSource: SlickDataSource,
-                        executionServiceCluster: ExecutionServiceCluster,
-                        val workspaceManagerDAO: WorkspaceManagerDAO,
-                        val leonardoService: LeonardoService,
-                        val gcsDAO: GoogleServicesDAO,
-                        val samDAO: SamDAO,
-                        notificationDAO: NotificationDAO,
-                        userServiceConstructor: RawlsRequestContext => UserService,
-                        override val workbenchMetricBaseName: String,
-                        config: WorkspaceServiceConfig,
-                        requesterPaysSetupService: RequesterPaysSetupService,
-                        resourceBufferService: ResourceBufferService,
-                        servicePerimeterService: ServicePerimeterService,
-                        googleIamDao: GoogleIamDAO,
-                        val terraBillingProjectOwnerRole: String,
-                        val terraWorkspaceCanComputeRole: String,
-                        val terraWorkspaceNextflowRole: String,
-                        val terraBucketReaderRole: String,
-                        val terraBucketWriterRole: String,
-                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                        val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
-                        val workspaceRepository: WorkspaceRepository,
-                        val billingRepository: BillingRepository,
-                        val submissionsRepository: SubmissionsRepository,
-                        val workspaceSettingsRepository: WorkspaceSettingRepository,
-                        policyService: PolicyService
+  val ctx: RawlsRequestContext,
+  val dataSource: SlickDataSource,
+  executionServiceCluster: ExecutionServiceCluster,
+  val workspaceManagerDAO: WorkspaceManagerDAO,
+  val leonardoService: LeonardoService,
+  val gcsDAO: GoogleServicesDAO,
+  val samDAO: SamDAO,
+  notificationDAO: NotificationDAO,
+  userServiceConstructor: RawlsRequestContext => UserService,
+  override val workbenchMetricBaseName: String,
+  config: WorkspaceServiceConfig,
+  requesterPaysSetupService: RequesterPaysSetupService,
+  resourceBufferService: ResourceBufferService,
+  servicePerimeterService: ServicePerimeterService,
+  googleIamDao: GoogleIamDAO,
+  val terraBillingProjectOwnerRole: String,
+  val terraWorkspaceCanComputeRole: String,
+  val terraWorkspaceNextflowRole: String,
+  val terraBucketReaderRole: String,
+  val terraBucketWriterRole: String,
+  rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
+  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+  val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
+  val workspaceRepository: WorkspaceRepository,
+  val billingRepository: BillingRepository,
+  val submissionsRepository: SubmissionsRepository,
+  val workspaceSettingsRepository: WorkspaceSettingRepository,
+  policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with LibraryPermissionsSupport

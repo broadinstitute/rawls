@@ -4,7 +4,14 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, IamRole, RoleBinding, RoleBindingList, WorkspaceDescription, WorkspaceStageModel}
+import bio.terra.workspace.model.{
+  AzureContext,
+  IamRole,
+  RoleBinding,
+  RoleBindingList,
+  WorkspaceDescription,
+  WorkspaceStageModel
+}
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
@@ -24,7 +31,12 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  UserDisabledException,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
@@ -82,33 +94,33 @@ class WorkspaceServiceUnitTests
 
   // This is just for convenience, so we only need to specify mocks we care about
   def workspaceServiceConstructor(
-                                   executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
-                                   workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
-                                   leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
-                                   gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
-                                   samDAO: SamDAO = mock[SamDAO],
-                                   notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
-                                   userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
-                                   workbenchMetricBaseName: String = "",
-                                   config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
-                                   requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS),
-                                   resourceBufferService: ResourceBufferService = mock[ResourceBufferService](RETURNS_SMART_NULLS),
-                                   servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS),
-                                   googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
-                                   terraBillingProjectOwnerRole: String = "",
-                                   terraWorkspaceCanComputeRole: String = "",
-                                   terraWorkspaceNextflowRole: String = "",
-                                   terraBucketReaderRole: String = "",
-                                   terraBucketWriterRole: String = "",
-                                   billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
-                                   aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-                                   fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
+    executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
+    workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+    leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
+    gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
+    samDAO: SamDAO = mock[SamDAO],
+    notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
+    userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
+    workbenchMetricBaseName: String = "",
+    config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig](RETURNS_SMART_NULLS),
+    requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS),
+    resourceBufferService: ResourceBufferService = mock[ResourceBufferService](RETURNS_SMART_NULLS),
+    servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS),
+    googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
+    terraBillingProjectOwnerRole: String = "",
+    terraWorkspaceCanComputeRole: String = "",
+    terraWorkspaceNextflowRole: String = "",
+    terraBucketReaderRole: String = "",
+    terraBucketWriterRole: String = "",
+    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
+    aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
+    fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
       mock[FastPassService](RETURNS_SMART_NULLS),
-                                   workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
-                                   billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
-                                   submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
-                                   workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
-                                   policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS)
+    workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
+    billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
+    submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
+    policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,

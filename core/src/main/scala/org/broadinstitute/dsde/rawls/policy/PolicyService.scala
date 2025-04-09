@@ -1,6 +1,13 @@
 package org.broadinstitute.dsde.rawls.policy
 
-import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
+import bio.terra.policy.model.{
+  TpsComponent,
+  TpsObjectType,
+  TpsPaoCreateRequest,
+  TpsPolicyInput,
+  TpsPolicyInputs,
+  TpsPolicyPair
+}
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
@@ -10,7 +17,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
-  def createWorkspacePao(workspaceId: UUID, workspaceRequest: WorkspaceRequest, ctx: RawlsRequestContext): Future[Unit] = {
+  def createWorkspacePao(workspaceId: UUID,
+                         workspaceRequest: WorkspaceRequest,
+                         ctx: RawlsRequestContext
+  ): Future[Unit] = {
     val req =
       new TpsPaoCreateRequest()
         .objectType(TpsObjectType.WORKSPACE)

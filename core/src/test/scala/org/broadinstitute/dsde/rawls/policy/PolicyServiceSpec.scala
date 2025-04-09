@@ -1,13 +1,20 @@
 package org.broadinstitute.dsde.rawls.policy
 
 import bio.terra.policy.api.TpsApi
-import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
+import bio.terra.policy.model.{
+  TpsComponent,
+  TpsObjectType,
+  TpsPaoCreateRequest,
+  TpsPolicyInput,
+  TpsPolicyInputs,
+  TpsPolicyPair
+}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.tps.{HttpTpsDAO, TpsDAO}
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
+import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -56,7 +63,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
       )
 
     Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
-      Duration.Inf
+                 Duration.Inf
     )
 
     verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
@@ -82,7 +89,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
       )
 
     Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
-      Duration.Inf
+                 Duration.Inf
     )
 
     verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
@@ -101,7 +108,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
       .component(TpsComponent.RAWLS)
 
     Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
-      Duration.Inf
+                 Duration.Inf
     )
 
     verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
