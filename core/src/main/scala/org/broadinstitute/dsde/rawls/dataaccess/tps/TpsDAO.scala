@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.tps
 
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceRequest}
+import bio.terra.policy.model.TpsPaoCreateRequest
+import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
-import java.util.UUID
 import scala.concurrent.Future
 
 trait TpsDAO {
-  def createWorkspacePao(workspaceId: UUID, workspaceRequest: WorkspaceRequest, ctx: RawlsRequestContext): Future[Unit]
+  def createPao(request: TpsPaoCreateRequest, ctx: RawlsRequestContext): Future[Unit]
 }

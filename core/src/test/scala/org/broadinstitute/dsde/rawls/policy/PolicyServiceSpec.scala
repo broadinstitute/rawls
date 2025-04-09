@@ -1,20 +1,22 @@
-package org.broadinstitute.dsde.rawls.dataaccess.tps
+package org.broadinstitute.dsde.rawls.policy
 
 import bio.terra.policy.api.TpsApi
-import bio.terra.policy.model._
+import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.tps.{HttpTpsDAO, TpsDAO}
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
-import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
+import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
-class HttpTpsDAOSpec extends AnyFlatSpec {
+class PolicyServiceSpec extends AnyFlatSpec {
   val baseWorkspaceRequest = WorkspaceRequest("workspace-namespace", "workspace-name", Map.empty)
   implicit val ec: ExecutionContext = TestExecutionContext.testExecutionContext
 
@@ -23,6 +25,8 @@ class HttpTpsDAOSpec extends AnyFlatSpec {
       override protected def getTpsApi(ctx: RawlsRequestContext): TpsApi = mockTpsApi
     }
 
+  def getPolicyService(tpsDAO: TpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)): PolicyService = new PolicyService(tpsDAO)
+
   behavior of "createWorkspacePao"
 
   it should "set group-constraint and protected-data policies if auth domain is present" in {
@@ -30,8 +34,8 @@ class HttpTpsDAOSpec extends AnyFlatSpec {
     val workspaceRequest =
       baseWorkspaceRequest.copy(authorizationDomain = Option(Set(ManagedGroupRef(RawlsGroupName("test-group")))))
 
-    val tpsApi = mock[TpsApi](RETURNS_SMART_NULLS)
-    val tpsDAO = getTpsDAO(tpsApi)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    val policyService = getPolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
@@ -51,19 +55,19 @@ class HttpTpsDAOSpec extends AnyFlatSpec {
         )
       )
 
-    Await.result(tpsDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
-                 Duration.Inf
+    Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+      Duration.Inf
     )
 
-    verify(tpsApi).createPao(expectedPaoRequest)
+    verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
   }
 
   it should "set protected-data policy if auth domain is not present and enhanced bucket logging is enabled" in {
     val workspaceId = UUID.randomUUID()
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(true))
 
-    val tpsApi = mock[TpsApi](RETURNS_SMART_NULLS)
-    val tpsDAO = getTpsDAO(tpsApi)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    val policyService = getPolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
@@ -77,29 +81,29 @@ class HttpTpsDAOSpec extends AnyFlatSpec {
         )
       )
 
-    Await.result(tpsDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
-                 Duration.Inf
+    Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+      Duration.Inf
     )
 
-    verify(tpsApi).createPao(expectedPaoRequest)
+    verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
   }
 
   it should "not set any policies if auth domain is not present and enhanced bucket logging is not enabled" in {
     val workspaceId = UUID.randomUUID()
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(false))
 
-    val tpsApi = mock[TpsApi](RETURNS_SMART_NULLS)
-    val tpsDAO = getTpsDAO(tpsApi)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    val policyService = getPolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
       .objectId(workspaceId)
       .component(TpsComponent.RAWLS)
 
-    Await.result(tpsDAO.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
-                 Duration.Inf
+    Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+      Duration.Inf
     )
 
-    verify(tpsApi).createPao(expectedPaoRequest)
+    verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
   }
 }

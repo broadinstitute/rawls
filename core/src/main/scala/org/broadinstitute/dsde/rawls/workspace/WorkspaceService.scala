@@ -16,7 +16,6 @@ import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -30,22 +29,13 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
+import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeNotFoundException,
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  BillingProjectSupport,
-  JsonFilterUtils,
-  LibraryPermissionsSupport,
-  UserUtils,
-  UserWiths,
-  WorkspaceSupport
-}
+import org.broadinstitute.dsde.rawls.util.{AttributeNotFoundException, AttributeSupport, AttributeUpdateOperationException, BillingProjectSupport, JsonFilterUtils, LibraryPermissionsSupport, UserUtils, UserWiths, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -91,7 +81,7 @@ object WorkspaceService {
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
-                  tpsDAO: TpsDAO
+                  policyService: PolicyService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -123,7 +113,7 @@ object WorkspaceService {
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
-      tpsDAO
+      policyService
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -173,7 +163,7 @@ class WorkspaceService(
                         val billingRepository: BillingRepository,
                         val submissionsRepository: SubmissionsRepository,
                         val workspaceSettingsRepository: WorkspaceSettingRepository,
-                        tpsDAO: TpsDAO
+                        policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with LibraryPermissionsSupport
@@ -2017,7 +2007,7 @@ class WorkspaceService(
 
       _ <- traceDBIOWithParent("createTpsPao", parentContext) { span =>
         DBIO.from(
-          tpsDAO.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
+          policyService.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
         )
       }
 

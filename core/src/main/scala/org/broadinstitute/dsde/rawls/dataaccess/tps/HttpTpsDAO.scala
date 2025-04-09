@@ -2,24 +2,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.client.ApiClient
-import bio.terra.policy.model.{
-  TpsComponent,
-  TpsObjectType,
-  TpsPaoCreateRequest,
-  TpsPolicyInput,
-  TpsPolicyInputs,
-  TpsPolicyPair
-}
+import bio.terra.policy.model.TpsPaoCreateRequest
 import jakarta.ws.rs.client.ClientBuilder
-import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.TracingUtils
 import org.glassfish.jersey.client.ClientConfig
 import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
-import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
 
 class HttpTpsDAO(tpsUrl: String)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
@@ -42,35 +32,9 @@ class HttpTpsDAO(tpsUrl: String)(implicit val ec: ExecutionContext) extends TpsD
   protected def getTpsApi(ctx: RawlsRequestContext): TpsApi =
     new TpsApi(getApiClient(ctx))
 
-  def createWorkspacePao(workspaceId: UUID,
-                         workspaceRequest: WorkspaceRequest,
-                         ctx: RawlsRequestContext
-  ): Future[Unit] = Future {
+  def createPao(request: TpsPaoCreateRequest, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
-      val req =
-        new TpsPaoCreateRequest()
-          .objectType(TpsObjectType.WORKSPACE)
-          .objectId(workspaceId)
-          .component(TpsComponent.RAWLS)
-      val protectedDataPolicy =
-        new TpsPolicyInput().namespace(TERRA_POLICY_NAMESPACE).name(TpsPolicies.ProtectedData.name)
-
-      (workspaceRequest.authorizationDomain, workspaceRequest.enhancedBucketLogging) match {
-        case (Some(authDomain), _) if authDomain.nonEmpty =>
-          val authDomainGroups = authDomain.map { case ManagedGroupRef(RawlsGroupName(membersGroupName)) =>
-            new TpsPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value(membersGroupName)
-          }
-          val groupConstraintPolicy = new TpsPolicyInput()
-            .namespace(TERRA_POLICY_NAMESPACE)
-            .name(TpsPolicies.GroupConstraint.name)
-            .additionalData(authDomainGroups.toList.asJava)
-          req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy, groupConstraintPolicy).asJava))
-        case (None, Some(enhancedBucketLogging)) if enhancedBucketLogging =>
-          req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy).asJava))
-        case _ =>
-      }
-
-      getTpsApi(ctx).createPao(req)
+      getTpsApi(ctx).createPao(request)
     }
   }
 }
