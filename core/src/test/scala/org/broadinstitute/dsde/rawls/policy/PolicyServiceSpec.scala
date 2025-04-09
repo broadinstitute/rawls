@@ -32,8 +32,6 @@ class PolicyServiceSpec extends AnyFlatSpec {
       override protected def getTpsApi(ctx: RawlsRequestContext): TpsApi = mockTpsApi
     }
 
-  def getPolicyService(tpsDAO: TpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)): PolicyService = new PolicyService(tpsDAO)
-
   behavior of "createWorkspacePao"
 
   it should "set group-constraint and protected-data policies if auth domain is present" in {
@@ -42,7 +40,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
       baseWorkspaceRequest.copy(authorizationDomain = Option(Set(ManagedGroupRef(RawlsGroupName("test-group")))))
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
-    val policyService = getPolicyService(tpsDAO)
+    val policyService = new PolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
@@ -74,7 +72,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(true))
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
-    val policyService = getPolicyService(tpsDAO)
+    val policyService = new PolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
@@ -100,7 +98,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(false))
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
-    val policyService = getPolicyService(tpsDAO)
+    val policyService = new PolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
       .objectType(TpsObjectType.WORKSPACE)
