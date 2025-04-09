@@ -123,7 +123,7 @@ object EntityManager {
                                                                           bqServiceFactory,
                                                                           config
     ) // implicit executionContext
-    val compactEntityProviderBuilder = new CompactEntityProviderBuilder()
+    val compactEntityProviderBuilder = new CompactEntityProviderBuilder(dataSource)
 
     new EntityManager(
       Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, compactEntityProviderBuilder),
