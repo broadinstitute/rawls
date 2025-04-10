@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.client.ApiClient
-import bio.terra.policy.model.TpsPaoCreateRequest
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoSourceRequest}
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -12,7 +12,8 @@ import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import java.util.UUID
+import scala.concurrent.{ExecutionContext, Future, blocking}
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
@@ -42,6 +43,12 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
   def createPao(request: TpsPaoCreateRequest, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
       getTpsApi(ctx).createPao(request)
+    }
+  }
+
+  def mergePao(request: TpsPaoSourceRequest, destPaoId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
+    blocking {
+      getTpsApi(ctx).mergePao(request, destPaoId)
     }
   }
 }
