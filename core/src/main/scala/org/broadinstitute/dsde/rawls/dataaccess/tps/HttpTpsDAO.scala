@@ -4,6 +4,7 @@ import bio.terra.policy.api.TpsApi
 import bio.terra.policy.client.ApiClient
 import bio.terra.policy.model.TpsPaoCreateRequest
 import jakarta.ws.rs.client.ClientBuilder
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.TracingUtils
 import org.glassfish.jersey.client.ClientConfig
@@ -11,7 +12,7 @@ import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
 import scala.concurrent.{blocking, ExecutionContext, Future}
 
-class HttpTpsDAO(tpsUrl: String)(implicit val ec: ExecutionContext) extends TpsDAO {
+class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
@@ -25,7 +26,7 @@ class HttpTpsDAO(tpsUrl: String)(implicit val ec: ExecutionContext) extends TpsD
 
     TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
     client.setBasePath(tpsUrl)
-    client.setAccessToken(ctx.userInfo.accessToken.token)
+    client.setAccessToken(rawlsSaCreds.getAccessToken)
     client
   }
 

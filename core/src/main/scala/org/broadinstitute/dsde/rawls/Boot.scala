@@ -27,6 +27,7 @@ import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
@@ -261,7 +262,9 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
 
-      val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"))
+      val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"),
+                                  RawlsCredential.getCredential(appConfigManager)
+      )
       val policyService = new PolicyService(tpsDAO)
 
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
