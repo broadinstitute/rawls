@@ -1,13 +1,6 @@
 package org.broadinstitute.dsde.rawls.policy
 
-import bio.terra.policy.model.{
-  TpsComponent,
-  TpsObjectType,
-  TpsPaoCreateRequest,
-  TpsPolicyInput,
-  TpsPolicyInputs,
-  TpsPolicyPair
-}
+import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPaoSourceRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair, TpsUpdateMode}
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
@@ -46,4 +39,14 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
 
     tpsDAO.createPao(req, ctx)
   }
+
+  def mergeWorkspacePao(sourceWorkspaceId: UUID,
+                        destWorkspaceId: UUID,
+                        ctx: RawlsRequestContext): Future[Unit] = {
+    val req = new TpsPaoSourceRequest().sourceObjectId(sourceWorkspaceId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+
+
+    tpsDAO.mergePao(req, destWorkspaceId, ctx)
+  }
+
 }
