@@ -195,7 +195,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         useReferenceDisks = useReferenceDisks,
         memoryRetryMultiplier = memoryRetryMultiplier,
         ignoreEmptyOutputs = ignoreEmptyOutputs
-      )
+      ),
+      submissionEntities = Some(Seq.empty)
     )
   }
 
@@ -1644,7 +1645,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       ),
       status = SubmissionStatuses.Submitted,
       options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
-      workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
+      workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible),
+      submissionEntities = Option(Seq.empty)
     )
 
     val azureWorkspace = new Workspace(

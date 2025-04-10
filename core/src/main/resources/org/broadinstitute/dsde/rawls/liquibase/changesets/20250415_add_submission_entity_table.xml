@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
+    <changeSet logicalFilePath="dummy" author="bmorgan" id="create_submission_entity">
+        <!-- create the SUBMISSION_ENTITY table -->
+            <createTable tableName="SUBMISSION_ENTITY">
+                <column name="submission_id" type="BINARY(16)">
+                    <constraints nullable="false" />
+                </column>
+                <column name="entity_id" type="BIGINT UNSIGNED">
+                    <constraints nullable="false" />
+                </column>
+            </createTable>
+            <addForeignKeyConstraint baseColumnNames="submission_id"
+                                 baseTableName="SUBMISSION_ENTITY"
+                                 constraintName="FK_SUB_ENT_SUB"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onDelete="NO ACTION"
+                                 onUpdate="NO ACTION"
+                                 referencedColumnNames="ID"
+                                 referencedTableName="SUBMISSION"/>
+            <addForeignKeyConstraint baseColumnNames="entity_id"
+                                 baseTableName="SUBMISSION_ENTITY"
+                                 constraintName="FK_SUB_ENT_ENT"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onDelete="NO ACTION"
+                                 onUpdate="NO ACTION"
+                                 referencedColumnNames="id"
+                                 referencedTableName="ENTITY"/>
+            <!-- index for lookups against to_id -->
+<!--            <createIndex tableName="ENTITY_REFS" indexName="idx_to">-->
+<!--                <column name="to_id" />-->
+<!--            </createIndex>-->
+<!--            &lt;!&ndash; unique constraint for from+to, which covers lookups against from_id &ndash;&gt;-->
+<!--            <addUniqueConstraint columnNames="from_id, to_id" constraintName="unq_from_to" tableName="ENTITY_REFS"/>-->
+    </changeSet>
+</databaseChangeLog>

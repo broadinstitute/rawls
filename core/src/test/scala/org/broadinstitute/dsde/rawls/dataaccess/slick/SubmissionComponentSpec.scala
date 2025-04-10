@@ -93,7 +93,8 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     ),
     status = SubmissionStatuses.Submitted,
     externalEntityInfo = Option(ExternalEntityInfo(UUID.randomUUID().toString, "external")),
-    options = SubmissionOptions(useCallCache = true, deleteIntermediateOutputFiles = true)
+    options = SubmissionOptions(useCallCache = true, deleteIntermediateOutputFiles = true),
+    submissionEntities = Option(Seq.empty)
   )
 
   val inputResolutionsList = Seq(

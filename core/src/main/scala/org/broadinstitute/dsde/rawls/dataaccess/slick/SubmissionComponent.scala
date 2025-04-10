@@ -42,13 +42,14 @@ case class SubmissionRecord(id: UUID,
                             monitoringScript: Option[String],
                             monitoringImage: Option[String],
                             monitoringImageScript: Option[String],
-                            perWorkflowCostCap: Option[BigDecimal],
-                            submissionEntities: Option[String]
+                            perWorkflowCostCap: Option[BigDecimal]
 )
 
 case class SubmissionValidationRecord(id: Long, workflowId: Long, errorText: Option[String], inputName: String)
 
 case class SubmissionAuditStatusRecord(id: Long, submissionId: UUID, status: String, timestamp: Timestamp)
+
+case class SubmissionEntityRef(submission_id: UUID, entity_id: Long)
 
 //noinspection MutatorLikeMethodIsParameterless,TypeAnnotation,ScalaUnusedSymbol,ScalaUnnecessaryParentheses,TypeAnnotation,SqlDialectInspection,SqlNoDataSourceInspection,RedundantBlock,RedundantCollectionConversion,DuplicatedCode
 trait SubmissionComponent {
@@ -83,7 +84,6 @@ trait SubmissionComponent {
     def monitoringImage = column[Option[String]]("MONITORING_IMAGE")
     def monitoringImageScript = column[Option[String]]("MONITORING_IMAGE_SCRIPT")
     def perWorkflowCostCap = column[Option[BigDecimal]]("PER_WORKFLOW_COST_CAP")
-    def submissionEntitiesIds: Rep[Option[String]] = column[Option[String]]("ENTITIES_IDS")
 
     def * = (
       id,
@@ -106,8 +106,7 @@ trait SubmissionComponent {
       monitoringScript,
       monitoringImage,
       monitoringImageScript,
-      perWorkflowCostCap,
-      submissionEntitiesIds
+      perWorkflowCostCap
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -127,7 +126,25 @@ trait SubmissionComponent {
     def workflow = foreignKey("FK_SUB_VALIDATION_WF", workflowId, workflowQuery)(_.id)
   }
 
+  class SubmissionEntityTable(tag: Tag) extends Table[SubmissionEntityRef](tag, "SUBMISSION_ENTITY") {
+    def submissionId = column[UUID]("submission_id")
+    def entityId = column[Long]("entity_id")
+
+    def * =
+      (submissionId, entityId) <> (SubmissionEntityRef.tupled, SubmissionEntityRef.unapply)
+  }
+
   protected val submissionValidationQuery = TableQuery[SubmissionValidationTable]
+
+  object submissionEntityQuery extends TableQuery(new SubmissionEntityTable(_)) {
+    type SubmissionEntityQueryType = Query[SubmissionEntityTable, SubmissionEntityRef, Seq]
+    def getEntitiesForSubmission(submissionId: UUID): ReadAction[Seq[AttributeEntityReference]] =
+      filter(_.submissionId === submissionId)
+        .map(_.entityId)
+        .result
+        .flatMap(ids => submissionQuery.loadEntities(ids))
+
+  }
 
   object submissionQuery extends TableQuery(new SubmissionTable(_)) {
 
@@ -255,8 +272,7 @@ trait SubmissionComponent {
                   submissionQuery += marshalSubmission(workspaceContext.workspaceIdAsUUID,
                                                        submission,
                                                        entityId,
-                                                       configId.get,
-                                                       entitiesIds
+                                                       configId.get
                   )
                 }
               }
@@ -368,14 +384,9 @@ trait SubmissionComponent {
             config <- methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
             workflows <- loadSubmissionWorkflows(submissionRec.id)
             entity <- DBIO.sequenceOption(submissionRec.submissionEntityId.map(loadEntity))
-            entities <- submissionRec.submissionEntities match {
-              case Some(entitiesString) =>
-                val entityIds = entitiesString.split(",").toSeq.map(_.toLong)
-                loadEntities(entityIds).map(Some(_))
-              case None =>
-                DBIO.successful(None)
-            }
-          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows, entities))
+            entities <- submissionEntityQuery
+              .getEntitiesForSubmission(submissionRec.id)
+          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows, Some(entities)))
       }
 
     def loadActiveSubmission(submissionId: UUID): ReadAction[ActiveSubmission] =
@@ -385,14 +396,9 @@ trait SubmissionComponent {
           workflows <- loadSubmissionWorkflows(rec.get.id)
           entity <- DBIO.sequenceOption(rec.get.submissionEntityId.map(loadEntity))
           workspace <- workspaceQuery.findById(rec.get.workspaceId.toString)
-          entities <- rec.get.submissionEntities match {
-            case Some(entitiesString) =>
-              val entityIds = entitiesString.split(",").toSeq.map(_.toLong)
-              loadEntities(entityIds).map(Some(_))
-            case None =>
-              DBIO.successful(None)
-          }
-        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows, entities)
+          entities <- submissionEntityQuery
+            .getEntitiesForSubmission(submissionId)
+        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows, Some(entities))
       }
 
     def loadSubmissionWorkflowsWithIds(submissionId: UUID): ReadAction[Seq[(Long, Workflow)]] = {
@@ -499,7 +505,7 @@ trait SubmissionComponent {
     def getEmptyOutputParam(submissionId: UUID): ReadAction[Boolean] = {
       val query = submissionQuery.filter(_.id === submissionId).map(_.ignoreEmptyOutputs)
 
-      return uniqueResult[Boolean](query).map(_.getOrElse(false))
+      uniqueResult[Boolean](query).map(_.getOrElse(false))
     }
 
     def getSubmissionWorkflowStatusCounts(submissionId: UUID): ReadAction[Map[String, Int]] = {
@@ -520,13 +526,9 @@ trait SubmissionComponent {
     private def marshalSubmission(workspaceId: UUID,
                                   submission: Submission,
                                   entityId: Option[Long],
-                                  configId: Long,
-                                  entitiesIds: Option[Seq[Long]]
-    ): SubmissionRecord = {
-      val formattedEntitiesIds = entitiesIds match {
-        case Some(seq) if seq.nonEmpty => Some(seq.mkString(","))
-        case _                         => None
-      }
+                                  configId: Long
+    ): SubmissionRecord =
+
       SubmissionRecord(
         UUID.fromString(submission.submissionId),
         workspaceId,
@@ -548,10 +550,8 @@ trait SubmissionComponent {
         submission.monitoringScript,
         submission.monitoringImage,
         submission.monitoringImageScript,
-        submission.options.perWorkflowCostCap,
-        formattedEntitiesIds
+        submission.options.perWorkflowCostCap
       )
-    }
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord,
                                     config: MethodConfiguration,
