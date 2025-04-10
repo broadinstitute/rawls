@@ -10,6 +10,8 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils
 import org.glassfish.jersey.client.ClientConfig
 import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.concurrent.{blocking, ExecutionContext, Future}
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
@@ -26,6 +28,10 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
 
     TracingUtils.enableCrossServiceTracing(client.getHttpClient, ctx)
     client.setBasePath(tpsUrl)
+    if (rawlsSaCreds.getExpiresAt.isBefore(Instant.now.plus(5, ChronoUnit.MINUTES))) {
+      rawlsSaCreds.refreshToken()
+    }
+
     client.setAccessToken(rawlsSaCreds.getAccessToken)
     client
   }
