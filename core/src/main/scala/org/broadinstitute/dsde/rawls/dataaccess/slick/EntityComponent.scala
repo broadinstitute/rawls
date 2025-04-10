@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -1027,7 +1028,7 @@ trait EntityComponent {
              entities: Traversable[Entity],
              parentContext: RawlsTracingContext = RawlsTracingContext()
     ): ReadWriteAction[Traversable[Entity]] = {
-      entities.foreach(validateEntity)
+      entities.foreach(EntityUtils.validateEntity)
 
       for {
         _ <- traceDBIOWithParent("updateLastModified", parentContext)(_ =>
@@ -1401,14 +1402,6 @@ trait EntityComponent {
     }
 
     // Utility methods
-    private def validateEntity(entity: Entity): Unit = {
-      validateEntityType(entity.entityType)
-      validateEntityName(entity.name)
-      entity.attributes.keys.foreach { attrName =>
-        validateUserDefinedString(attrName.name)
-        validateAttributeName(attrName, entity.entityType)
-      }
-    }
 
     def generateEntityMetadataMap(typesAndCountsQ: ReadAction[Map[String, Int]],
                                   typesAndAttrsQ: ReadAction[Map[String, Seq[AttributeName]]]

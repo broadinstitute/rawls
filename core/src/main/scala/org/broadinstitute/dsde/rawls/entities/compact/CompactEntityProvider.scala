@@ -1,12 +1,23 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.NotUsed
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
+import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityNotFoundException,
+  EntityReferenceNotFoundException
+}
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
+  AttributeEntityReferenceList,
   AttributeName,
   AttributeRename,
   AttributeUpdateOperations,
@@ -18,11 +29,15 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResultMetadata,
   EntityTypeMetadata,
   EntityTypeRename,
+  ErrorReport,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
   Workspace
 }
+import slick.dbio.DBIO
+import slick.jdbc.ResultSetConcurrency.ReadOnly
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -33,8 +48,13 @@ import scala.util.Try
   *
   * @param executionContext scala concurrency context
   */
-class CompactEntityProvider(implicit protected val executionContext: ExecutionContext) extends EntityProvider {
-  override def entityStoreId: Option[String] = ???
+class CompactEntityProvider(requestArguments: EntityRequestArguments, repository: CompactEntityRepository)(implicit
+  protected val executionContext: ExecutionContext
+) extends EntityProvider
+    with LazyLogging {
+  override def entityStoreId: Option[String] = None // unused
+
+  val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
 
   override def batchUpdateEntities(
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition],
@@ -54,7 +74,43 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = ???
 
-  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = ???
+  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
+    EntityUtils.validateEntity(entity)
+    val createFuture = repository.dataSource.inTransaction { _ =>
+      for {
+        // does this entity already exist?
+        preExisting <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
+        _ = if (preExisting.nonEmpty)
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Conflict,
+              s"${entity.entityType} ${entity.name} already exists in ${requestArguments.workspace.toWorkspaceName}"
+            )
+          )
+        // find all references in this entity
+        refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
+        // find all unique references in this entity
+        uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
+        // verify that all references in the entity-to-be-saved actually exist
+        referencedIds <- repository.queries.getReferencedIds(workspaceId, uniqueRefs)
+        _ = if (uniqueRefs.size != referencedIds.size)
+          throw new EntityReferenceNotFoundException("Some entity references do not exist")
+        // save the entity
+        _ <- repository.queries.createEntity(workspaceId, entity)
+        // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
+        // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
+        // normalized version.
+        savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
+        savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
+        // save all references from this entity to other entities
+        _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
+      } yield savedEntityRecord.toEntity
+    }
+    // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(createFuture)
+
+    createFuture
+  }
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
                               parentContext: RawlsRequestContext
@@ -84,8 +140,15 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
 
   override def expressionValidator: ExpressionValidator = ???
 
-  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
-    ???
+  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
+    val queryResult = repository.dataSource.inTransaction(ReadOnly) { _ =>
+      repository.queries.getEntity(workspaceId, entityType, entityName)
+    }
+    queryResult map {
+      case Some(entityRec) => entityRec.toEntity
+      case None            => throw new EntityNotFoundException()
+    }
+  }
 
   override def listEntities(entityType: String): Source[Entity, NotUsed] = ???
 
@@ -121,4 +184,69 @@ class CompactEntityProvider(implicit protected val executionContext: ExecutionCo
                             operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation],
                             parentContext: RawlsRequestContext
   ): Future[Entity] = ???
+
+  // ====================================================================================================
+  //  helper methods
+  // ====================================================================================================
+
+  // given an entity, finds all references in that entity, grouped by their attribute names
+  protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
+    entity.attributes
+      .collect {
+        case (name: AttributeName, ref: AttributeEntityReference)         => Seq((name, ref))
+        case (name: AttributeName, refList: AttributeEntityReferenceList) => refList.list.map(ref => (name, ref))
+      }
+      .flatten
+      .toSeq
+      .groupMap(_._1)(_._2)
+
+  // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
+  // entity
+  protected[compact] def replaceReferences(fromId: Long,
+                                           toIds: Set[Long],
+                                           isInsert: Boolean
+  ): ReadWriteAction[(Int, Int)] = {
+    // short-circuit
+    if (isInsert && toIds.isEmpty) {
+      DBIO.successful((0, 0))
+    }
+
+    for {
+      // delete any reference pointers that should no longer exist
+      deletes <-
+        if (isInsert) {
+          DBIO.successful(0)
+        } else {
+          repository.queries.deleteReferences(fromId, toIds)
+        }
+      // upsert all reference pointers that do exist
+      upserts <-
+        if (toIds.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          repository.queries.upsertReferences(fromId, toIds)
+        }
+    } yield (deletes, upserts)
+  }
+
+  /**
+    * Update the workspace's last-modified timestamp - in a separate transaction - upon successful
+    * completion of a given Future.
+    *
+    * @param func the original function
+    * @tparam T return type of original function
+    */
+  protected[compact] def withWorkspaceLastModified[T](func: Future[T]): Unit =
+    func.foreach(_ =>
+      repository.dataSource
+        .inTransaction { _ =>
+          repository.updateLastModified(workspaceId)
+        }
+        .recover { case t: Throwable =>
+          logger.warn(
+            s"Failed to update workspace last-modified timestamp. Workspace $workspaceId; message: ${t.getMessage}"
+          )
+        }
+    )
+
 }
