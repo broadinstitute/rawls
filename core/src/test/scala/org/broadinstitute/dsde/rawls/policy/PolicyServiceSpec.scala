@@ -1,25 +1,18 @@
 package org.broadinstitute.dsde.rawls.policy
 
 import bio.terra.policy.api.TpsApi
-import bio.terra.policy.model.{
-  TpsComponent,
-  TpsObjectType,
-  TpsPaoCreateRequest,
-  TpsPolicyInput,
-  TpsPolicyInputs,
-  TpsPolicyPair
-}
+import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.tps.{HttpTpsDAO, TpsDAO}
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
@@ -40,6 +33,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
       baseWorkspaceRequest.copy(authorizationDomain = Option(Set(ManagedGroupRef(RawlsGroupName("test-group")))))
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.createPao(any(), any())).thenReturn(Future.unit)
     val policyService = new PolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
@@ -72,6 +66,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(true))
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.createPao(any(), any())).thenReturn(Future.unit)
     val policyService = new PolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
@@ -98,6 +93,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(false))
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.createPao(any(), any())).thenReturn(Future.unit)
     val policyService = new PolicyService(tpsDAO)
 
     val expectedPaoRequest = new TpsPaoCreateRequest()
