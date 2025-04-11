@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
@@ -84,8 +85,8 @@ object MultiCloudWorkspaceService {
         Some(
           Seq(
             new WsmPolicyInput()
-              .name("protected-data")
-              .namespace("terra")
+              .name(TpsPolicies.ProtectedData.name)
+              .namespace(TERRA_POLICY_NAMESPACE)
               .additionalData(List().asJava)
           )
         )

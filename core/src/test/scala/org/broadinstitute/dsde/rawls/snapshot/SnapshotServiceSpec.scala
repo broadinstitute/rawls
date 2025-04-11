@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.mock.MockDataRepoDAO
+import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{
   DataReferenceDescriptionField,
   DataReferenceName,
@@ -342,9 +343,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         val expectedPolicyInputs = new WsmPolicyInputs().inputs(
           List(
             new WsmPolicyInput()
-              .namespace("terra")
-              .name("group-constraint")
-              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+              .namespace(TERRA_POLICY_NAMESPACE)
+              .name(TpsPolicies.GroupConstraint.name)
+              .additionalData(
+                List(
+                  new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value(authDomainGroup)
+                ).asJava
+              )
           ).asJava
         )
 
@@ -402,9 +407,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         val expectedPolicyInputs = new WsmPolicyInputs().inputs(
           List(
             new WsmPolicyInput()
-              .namespace("terra")
-              .name("group-constraint")
-              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
+              .namespace(TERRA_POLICY_NAMESPACE)
+              .name(TpsPolicies.GroupConstraint.name)
+              .additionalData(
+                List(
+                  new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value(authDomainGroup)
+                ).asJava
+              )
           ).asJava
         )
 
@@ -465,10 +474,18 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         val existingPolicyInputs = new WsmPolicyInputs().inputs(
           List(
             new WsmPolicyInput()
-              .namespace("terra")
-              .name("group-constraint")
-              .additionalData(List(new WsmPolicyPair().key("group").value(authDomainGroup)).asJava)
-              .additionalData(List(new WsmPolicyPair().key("group").value("additionalPolicyGroup")).asJava)
+              .namespace(TERRA_POLICY_NAMESPACE)
+              .name(TpsPolicies.GroupConstraint.name)
+              .additionalData(
+                List(
+                  new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value(authDomainGroup)
+                ).asJava
+              )
+              .additionalData(
+                List(
+                  new WsmPolicyPair().key(TpsPolicies.GroupConstraint.additionalDataKey).value("additionalPolicyGroup")
+                ).asJava
+              )
           ).asJava
         )
 

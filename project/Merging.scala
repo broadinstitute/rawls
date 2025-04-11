@@ -10,6 +10,11 @@ object Merging {
     // [error]   Jar name = bcprov-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
     // [error]   Jar name = bcutil-jdk18on-1.78.jar, jar org = org.bouncycastle, entry target = META-INF/versions/9/OSGI-INF/MANIFEST.MF
     case "META-INF/versions/9/OSGI-INF/MANIFEST.MF" => MergeStrategy.first
+    // for ApiClient.mustache merge error:
+    // [error] Deduplicate found different file contents in the following:
+    // [error]   Jar name = terra-policy-client-1.0.18-SNAPSHOT.jar, jar org = bio.terra, entry target = swaggercodegen/libraries/jersey2/ApiClient.mustache
+    // [error]   Jar name = workspace-manager-client-0.254.1183-SNAPSHOT.jar, jar org = bio.terra, entry target = swaggercodegen/libraries/jersey2/ApiClient.mustache
+    case "swaggercodegen/libraries/jersey2/ApiClient.mustache" => MergeStrategy.discard
     // For source bouncycastle files
     case x if x.contains("bouncycastle") => MergeStrategy.first
     // For the following error:
