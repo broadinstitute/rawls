@@ -72,6 +72,8 @@ object SamWorkspaceActions {
   val viewMigrationStatus = SamResourceAction("view_migration_status")
   val readSpendReport = SamResourceAction("read_spend_report")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
+  val readSettings = SamResourceAction("read_settings")
+  val writeSettings = SamResourceAction("alter_settings")
 }
 
 object SamBillingProjectActions {
