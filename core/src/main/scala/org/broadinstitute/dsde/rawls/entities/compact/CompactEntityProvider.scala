@@ -150,7 +150,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
     }
   }
 
-  override def listEntities(entityType: String): Source[Entity, NotUsed] = ???
+  override def listEntities(entityType: String): Source[Entity, NotUsed] =
+    throw new DataEntityException("list all entities not supported for compact data tables.",
+                                  code = StatusCodes.NotImplemented
+    )
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
