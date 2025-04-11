@@ -47,6 +47,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUser
 }
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
+import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
@@ -200,6 +201,9 @@ trait ApiServiceSpec
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
+    val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
+    when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
@@ -386,7 +390,8 @@ trait ApiServiceSpec
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
-      fastPassServiceConstructor
+      fastPassServiceConstructor,
+      policyService
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

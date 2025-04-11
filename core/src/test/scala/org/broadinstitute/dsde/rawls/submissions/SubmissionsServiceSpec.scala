@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowCostTypes.WorkflowCostType
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Running, Succeeded, WorkflowStatus}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
+import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -135,6 +136,7 @@ class SubmissionsServiceSpec
     )
       .thenReturn(Future.successful())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
+    val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
@@ -292,7 +294,8 @@ class SubmissionsServiceSpec
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
-      fastPassServiceConstructor
+      fastPassServiceConstructor,
+      policyService
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

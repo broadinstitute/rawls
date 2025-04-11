@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketReque
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
@@ -118,7 +119,8 @@ class WorkspaceServiceUnitTests
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
     submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
-    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
+    workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
+    policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -147,7 +149,8 @@ class WorkspaceServiceUnitTests
       workspaceRepository,
       billingRepository,
       submissionsRepository,
-      workspaceSettingRepository
+      workspaceSettingRepository,
+      policyService
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"
