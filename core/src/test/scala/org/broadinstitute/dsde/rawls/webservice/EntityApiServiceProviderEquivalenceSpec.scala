@@ -37,14 +37,15 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
-    try
+    try {
+      setupProviders(apiService) // tweaks to minimalTestData for this test suite
       testCode(apiService)
-    finally
+    } finally
       apiService.cleanupSupervisor
   }
 
   // withMinimalTestDatabase has two workspaces, each starts with no entities
-  def withMinimalDatabaseApiServices[T](testCode: TestApiService => T): T =
+  def withProviderEquivalenceApiServices[T](testCode: TestApiService => T): T =
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
@@ -106,9 +107,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
 
   behavior of "POST and GET single entity"
   entityTestCases foreach { case (descriptor, entity) =>
-    it should s"work for an entity with $descriptor" in withMinimalDatabaseApiServices { services =>
-      setupProviders(services) // needs to be inside withMinimalDatabaseApiServices
-
+    it should s"work for an entity with $descriptor" in withProviderEquivalenceApiServices { services =>
       // create entities; this validates the POST api
       createEntity(compactWs, entity, services)
       createEntity(legacyWs, entity, services)
@@ -123,9 +122,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     }
   }
 
-  it should s"work for an entity with references" in withMinimalDatabaseApiServices { services =>
-    setupProviders(services) // needs to be inside withMinimalDatabaseApiServices
-
+  it should s"work for an entity with references" in withProviderEquivalenceApiServices { services =>
     val targetType = "target"
 
     // create entities to serve as reference targets
@@ -162,14 +159,12 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     legacy shouldBe entity
   }
 
-  behavior of "setupProviders helper"
+  behavior of "test assumptions via setupProviders helper"
 
   // this verifies that setup is correct; compactWs should use CompactEntityProvider and legacyWs should use
   // LocalEntityProvider
-  it should " succeed for legacy, fail for compact on list_entities (not implemented yet)" in withMinimalDatabaseApiServices {
+  it should " succeed for legacy, fail for compact on list_entities (not implemented yet)" in withProviderEquivalenceApiServices {
     services =>
-      setupProviders(services) // needs to be inside withMinimalDatabaseApiServices
-
       withClue("For legacy workspace,") {
         Get(s"/workspaces/${legacyWs.namespace}/${legacyWs.name}/entities/some-type") ~>
           withHandlers(services.entityRoutes()) ~>
