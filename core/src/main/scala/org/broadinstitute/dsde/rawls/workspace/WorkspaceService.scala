@@ -3,10 +3,12 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import cats.data.NonEmptyList
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
@@ -2193,6 +2195,78 @@ class WorkspaceService(
       throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
+
+  def addAuthDomainGroups(workspaceName: WorkspaceName,
+                          newAuthDomainGroups: Set[String],
+                          parentContext: RawlsRequestContext = ctx
+  ): Future[Unit] = for {
+    // relies on sam calls to check permissions
+    // if no auth domain update is required, caller only requires read_auth_domain permission
+    // if an auth domain update is required, caller requires update_auth_domain permission
+    workspace <- getV2WorkspaceContext(workspaceName)
+    existingAuthDomain <- samDAO
+      .getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, parentContext)
+
+    _ <-
+      if ((newAuthDomainGroups -- existingAuthDomain).nonEmpty) {
+        samDAO.addResourceAuthDomain(SamResourceTypeNames.workspace,
+                                     workspace.workspaceId,
+                                     newAuthDomainGroups,
+                                     parentContext
+        )
+      } else {
+        // if the new auth domain is already in the workspace, do nothing
+        Future.successful(())
+      }
+    _ <-
+      if (existingAuthDomain.isEmpty) {
+        // if there was no auth domain, we need update the google bucket IAM to use the workspace's project owner policy
+        // instead of the billing project owner policy directly
+        changeProjectOwnerBucketIamBinding(workspace, parentContext)
+      } else {
+        Future.successful(())
+      }
+  } yield ()
+
+  private def changeProjectOwnerBucketIamBinding(workspace: Workspace, parentContext: RawlsRequestContext) =
+    for {
+      workspacePolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
+                                                          workspace.workspaceId,
+                                                          parentContext
+      )
+      _ <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace,
+                                     workspace.workspaceId,
+                                     SamWorkspacePolicyNames.projectOwner
+      )
+      workspaceProjectOwnerEmail = workspacePolicies
+        .find(_.policyName == SamWorkspacePolicyNames.projectOwner)
+        .map(_.email)
+        .getOrElse(
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError,
+                        s"Unable to find project owner policy for workspace ${workspace.workspaceId}"
+            )
+          )
+        )
+      billingProjectPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject,
+                                                               workspace.namespace,
+                                                               parentContext
+      )
+      billingProjectOwnerEmail = billingProjectPolicies
+        .find(_.policyName == SamBillingProjectPolicyNames.owner)
+        .map(_.email)
+        .getOrElse(
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError,
+                        s"Unable to find project owner policy for billing project ${workspace.namespace}"
+            )
+          )
+        )
+      _ <- gcsDAO.changeProjectOwnerBucketIamBinding(GcsBucketName(workspace.bucketName),
+                                                     Identity.group(billingProjectOwnerEmail.value),
+                                                     Identity.group(workspaceProjectOwnerEmail.value)
+      )
+    } yield ()
 }
 
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

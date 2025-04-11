@@ -133,6 +133,12 @@ trait SamDAO {
                             ctx: RawlsRequestContext
   ): Future[Seq[String]]
 
+  def addResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                            resourceId: String,
+                            authDomain: Set[String],
+                            ctx: RawlsRequestContext
+  ): Future[Unit]
+
   def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
                                        resourceId: String,
                                        ctx: RawlsRequestContext

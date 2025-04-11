@@ -20,6 +20,7 @@ import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonRespons
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
+import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -3770,5 +3771,150 @@ class WorkspaceServiceSpec
 
       err.errorReport.message should include(mockErrorMessage)
       err.errorReport.statusCode.get.intValue() shouldBe 998
+  }
+
+  "addAuthDomainGroups" should "call addResourceAuthDomain when adding new AD groups" in withTestDataServices {
+    services =>
+      val workspace = runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(testData.workspace))
+
+      when(
+        services.samDAO.getResourceAuthDomain(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(workspace.workspaceId),
+          any
+        )
+      ).thenReturn(Future.successful(Seq("group1", "group2")))
+
+      val testGroups = Set("group3")
+      when(
+        services.samDAO.addResourceAuthDomain(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(workspace.workspaceId),
+          ArgumentMatchers.eq(testGroups),
+          any
+        )
+      ).thenReturn(Future.successful(()))
+
+      Await.result(services.workspaceService.addAuthDomainGroups(workspace.toWorkspaceName,
+                                                                 testGroups,
+                                                                 toRawlsRequestContext(testData.userOwner)
+                   ),
+                   Duration.Inf
+      )
+
+      verify(services.samDAO).addResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        ArgumentMatchers.eq(testGroups),
+        any
+      )
+  }
+
+  it should "call changeProjectOwnerBucketIamBinding when adding first AD group" in withTestDataServices { services =>
+    val workspace = runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(testData.workspace))
+
+    when(
+      services.samDAO.getResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        any
+      )
+    ).thenReturn(Future.successful(Seq.empty))
+
+    val testGroups = Set("group3")
+    when(
+      services.samDAO.addResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        ArgumentMatchers.eq(testGroups),
+        any
+      )
+    ).thenReturn(Future.successful(()))
+
+    val workspaceProjectOwnerEmail = "workspace email"
+    when(
+      services.samDAO.listPoliciesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        any
+      )
+    ).thenReturn(
+      Future.successful(
+        Set(
+          SamPolicyWithNameAndEmail(
+            SamWorkspacePolicyNames.projectOwner,
+            SamPolicy(Set.empty, Set.empty, Set.empty),
+            WorkbenchEmail(workspaceProjectOwnerEmail)
+          )
+        )
+      )
+    )
+    val billingOwnerEmail = "billing email"
+    when(
+      services.samDAO.listPoliciesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(workspace.namespace),
+        any
+      )
+    ).thenReturn(
+      Future.successful(
+        Set(
+          SamPolicyWithNameAndEmail(
+            SamBillingProjectPolicyNames.owner,
+            SamPolicy(Set.empty, Set.empty, Set.empty),
+            WorkbenchEmail(billingOwnerEmail)
+          )
+        )
+      )
+    )
+
+    when(
+      services.gcsDAO.changeProjectOwnerBucketIamBinding(
+        GcsBucketName(workspace.bucketName),
+        Identity.group(billingOwnerEmail),
+        Identity.group(workspaceProjectOwnerEmail)
+      )
+    ).thenReturn(Future.successful(()))
+
+    Await.result(services.workspaceService.addAuthDomainGroups(workspace.toWorkspaceName,
+                                                               testGroups,
+                                                               toRawlsRequestContext(testData.userOwner)
+                 ),
+                 Duration.Inf
+    )
+
+    verify(services.samDAO).addResourceAuthDomain(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspace.workspaceId),
+      ArgumentMatchers.eq(testGroups),
+      any
+    )
+    verify(services.gcsDAO).changeProjectOwnerBucketIamBinding(
+      GcsBucketName(workspace.bucketName),
+      Identity.group(billingOwnerEmail),
+      Identity.group(workspaceProjectOwnerEmail)
+    )
+  }
+
+  it should "no op if no new AD groups" in withTestDataServices { services =>
+    val workspace = runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(testData.workspace))
+
+    val testGroups = Set("group3")
+    when(
+      services.samDAO.getResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        any
+      )
+    ).thenReturn(Future.successful(testGroups.toSeq))
+
+    Await.result(services.workspaceService.addAuthDomainGroups(workspace.toWorkspaceName,
+                                                               testGroups,
+                                                               toRawlsRequestContext(testData.userOwner)
+                 ),
+                 Duration.Inf
+    )
+
+    verify(services.samDAO, never).addResourceAuthDomain(any, any, any, any)
   }
 }
