@@ -13,7 +13,7 @@ import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
@@ -46,9 +46,9 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
     }
   }
 
-  def mergePao(request: TpsPaoSourceRequest, destPaoId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
+  def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
-      getTpsApi(ctx).mergePao(request, destPaoId)
+      getTpsApi(ctx).mergePao(request, objectId)
     }
   }
 }
