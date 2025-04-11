@@ -50,9 +50,9 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
   }
 
   /**
-    * Despite what the documentation and naming in TPS would have you believe, the mergePao endpoint
-    * will merge the policies from the PAO of the specified object id into the PAO of the source
-    * object id.
+    * The documentation for this TPS API is misleading. It will merge the target PAO into the source
+    * PAO, NOT the other way around. While it might be confusing to see the destination workspace id
+    * used as the `sourceObjectId`, this is the correct way to call the TPS API.
     */
   def mergeWorkspacePao(sourceWorkspaceId: UUID, destWorkspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] = {
     val req = new TpsPaoSourceRequest().sourceObjectId(destWorkspaceId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)

@@ -1779,6 +1779,18 @@ class WorkspaceServiceSpec
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
+  it should "create a new PAO for the workspace" in withTestDataServices { services =>
+    val workspaceRequest = WorkspaceRequest(testData.workspace.namespace, "paoWs", Map.empty)
+
+    val newWs = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.policyService).createWorkspacePao(ArgumentMatchers.eq(UUID.fromString(newWs.workspaceId)),
+                                                      any(),
+                                                      any()
+    )
+    verify(services.policyService, never()).mergeWorkspacePao(any(), any(), any())
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {
@@ -1915,6 +1927,29 @@ class WorkspaceServiceSpec
     mergedAttributes.get(AttributeName.withDefaultNS("string")).value should be(AttributeString("destination string"))
     // from source attributes
     mergedAttributes.get(AttributeName.withDefaultNS("number")).value should be(AttributeNumber(10))
+  }
+
+  it should "create a new PAO and merge the source workspace's PAO into the destination workspace's PAO" in withTestDataServices {
+    services =>
+      val baseWorkspace = testData.workspace
+      val workspaceRequest = WorkspaceRequest(baseWorkspace.namespace, "clone", Map.empty)
+
+      val newlyClonedWs =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
+
+      verify(services.policyService).createWorkspacePao(ArgumentMatchers.eq(UUID.fromString(newlyClonedWs.workspaceId)),
+                                                        any(),
+                                                        any()
+      )
+      verify(services.policyService).mergeWorkspacePao(ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+                                                       ArgumentMatchers.eq(UUID.fromString(newlyClonedWs.workspaceId)),
+                                                       any()
+      )
   }
 
   it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
