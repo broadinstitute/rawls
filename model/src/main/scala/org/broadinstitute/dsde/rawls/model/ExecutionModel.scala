@@ -223,7 +223,8 @@ case class SubmissionListResponse(
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
   userComment: Option[String] = None,
-  perWorkflowCostCap: Option[BigDecimal] = None
+  perWorkflowCostCap: Option[BigDecimal] = None,
+  submissionEntities: Option[Seq[AttributeEntityReference]] = None
 )
 
 object SubmissionListResponse {
@@ -248,7 +249,8 @@ object SubmissionListResponse {
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
       externalEntityInfo = submission.externalEntityInfo,
-      userComment = submission.userComment
+      userComment = submission.userComment,
+      submissionEntities = submission.submissionEntities
     )
 }
 
@@ -552,7 +554,7 @@ trait ExecutionJsonSupport extends JsonSupport {
     RetriedSubmissionReport
   )
 
-  implicit val SubmissionListResponseFormat: RootJsonFormat[SubmissionListResponse] = jsonFormat18(
+  implicit val SubmissionListResponseFormat: RootJsonFormat[SubmissionListResponse] = jsonFormat19(
     SubmissionListResponse.apply
   )
 

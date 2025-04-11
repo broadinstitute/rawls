@@ -1409,7 +1409,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
+      submissionEntities = Option(Seq.empty)
     )
 
     // a submission with a succeeeded workflow
@@ -1453,7 +1454,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
+      submissionEntities = Option(Seq.empty)
     )
 
     // a submission with a submitted workflow
@@ -1475,7 +1477,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
+      submissionEntities = Option(Seq.empty)
     )
 
     // a submission with an aborted workflow

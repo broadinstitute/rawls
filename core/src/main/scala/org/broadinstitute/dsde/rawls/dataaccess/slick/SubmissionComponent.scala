@@ -16,7 +16,6 @@ import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
 import scala.language.postfixOps
-import scala.reflect.runtime.universe.Try
 
 /**
  * Created by mbemis on 2/18/16.
@@ -144,6 +143,24 @@ trait SubmissionComponent {
         .result
         .flatMap(ids => submissionQuery.loadEntities(ids))
 
+    def getEntitiesForSubmissions(submissionIds: Seq[UUID]): ReadAction[Seq[(UUID, Seq[AttributeEntityReference])]] =
+      filter(_.submissionId inSet submissionIds).result.flatMap { results =>
+        val groupedResults = results.groupBy(_.submission_id).toSeq
+        DBIO.sequence(groupedResults.map { case (subId, pairs) =>
+          val entityIds = pairs.map(_.entity_id)
+          submissionQuery.loadEntities(entityIds).map(entities => (subId, entities))
+        })
+      }
+
+    def saveEntitiesForSubmission(submissionId: UUID,
+                                  entityIds: Seq[Long]
+    ): ReadWriteAction[Seq[SubmissionEntityRef]] = {
+      val refsToInsert = entityIds.map { entityId =>
+        submissionEntityQuery += SubmissionEntityRef(submissionId, entityId)
+      }
+      DBIO.sequence(refsToInsert).map(_ => entityIds.map(SubmissionEntityRef(submissionId, _)))
+    }
+
   }
 
   object submissionQuery extends TableQuery(new SubmissionTable(_)) {
@@ -174,11 +191,11 @@ trait SubmissionComponent {
 
     def listWithSubmitter(workspaceContext: Workspace): ReadWriteAction[Seq[SubmissionListResponse]] = {
       val query = for {
-        (submissionRec, entityRec) <- findByWorkspaceId(
+        submissionRec <- findByWorkspaceId(
           workspaceContext.workspaceIdAsUUID
-        ) joinLeft entityQuery on (_.submissionEntityId === _.id)
+        )
         methodConfigRec <- methodConfigurationQuery if submissionRec.methodConfigurationId === methodConfigRec.id
-      } yield (submissionRec, methodConfigRec, entityRec)
+      } yield (submissionRec, methodConfigRec)
 
       for {
         workflowStatusResponses <- GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowIdsAndStatuses(
@@ -186,7 +203,13 @@ trait SubmissionComponent {
         )
         states = workflowStatusResponses.groupBy(_.submissionId)
         recs <- query.result
-      } yield recs.map { case (submissionRec, methodConfigRec, entityRec) =>
+        submissionIds = recs.map(_._1.id).toSeq
+        subTuples <- submissionEntityQuery.getEntitiesForSubmissions(submissionIds)
+        submissionGroup = recs.map { case (submissionRec, methodConfigRec) =>
+          val entityRecs = subTuples.find(_._1 == submissionRec.id).map(_._2).getOrElse(Seq.empty)
+          (submissionRec, methodConfigRec, entityRecs)
+        }
+      } yield submissionGroup.map { case (submissionRec, methodConfigRec, entityRecs) =>
         val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty)
         val statusCounts = states
           .getOrElse(submissionRec.id, Seq.empty)
@@ -195,7 +218,7 @@ trait SubmissionComponent {
         val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
         val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
         SubmissionListResponse(
-          unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty, None), // TODO get these
+          unmarshalSubmission(submissionRec, config, None, Seq.empty, Some(entityRecs)),
           workflowIds,
           statusCounts,
           config.deleted
@@ -275,7 +298,12 @@ trait SubmissionComponent {
                                                        configId.get
                   )
                 }
-              }
+              } andThen
+                entitiesIds
+                  .map(ids =>
+                    submissionEntityQuery.saveEntitiesForSubmission(UUID.fromString(submission.submissionId), ids)
+                  )
+                  .getOrElse(DBIO.successful(Seq.empty))
             } andThen
               saveSubmissionWorkflows(submission.workflows)
           }
