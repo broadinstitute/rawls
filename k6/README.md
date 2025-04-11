@@ -23,3 +23,13 @@ the "test" and "baseline" scenarios to look for any notable differences.
 
 _example output:_
 ![example-k6-output.png](example-k6-output.png)
+
+## Testing Against a Different Environment
+
+To test against a different instance of Rawls, such as a locally-running Rawls, change the value of the
+`QUICKSILVER_TERRA_INSTANCE` environment variable. See [quicksilver.env](quicksilver.env) for syntax.
+
+To test against different workspaces, change the value of the
+`QUICKSILVER_WS_PREFIX` environment variable. See [quicksilver.env](quicksilver.env) for syntax.
+*IMPORTANT:* the performance tests assume that three entities of type `target` with names `one`, `two`,
+and `three` already exist in the workspaces under test. Without those entities, tests will fail.

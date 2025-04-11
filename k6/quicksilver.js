@@ -69,7 +69,7 @@ export const options = {
 export function entityQuery() {
   group(`${__ENV.TEST_GROUP}`, function() {
     let res = http.get(
-      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/files?page=1&pageSize=10&sortField=name&sortDirection=asc&filterOperator=and`,
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/target?page=1&pageSize=10&sortField=name&sortDirection=asc&filterOperator=and`,
       defaultParams);
     check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
@@ -80,7 +80,7 @@ export function entityQuery() {
 export function getEntity() {
   group(`${__ENV.TEST_GROUP}`, function() {
     let res = http.get(
-      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/files/files.0e0f2af4-8406-5d43-950c-6ad9a7d999fb.1`,
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/target/one`,
       defaultParams);
     check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
@@ -98,13 +98,21 @@ export function putEntity() {
       attributes: {
         copyOfName: name,
         randomNumber: Math.random()*10000,
-        ref1: {
-          entityType: 'files',
-          entityName: 'files.0e0f2af4-8406-5d43-950c-6ad9a7d999fb.1'
+        ref: {
+          entityType: 'target',
+          entityName: 'one'
         },
-        ref2: {
-          entityType: 'files',
-          entityName: 'files.072a18ca-239b-570b-8509-73878b87988d.1'
+        refList: {
+          itemsType: 'EntityReference',
+          items: [
+            {
+              entityType: 'target',
+              entityName: 'two'
+            }, {
+              entityType: 'target',
+              entityName: 'three'
+            }
+          ]
         }
       }
     }
