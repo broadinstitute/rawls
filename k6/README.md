@@ -3,7 +3,7 @@
 ## Quick Start
 
 * install k6: `brew install k6`
-* edit `quicksilver.env` as appropriate for your test
+* edit `quicksilver.env` if appropriate for your test
 * `source quicksilver.env`
 * `gcloud auth login` as a user with access to the workspaces under test
 * `QUICKSILVER_USER_TOKEN=$(gcloud auth print-access-token) k6 run --summary-mode=full quicksilver.js`
@@ -31,5 +31,9 @@ To test against a different instance of Rawls, such as a locally-running Rawls, 
 
 To test against different workspaces, change the value of the
 `QUICKSILVER_WS_PREFIX` environment variable. See [quicksilver.env](quicksilver.env) for syntax.
-*IMPORTANT:* the performance tests assume that three entities of type `target` with names `one`, `two`,
+
+*IMPORTANT:*
+* The performance tests assume that three entities of type `target` with names `one`, `two`,
 and `three` already exist in the workspaces under test. Without those entities, tests will fail.
+* The performance tests assume that the "test" workspace has Quicksilver data tables enabled; you can
+enable them via the `CompactDataTables` workspace setting.
