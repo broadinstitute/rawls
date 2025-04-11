@@ -222,7 +222,7 @@ class WorkspaceService(
               newWorkspace <- createNewWorkspaceContext(workspaceRequest,
                                                         billingProject,
                                                         sourceBucketName = None,
-                sourceWorkspaceId = None,
+                                                        sourceWorkspaceId = None,
                                                         dataAccess,
                                                         s
               )
@@ -2024,11 +2024,14 @@ class WorkspaceService(
         )
       }
 
-      _ <- if (sourceWorkspaceId.isDefined) { traceDBIOWithParent("mergeSourcePaoIntoDestPao", parentContext) { span =>
-          DBIO.from(
-            policyService.mergeWorkspacePao(sourceWorkspaceId.get, UUID.fromString(workspaceId), span)
-          )
-        }} else DBIO.successful(())
+      _ <-
+        if (sourceWorkspaceId.isDefined) {
+          traceDBIOWithParent("mergeSourcePaoIntoDestPao", parentContext) { span =>
+            DBIO.from(
+              policyService.mergeWorkspacePao(sourceWorkspaceId.get, UUID.fromString(workspaceId), span)
+            )
+          }
+        } else DBIO.successful(())
 
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,

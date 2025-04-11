@@ -9,5 +9,5 @@ import scala.concurrent.Future
 trait TpsDAO {
   def createPao(request: TpsPaoCreateRequest, ctx: RawlsRequestContext): Future[Unit]
 
-  def mergePao(request: TpsPaoSourceRequest, destPaoId: UUID, ctx: RawlsRequestContext): Future[Unit]
+  def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
 }

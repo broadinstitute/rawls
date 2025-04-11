@@ -1,6 +1,15 @@
 package org.broadinstitute.dsde.rawls.policy
 
-import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPaoSourceRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair, TpsUpdateMode}
+import bio.terra.policy.model.{
+  TpsComponent,
+  TpsObjectType,
+  TpsPaoCreateRequest,
+  TpsPaoSourceRequest,
+  TpsPolicyInput,
+  TpsPolicyInputs,
+  TpsPolicyPair,
+  TpsUpdateMode
+}
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
@@ -40,13 +49,15 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
     tpsDAO.createPao(req, ctx)
   }
 
-  def mergeWorkspacePao(sourceWorkspaceId: UUID,
-                        destWorkspaceId: UUID,
-                        ctx: RawlsRequestContext): Future[Unit] = {
-    val req = new TpsPaoSourceRequest().sourceObjectId(sourceWorkspaceId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+  /**
+    * Despite what the documentation and naming in TPS would have you believe, the mergePao endpoint
+    * will merge the policies from the PAO of the specified object id into the PAO of the source
+    * object id.
+    */
+  def mergeWorkspacePao(sourceWorkspaceId: UUID, destWorkspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] = {
+    val req = new TpsPaoSourceRequest().sourceObjectId(destWorkspaceId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
 
-
-    tpsDAO.mergePao(req, destWorkspaceId, ctx)
+    tpsDAO.mergePao(req, sourceWorkspaceId, ctx)
   }
 
 }
