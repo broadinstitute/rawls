@@ -73,6 +73,7 @@ trait DataAccess
       TableQuery[SubmissionValidationTable].delete andThen // FK to workflow, workflowfailure
       TableQuery[WorkflowMessageTable].delete andThen // FK to workflow
       TableQuery[WorkflowTable].delete andThen // FK to submission, entity
+      TableQuery[SubmissionEntityTable].delete andThen // FK to submission, entity
       TableQuery[SubmissionTable].delete andThen // FK to workspace, user, MC, entity
       TableQuery[MethodConfigurationTable].delete andThen // FK to workspace
       TableQuery[EntityTable].delete andThen // FK to workspace

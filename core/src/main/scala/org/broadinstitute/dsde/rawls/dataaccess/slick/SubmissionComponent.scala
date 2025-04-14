@@ -161,6 +161,9 @@ trait SubmissionComponent {
       DBIO.sequence(refsToInsert).map(_ => entityIds.map(SubmissionEntityRef(submissionId, _)))
     }
 
+    def deleteRecordsForSubmission(submissionId: UUID): ReadWriteAction[Int] =
+      filter(_.submissionId === submissionId).delete
+
   }
 
   object submissionQuery extends TableQuery(new SubmissionTable(_)) {
@@ -217,8 +220,9 @@ trait SubmissionComponent {
           .foldLeft(Map.empty[String, Int])(_ |+| _)
         val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
         val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
+        val singleEntity = if (entityRecs.size == 1) Some(entityRecs.head) else None // TODO smarten this up
         SubmissionListResponse(
-          unmarshalSubmission(submissionRec, config, None, Seq.empty, Some(entityRecs)),
+          unmarshalSubmission(submissionRec, config, singleEntity, Seq.empty, Some(entityRecs)),
           workflowIds,
           statusCounts,
           config.deleted
@@ -280,17 +284,19 @@ trait SubmissionComponent {
                 .map(seq => if (seq.isEmpty) None else Some(seq))
           }
 
-          entityIdAction flatMap { entityId =>
-            entitiesIdsAction flatMap { entitiesIds =>
-              configIdAction flatMap { configId =>
-                if (configId.isEmpty) {
-                  throw new RawlsExceptionWithErrorReport(
-                    ErrorReport(
-                      StatusCodes.BadRequest,
-                      s"Can't find this submission's method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}."
-                    )
+          for {
+            entityId <- entityIdAction
+            entitiesIds <- entitiesIdsAction
+            configId <- configIdAction
+            _ <-
+              if (configId.isEmpty) {
+                throw new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.BadRequest,
+                    s"Can't find this submission's method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}."
                   )
-                }
+                )
+              } else {
                 submissionStatusCounter(submission.status).countDBResult {
                   submissionQuery += marshalSubmission(workspaceContext.workspaceIdAsUUID,
                                                        submission,
@@ -298,15 +304,19 @@ trait SubmissionComponent {
                                                        configId.get
                   )
                 }
-              } andThen
-                entitiesIds
-                  .map(ids =>
-                    submissionEntityQuery.saveEntitiesForSubmission(UUID.fromString(submission.submissionId), ids)
-                  )
-                  .getOrElse(DBIO.successful(Seq.empty))
-            } andThen
-              saveSubmissionWorkflows(submission.workflows)
-          }
+              }
+            _ <- entityId
+              .map(id =>
+                submissionEntityQuery.saveEntitiesForSubmission(UUID.fromString(submission.submissionId), Seq(id))
+              )
+              .getOrElse(DBIO.successful(Seq.empty))
+            _ <- entitiesIds
+              .map(ids =>
+                submissionEntityQuery.saveEntitiesForSubmission(UUID.fromString(submission.submissionId), ids)
+              )
+              .getOrElse(DBIO.successful(Seq.empty))
+            _ <- saveSubmissionWorkflows(submission.workflows)
+          } yield submission
         case Some(_) =>
           throw new RawlsException(s"A submission already exists by the id [${submission.submissionId}]")
       }
@@ -337,6 +347,7 @@ trait SubmissionComponent {
           DBIO.successful(false)
         case Some(submissionRec) =>
           updateSubmissionWorkspace(UUID.fromString(submissionId)) andThen
+            submissionEntityQuery.deleteRecordsForSubmission(UUID.fromString(submissionId)) andThen
             deleteSubmissionAction(UUID.fromString(submissionId)).map(_ > 0)
       }
 

@@ -27,6 +27,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -419,14 +420,23 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     // Build expected SubmissionListResponse objects
     lazy val failedSubmission = getSubmission(submissionResponseWithFailureMode.submissionId)
     lazy val submission = getSubmission(submissionResponseWithoutFailureMode.submissionId)
+
+    // TODO why are these list v vector?  have i done something wrong?  the vector comes straight from the db...
+    def normalizeSubmissionEntities(response: SubmissionListResponse): SubmissionListResponse =
+      response.copy(submissionEntities = response.submissionEntities.map(_.toVector))
+
     val submissionListResponseWithFailureMode =
-      SubmissionListResponse(failedSubmission, None, Map("Queued" -> 1), false).copy(cost = None)
+      normalizeSubmissionEntities(
+        SubmissionListResponse(failedSubmission, None, Map("Queued" -> 1), false).copy(cost = None)
+      )
     val submissionListResponseWithoutFailureMode =
-      SubmissionListResponse(getSubmission(submissionResponseWithoutFailureMode.submissionId),
-                             None,
-                             Map("Queued" -> 1),
-                             false
-      ).copy(cost = None)
+      normalizeSubmissionEntities(
+        SubmissionListResponse(getSubmission(submissionResponseWithoutFailureMode.submissionId),
+                               None,
+                               Map("Queued" -> 1),
+                               false
+        ).copy(cost = None)
+      )
 
     // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
     submissionListResponseWithFailureMode.workflowFailureMode should equal(

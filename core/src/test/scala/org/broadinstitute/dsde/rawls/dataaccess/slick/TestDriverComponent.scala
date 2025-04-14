@@ -196,7 +196,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         memoryRetryMultiplier = memoryRetryMultiplier,
         ignoreEmptyOutputs = ignoreEmptyOutputs
       ),
-      submissionEntities = Some(Seq.empty)
+      submissionEntities = Option(Seq(submissionEntity.toReference))
     )
   }
 
@@ -1387,7 +1387,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Submitted,
-      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
+      submissionEntities = Option(Seq(indiv1.toReference))
     )
 
     // a submission with a succeeeded workflow
@@ -1409,8 +1410,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
-      submissionEntities = Option(Seq.empty)
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
     )
 
     // a submission with a succeeeded workflow
@@ -1649,7 +1649,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       status = SubmissionStatuses.Submitted,
       options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
       workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible),
-      submissionEntities = Option(Seq.empty)
+      submissionEntities = Option(Seq(indiv1.toReference))
     )
 
     val azureWorkspace = new Workspace(

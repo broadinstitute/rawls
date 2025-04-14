@@ -202,7 +202,7 @@ case class Submission(
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
   options: SubmissionOptions = SubmissionOptions(false, false, false, 1.0, false, None),
-  submissionEntities: Option[Seq[AttributeEntityReference]] = None
+  submissionEntities: Option[Seq[AttributeEntityReference]] = Some(Seq.empty)
 )
 
 case class SubmissionListResponse(
