@@ -633,6 +633,19 @@ class HttpSamDAO(baseSamServiceURL: String,
       callback.future.map(_.asScala.toSeq)
     }
 
+  override def addResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                                     resourceId: String,
+                                     authDomain: Set[String],
+                                     ctx: RawlsRequestContext
+  ): Future[Unit] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[Void]("patchAuthDomainV2")
+
+      resourcesApi(ctx).patchAuthDomainV2Async(resourceTypeName.value, resourceId, authDomain.toList.asJava, callback)
+
+      callback.future.map(_ => ())
+    }
+
   override def getAuthDomainConstraintSatisfied(resourceTypeName: SamResourceTypeName,
                                                 resourceId: String,
                                                 ctx: RawlsRequestContext

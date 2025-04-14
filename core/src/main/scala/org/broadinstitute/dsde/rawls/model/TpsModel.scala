@@ -16,7 +16,8 @@ object TpsModel {
 
     case object ProtectedData extends TpsPolicy {
       override val name: String = "protected-data"
-      override val additionalDataKey: String = "" // protected-data policies do not pass additional data and therefore do not need keys
+      override val additionalDataKey: String =
+        "" // protected-data policies do not pass additional data and therefore do not need keys
     }
   }
 }

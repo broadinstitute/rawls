@@ -114,6 +114,19 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                     }
                   }
               }
+            } ~
+            pathPrefix("authDomain") {
+              pathEndOrSingleSlash {
+                patch {
+                  entity(as[List[String]]) { newAuthDomainGroups =>
+                    complete {
+                      workspaceServiceConstructor(ctx)
+                        .addAuthDomainGroups(workspaceName, newAuthDomainGroups.toSet)
+                        .map(_ => StatusCodes.NoContent)
+                    }
+                  }
+                }
+              }
             }
         } ~
           pathPrefix("bucketMigration") {
