@@ -63,7 +63,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
 
   // Returns applied settings on a workspace.
   def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] =
-    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.readSettings).flatMap { workspace =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read).flatMap { workspace =>
       workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
     }
 
@@ -206,7 +206,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
 
     validateSettings(workspaceSettings)
     for {
-      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.writeSettings)
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
       currentSettings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
       newSettings = workspaceSettings.filterNot(currentSettings.contains(_))
       _ <- workspaceSettingRepository.createWorkspaceSettingsRecords(workspace.workspaceIdAsUUID,
