@@ -4292,6 +4292,47 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/authDomain:
+    patch:
+      tags:
+        - workspaces_v2
+      summary: Add auth domain groups
+      description: Add auth domain groups, no op if they already exist, caller must be a member of all groups
+      operationId: addAuthDomainGroups
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: List of groups to add to the Authorization Domain
+        content:
+          'application/json':
+            schema:
+              type: array
+              description: The list of groups to add to the Authorization Domain
+      responses:
+        204:
+          description: Successful Request
+          content: { }
+        400:
+          description: Specified groups do not exist or the caller is not a member
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to perform all the required actions
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Source workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/clone:
     post:
       tags:
