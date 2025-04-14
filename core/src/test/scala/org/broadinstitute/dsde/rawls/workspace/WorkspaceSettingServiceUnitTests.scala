@@ -8,7 +8,11 @@ import cats.effect.unsafe.implicits.global
 import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleAction,
@@ -193,7 +197,49 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         ArgumentMatchers.eq(SamWorkspaceActions.readSettings),
         any()
       )
-    ).thenReturn(Future.successful(false))
+    ).thenReturn(Future.successful(false)) // User does not have readSettings access
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.read),
+        any()
+      )
+    ).thenReturn(Future.successful(true)) // User has read access
+    val service =
+      workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)
+
+    assertThrows[WorkspaceAccessDeniedException] {
+      Await.result(service.getWorkspaceSettings(workspaceName), Duration.Inf)
+    }
+  }
+
+  it should "return an error if the user does not have any access to the workspace" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.readSettings),
+        any()
+      )
+    ).thenReturn(Future.successful(false)) // User does not have readSettings access
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.read),
+        any()
+      )
+    ).thenReturn(Future.successful(false)) // User has read access
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO, workspaceRepository = workspaceRepository)
 
@@ -234,10 +280,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
 
@@ -308,10 +355,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
 
@@ -359,10 +407,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
 
@@ -409,10 +458,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
 
@@ -468,10 +518,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
 
@@ -510,10 +561,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(false))
     // Rawls confirms a user has at least writeSetting access to the workspace after a failed authz check
@@ -522,7 +574,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       samDAO.userHasAction(
         ArgumentMatchers.eq(SamResourceTypeNames.workspace),
         ArgumentMatchers.eq(workspaceId.toString),
-        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        ArgumentMatchers.eq(SamWorkspaceActions.read),
         any()
       )
     ).thenReturn(Future.successful(true))
@@ -698,10 +750,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
     when(
@@ -790,10 +843,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
     when(
@@ -882,10 +936,11 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                           ArgumentMatchers.eq(workspaceId.toString),
-                           ArgumentMatchers.eq(SamWorkspaceActions.own),
-                           any()
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
       )
     ).thenReturn(Future.successful(true))
     when(
