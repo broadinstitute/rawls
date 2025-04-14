@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import cats.data.NonEmptyList
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -2200,31 +2199,45 @@ class WorkspaceService(
                           newAuthDomainGroups: Set[String],
                           parentContext: RawlsRequestContext = ctx
   ): Future[Unit] = for {
-    // relies on sam calls to check permissions
     // if no auth domain update is required, caller only requires read_auth_domain permission
+    // -> checked by sam in getResourceAuthDomain
     // if an auth domain update is required, caller requires update_auth_domain permission
+    // -> explicitly checked in this function
     workspace <- getV2WorkspaceContext(workspaceName)
     existingAuthDomain <- samDAO
       .getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, parentContext)
 
-    _ <-
-      if ((newAuthDomainGroups -- existingAuthDomain).nonEmpty) {
-        samDAO.addResourceAuthDomain(SamResourceTypeNames.workspace,
-                                     workspace.workspaceId,
-                                     newAuthDomainGroups,
-                                     parentContext
+    groupsToAdd = newAuthDomainGroups.map(_.toLowerCase) -- existingAuthDomain.map(_.toLowerCase)
+    hasUpdateAction <- samDAO.userHasAction(SamResourceTypeNames.workspace,
+                                            workspace.workspaceId,
+                                            SamWorkspaceActions.updateAuthDomain,
+                                            parentContext
+    )
+    _ <- Applicative[Future].whenA(groupsToAdd.nonEmpty && !hasUpdateAction) {
+      // sam does this check in addResourceAuthDomain but we need this
+      // explicit access check because we don't want to call changeProjectOwnerBucketIamBinding if the user doesn't have
+      // permission to update the auth domain but we want to update the bucket before adding the auth domain
+      // we don't need to worry about leaking workspace existence info since getResourceAuthDomain already passed
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.Forbidden,
+            s"User ${ctx.userInfo.userEmail} does not have permission to update auth domain for workspace ${workspaceName}"
+          )
         )
-      } else {
-        // if the new auth domain is already in the workspace, do nothing
-        Future.successful(())
-      }
+      )
+    }
     _ <-
-      if (existingAuthDomain.isEmpty) {
+      Applicative[Future].whenA(groupsToAdd.nonEmpty && existingAuthDomain.isEmpty) {
         // if there was no auth domain, we need update the google bucket IAM to use the workspace's project owner policy
         // instead of the billing project owner policy directly
+        // do this before adding the auth domain because it is required for correct functionality but won't
+        // leave things in a bad state if it fails
         changeProjectOwnerBucketIamBinding(workspace, parentContext)
-      } else {
-        Future.successful(())
+      }
+    _ <-
+      Applicative[Future].whenA(groupsToAdd.nonEmpty) {
+        samDAO.addResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, groupsToAdd, parentContext)
       }
   } yield ()
 

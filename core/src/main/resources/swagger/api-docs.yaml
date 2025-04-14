@@ -4303,7 +4303,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
-        description: Request for new workspace
+        description: List of groups to add to the Authorization Domain
         content:
           'application/json':
             schema:

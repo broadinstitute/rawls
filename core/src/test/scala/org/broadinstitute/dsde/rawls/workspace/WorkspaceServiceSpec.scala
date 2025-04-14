@@ -3796,7 +3796,7 @@ class WorkspaceServiceSpec
       ).thenReturn(Future.successful(()))
 
       Await.result(services.workspaceService.addAuthDomainGroups(workspace.toWorkspaceName,
-                                                                 testGroups,
+                                                                 testGroups + "group2",
                                                                  toRawlsRequestContext(testData.userOwner)
                    ),
                    Duration.Inf
@@ -3808,6 +3808,40 @@ class WorkspaceServiceSpec
         ArgumentMatchers.eq(testGroups),
         any
       )
+      verify(services.gcsDAO, never).changeProjectOwnerBucketIamBinding(any, any, any)
+  }
+
+  it should "403 adding new AD groups without permissions" in withTestDataServices { services =>
+    val workspace = runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(testData.workspace))
+
+    when(
+      services.samDAO.getResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        any
+      )
+    ).thenReturn(Future.successful(Seq("group1", "group2")))
+    when(
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        ArgumentMatchers.eq(SamWorkspaceActions.updateAuthDomain),
+        any
+      )
+    ).thenReturn(Future.successful(false))
+
+    val testGroups = Set("group3")
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.addAuthDomainGroups(workspace.toWorkspaceName,
+                                                                 testGroups,
+                                                                 toRawlsRequestContext(testData.userOwner)
+                   ),
+                   Duration.Inf
+      )
+    }.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+
+    verify(services.samDAO, never).addResourceAuthDomain(any, any, any, any)
+    verify(services.gcsDAO, never).changeProjectOwnerBucketIamBinding(any, any, any)
   }
 
   it should "call changeProjectOwnerBucketIamBinding when adding first AD group" in withTestDataServices { services =>
@@ -3916,5 +3950,6 @@ class WorkspaceServiceSpec
     )
 
     verify(services.samDAO, never).addResourceAuthDomain(any, any, any, any)
+    verify(services.gcsDAO, never).changeProjectOwnerBucketIamBinding(any, any, any)
   }
 }
