@@ -27,6 +27,7 @@ import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
@@ -39,6 +40,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+import org.broadinstitute.dsde.rawls.dataaccess.tps.HttpTpsDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -52,6 +54,7 @@ import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.BardService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
+import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.serviceFactory._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.{SpendReportingService, WorkspaceSpendReportRepository}
@@ -259,6 +262,11 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
 
+      val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"),
+                                  RawlsCredential.getCredential(appConfigManager)
+      )
+      val policyService = new PolicyService(tpsDAO)
+
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
 
@@ -427,7 +435,8 @@ object Boot extends IOApp with LazyLogging {
           appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
-        fastPassServiceConstructor
+        fastPassServiceConstructor,
+        policyService
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

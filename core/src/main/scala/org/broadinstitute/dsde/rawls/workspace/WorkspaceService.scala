@@ -30,6 +30,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
+import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
@@ -90,7 +91,8 @@ object WorkspaceService {
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
+                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
+                  policyService: PolicyService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -121,7 +123,8 @@ object WorkspaceService {
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
-      new WorkspaceSettingRepository(dataSource)
+      new WorkspaceSettingRepository(dataSource),
+      policyService
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -170,7 +173,8 @@ class WorkspaceService(
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository,
   val submissionsRepository: SubmissionsRepository,
-  val workspaceSettingsRepository: WorkspaceSettingRepository
+  val workspaceSettingsRepository: WorkspaceSettingRepository,
+  policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with LibraryPermissionsSupport
@@ -209,7 +213,7 @@ class WorkspaceService(
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
-      // policies are not supported on GCP workspaces
+      // explicit policies in the request are not supported on GCP workspaces. instead, we derive the policies from other fields in the request
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       workspace <- traceFutureWithParent("createNewWorkspaceContext", parentContext)(s =>
@@ -2011,6 +2015,12 @@ class WorkspaceService(
         case None => Future.successful(Seq.empty[String])
       })
       _ <- DBIO.from(Future.traverse(usersToInvite)(email => samDAO.inviteUser(email, ctx)))
+
+      _ <- traceDBIOWithParent("createTpsPao", parentContext) { span =>
+        DBIO.from(
+          policyService.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
+        )
+      }
 
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,

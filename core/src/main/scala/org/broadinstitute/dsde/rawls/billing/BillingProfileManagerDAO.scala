@@ -9,6 +9,7 @@ import org.apache.http.HttpStatus
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
+import org.broadinstitute.dsde.rawls.model.TpsModel.TERRA_POLICY_NAMESPACE
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -156,7 +157,7 @@ class BillingProfileManagerDAOImpl(
       policies
         .map { case (policyName, additionalData) =>
           new BpmApiPolicyInput()
-            .namespace("terra") // policy namespaces in Rawls are always 'terra'
+            .namespace(TERRA_POLICY_NAMESPACE)
             .name(policyName)
             .additionalData(
               additionalData.map { case (key, value) =>
