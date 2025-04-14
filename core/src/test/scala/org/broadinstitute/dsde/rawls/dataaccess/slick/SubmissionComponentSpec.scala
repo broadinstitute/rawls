@@ -646,6 +646,87 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     validateCountsByQueueStatus(Monoid.combineAll(result.values))
   }
 
+  "submissionEntityQuery" should "get all the entities for a submission" in withDefaultTestDatabase {
+    // These submissions are already saved in the database by the test setup
+
+    // A submission that submitted a single entityName
+    assertResult(Seq(testData.indiv1.toReference)) {
+      runAndWait(submissionEntityQuery.getEntitiesForSubmission(UUID.fromString(testData.submission1.submissionId)))
+    }
+
+    // A submission that submitted a list of entityNames
+    assertResult(Seq(testData.indiv1.toReference, testData.indiv2.toReference)) {
+      runAndWait(
+        submissionEntityQuery.getEntitiesForSubmission(
+          UUID.fromString(testData.submissionMultipleEntities.submissionId)
+        )
+      )
+    }
+
+  }
+
+  "submissionEntityQuery" should "get all the entities for several submissions" in withDefaultTestDatabase {
+    // These submissions are already saved in the database by the test setup
+
+    // A submission that submitted a list of entityNames
+    assertResult(
+      Seq(
+        (UUID.fromString(testData.submission1.submissionId), Seq(testData.indiv1.toReference)),
+        (UUID.fromString(testData.submissionMultipleEntities.submissionId),
+         Seq(testData.indiv1.toReference, testData.indiv2.toReference)
+        )
+      )
+    ) {
+      runAndWait(
+        submissionEntityQuery.getEntitiesForSubmissions(
+          Seq(UUID.fromString(testData.submission1.submissionId),
+              UUID.fromString(testData.submissionMultipleEntities.submissionId)
+          )
+        )
+      )
+    }
+
+  }
+
+  "submissionEntityQuery" should "save entities for a submission" in withDefaultTestDatabase {
+    // Use a submission that has a single entity associated with it
+    // TODO will this mess up other tests
+    assertResult(Seq(testData.indiv1.toReference)) {
+      runAndWait(submissionEntityQuery.getEntitiesForSubmission(UUID.fromString(testData.submission1.submissionId)))
+    }
+
+    // Get the entity ids for some other entities
+    val entity1 = runAndWait(
+      entityQuery
+        .findEntityByName(UUID.fromString(testData.workspace.workspaceId),
+                          testData.sample1.entityType,
+                          testData.sample1.name
+        )
+        .result
+    ).head
+    val entity2 = runAndWait(
+      entityQuery
+        .findEntityByName(UUID.fromString(testData.workspace.workspaceId),
+                          testData.sample2.entityType,
+                          testData.sample2.name
+        )
+        .result
+    ).head
+    // Insert them to the submission
+    runAndWait(
+      submissionEntityQuery.saveEntitiesForSubmission(UUID.fromString(testData.submission1.submissionId),
+                                                      Seq(entity1.id, entity2.id)
+      )
+    )
+
+    assertResult(Set(testData.indiv1.toReference, testData.sample1.toReference, testData.sample2.toReference)) {
+      runAndWait(
+        submissionEntityQuery.getEntitiesForSubmission(UUID.fromString(testData.submission1.submissionId))
+      ).toSet
+    }
+
+  }
+
   /**
     * Validates workflow counts by status against the current contents of the database.
     * @param counts workflow counts by status

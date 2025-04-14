@@ -117,8 +117,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           def withNewEntityNames(in: Seq[ActiveSubmission]): Seq[ActiveSubmission] =
             in.map { as =>
               as.copy(submission =
-                as.submission.copy(submissionEntity =
-                  Some(as.submission.submissionEntity.get.copy(entityName = "newName"))
+                as.submission.copy(
+                  submissionEntity = Some(as.submission.submissionEntity.get.copy(entityName = "newName")),
+                  submissionEntities = as.submission.submissionEntities.map(_.map(_.copy(entityName = "newName")))
                 )
               )
             }

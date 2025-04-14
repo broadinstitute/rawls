@@ -1410,7 +1410,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         )
       ),
       status = SubmissionStatuses.Done,
-      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false)
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
+      submissionEntities = Option(Seq(indiv1.toReference))
     )
 
     // a submission with a succeeeded workflow
@@ -1455,7 +1456,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       ),
       status = SubmissionStatuses.Done,
       options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
-      submissionEntities = Option(Seq.empty)
+      submissionEntities = Option(Seq(indiv1.toReference))
     )
 
     // a submission with a submitted workflow
@@ -1478,7 +1479,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       ),
       status = SubmissionStatuses.Submitted,
       options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
-      submissionEntities = Option(Seq.empty)
+      submissionEntities = Option(Seq(indiv1.toReference))
     )
 
     // a submission with an aborted workflow
@@ -1652,6 +1653,35 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submissionEntities = Option(Seq(indiv1.toReference))
     )
 
+    val submissionMultipleEntities = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name,
+      submissionEntity = None,
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSubmitted"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowSubmitted"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample2.toReference),
+          inputResolutions = inputResolutions2
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      options = SubmissionOptions(useCallCache = false, deleteIntermediateOutputFiles = false),
+      submissionEntities = Option(Seq(indiv1.toReference, indiv2.toReference))
+    )
+
     val azureWorkspace = new Workspace(
       namespace = azureBillingProjectName.value,
       name = "test-azure-workspace",
@@ -1789,6 +1819,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
             submissionQuery.create(context, submission2),
             submissionQuery.create(context, submissionUpdateEntity),
             submissionQuery.create(context, submissionUpdateWorkspace),
+            submissionQuery.create(context, submissionMultipleEntities),
 
             // update exec key for all test data workflows that have been started.
             updateWorkflowExecutionServiceKey("unittestdefault")

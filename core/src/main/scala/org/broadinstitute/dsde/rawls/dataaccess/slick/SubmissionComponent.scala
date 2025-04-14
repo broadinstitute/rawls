@@ -754,10 +754,17 @@ trait SubmissionComponent {
                  where s.workspace_id=$workspaceId
               """
 
+        def deleteFromSubmissionEntity() =
+          sqlu"""delete se from SUBMISSION_ENTITY se
+                 inner join SUBMISSION s on se.submission_id=s.id
+                 where s.workspace_id=$workspaceId
+              """
+
         DBIO.seq(
           deleteSubmissionAttributes("WORKFLOW", "workflow_id"),
           deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW", "workflow_id"),
-          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id")
+          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id"),
+          deleteFromSubmissionEntity() // TODO just copying code here, should this be part of submissionEntityQuery instead?
         ) andThen
           DBIO.sequence(Seq("WORKFLOW") map { workflow_table =>
             // delete workflows
