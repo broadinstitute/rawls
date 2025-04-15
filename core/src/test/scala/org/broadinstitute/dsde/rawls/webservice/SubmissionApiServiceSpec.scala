@@ -672,7 +672,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             expectedResponse(testData.submission2),
             expectedResponse(testData.submissionUpdateEntity),
             expectedResponse(testData.regionalSubmission),
-            expectedResponse(testData.submissionUpdateWorkspace)
+            expectedResponse(testData.submissionUpdateWorkspace),
+            expectedResponse(testData.submissionMultipleEntities)
           )
         ) {
           responseAs[Seq[SubmissionListResponse]].toSet
@@ -687,7 +688,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Map("Submitted" -> 8)) {
+          assertResult(Map("Submitted" -> 9)) {
             responseAs[Map[String, Int]]
           }
         }

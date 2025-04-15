@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.submissions
 
+import akka.http.javadsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.{MethodConfiguration, MethodRepoMethod, SubmissionRequest}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -100,6 +101,61 @@ class SubmissionValidationSpec extends AnyFlatSpec with Matchers with TableDrive
   it should "not return an error if neither the name nor the type are specified" in {
     val submission = SubmissionRequest("name", "namespace", None, None, None, false, false)
     SubmissionRequestValidation.validateEntityNameAndType(submission) shouldBe None
+  }
+
+  it should "error if neither the entityName nor entityNames are specified" in {
+    val submission = SubmissionRequest("name", "namespace", Some("entityType"), None, None, false, false)
+    val error = SubmissionRequestValidation.validateEntityNameAndType(submission)
+    error.get.statusCode shouldBe Some(StatusCodes.BAD_REQUEST)
+  }
+
+  it should "error if both the entityName and entityNames are specified" in {
+    val submission = SubmissionRequest("name",
+                                       "namespace",
+                                       Some("entityType"),
+                                       Some("entityName"),
+                                       None,
+                                       false,
+                                       false,
+                                       entityNames = Some(Seq("entityName1", "entityName2"))
+    )
+    val error = SubmissionRequestValidation.validateEntityNameAndType(submission)
+    error.get.statusCode shouldBe Some(StatusCodes.BAD_REQUEST)
+  }
+
+  behavior of "validateMethodConfigRootEntity"
+
+  it should "error if config defines a root entity but neither entityName nor entityNames is submitted" in {
+    val submission = SubmissionRequest("name", "namespace", Some("entityType"), None, None, false, false)
+    val error = SubmissionRequestValidation.validateMethodConfigRootEntity(
+      submission,
+      defaultValidMethodConfig.copy(rootEntityType = Some("entityType"))
+    )
+    error.get.statusCode shouldBe Some(StatusCodes.BAD_REQUEST)
+  }
+
+  it should "error if config doesn't define a root entity but either entityName or entityNames is submitted" in {
+    val submission = SubmissionRequest("name", "namespace", Some("entityType"), Some("entityName"), None, false, false)
+    val error = SubmissionRequestValidation.validateMethodConfigRootEntity(
+      submission,
+      defaultValidMethodConfig
+    )
+    error.get.statusCode shouldBe Some(StatusCodes.BAD_REQUEST)
+
+    val submission2 = SubmissionRequest("name",
+                                        "namespace",
+                                        Some("entityType"),
+                                        None,
+                                        None,
+                                        false,
+                                        false,
+                                        entityNames = Some(Seq("entityName1", "entityName2"))
+    )
+    val error2 = SubmissionRequestValidation.validateMethodConfigRootEntity(
+      submission2,
+      defaultValidMethodConfig
+    )
+    error2.get.statusCode shouldBe Some(StatusCodes.BAD_REQUEST)
   }
 
 }

@@ -670,14 +670,13 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     // These submissions are already saved in the database by the test setup
 
     // A submission that submitted a list of entityNames
-    assertResult(
+    assertSameElements(
       Seq(
         (UUID.fromString(testData.submission1.submissionId), Seq(testData.indiv1.toReference)),
         (UUID.fromString(testData.submissionMultipleEntities.submissionId),
          Vector(testData.indiv1.toReference, testData.indiv2.toReference)
         )
-      )
-    ) {
+      ),
       runAndWait(
         submissionEntityQuery.getEntitiesForSubmissions(
           Seq(UUID.fromString(testData.submission1.submissionId),
@@ -685,7 +684,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
           )
         )
       )
-    }
+    )
 
   }
 

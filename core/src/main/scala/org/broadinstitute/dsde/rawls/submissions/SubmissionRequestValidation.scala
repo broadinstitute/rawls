@@ -71,15 +71,14 @@ object SubmissionRequestValidation extends StringValidationUtils {
             s"You must set either entityName or entityNames if running on an entity, but not both."
           )
         )
-      } else if (!submission.entityName.isDefined || !submission.entityNames.isDefined) {
+      } else if (!submission.entityName.isDefined && !submission.entityNames.isDefined) {
         Some(
           ErrorReport(
             StatusCodes.BadRequest,
             s"You must set both entityType and entityName(s) to run on an entity, or neither (to run with literal or workspace inputs)."
           )
         )
-      }
-      None
+      } else None
     } else None
 
   // TODO make sure you've covered all cases correctly, this probably isn't right

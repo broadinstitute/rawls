@@ -1104,6 +1104,30 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
+  it should "return a successful Submission and spawn a submission monitor actor when given multiple entity names" in withSubmissionsServiceMockExecution {
+    mockExecSvc => submissionsService =>
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option("Pair"),
+        entityName = None,
+        expression = Option("this.case"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false,
+        entityNames = Option(Seq("pair1", "pair2"))
+      )
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
+      // not really necessary, failing to find the actor above will throw an exception and thus fail this test
+      assert(monitorActor != ActorRef.noSender)
+
+      assert(newSubmissionReport.workflows.size == 2)
+
+      checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+  }
+
   def workspaceSettingSubmissionTest[T](
     SeparateSubmissionFinalOutputs: Boolean
   )(test: (SubmissionsService) => T) = {

@@ -1663,14 +1663,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
-          workflowId = Option("workflowSubmitted"),
+          workflowId = Option("workflowSubmitted1"),
           status = WorkflowStatuses.Submitted,
           statusLastChangedDate = testDate,
           workflowEntity = Option(sample1.toReference),
           inputResolutions = inputResolutions
         ),
         Workflow(
-          workflowId = Option("workflowSubmitted"),
+          workflowId = Option("workflowSubmitted2"),
           status = WorkflowStatuses.Submitted,
           statusLastChangedDate = testDate,
           workflowEntity = Option(sample2.toReference),
