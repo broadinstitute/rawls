@@ -143,6 +143,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     Map.empty
   )
 
+  // TODO similar tests on listWithSubmiter which seems to be used more than just list
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
@@ -295,10 +296,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(submissionQuery.get(workspaceContext, testData.submission2.submissionId))
     }
 
-    // should return {"Submitted" : 6, "Done" : 1, "Aborted" : 1}
+    // should return {"Submitted" : 7, "Done" : 1, "Aborted" : 1}
     assert(3 == runAndWait(submissionQuery.countByStatus(workspaceContext)).size)
     assert(
-      Option(6) == runAndWait(submissionQuery.countByStatus(workspaceContext))
+      Option(7) == runAndWait(submissionQuery.countByStatus(workspaceContext))
         .get(SubmissionStatuses.Submitted.toString)
     )
     assert(
@@ -646,6 +647,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     validateCountsByQueueStatus(Monoid.combineAll(result.values))
   }
 
+  // TODO failure tests
   "submissionEntityQuery" should "get all the entities for a submission" in withDefaultTestDatabase {
     // These submissions are already saved in the database by the test setup
 
@@ -665,7 +667,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   }
 
-  "submissionEntityQuery" should "get all the entities for several submissions" in withDefaultTestDatabase {
+  it should "get all the entities for several submissions" in withDefaultTestDatabase {
     // These submissions are already saved in the database by the test setup
 
     // A submission that submitted a list of entityNames
@@ -673,7 +675,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       Seq(
         (UUID.fromString(testData.submission1.submissionId), Seq(testData.indiv1.toReference)),
         (UUID.fromString(testData.submissionMultipleEntities.submissionId),
-         Seq(testData.indiv1.toReference, testData.indiv2.toReference)
+         Vector(testData.indiv1.toReference, testData.indiv2.toReference)
         )
       )
     ) {
@@ -688,7 +690,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   }
 
-  "submissionEntityQuery" should "save entities for a submission" in withDefaultTestDatabase {
+  it should "save entities for a submission" in withDefaultTestDatabase {
     // Use a submission that has a single entity associated with it
     // TODO will this mess up other tests
     assertResult(Seq(testData.indiv1.toReference)) {
@@ -725,6 +727,33 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       ).toSet
     }
 
+  }
+
+  it should "delete the records for a submission" in withDefaultTestDatabase {
+    // These submissions are already saved in the database by the test setup
+
+    // A submission that submitted a list of entityNames
+    assertResult(Seq(testData.indiv1.toReference, testData.indiv2.toReference)) {
+      runAndWait(
+        submissionEntityQuery.getEntitiesForSubmission(
+          UUID.fromString(testData.submissionMultipleEntities.submissionId)
+        )
+      )
+    }
+
+    runAndWait(
+      submissionEntityQuery.deleteRecordsForSubmission(
+        UUID.fromString(testData.submissionMultipleEntities.submissionId)
+      )
+    )
+
+    assertResult(Seq.empty) {
+      runAndWait(
+        submissionEntityQuery.getEntitiesForSubmission(
+          UUID.fromString(testData.submissionMultipleEntities.submissionId)
+        )
+      )
+    }
   }
 
   /**

@@ -10,6 +10,9 @@
                     <constraints nullable="false" />
                 </column>
             </createTable>
+            <addUniqueConstraint columnNames="submission_id, entity_id"
+                             constraintName="UQ_SUBMISSION_ENTITY"
+                             tableName="SUBMISSION_ENTITY"/>
             <addForeignKeyConstraint baseColumnNames="submission_id"
                                  baseTableName="SUBMISSION_ENTITY"
                                  constraintName="FK_SUB_ENT_SUB"
@@ -28,11 +31,22 @@
                                  onUpdate="NO ACTION"
                                  referencedColumnNames="id"
                                  referencedTableName="ENTITY"/>
-            <!-- index for lookups against to_id -->
-<!--            <createIndex tableName="ENTITY_REFS" indexName="idx_to">-->
-<!--                <column name="to_id" />-->
-<!--            </createIndex>-->
-<!--            &lt;!&ndash; unique constraint for from+to, which covers lookups against from_id &ndash;&gt;-->
-<!--            <addUniqueConstraint columnNames="from_id, to_id" constraintName="unq_from_to" tableName="ENTITY_REFS"/>-->
+    </changeSet>
+
+
+    <!-- TODO should i avoid trying to insert duplicates or rely on the unique constraint? -->
+    <!-- Also TODO this doesn't run apparently -->
+    <changeSet logicalFilePath="dummy" author="bmorgan" id="add_rows_to_sub_ent">
+        <sql stripComments="true">
+            insert into SUBMISSION_ENTITY (submission_id, entity_id)
+            select s.id, s.entity_id
+            from SUBMISSION s where entity_id is not null
+                                AND NOT EXISTS (
+                    SELECT 1
+                    FROM SUBMISSION_ENTITY se
+                    WHERE se.submission_id = s.id
+                      AND se.entity_id = s.entity_id
+                );
+        </sql>
     </changeSet>
 </databaseChangeLog>
