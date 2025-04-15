@@ -10,9 +10,9 @@
                     <constraints nullable="false" />
                 </column>
             </createTable>
-            <addUniqueConstraint columnNames="submission_id, entity_id"
-                             constraintName="UQ_SUBMISSION_ENTITY"
-                             tableName="SUBMISSION_ENTITY"/>
+<!--            <addUniqueConstraint columnNames="submission_id, entity_id"-->
+<!--                             constraintName="UQ_SUBMISSION_ENTITY"-->
+<!--                             tableName="SUBMISSION_ENTITY"/>-->
             <addForeignKeyConstraint baseColumnNames="submission_id"
                                  baseTableName="SUBMISSION_ENTITY"
                                  constraintName="FK_SUB_ENT_SUB"

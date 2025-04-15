@@ -143,7 +143,6 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     Map.empty
   )
 
-  // TODO similar tests on listWithSubmiter which seems to be used more than just list
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
@@ -222,7 +221,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(!runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(submission4))
   }
 
-  it should "save and unmarshal listy input resolutions correctly" in withDefaultTestDatabase {
+  it should "save and unmarshal list input resolutions correctly" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
     runAndWait(submissionQuery.create(workspaceContext, submissionList))
@@ -754,6 +753,20 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
         )
       )
     }
+  }
+
+  "listWithSubmitter" should "list a submission" in withDefaultTestDatabase {
+    val workspaceContext = testData.workspace
+    val multiSubmission = testData.submissionMultipleEntities
+
+    val multiSubmissionListResponse = SubmissionListResponse(multiSubmission,
+                                                             Some(multiSubmission.workflows.flatMap(_.workflowId)),
+                                                             Map(WorkflowStatuses.Submitted.toString -> 2),
+                                                             false
+    )
+
+    assert(runAndWait(submissionQuery.listWithSubmitter(workspaceContext)).toSet.contains(multiSubmissionListResponse))
+
   }
 
   /**

@@ -1393,6 +1393,21 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "get entities by ids" in withConstantTestDatabase {
+
+    val expected =
+      runAndWait(
+        entityQuery.getEntityRecords(constantData.workspace.workspaceIdAsUUID,
+                                     Set(constantData.sample1.toReference,
+                                         constantData.sample2.toReference,
+                                         constantData.sample3.toReference
+                                     )
+        )
+      )
+
+    assertSameElements(expected, runAndWait(entityQuery.findEntitiesByIds(expected.map(_.id)).result))
+  }
+
   private def caseSensitivityFixtures(context: Workspace) = {
     val entitiesToSave = Seq(
       Entity("name-1",
