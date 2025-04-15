@@ -298,6 +298,12 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   ): Future[Unit] = ???
 
   override def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail] = ???
+
+  override def addResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                                     resourceId: String,
+                                     authDomain: Set[String],
+                                     ctx: RawlsRequestContext
+  ): Future[Unit] = Future.successful(())
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext)

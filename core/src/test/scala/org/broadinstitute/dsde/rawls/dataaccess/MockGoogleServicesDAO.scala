@@ -7,6 +7,7 @@ import com.google.api.services.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
+import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -315,4 +316,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   ): Future[Set[IamPermission]] = Future.successful(permissions)
 
   override val terraBucketReaderRole: String = "terraBucketReaderRole"
+
+  override def changeProjectOwnerBucketIamBinding(bucket: GcsBucketName,
+                                                  oldIdentity: Identity,
+                                                  newIdentity: Identity
+  ): Future[Unit] = Future.successful(())
 }

@@ -1277,6 +1277,22 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
     }
   }
+
+  override def changeProjectOwnerBucketIamBinding(bucket: GcsBucketName,
+                                                  oldIdentity: Identity,
+                                                  newIdentity: Identity
+  ): Future[Unit] = {
+    for {
+      _ <- googleStorageService.setIamPolicy(
+        bucket,
+        Map(StorageRole.CustomStorageRole(terraBucketWriterRole) -> NonEmptyList.one(newIdentity))
+      )
+      _ <- googleStorageService.removeIamPolicy(
+        bucket,
+        Map(StorageRole.CustomStorageRole(terraBucketWriterRole) -> NonEmptyList.one(oldIdentity))
+      )
+    } yield ()
+  }.compile.drain.unsafeToFuture()
 }
 
 object HttpGoogleServicesDAO {
