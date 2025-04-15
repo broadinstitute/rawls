@@ -4309,6 +4309,8 @@ paths:
             schema:
               type: array
               description: The list of groups to add to the Authorization Domain
+              items:
+                type: string
       responses:
         204:
           description: Successful Request
