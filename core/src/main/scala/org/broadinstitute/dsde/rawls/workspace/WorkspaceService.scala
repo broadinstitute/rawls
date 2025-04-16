@@ -223,6 +223,7 @@ class WorkspaceService(
               newWorkspace <- createNewWorkspaceContext(workspaceRequest,
                                                         billingProject,
                                                         sourceBucketName = None,
+                                                        sourceWorkspaceId = None,
                                                         dataAccess,
                                                         s
               )
@@ -739,6 +740,7 @@ class WorkspaceService(
                 ),
                 billingProject,
                 sourceBucketNameOption,
+                sourceWorkspaceId = Some(sourceWorkspaceContext.workspaceIdAsUUID),
                 dataAccess,
                 s
               )
@@ -1953,6 +1955,7 @@ class WorkspaceService(
   private def createNewWorkspaceContext(workspaceRequest: WorkspaceRequest,
                                         billingProject: RawlsBillingProject,
                                         sourceBucketName: Option[String],
+                                        sourceWorkspaceId: Option[UUID],
                                         dataAccess: DataAccess,
                                         parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
@@ -2021,6 +2024,15 @@ class WorkspaceService(
           policyService.createWorkspacePao(UUID.fromString(workspaceId), workspaceRequest, span)
         )
       }
+
+      _ <-
+        if (sourceWorkspaceId.isDefined) {
+          traceDBIOWithParent("mergeSourcePaoIntoDestPao", parentContext) { span =>
+            DBIO.from(
+              policyService.mergeWorkspacePao(sourceWorkspaceId.get, UUID.fromString(workspaceId), span)
+            )
+          }
+        } else DBIO.successful(())
 
       resource <- createWorkspaceResourceInSam(workspaceId,
                                                billingProjectOwnerPolicyEmail,

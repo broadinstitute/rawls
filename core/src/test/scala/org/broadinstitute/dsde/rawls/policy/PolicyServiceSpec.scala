@@ -4,9 +4,11 @@ import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
   TpsPaoCreateRequest,
+  TpsPaoSourceRequest,
   TpsPolicyInput,
   TpsPolicyInputs,
-  TpsPolicyPair
+  TpsPolicyPair,
+  TpsUpdateMode
 }
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
@@ -107,5 +109,26 @@ class PolicyServiceSpec extends AnyFlatSpec {
     )
 
     verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
+  }
+
+  behavior of "mergeWorkspacePao"
+
+  it should "call mergePao with the correct parameters" in {
+    val sourceWorkspaceId = UUID.randomUUID()
+    val destWorkspaceId = UUID.randomUUID()
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.mergePao(any(), any(), any())).thenReturn(Future.unit)
+    val policyService = new PolicyService(tpsDAO)
+
+    val expectedPaoRequest = new TpsPaoSourceRequest()
+      .sourceObjectId(destWorkspaceId)
+      .updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+
+    Await.result(policyService.mergeWorkspacePao(sourceWorkspaceId, destWorkspaceId, mock[RawlsRequestContext]),
+                 Duration.Inf
+    )
+
+    verify(tpsDAO).mergePao(mockitoEq(expectedPaoRequest), mockitoEq(sourceWorkspaceId), any())
   }
 }
