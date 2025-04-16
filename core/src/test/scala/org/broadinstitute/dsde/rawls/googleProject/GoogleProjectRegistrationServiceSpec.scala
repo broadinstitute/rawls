@@ -16,10 +16,10 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
-  SamGoogleProjectActions,
   SamResourceAction,
   SamResourceTypeName,
-  SamResourceTypeNames
+  SamResourceTypeNames,
+  SamTdrGoogleProjectActions
 }
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -176,7 +176,7 @@ class GoogleProjectRegistrationServiceSpec
     }
   }
 
-  // Fails if no link action on billing-project resource in Sam and/or no link action on google-project resource in Sam
+  // Fails if no link action on billing-project resource in Sam and/or no link action on datarepo-google-project resource in Sam
   it should "fail if no link action on billing project resource" in {
     val mockSamDAO = mock[SamDAO]
     val mockGoogleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
@@ -206,9 +206,9 @@ class GoogleProjectRegistrationServiceSpec
     )
 
     when(
-      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.tdrGoogleProject),
                                any[String],
-                               mockitoEq(SamGoogleProjectActions.link),
+                               mockitoEq(SamTdrGoogleProjectActions.link),
                                any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(true))
@@ -260,9 +260,9 @@ class GoogleProjectRegistrationServiceSpec
       .thenReturn(Future.successful(Some(billingProject)))
 
     when(
-      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.tdrGoogleProject),
                                any[String],
-                               mockitoEq(SamGoogleProjectActions.link),
+                               mockitoEq(SamTdrGoogleProjectActions.link),
                                any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
@@ -315,9 +315,9 @@ class GoogleProjectRegistrationServiceSpec
       .thenReturn(Future.successful(None))
 
     when(
-      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.tdrGoogleProject),
                                any[String],
-                               mockitoEq(SamGoogleProjectActions.link),
+                               mockitoEq(SamTdrGoogleProjectActions.link),
                                any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(true))
@@ -619,9 +619,9 @@ class GoogleProjectRegistrationServiceSpec
       .thenReturn(Future.successful(new ProjectBillingInfo()))
 
     when(
-      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.tdrGoogleProject),
                                any[String],
-                               mockitoEq(SamGoogleProjectActions.delete),
+                               mockitoEq(SamTdrGoogleProjectActions.delete),
                                any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
@@ -664,9 +664,9 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.googleProject),
+      mockSamDAO.userHasAction(mockitoEq(SamResourceTypeNames.tdrGoogleProject),
                                any[String],
-                               mockitoEq(SamGoogleProjectActions.delete),
+                               mockitoEq(SamTdrGoogleProjectActions.delete),
                                any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(true))
@@ -717,14 +717,17 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, mockContext)
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject,
+                                          SamTdrGoogleProjectActions.read,
+                                          mockContext
+      )
     )
       .thenReturn(
         Future.successful(
           Seq(
             new FilteredFlatResource()
               .resourceId("test-project-id")
-              .resourceType(SamResourceTypeNames.googleProject.value)
+              .resourceType(SamResourceTypeNames.tdrGoogleProject.value)
           )
         )
       )
@@ -760,14 +763,17 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, mockContext)
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject,
+                                          SamTdrGoogleProjectActions.read,
+                                          mockContext
+      )
     )
       .thenReturn(
         Future.successful(
           Seq(
             new FilteredFlatResource()
               .resourceId("test-project-id")
-              .resourceType(SamResourceTypeNames.googleProject.value)
+              .resourceType(SamResourceTypeNames.tdrGoogleProject.value)
           )
         )
       )
@@ -813,17 +819,20 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.googleProject, SamGoogleProjectActions.read, mockContext)
+      mockSamDAO.listResourcesWithActions(SamResourceTypeNames.tdrGoogleProject,
+                                          SamTdrGoogleProjectActions.read,
+                                          mockContext
+      )
     )
       .thenReturn(
         Future.successful(
           Seq(
             new FilteredFlatResource()
               .resourceId("test-project-id-1")
-              .resourceType(SamResourceTypeNames.googleProject.value),
+              .resourceType(SamResourceTypeNames.tdrGoogleProject.value),
             new FilteredFlatResource()
               .resourceId("test-project-id-2")
-              .resourceType(SamResourceTypeNames.googleProject.value)
+              .resourceType(SamResourceTypeNames.tdrGoogleProject.value)
           )
         )
       )
@@ -866,9 +875,9 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
+      mockSamDAO.userHasAction(SamResourceTypeNames.tdrGoogleProject,
                                googleProjectId.value,
-                               SamGoogleProjectActions.read,
+                               SamTdrGoogleProjectActions.read,
                                mockContext
       )
     )
@@ -899,9 +908,9 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
+      mockSamDAO.userHasAction(SamResourceTypeNames.tdrGoogleProject,
                                googleProjectId.value,
-                               SamGoogleProjectActions.read,
+                               SamTdrGoogleProjectActions.read,
                                mockContext
       )
     )
@@ -931,9 +940,9 @@ class GoogleProjectRegistrationServiceSpec
       )
 
     when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.googleProject,
+      mockSamDAO.userHasAction(SamResourceTypeNames.tdrGoogleProject,
                                googleProjectId.value,
-                               SamGoogleProjectActions.read,
+                               SamTdrGoogleProjectActions.read,
                                mockContext
       )
     )
