@@ -5094,6 +5094,11 @@ components:
         monitoringImageScript:
           type: string
           description: When using `monitoringImage`, a user-defined script that runs inside the monitoring container
+        submissionEntities:
+          type: array
+          description: Entities submitted
+          items:
+            $ref: '#/components/schemas/AttributeEntityReference'
       description: ""
     ExternalEntityInfo:
       type: object
@@ -5148,6 +5153,11 @@ components:
         userComment:
           type: string
           description: Comment for the submission
+        submissionEntities:
+          type: array
+          description: Entities submitted
+          items:
+            $ref: '#/components/schemas/AttributeEntityReference'
       description: An abbreviated Submission, without workflow information, good for
         listings
     ActiveSubmission:
@@ -5254,7 +5264,7 @@ components:
         entityName:
           type: string
           description: Name of root entity for expression. Optional if the method
-            configuration has no root entity.
+            configuration has no root entity or multiple entityNames are given.
         expression:
           type: string
           description: Expression that resolves to one or more entities matching the
@@ -5309,6 +5319,12 @@ components:
           minimum: 0.01
           maximum: 9999999999.99
           multipleOf: 0.01
+        entityNames:
+          type: array
+          description: Name of root entities for expression. Optional if the method
+            configuration has no root entity or a single entityName is given.
+          items:
+            type: string
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
