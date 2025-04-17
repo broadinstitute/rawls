@@ -548,6 +548,10 @@ class WorkspaceService(
           throw t
       }
     )
+    // Delete the workspace PAO in the policy service (TPS)
+    _ <- traceFutureWithParent("deleteTpsPao", ctx) { span =>
+      policyService.deleteWorkspacePao(UUID.fromString(workspace.workspaceId), span)
+    }
     _ <- traceFutureWithParent("deleteWorkspaceSamResource", ctx)(_ =>
       samDAO.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx) recover {
         case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
