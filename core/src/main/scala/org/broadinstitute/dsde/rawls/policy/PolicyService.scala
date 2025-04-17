@@ -60,4 +60,9 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
     tpsDAO.mergePao(req, sourceWorkspaceId, ctx)
   }
 
+  def deleteWorkspacePao(workspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] =
+    tpsDAO.deletePao(workspaceId, ctx).recover { case _: NoSuchElementException =>
+      () // PAO does not exist, safely ignore
+    }
+
 }
