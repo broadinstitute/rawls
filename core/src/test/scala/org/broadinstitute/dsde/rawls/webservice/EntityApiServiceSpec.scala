@@ -455,7 +455,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  List("default", "tag", "pfb", "import", "system", "sys", "tdr") foreach { namespace =>
+  List("default", "tag", "pfb", "import", "system", "sys", "tdr", "library") foreach { namespace =>
     it should s"return 201 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices {
       services =>
         val newSample =
@@ -470,8 +470,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
     }
   }
-  List("defaultX", "library", " tag", "bfp", "imp", "TDR", "xxx", "") foreach { namespace =>
-    it should s"return 403 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices {
+  List("defaultX", " tag", "bfp", "imp", "TDR", "xxx", "") foreach { namespace =>
+    it should s"return 201 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices {
       services =>
         val newSample =
           Entity("sampleNew", "sample", Map(AttributeName(namespace, "attribute") -> AttributeString("foo")))
@@ -482,7 +482,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.Forbidden) {
               status
             }
-
             val errorText = responseAs[ErrorReport].message
             assert(errorText.contains(namespace))
           }
@@ -1248,7 +1247,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  it should "return 403 when batch upserting an entity with library-namespace attributes " in withTestDataApiServices {
+  it should "return 204 when batch upserting an entity with library-namespace attributes " in withTestDataApiServices {
     services =>
       val update1 = EntityUpdateDefinition(
         testData.sample1.name,
@@ -1265,7 +1264,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
         sealRoute(services.entityRoutes()) ~>
         check {
-          assertResult(StatusCodes.Forbidden) {
+          assertResult(StatusCodes.NoContent) {
             status
           }
         }
@@ -1772,7 +1771,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 on updating entity with library-namespace attributes " in withTestDataApiServices { services =>
+  it should "return 200 on updating entity with library-namespace attributes " in withTestDataApiServices { services =>
     val name = AttributeName(AttributeName.libraryNamespace, "reader")
     val attr = AttributeString("me")
 
@@ -1781,7 +1780,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     ) ~>
       sealRoute(services.entityRoutes()) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[String]) {
+        assertResult(StatusCodes.OK) {
           status
         }
       }

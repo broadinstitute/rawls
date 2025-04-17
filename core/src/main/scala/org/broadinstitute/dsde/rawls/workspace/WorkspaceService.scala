@@ -604,21 +604,6 @@ class WorkspaceService(
     } yield ()
   }
 
-  def updateLibraryAttributes(workspaceName: WorkspaceName,
-                              operations: Seq[AttributeUpdateOperation]
-  ): Future[WorkspaceDetails] =
-    withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
-      for {
-        workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
-          dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-            dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
-            TransactionIsolation.ReadCommitted
-          ) // read committed to avoid deadlocks on workspace attr scratch table
-        }
-        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId)
-      } yield WorkspaceDetails(workspace, authDomain)
-    }
-
   def updateWorkspace(workspaceName: WorkspaceName,
                       operations: Seq[AttributeUpdateOperation]
   ): Future[WorkspaceDetails] =
