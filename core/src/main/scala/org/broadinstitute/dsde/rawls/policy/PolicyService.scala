@@ -4,9 +4,11 @@ import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
   TpsPaoCreateRequest,
+  TpsPaoSourceRequest,
   TpsPolicyInput,
   TpsPolicyInputs,
-  TpsPolicyPair
+  TpsPolicyPair,
+  TpsUpdateMode
 }
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
@@ -46,4 +48,16 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
 
     tpsDAO.createPao(req, ctx)
   }
+
+  /**
+    * The documentation for this TPS API is misleading. It will merge the target PAO into the source
+    * PAO, NOT the other way around. While it might be confusing to see the destination workspace id
+    * used as the `sourceObjectId`, this is the correct way to call the TPS API.
+    */
+  def mergeWorkspacePao(sourceWorkspaceId: UUID, destWorkspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] = {
+    val req = new TpsPaoSourceRequest().sourceObjectId(destWorkspaceId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+
+    tpsDAO.mergePao(req, sourceWorkspaceId, ctx)
+  }
+
 }
