@@ -314,7 +314,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
       useCromwellGcpBatchBackend =
         if (currentSettings.isEmpty) {
-          println(s"### FIND ME - currentSettings is empty")
+          println(
+            s"### FIND ME - currentSettings is empty. Using useBatchAsDefaultBackend value - $useBatchAsDefaultBackend"
+          )
           useBatchAsDefaultBackend
         } else {
           println(s"### FIND ME - currentSettings is NOT empty. Values: ${currentSettings.toString()}")
@@ -326,20 +328,19 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
               println(s"FIND ME - No match: ${other.getClass.getCanonicalName}")
           }
 
-          currentSettings.exists { s =>
-            s match {
-              case backendSetting: UseCromwellGcpBatchBackendSetting =>
-                println(
-                  s"### FIND ME - Found Batch setting; backendSetting.config.enabled - ${backendSetting.config.enabled}"
-                )
-                backendSetting.config.enabled
-              case _ =>
-                println(
-                  s"### FIND ME - Batch setting NOT FOUND; Using useBatchAsDefaultBackend ($useBatchAsDefaultBackend)"
-                )
-                useBatchAsDefaultBackend
+          currentSettings
+            .collectFirst { case backendSetting: UseCromwellGcpBatchBackendSetting =>
+              println(
+                s"### FIND ME - Found Batch setting; backendSetting.config.enabled - ${backendSetting.config.enabled}"
+              )
+              backendSetting.config.enabled
             }
-          }
+            .getOrElse {
+              println(
+                s"### FIND ME - Batch setting NOT FOUND; Using useBatchAsDefaultBackend ($useBatchAsDefaultBackend)"
+              )
+              useBatchAsDefaultBackend
+            }
         }
 
       cromwellSubmissionBackend =

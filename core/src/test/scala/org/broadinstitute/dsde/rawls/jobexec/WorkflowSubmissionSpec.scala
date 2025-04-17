@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock.{MockBardService, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketSoftDeleteConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -107,7 +108,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val methodConfigResolver: MethodConfigResolver = methodConfigResolver,
     val bardService: BardService = mockBardService,
     val workspaceSettingRepository: WorkspaceSettingRepository = mockWorkspaceSettingRepository,
-    val useBatchAsDefaultBackend: Boolean = false
+    val useBatchAsDefaultBackend: Boolean = true
   ) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
@@ -977,11 +978,16 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     }
   }
 
+  // TODO: Saloni - add similar cases where Batch disabled WS is respected
   it should "submit workflows to Cromwell's GCP Batch backend when UseCromwellGcpBatchBackendSetting is true" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
     when(workspaceSettingRepository.getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))).thenReturn(
-      Future.successful(List(UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))))
+      Future.successful(
+        List(GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(604800)),
+             UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
+        )
+      )
     )
 
     val workflowSubmission =
