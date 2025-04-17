@@ -310,18 +310,28 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
+      _ = println(s"### FIND ME - useBatchAsDefaultBackend  from config: $useBatchAsDefaultBackend")
+
       useCromwellGcpBatchBackend =
         if (currentSettings.isEmpty) {
+          println(s"### FIND ME - currentSettings is empty")
           useBatchAsDefaultBackend
         } else {
+          println(s"### FIND ME - currentSettings is NOT empty. Values: ${currentSettings.toString()}")
           currentSettings.exists {
-            case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled
-            case _                                                 => useBatchAsDefaultBackend
+            case backendSetting: UseCromwellGcpBatchBackendSetting =>
+              println(s"### FIND ME - Found Batch setting; backendSetting.config.enabled - ${backendSetting.config.enabled}")
+              backendSetting.config.enabled
+            case _                                                 =>
+              println(s"### FIND ME - Batch setting NOT FOUND; Using useBatchAsDefaultBackend ($useBatchAsDefaultBackend)")
+              useBatchAsDefaultBackend
           }
         }
 
       cromwellSubmissionBackend =
         if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
+
+      _ = println(s"### FIND ME - cromwellSubmissionBackend: ${cromwellSubmissionBackend.value}")
 
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         // We pass the submission root as the value for two options,
