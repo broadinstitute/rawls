@@ -2025,11 +2025,12 @@ class WorkspaceService(
         )
       }
 
-      sourceWorkspacePaoOpt <- if (sourceWorkspaceIdOpt.isDefined) {
-        traceDBIOWithParent("getSourcePao", parentContext) { span =>
-          DBIO.from(policyService.getPao(sourceWorkspaceIdOpt.get, span))
-        }
-      } else DBIO.successful(None)
+      sourceWorkspacePaoOpt <-
+        if (sourceWorkspaceIdOpt.isDefined) {
+          traceDBIOWithParent("getSourcePao", parentContext) { span =>
+            DBIO.from(policyService.getPao(sourceWorkspaceIdOpt.get, span))
+          }
+        } else DBIO.successful(None)
 
       _ <-
         if (sourceWorkspacePaoOpt.isDefined) {

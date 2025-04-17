@@ -13,7 +13,7 @@ import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.Try
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
@@ -56,9 +56,9 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
   def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] = Future {
     blocking {
       val tpsApi = getTpsApi(ctx)
-      try {
+      try
         Option(tpsApi.getPao(objectId, false))
-      } catch {
+      catch {
         case ex: ApiException if ex.getCode == 404 => None
       }
     }
