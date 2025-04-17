@@ -310,7 +310,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
-      useCromwellGcpBatchBackend = currentSettings
+      useCromwellGcpBatchBackend: Boolean = currentSettings
         .collectFirst { case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled }
         .getOrElse(useBatchAsDefaultBackend)
 
