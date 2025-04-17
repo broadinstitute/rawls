@@ -320,10 +320,14 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           println(s"### FIND ME - currentSettings is NOT empty. Values: ${currentSettings.toString()}")
           currentSettings.exists {
             case backendSetting: UseCromwellGcpBatchBackendSetting =>
-              println(s"### FIND ME - Found Batch setting; backendSetting.config.enabled - ${backendSetting.config.enabled}")
+              println(
+                s"### FIND ME - Found Batch setting; backendSetting.config.enabled - ${backendSetting.config.enabled}"
+              )
               backendSetting.config.enabled
-            case _                                                 =>
-              println(s"### FIND ME - Batch setting NOT FOUND; Using useBatchAsDefaultBackend ($useBatchAsDefaultBackend)")
+            case _ =>
+              println(
+                s"### FIND ME - Batch setting NOT FOUND; Using useBatchAsDefaultBackend ($useBatchAsDefaultBackend)"
+              )
               useBatchAsDefaultBackend
           }
         }
