@@ -4,6 +4,7 @@ import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
   TpsPaoCreateRequest,
+  TpsPaoGetResult,
   TpsPaoSourceRequest,
   TpsPolicyInput,
   TpsPolicyInputs,
@@ -60,4 +61,6 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
     tpsDAO.mergePao(req, sourceWorkspaceId, ctx)
   }
 
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] =
+    tpsDAO.getPao(objectId, ctx)
 }

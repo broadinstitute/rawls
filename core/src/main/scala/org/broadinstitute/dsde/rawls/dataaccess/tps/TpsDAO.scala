@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.tps
 
-import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoSourceRequest}
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
 import java.util.UUID
@@ -10,4 +10,6 @@ trait TpsDAO {
   def createPao(request: TpsPaoCreateRequest, ctx: RawlsRequestContext): Future[Unit]
 
   def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
+
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]]
 }
