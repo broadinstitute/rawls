@@ -1,15 +1,6 @@
 package org.broadinstitute.dsde.rawls.policy
 
-import bio.terra.policy.model.{
-  TpsComponent,
-  TpsObjectType,
-  TpsPaoCreateRequest,
-  TpsPaoSourceRequest,
-  TpsPolicyInput,
-  TpsPolicyInputs,
-  TpsPolicyPair,
-  TpsUpdateMode
-}
+import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair, TpsUpdateMode}
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
@@ -60,4 +51,6 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
     tpsDAO.mergePao(req, sourceWorkspaceId, ctx)
   }
 
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] =
+    tpsDAO.getPao(objectId, ctx)
 }

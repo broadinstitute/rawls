@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.policy.model.TpsPaoGetResult
 import cats.effect.IO
 import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
@@ -30,13 +31,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceService,
-  WorkspaceSettingRepository
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
@@ -56,7 +51,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
 import java.sql.Timestamp
-import java.time.{Duration => JavaDuration, LocalDateTime, OffsetDateTime, ZoneOffset}
+import java.time.{LocalDateTime, OffsetDateTime, ZoneOffset, Duration => JavaDuration}
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
@@ -161,6 +156,7 @@ class FastPassServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
