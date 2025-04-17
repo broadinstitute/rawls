@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.policy.model.TpsPaoGetResult
 import cats.effect.IO
 import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
@@ -161,6 +162,7 @@ class FastPassServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))

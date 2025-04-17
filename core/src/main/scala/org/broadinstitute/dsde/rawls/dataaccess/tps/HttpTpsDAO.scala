@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
-import bio.terra.policy.client.ApiClient
-import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoSourceRequest}
+import bio.terra.policy.client.{ApiClient, ApiException}
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest}
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -14,6 +14,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.util.Try
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
@@ -49,6 +50,17 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
   def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
       getTpsApi(ctx).mergePao(request, objectId)
+    }
+  }
+
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] = Future {
+    blocking {
+      val tpsApi = getTpsApi(ctx)
+      try
+        Option(tpsApi.getPao(objectId, false))
+      catch {
+        case ex: ApiException if ex.getCode == 404 => None
+      }
     }
   }
 }
