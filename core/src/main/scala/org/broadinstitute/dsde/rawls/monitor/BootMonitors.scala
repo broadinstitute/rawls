@@ -97,7 +97,8 @@ object BootMonitors extends LazyLogging {
                    gcpBatchBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver,
                    bardService: BardService,
-                   workspaceSettingRepository: WorkspaceSettingRepository
+                   workspaceSettingRepository: WorkspaceSettingRepository,
+                   useBatchAsDefaultBackend: Boolean
   ): Unit = {
 
     if (appConfigManager.cloudProvider == WorkspaceCloudPlatform.Gcp) {
@@ -152,7 +153,8 @@ object BootMonitors extends LazyLogging {
         gcpBatchBackend,
         methodConfigResolver,
         bardService,
-        workspaceSettingRepository
+        workspaceSettingRepository,
+        useBatchAsDefaultBackend
       )
 
       // Boot bucket deletion monitor
@@ -344,7 +346,8 @@ object BootMonitors extends LazyLogging {
                                             gcpBatchBackend: CromwellBackend,
                                             methodConfigResolver: MethodConfigResolver,
                                             bardService: BardService,
-                                            workspaceSettingRepository: WorkspaceSettingRepository
+                                            workspaceSettingRepository: WorkspaceSettingRepository,
+                                            useBatchAsDefaultBackend: Boolean
   ) =
     for (i <- 0 until conf.getInt("executionservice.parallelSubmitters"))
       system.actorOf(
@@ -373,7 +376,8 @@ object BootMonitors extends LazyLogging {
           gcpBatchBackend,
           methodConfigResolver,
           bardService,
-          workspaceSettingRepository
+          workspaceSettingRepository,
+          useBatchAsDefaultBackend
         )
       )
 
