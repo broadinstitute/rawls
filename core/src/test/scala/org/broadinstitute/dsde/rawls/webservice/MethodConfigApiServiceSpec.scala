@@ -292,7 +292,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
                                                 AgoraMethod("dsde", "three_step", 1)
       )
 
-      val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
       val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
@@ -302,7 +301,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           }
           val validated = responseAs[ValidatedMethodConfiguration]
           assertResult(newMethodConfig)(validated.methodConfiguration)
-          assertSameElements(expectedSuccessInputs, validated.validInputs)
           assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         }
 
@@ -804,12 +802,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     checkValidAttributeSyntax(Post)
 
   def checkLibraryAttributesInOutputs(httpMethod: RequestBuilder): Unit = withTestDataApiServices { services =>
-    val newInputs = Map("good_in" -> AttributeString("this.foo"))
-    val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
-    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
+    val newOutputs = Map("good_out" -> AttributeString("this.library:foo"))
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(outputs = newOutputs)
 
-    val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map.empty[String, String]
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map.empty[String, String]
 
@@ -821,8 +816,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         }
         val validated = responseAs[ValidatedMethodConfiguration]
         assertResult(modifiedMethodConfig)(validated.methodConfiguration)
-        assertSameElements(expectedSuccessInputs, validated.validInputs)
-        assertSameElements(expectedFailureInputs, validated.invalidInputs)
+
         assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
       }

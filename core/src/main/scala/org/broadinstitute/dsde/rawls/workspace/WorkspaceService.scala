@@ -666,12 +666,11 @@ class WorkspaceService(
         StatusCodes.BadRequest,
         """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
       )
-    val (libraryAttributeNames, workspaceAttributeNames) =
-      destWorkspaceRequest.attributes.keys.partition(_.namespace == AttributeName.libraryNamespace)
+    val workspaceAttributeNames =
+      destWorkspaceRequest.attributes.keys
 
     for {
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
-      _ <- withLibraryAttributeNamespaceCheck(libraryAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       _ <- failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)
       // if bucket location is specified, then we just use that for the destination workspace's bucket location.
@@ -2181,19 +2180,6 @@ class WorkspaceService(
         gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
       case (None, None) => Future(Some(config.defaultLocation))
     }
-
-  private def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
-    val namespaces = attributeNames.map(_.namespace).toSet
-
-    // only allow library namespace
-    val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
-    if (invalidNamespaces.isEmpty) op
-    else {
-      val err =
-        ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
-    }
-  }
 
   def addAuthDomainGroups(workspaceName: WorkspaceName,
                           newAuthDomainGroups: Set[String],
