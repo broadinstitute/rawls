@@ -51,4 +51,10 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
       getTpsApi(ctx).mergePao(request, objectId)
     }
   }
+
+  def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
+    blocking {
+      getTpsApi(ctx).deletePao(objectId)
+    }
+  }
 }

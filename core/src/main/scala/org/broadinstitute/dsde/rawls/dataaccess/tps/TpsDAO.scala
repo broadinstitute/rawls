@@ -10,4 +10,6 @@ trait TpsDAO {
   def createPao(request: TpsPaoCreateRequest, ctx: RawlsRequestContext): Future[Unit]
 
   def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
+
+  def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
 }
