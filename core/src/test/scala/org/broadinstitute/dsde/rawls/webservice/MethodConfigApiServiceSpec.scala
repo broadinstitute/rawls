@@ -324,7 +324,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       val expectedSuccessInputs = Set("goodAndBad.goodAndBadTask.good_in", "goodAndBad.goodAndBadTask.bad_in")
       val expectedSuccessOutputs = Set("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.bad_out")
 
-      revokeCuratorRole(services)
+      // TODO CORE-382: is this test still valid?
 
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
@@ -375,7 +375,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
                                                 AgoraMethod(testData.wsName.namespace, "method-a", 1)
       )
 
-      revokeCuratorRole(services)
+      // TODO CORE-382: is this test still valid?
 
       val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
       val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
@@ -861,7 +861,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
     val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
-    revokeCuratorRole(services)
+    // TODO CORE-382: is this test still valid?
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map.empty[String, String]
@@ -1097,7 +1097,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "allow copy method configuration with library attributes in outputs by non-curator" in withTestDataApiServices {
     services =>
-      revokeCuratorRole(services)
+      // TODO CORE-382: is this test still valid?
 
       Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
@@ -1247,7 +1247,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   it should "not allow copy method configuration from repo with library attributes in outputs by non-curator" in withTestDataApiServices {
     services =>
-      revokeCuratorRole(services)
+      // TODO CORE-382: is this test still valid?
 
       Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
