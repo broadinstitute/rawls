@@ -35,8 +35,6 @@ trait GoogleServicesDAO extends ErrorReportable {
 
   def adminGroupName: String
 
-  def curatorGroupName: String
-
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                       userProject: Option[GoogleProjectId] = None,
@@ -79,12 +77,6 @@ trait GoogleServicesDAO extends ErrorReportable {
   def setRequesterPays(bucketName: String, requesterPaysEnabled: Boolean, userProject: GoogleProjectId): Future[Unit]
 
   def isAdmin(userEmail: String): Future[Boolean]
-
-  def isLibraryCurator(userEmail: String): Future[Boolean]
-
-  def addLibraryCurator(userEmail: String): Future[Unit]
-
-  def removeLibraryCurator(userEmail: String): Future[Unit]
 
   def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean]
 

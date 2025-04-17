@@ -1407,30 +1407,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  it should "return 403 when batch updating an entity with library-namespace attributes" in withTestDataApiServices {
-    services =>
-      revokeCuratorRole(services)
-      val update1 = EntityUpdateDefinition(
-        testData.sample1.name,
-        testData.sample1.entityType,
-        Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute1"), AttributeString("wang")))
-      )
-      val update2 = EntityUpdateDefinition(
-        testData.sample2.name,
-        testData.sample2.entityType,
-        Seq(
-          AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute2"), AttributeString("chung"))
-        )
-      )
-      Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
-        sealRoute(services.entityRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
-        }
-  }
-
   it should "return 200 on get entity" in withTestDataApiServices { services =>
     withStatsD {
       Get(testData.sample2.path(testData.workspace)) ~>

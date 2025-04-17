@@ -42,7 +42,6 @@ import org.broadinstitute.dsde.rawls.util.{
   AttributeUpdateOperationException,
   BillingProjectSupport,
   JsonFilterUtils,
-  LibraryPermissionsSupport,
   UserUtils,
   UserWiths,
   WorkspaceSupport
@@ -177,7 +176,6 @@ class WorkspaceService(
   policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
-    with LibraryPermissionsSupport
     with UserWiths
     with UserUtils
     with RawlsInstrumented
@@ -611,16 +609,11 @@ class WorkspaceService(
   ): Future[WorkspaceDetails] =
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        isCurator <- gcsDAO.isLibraryCurator(ctx.userInfo.userEmail.value) recoverWith { case t =>
-          throw new RawlsException("Unable to query for library curator status.", t)
-        }
         workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
-          withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
-            dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-              dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
-              TransactionIsolation.ReadCommitted
-            ) // read committed to avoid deadlocks on workspace attr scratch table
-          }
+          dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
+            dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
+            TransactionIsolation.ReadCommitted
+          ) // read committed to avoid deadlocks on workspace attr scratch table
         }
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId)
       } yield WorkspaceDetails(workspace, authDomain)
