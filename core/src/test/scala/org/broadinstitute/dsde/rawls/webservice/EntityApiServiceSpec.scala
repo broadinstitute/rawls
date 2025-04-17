@@ -471,7 +471,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
   List("defaultX", " tag", "bfp", "imp", "TDR", "xxx", "") foreach { namespace =>
-    it should s"return 201 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices {
+    it should s"return 403 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices {
       services =>
         val newSample =
           Entity("sampleNew", "sample", Map(AttributeName(namespace, "attribute") -> AttributeString("foo")))
@@ -482,6 +482,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.Forbidden) {
               status
             }
+
             val errorText = responseAs[ErrorReport].message
             assert(errorText.contains(namespace))
           }
