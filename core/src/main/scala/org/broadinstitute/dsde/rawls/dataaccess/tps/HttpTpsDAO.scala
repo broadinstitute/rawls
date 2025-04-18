@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
-import bio.terra.policy.client.ApiClient
+import bio.terra.policy.client.{ApiClient, ApiException}
 import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoSourceRequest}
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
@@ -54,7 +54,12 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
 
   def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
-      getTpsApi(ctx).deletePao(objectId)
+      val tpsApi = getTpsApi(ctx)
+      try
+        Option(tpsApi.deletePao(objectId))
+      catch {
+        case ex: ApiException if ex.getCode == 404 => // Ignore if PAO does not exist
+      }
     }
   }
 }
