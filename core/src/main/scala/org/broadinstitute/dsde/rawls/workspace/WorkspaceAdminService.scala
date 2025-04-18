@@ -8,15 +8,10 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
-  AttributeName,
-  AttributeValue,
   ErrorReport,
   ErrorReportSource,
-  ManagedGroupRef,
-  RawlsGroupName,
   RawlsRequestContext,
   SamResourceTypeAdminActions,
-  SamResourceTypeName,
   SamResourceTypeNames,
   Workspace,
   WorkspaceAdminResponse,
@@ -65,31 +60,6 @@ class WorkspaceAdminService(
     with WorkspaceSupport {
 
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
-
-  // Admin endpoint, not limited to V2 workspaces
-  def listAllWorkspaces(): Future[Seq[WorkspaceDetails]] =
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listAll().map(workspaces => workspaces.map(w => WorkspaceDetails(w, Set.empty)))
-      }
-    }
-
-  // Admin endpoint, not limited to V2 workspaces
-  def adminListWorkspacesWithAttribute(attributeName: AttributeName,
-                                       attributeValue: AttributeValue
-  ): Future[Seq[WorkspaceDetails]] =
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue)
-        }
-        results <- Future.traverse(workspaces) { workspace =>
-          loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId).map(
-            WorkspaceDetails(workspace, _)
-          )
-        }
-      } yield results
-    }
 
   // Admin endpoint, not limited to V2 workspaces
   def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] =
@@ -147,12 +117,5 @@ class WorkspaceAdminService(
       case None            => throw NoSuchWorkspaceException(workspaceName)
       case Some(workspace) => op(workspace)
     }
-
-  private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName,
-                                     resourceId: String
-  ): Future[Set[ManagedGroupRef]] =
-    samDAO
-      .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
-      .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
 }
