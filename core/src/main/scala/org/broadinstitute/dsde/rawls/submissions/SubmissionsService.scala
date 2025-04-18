@@ -622,6 +622,11 @@ class SubmissionsService(
         workspaceExpressionResults
       )
       submissionPath <- submissionRootPath(workspaceContext, submissionId)
+      _ <-
+        if (!submissionRequest.preserveSet) {
+          val setToDelete = AttributeEntityReference(submissionRequest.entityType.get, submissionRequest.entityName.get)
+          entityProvider.deleteEntities(Seq(setToDelete), ctx)
+        } else Future.successful(())
     } yield PreparedSubmission(
       workspaceContext,
       submissionId,
