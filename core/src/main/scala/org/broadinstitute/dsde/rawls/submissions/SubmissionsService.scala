@@ -537,22 +537,17 @@ class SubmissionsService(
         ps.failureMode,
         ps.header
       )
-      _ <-
-        if (!submissionRequest.preserveSet) { // This has to be done after saving the submission so it can pull the data from the entity first
-          val setToDelete = AttributeEntityReference(submissionRequest.entityType.get, submissionRequest.entityName.get)
-
-          // TODO is there a way to avoid fetching the method config again?  another way to get an entityProvider?
-          for {
-            methodConfig <- dataSource.inTransaction { dataAccess =>
-              dataAccess.methodConfigurationQuery.get(ps.workspace,
-                                                      submissionRequest.methodConfigurationNamespace,
-                                                      submissionRequest.methodConfigurationName
-              )
+      _ <- getSetToDelete(submissionRequest)
+        .map { setToDelete =>
+          entityManager
+            .resolveProviderFuture(
+              EntityRequestArguments(ps.workspace, ctx, None, None)
+            )
+            .flatMap { entityProvider =>
+              entityProvider.deleteEntities(Seq(setToDelete), ctx)
             }
-            entityProvider <- getEntityProviderForMethodConfig(ps.workspace, methodConfig.get)
-            _ <- entityProvider.deleteEntities(Seq(setToDelete), ctx)
-          } yield ()
-        } else Future.successful(())
+        }
+        .getOrElse(Future.successful(()))
     } yield SubmissionReport(
       submissionRequest,
       submission.submissionId,
@@ -562,6 +557,17 @@ class SubmissionsService(
       ps.header,
       ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
+
+  def getSetToDelete(submissionRequest: SubmissionRequest): Option[AttributeEntityReference] =
+    if (!submissionRequest.preserveSet) {
+      submissionRequest.entityType match {
+        case Some(value) if value.endsWith("_set") =>
+          Some(AttributeEntityReference(value, submissionRequest.entityName.get))
+        case _ => None
+      }
+    } else {
+      None
+    }
 
   @VisibleForTesting
   def validateCostCap(costCap: Option[BigDecimal]): Unit = {

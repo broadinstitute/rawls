@@ -854,6 +854,33 @@ class SubmissionSpec(_system: ActorSystem)
     }
   }
 
+  it should "not delete entity if not a set even if preserveSet is set to false" in withSubmissionsService {
+    submissionsService =>
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option("Sample"),
+        entityName = Option("sample1"),
+        expression = None,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false,
+        preserveSet = false
+      )
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      assert(newSubmissionReport.workflows.size == 1)
+
+      checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+      val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+      assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+      assertResult(Some(testData.sample1)) {
+        runAndWait(entityQuery.get(testData.workspace, "Sample", "sample1"))
+      }
+  }
+
   it should "return a successful Submission when given an wdl struct entity expression that evaluates to a set of entities" in withSubmissionsService {
     submissionsService =>
       val sample1 = Entity(
