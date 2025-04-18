@@ -31,6 +31,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
@@ -72,6 +73,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.scalatestplus.mockito.MockitoSugar.mock
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
@@ -162,6 +164,7 @@ class WorkspaceServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
@@ -1129,6 +1132,47 @@ class WorkspaceServiceSpec
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
+  }
+
+  it should "delete a workspace when PAO exists" in withTestDataServices { services =>
+    // Check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    // Mock the existence of a PAO
+    when(services.policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
+
+    // Delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    // Verify that the PAO deletion was called
+    verify(services.policyService).deleteWorkspacePao(any(), any())
+
+    // Check that the workspace has been deleted
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
+  }
+
+  it should "delete a workspace when PAO does not exist" in withTestDataServices { services =>
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+
+    // Check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    // Mock the absence of a PAO by throwing an ApiException with a 404 status code
+    when(tpsDAO.deletePao(any(), any()))
+      .thenReturn(Future.failed(new ApiException(404, "PAO not found")))
+
+    // Delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    // Verify that the PAO deletion was attempted
+    verify(services.policyService).deleteWorkspacePao(any(), any())
+
+    // Check that the workspace has been deleted
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
   }
 
   behavior of "getTags"

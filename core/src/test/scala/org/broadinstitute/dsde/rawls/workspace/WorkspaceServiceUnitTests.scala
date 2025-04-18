@@ -971,6 +971,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -996,6 +997,8 @@ class WorkspaceServiceUnitTests
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // delete workspace in sam
     when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
     val service = workspaceServiceConstructor(
@@ -1005,7 +1008,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
@@ -1024,6 +1028,7 @@ class WorkspaceServiceUnitTests
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
     val wsm = mock[WorkspaceManagerDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1051,6 +1056,8 @@ class WorkspaceServiceUnitTests
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // delete workspace in sam
     when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
     val service = workspaceServiceConstructor(
@@ -1061,7 +1068,8 @@ class WorkspaceServiceUnitTests
       workspaceRepository = repo,
       workspaceManagerDAO = wsm,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
@@ -1078,6 +1086,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1104,6 +1113,8 @@ class WorkspaceServiceUnitTests
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
     val service = workspaceServiceConstructor(
       samDAO = sam,
@@ -1112,7 +1123,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
@@ -1129,6 +1141,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1151,6 +1164,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future())
     // delete workspace and associated records
     when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // throw 404 when deleting workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future.failed(RawlsExceptionWithErrorReport(StatusCodes.NotFound, "")))
@@ -1162,7 +1177,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
@@ -1231,6 +1247,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1253,6 +1270,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future())
     // delete workspace and associated records
     when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
@@ -1267,7 +1286,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
@@ -1284,6 +1304,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1306,6 +1327,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future())
     // delete workspace and associated records
     when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
@@ -1321,7 +1344,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
@@ -1340,6 +1364,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1371,6 +1396,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future())
     // delete workspace and associated records
     when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
@@ -1383,7 +1410,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
@@ -1403,6 +1431,7 @@ class WorkspaceServiceUnitTests
     val leo = mock[LeonardoService]
     val fastPass = mock[FastPassService]
     val gcs = mock[GoogleServicesDAO]
+    val tps = mock[PolicyService]
     // mocked operations are defined in the order they are called by the service
     // initial auth checks/workspace retrieval
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
@@ -1427,6 +1456,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future())
     // delete workspace and associated records
     when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
+    // delete workspace pao in tps
+    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
     // delete workflow collection in sam
     when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
       .thenReturn(Future())
@@ -1439,7 +1470,8 @@ class WorkspaceServiceUnitTests
       leonardoService = leo,
       workspaceRepository = repo,
       gcsDAO = gcs,
-      submissionsRepository = submissionsRepository
+      submissionsRepository = submissionsRepository,
+      policyService = tps
     )(ctx)
 
     val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)

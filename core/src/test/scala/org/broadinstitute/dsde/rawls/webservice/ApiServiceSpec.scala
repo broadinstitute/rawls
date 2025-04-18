@@ -205,6 +205,7 @@ trait ApiServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),

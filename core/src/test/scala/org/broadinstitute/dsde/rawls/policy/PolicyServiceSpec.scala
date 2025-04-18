@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.policy
 
+import bio.terra.policy.client.ApiException
 import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
@@ -130,5 +131,33 @@ class PolicyServiceSpec extends AnyFlatSpec {
     )
 
     verify(tpsDAO).mergePao(mockitoEq(expectedPaoRequest), mockitoEq(sourceWorkspaceId), any())
+  }
+
+  behavior of "deleteWorkspacePao"
+
+  it should "call deletePao with the correct parameters" in {
+    val workspaceId = UUID.randomUUID()
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.deletePao(any(), any())).thenReturn(Future.unit)
+    val policyService = new PolicyService(tpsDAO)
+
+    Await.result(policyService.deleteWorkspacePao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
+
+    verify(tpsDAO).deletePao(mockitoEq(workspaceId), any())
+  }
+
+  it should "handle 404 error gracefully" in {
+    val workspaceId = UUID.randomUUID()
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.deletePao(any(), any())).thenReturn(Future.failed(new ApiException(404, "Not Found")))
+    val policyService = new PolicyService(tpsDAO)
+
+    val exception = intercept[ApiException] {
+      Await.result(policyService.deleteWorkspacePao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
+    }
+    assert(exception.getCode == 404)
+    verify(tpsDAO).deletePao(mockitoEq(workspaceId), any())
   }
 }
