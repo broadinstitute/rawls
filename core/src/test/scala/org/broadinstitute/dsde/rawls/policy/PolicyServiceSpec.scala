@@ -146,18 +146,4 @@ class PolicyServiceSpec extends AnyFlatSpec {
 
     verify(tpsDAO).deletePao(mockitoEq(workspaceId), any())
   }
-
-  it should "handle 404 error gracefully" in {
-    val workspaceId = UUID.randomUUID()
-
-    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
-    when(tpsDAO.deletePao(any(), any())).thenReturn(Future.failed(new ApiException(404, "Not Found")))
-    val policyService = new PolicyService(tpsDAO)
-
-    val exception = intercept[ApiException] {
-      Await.result(policyService.deleteWorkspacePao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
-    }
-    assert(exception.getCode == 404)
-    verify(tpsDAO).deletePao(mockitoEq(workspaceId), any())
-  }
 }

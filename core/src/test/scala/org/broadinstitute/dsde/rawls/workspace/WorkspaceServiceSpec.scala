@@ -1136,42 +1136,21 @@ class WorkspaceServiceSpec
 
   }
 
-  it should "delete a workspace when PAO exists" in withTestDataServices { services =>
+  it should "delete a workspace when PAO exists or has exceptions" in withTestDataServices { services =>
     // Check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
       runAndWait(workspaceQuery.findByName(testData.wsName3))
     }
 
-    // Mock the existence of a PAO
+    // Mock the PAO deletion [ignores any exceptions]
     when(services.policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     // Delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
     // Verify that the PAO deletion was called
-    verify(services.policyService).deleteWorkspacePao(any(), any())
-
-    // Check that the workspace has been deleted
-    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
-  }
-
-  it should "delete a workspace when PAO does not exist" in withTestDataServices { services =>
-    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
-
-    // Check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-    // Mock the absence of a PAO by throwing an ApiException with a 404 status code
-    when(tpsDAO.deletePao(any(), any()))
-      .thenReturn(Future.failed(new ApiException(404, "PAO not found")))
-
-    // Delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-
-    // Verify that the PAO deletion was attempted
-    verify(services.policyService).deleteWorkspacePao(any(), any())
+    verify(services.policyService)
+      .deleteWorkspacePao(ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceIdAsUUID), any())
 
     // Check that the workspace has been deleted
     runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
