@@ -310,6 +310,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
+      // Note: Usage of 'useBatchAsDefaultBackend' and 'highSecurityNetworkCromwellBackend' will be removed as part of
+      // https://broadworkbench.atlassian.net/browse/AN-518 when GCP Batch becomes the default backend.
       useCromwellGcpBatchBackend: Boolean = currentSettings
         .collectFirst { case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled }
         .getOrElse(useBatchAsDefaultBackend)
