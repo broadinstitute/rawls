@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.policy
 
-import bio.terra.policy.client.ApiException
 import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
@@ -19,6 +18,7 @@ import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
+import org.scalatest.matchers.should.Matchers._
 
 import java.util.UUID
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -145,5 +145,16 @@ class PolicyServiceSpec extends AnyFlatSpec {
     Await.result(policyService.deleteWorkspacePao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
 
     verify(tpsDAO).deletePao(mockitoEq(workspaceId), any())
+  }
+
+  it should "not throw an exception if TpsDAO.deletePao throws an exception" in {
+    val workspaceId = UUID.randomUUID()
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.deletePao(any(), any())).thenReturn(Future.failed(new RuntimeException("Test exception")))
+    val policyService = new PolicyService(tpsDAO)
+
+    noException should be thrownBy
+      Await.result(policyService.deleteWorkspacePao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
   }
 }
