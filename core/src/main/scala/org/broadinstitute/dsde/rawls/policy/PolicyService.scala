@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.policy
 
-import bio.terra.policy.client.ApiException
 import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
@@ -67,13 +66,8 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
     tpsDAO.getPao(objectId, ctx)
 
   def deleteWorkspacePao(workspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] =
-    Future {
-      try
-        tpsDAO.deletePao(workspaceId, ctx)
-      catch {
-        case ex: ApiException =>
-          logger.error(s"ApiException occurred while deleting PAO: ${ex.getMessage}", ex)
-        // Do not rethrow the exception, effectively ignoring it
-      }
+    tpsDAO.deletePao(workspaceId, ctx).recover { case ex: Throwable =>
+      logger.error(s"Exception occurred while deleting PAO: ${ex.getMessage}", ex)
+    // Ignore any exception
     }
 }
