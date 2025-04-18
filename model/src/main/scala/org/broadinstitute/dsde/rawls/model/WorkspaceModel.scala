@@ -114,9 +114,9 @@ object AttributeName {
   val sysNamespace = "sys"
   val tdrNamespace = "tdr"
 
-  // removed library from the set because these attributes should no longer be set with updateWorkspace
   val validNamespaces: Set[String] = Set(
     AttributeName.defaultNamespace,
+    AttributeName.libraryNamespace,
     AttributeName.tagsNamespace,
     AttributeName.pfbNamespace,
     AttributeName.importNamespace,

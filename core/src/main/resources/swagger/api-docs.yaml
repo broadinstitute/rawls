@@ -907,45 +907,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-  /api/admin/user/role/curator/{userEmail}:
-    put:
-      tags:
-        - admin
-      summary: Add a library curator
-      description: adds a user to the list of curators
-      operationId: adminAddCurator
-      parameters:
-        - name: userEmail
-          in: path
-          description: email of user
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: Successful Request
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-    delete:
-      tags:
-        - admin
-      summary: Remove a library curator
-      description: removes a user from the list of curators
-      operationId: adminRemoveCurator
-      parameters:
-        - name: userEmail
-          in: path
-          description: email of user
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: Successful Request
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/workspaces:
     get:
       tags:
@@ -3300,68 +3261,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/catalog:
-    get:
-      tags:
-        - workspaces
-      summary: Get catalog permissions
-      description: Returns workspace catalog permissions for users and groups with
-        the permission for the workspace
-      operationId: getCatalog
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WorkspaceCatalog'
-        404:
-          description: Workspace not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-    patch:
-      tags:
-        - workspaces
-      summary: Update catalog permission
-      description: Edit catalog permissions for a workspace
-      operationId: updateCatalog
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      requestBody:
-        description: Series of Catalog updates for workspace
-        content:
-          'application/json':
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/WorkspaceCatalog'
-        required: true
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/WorkspaceCatalogUpdateResponseList'
-        404:
-          description: Workspace, user or group not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-      x-codegen-request-body-name: catalogUpdates
   /api/workspaces:
     get:
       tags:
@@ -3798,22 +3697,6 @@ paths:
           content: {}
         404:
           description: User is not an admin
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-  /api/user/role/curator:
-    get:
-      tags:
-        - users
-      summary: Query to see if you're a library curator
-      description: gets the curator status of a user
-      operationId: isCurator
-      responses:
-        200:
-          description: User is a curator
-          content: {}
-        404:
-          description: User is not a curator
           content: {}
         500:
           $ref: '#/components/responses/RawlsInternalError'
@@ -6021,51 +5904,6 @@ components:
         instructions:
           type: string
           description: The instructions for applying to the Group
-      description: ""
-    WorkspaceCatalog:
-      required:
-        - catalog
-        - email
-      type: object
-      properties:
-        email:
-          type: string
-          description: email of the user or group whose permissions will be changed
-        catalog:
-          type: boolean
-          description: Set to true if you want this user to be able to perform library
-            related operations on the workspace
-      description: ""
-    WorkspaceCatalogResponse:
-      required:
-        - catalog
-        - subjectId
-      type: object
-      properties:
-        subjectId:
-          type: string
-          description: subject Id of the user or group whose permissions will be changed
-        catalog:
-          type: boolean
-          description: Set to true if you want this user to be able to perform library
-            related operations on the workspace
-      description: ""
-    WorkspaceCatalogUpdateResponseList:
-      required:
-        - emailsNotFound
-        - usersUpdated
-      type: object
-      properties:
-        usersUpdated:
-          type: array
-          description: the users or groups who were updated
-          items:
-            $ref: '#/components/schemas/WorkspaceCatalogResponse'
-        emailsNotFound:
-          type: array
-          description: the emails of users or groups who were not found
-          items:
-            type: string
       description: ""
     WorkspaceAccessEntry:
       required:

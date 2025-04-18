@@ -361,15 +361,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   override def isAdmin(userEmail: String): Future[Boolean] =
     hasGoogleRole(adminGroupName, userEmail)
 
-  override def isLibraryCurator(userEmail: String): Future[Boolean] =
-    hasGoogleRole(curatorGroupName, userEmail)
-
-  override def addLibraryCurator(userEmail: String): Future[Unit] =
-    addEmailToGoogleGroup(curatorGroupName, userEmail)
-
-  override def removeLibraryCurator(userEmail: String): Future[Unit] =
-    removeEmailFromGoogleGroup(curatorGroupName, userEmail)
-
   override def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Groups
     val query = getGroupDirectory.members.get(roleGroupName, userEmail)
@@ -1201,7 +1192,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
-  def curatorGroupName = s"${groupsPrefix}-CURATORS@${appsDomain}"
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
 
   private def buildCredentialFromAccessToken(accessToken: String, credentialEmail: String): GoogleCredential =

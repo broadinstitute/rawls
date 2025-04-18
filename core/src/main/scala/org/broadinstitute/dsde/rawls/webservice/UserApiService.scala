@@ -67,16 +67,6 @@ trait UserApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("user" / "role" / "curator") {
-          get {
-            complete {
-              userServiceConstructor(ctx).isLibraryCurator(userInfo.userEmail).map {
-                case true  => StatusCodes.OK
-                case false => StatusCodes.NotFound
-              }
-            }
-          }
-        } ~
         path("user" / "billingAccounts") {
           get {
             parameters("firecloudHasAccess".as[Boolean].optional) { firecloudHasAccess =>
