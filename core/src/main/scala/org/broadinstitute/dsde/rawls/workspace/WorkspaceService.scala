@@ -824,72 +824,11 @@ class WorkspaceService(
       workspaceACL <- workspaceAclManager.getAcl(workspace.workspaceIdAsUUID, ctx)
     } yield workspaceACL
 
-  def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]] =
-    loadV2WorkspaceId(workspaceName).flatMap { workspaceId =>
-      samDAO
-        .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, ctx)
-        .map(members => members.memberEmails.map(email => WorkspaceCatalog(email.value, true)))
-    }
-
   private def loadV2WorkspaceId(workspaceName: WorkspaceName): Future[String] =
     workspaceRepository.getWorkspaceId(workspaceName).map {
       case None =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "unable to load workspace"))
       case Some(id) => id.toString
-    }
-
-  def updateCatalog(workspaceName: WorkspaceName,
-                    input: Seq[WorkspaceCatalog]
-  ): Future[WorkspaceCatalogUpdateResponseList] =
-    for {
-      workspaceId <- loadV2WorkspaceId(workspaceName)
-      results <- Future.traverse(input) {
-        case WorkspaceCatalog(email, true) =>
-          samDAO
-            .addUserToPolicy(
-              SamResourceTypeNames.workspace,
-              workspaceId,
-              SamWorkspacePolicyNames.canCatalog,
-              email,
-              ctx
-            )
-            .map { _ =>
-              Success(Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true)))
-            }
-            .recover {
-              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-                Success(Left(email))
-              case t: Throwable => Failure(t)
-            }
-        case WorkspaceCatalog(email, false) =>
-          samDAO
-            .removeUserFromPolicy(
-              SamResourceTypeNames.workspace,
-              workspaceId,
-              SamWorkspacePolicyNames.canCatalog,
-              email,
-              ctx
-            )
-            .map { _ =>
-              Success(Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false)))
-            }
-            .recover {
-              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-                Success(Left(email))
-              case t: Throwable => Failure(t)
-            }
-      }
-    } yield {
-      val failures = results.collect { case Failure(regrets) =>
-        ErrorReport(regrets)
-      }
-      if (failures.nonEmpty) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport("Error setting catalog permissions", failures))
-      } else {
-        WorkspaceCatalogUpdateResponseList(results.collect { case Success(Right(wc)) => wc },
-                                           results.collect { case Success(Left(email)) => email }
-        )
-      }
     }
 
   /**
