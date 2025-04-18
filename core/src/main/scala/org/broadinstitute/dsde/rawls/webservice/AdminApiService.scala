@@ -8,9 +8,8 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.billing.BillingAdminService
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -88,39 +87,6 @@ trait AdminApiService extends UserInfoDirectives {
           get {
             complete {
               submissionsServiceConstructor(ctx).adminWorkflowQueueStatusByUser
-            }
-          }
-        } ~
-        path("admin" / "workspaces") {
-          get {
-            parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) {
-              (nameOption, stringOption, numberOption, booleanOption) =>
-                val resultFuture = nameOption match {
-                  case None => workspaceAdminServiceConstructor(ctx).listAllWorkspaces()
-                  case Some(attributeName) =>
-                    val name = AttributeName.fromDelimitedName(attributeName)
-                    (stringOption, numberOption, booleanOption) match {
-                      case (Some(string), None, None) =>
-                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(name,
-                                                                                               AttributeString(string)
-                        )
-                      case (None, Some(number), None) =>
-                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(
-                          name,
-                          AttributeNumber(number.toDouble)
-                        )
-                      case (None, None, Some(boolean)) =>
-                        workspaceAdminServiceConstructor(ctx).adminListWorkspacesWithAttribute(
-                          name,
-                          AttributeBoolean(boolean.toBoolean)
-                        )
-                      case _ =>
-                        throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
-                    }
-                }
-                complete {
-                  resultFuture
-                }
             }
           }
         } ~

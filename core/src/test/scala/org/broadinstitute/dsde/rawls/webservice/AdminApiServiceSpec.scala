@@ -11,8 +11,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{
   ActiveSubmissionFormat,
   WorkflowQueueStatusByUserResponseFormat
 }
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectTransferFormat
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceDetailsFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeReferenceFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -142,43 +141,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes()) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
-      }
-  }
-
-  it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
-    Get(s"/admin/workspaces") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-        // TODO: why is this result returned out of order?
-        sortAndAssertWorkspaceResult(testData.allWorkspaces)(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
-      }
-  }
-
-  it should "return 200 when getting workspaces by a string attribute" in withConstantTestDataApiServices { services =>
-    Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-        assertWorkspaceResult(Seq(constantData.workspace))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
-      }
-  }
-
-  it should "return 200 when getting workspaces by a numeric attribute" in withConstantTestDataApiServices { services =>
-    Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-        assertWorkspaceResult(Seq(constantData.workspace))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
-      }
-  }
-
-  it should "return 200 when getting workspaces by a boolean attribute" in withTestDataApiServices { services =>
-    Get(s"/admin/workspaces?attributeName=library%3Apublished&valueBoolean=true") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-        assertWorkspaceResult(Seq(testData.workspacePublished))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
       }
   }
 
