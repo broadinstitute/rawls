@@ -537,6 +537,22 @@ class SubmissionsService(
         ps.failureMode,
         ps.header
       )
+      _ <-
+        if (!submissionRequest.preserveSet) { // This has to be done after saving the submission so it can pull the data from the entity first
+          val setToDelete = AttributeEntityReference(submissionRequest.entityType.get, submissionRequest.entityName.get)
+
+          // TODO is there a way to avoid fetching the method config again?  another way to get an entityProvider?
+          for {
+            methodConfig <- dataSource.inTransaction { dataAccess =>
+              dataAccess.methodConfigurationQuery.get(ps.workspace,
+                                                      submissionRequest.methodConfigurationNamespace,
+                                                      submissionRequest.methodConfigurationName
+              )
+            }
+            entityProvider <- getEntityProviderForMethodConfig(ps.workspace, methodConfig.get)
+            _ <- entityProvider.deleteEntities(Seq(setToDelete), ctx)
+          } yield ()
+        } else Future.successful(())
     } yield SubmissionReport(
       submissionRequest,
       submission.submissionId,
@@ -622,11 +638,6 @@ class SubmissionsService(
         workspaceExpressionResults
       )
       submissionPath <- submissionRootPath(workspaceContext, submissionId)
-      _ <-
-        if (!submissionRequest.preserveSet) {
-          val setToDelete = AttributeEntityReference(submissionRequest.entityType.get, submissionRequest.entityName.get)
-          entityProvider.deleteEntities(Seq(setToDelete), ctx)
-        } else Future.successful(())
     } yield PreparedSubmission(
       workspaceContext,
       submissionId,
