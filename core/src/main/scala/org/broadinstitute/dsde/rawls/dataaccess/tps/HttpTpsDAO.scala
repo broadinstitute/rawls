@@ -65,12 +65,7 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
 
   def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
-      val tpsApi = getTpsApi(ctx)
-      try
-        Option(tpsApi.deletePao(objectId))
-      catch {
-        case ex: ApiException if ex.getCode == 404 => // Ignore if PAO does not exist
-      }
+      getTpsApi(ctx).deletePao(objectId)
     }
   }
 }
