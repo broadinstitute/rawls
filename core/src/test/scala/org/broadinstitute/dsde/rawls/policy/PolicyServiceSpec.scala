@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.policy
 
+import bio.terra.policy.client.ApiException
 import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
@@ -151,7 +152,7 @@ class PolicyServiceSpec extends AnyFlatSpec {
     val workspaceId = UUID.randomUUID()
 
     val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
-    when(tpsDAO.deletePao(any(), any())).thenReturn(Future.failed(new RuntimeException("Test exception")))
+    when(tpsDAO.deletePao(any(), any())).thenReturn(Future.failed(new ApiException("Test exception")))
     val policyService = new PolicyService(tpsDAO)
 
     noException should be thrownBy
