@@ -14,7 +14,6 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.util.Try
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
@@ -61,6 +60,12 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
       catch {
         case ex: ApiException if ex.getCode == 404 => None
       }
+    }
+  }
+
+  def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
+    blocking {
+      getTpsApi(ctx).deletePao(objectId)
     }
   }
 }

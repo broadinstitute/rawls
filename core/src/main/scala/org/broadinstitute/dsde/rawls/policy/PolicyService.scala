@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.policy
 
+import bio.terra.policy.client.ApiException
 import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
@@ -11,6 +12,7 @@ import bio.terra.policy.model.{
   TpsPolicyPair,
   TpsUpdateMode
 }
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
@@ -19,7 +21,7 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
-class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
+class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends LazyLogging {
   def createWorkspacePao(workspaceId: UUID,
                          workspaceRequest: WorkspaceRequest,
                          ctx: RawlsRequestContext
@@ -63,4 +65,10 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) {
 
   def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] =
     tpsDAO.getPao(objectId, ctx)
+
+  def deleteWorkspacePao(workspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] =
+    tpsDAO.deletePao(workspaceId, ctx).recover { case ex: ApiException =>
+      logger.error(s"Exception occurred while deleting PAO: ${ex.getMessage}", ex)
+    // Ignore any exception
+    }
 }
