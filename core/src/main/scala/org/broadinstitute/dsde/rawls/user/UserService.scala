@@ -227,31 +227,6 @@ class UserService(
       case Success(b) => b
     }
 
-  def isLibraryCurator(userEmail: RawlsUserEmail): Future[Boolean] =
-    toFutureTry(gcsDAO.isLibraryCurator(userEmail.value)) map {
-      case Failure(t) =>
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
-      case Success(b) => b
-    }
-
-  def adminAddLibraryCurator(userEmail: RawlsUserEmail): Future[Unit] =
-    asFCAdmin {
-      toFutureTry(gcsDAO.addLibraryCurator(userEmail.value)) map {
-        case Failure(t) =>
-          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
-        case Success(result) => result
-      }
-    }
-
-  def adminRemoveLibraryCurator(userEmail: RawlsUserEmail): Future[Unit] =
-    asFCAdmin {
-      toFutureTry(gcsDAO.removeLibraryCurator(userEmail.value)) map {
-        case Failure(t) =>
-          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
-        case Success(result) => result
-      }
-    }
-
   def listBillingAccounts(firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] =
     gcsDAO.listBillingAccounts(ctx.userInfo, firecloudHasAccess)
 

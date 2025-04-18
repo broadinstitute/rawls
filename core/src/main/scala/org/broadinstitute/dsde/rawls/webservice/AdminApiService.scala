@@ -91,20 +91,6 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "user" / "role" / "curator" / Segment) { userEmail =>
-          put {
-            complete {
-              userServiceConstructor(ctx).adminAddLibraryCurator(RawlsUserEmail(userEmail)).map(_ => StatusCodes.OK)
-            }
-          } ~
-            delete {
-              complete {
-                userServiceConstructor(ctx)
-                  .adminRemoveLibraryCurator(RawlsUserEmail(userEmail))
-                  .map(_ => StatusCodes.OK)
-              }
-            }
-        } ~
         path("admin" / "workspaces") {
           get {
             parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) {

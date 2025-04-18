@@ -273,120 +273,90 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   }
 
-  it should "not allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices {
+  it should "allow library attributes in outputs for create method configuration" in withTestDataApiServices {
     services =>
-      val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"),
-                       "lib_ws_in" -> AttributeString("workspace.library:foo")
-      )
+      val inputs =
+        Map("lib_ent_in" -> AttributeString("this.library:foo"),
+            "lib_ws_in" -> AttributeString("workspace.library:foo")
+        )
       val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),
                         "lib_ws_out" -> AttributeString("workspace.library:bar")
       )
+
       val newMethodConfig = MethodConfiguration("dsde",
                                                 "testConfigNew",
                                                 Some("samples"),
                                                 None,
                                                 inputs,
                                                 outputs,
-                                                AgoraMethod(testData.wsName.namespace, "method-a", 1)
+                                                AgoraMethod("dsde", "three_step", 1)
       )
 
-      val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
       val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
-
-      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
-        }
-  }
-
-  it should "allow library attributes in input for create method configuration by non-curator" in withTestDataApiServices {
-    services =>
-      val inputs = Map(
-        "goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"),
-        "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo")
-      )
-      val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),
-                        "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar")
-      )
-
-      val newMethodConfig = MethodConfiguration("dsde",
-                                                "good_and_bad2",
-                                                Some("samples"),
-                                                None,
-                                                inputs,
-                                                outputs,
-                                                AgoraMethod("dsde", "good_and_bad", 1)
-      )
-
-      val expectedSuccessInputs = Set("goodAndBad.goodAndBadTask.good_in", "goodAndBad.goodAndBadTask.bad_in")
-      val expectedSuccessOutputs = Set("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.bad_out")
-
-      revokeCuratorRole(services)
-
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(
-            ValidatedMethodConfiguration(newMethodConfig,
-                                         expectedSuccessInputs,
-                                         Map(),
-                                         Set(),
-                                         Set(),
-                                         expectedSuccessOutputs,
-                                         Map()
-            )
-          ) {
-            responseAs[ValidatedMethodConfiguration]
-          }
-          // all inputs and outputs are saved, regardless of parsing errors
-          for ((key, value) <- inputs) assertResult(Option(value)) {
-            runAndWait(
-              methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)
-            ).get.inputs.get(key)
-          }
-          for ((key, value) <- outputs) assertResult(Option(value)) {
-            runAndWait(
-              methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)
-            ).get.outputs.get(key)
-          }
+          val validated = responseAs[ValidatedMethodConfiguration]
+          assertResult(newMethodConfig)(validated.methodConfiguration)
+          assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         }
+
   }
 
-  it should "not allow library attributes in outputs for create method configuration by non-curator" in withTestDataApiServices {
-    services =>
-      val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"),
-                       "lib_ws_in" -> AttributeString("workspace.library:foo")
-      )
-      val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),
-                        "lib_ws_out" -> AttributeString("workspace.library:bar")
-      )
-      val newMethodConfig = MethodConfiguration("dsde",
-                                                "testConfigNew",
-                                                Some("samples"),
-                                                None,
-                                                inputs,
-                                                outputs,
-                                                AgoraMethod(testData.wsName.namespace, "method-a", 1)
-      )
+  it should "allow library attributes in input for create method configuration" in withTestDataApiServices { services =>
+    val inputs = Map(
+      "goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"),
+      "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo")
+    )
+    val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),
+                      "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar")
+    )
 
-      revokeCuratorRole(services)
+    val newMethodConfig = MethodConfiguration("dsde",
+                                              "good_and_bad2",
+                                              Some("samples"),
+                                              None,
+                                              inputs,
+                                              outputs,
+                                              AgoraMethod("dsde", "good_and_bad", 1)
+    )
 
-      val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
-      val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
+    val expectedSuccessInputs = Set("goodAndBad.goodAndBadTask.good_in", "goodAndBad.goodAndBadTask.bad_in")
+    val expectedSuccessOutputs = Set("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.bad_out")
 
-      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
         }
+        assertResult(
+          ValidatedMethodConfiguration(newMethodConfig,
+                                       expectedSuccessInputs,
+                                       Map(),
+                                       Set(),
+                                       Set(),
+                                       expectedSuccessOutputs,
+                                       Map()
+          )
+        ) {
+          responseAs[ValidatedMethodConfiguration]
+        }
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- inputs) assertResult(Option(value)) {
+          runAndWait(
+            methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)
+          ).get.inputs.get(key)
+        }
+        for ((key, value) <- outputs) assertResult(Option(value)) {
+          runAndWait(
+            methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)
+          ).get.outputs.get(key)
+        }
+      }
   }
 
   // DSDEEPB-1433
@@ -831,57 +801,32 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   it should "validate attribute syntax in post method configuration" in
     checkValidAttributeSyntax(Post)
 
-  def checkNoLibraryAttributesInOutputsByCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val newInputs = Map("good_in" -> AttributeString("this.foo"))
-    val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
-    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
+  def checkLibraryAttributesInOutputs(httpMethod: RequestBuilder): Unit = withTestDataApiServices { services =>
+    val newOutputs = Map("good_out" -> AttributeString("this.library:foo"))
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(outputs = newOutputs)
 
-    val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map.empty[String, String]
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map.empty[String, String]
 
     httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes()) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.OK) {
           status
         }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(modifiedMethodConfig)(validated.methodConfiguration)
+
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
       }
   }
 
-  it should "not allow library attributes in outputs for put method configuration by curator" in
-    checkNoLibraryAttributesInOutputsByCurator(Put)
+  it should "allow library attributes in outputs for put method configuration" in
+    checkLibraryAttributesInOutputs(Put)
 
-  it should "not allow library attributes in outputs for post method configuration by curator" in
-    checkNoLibraryAttributesInOutputsByCurator(Post)
-
-  def checkNoLibraryAttributesInOutputsByNonCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val newInputs = Map("good_in" -> AttributeString("this.foo"))
-    val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
-    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
-
-    revokeCuratorRole(services)
-
-    val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map.empty[String, String]
-    val expectedSuccessOutputs = Seq("good_out")
-    val expectedFailureOutputs = Map.empty[String, String]
-
-    Put(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes()) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
-  it should "not allow library attributes in outputs for put method configuration by non-curator" in
-    checkNoLibraryAttributesInOutputsByNonCurator(Put)
-
-  it should "not allow library attributes in outputs for post method configuration by non-curator" in
-    checkNoLibraryAttributesInOutputsByNonCurator(Post)
+  it should "allow library attributes in outputs for post method configuration" in
+    checkLibraryAttributesInOutputs(Post)
 
   it should "return 400 on put method configuration if the location differs between URI and JSON body" in withTestDataApiServices {
     services =>
@@ -1084,28 +1029,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "not allow copy method configuration with library attributes in outputs by curator" in withTestDataApiServices {
-    services =>
-      Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
+  it should "allow copy method configuration with library attributes in outputs" in withTestDataApiServices { services =>
+    Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
+      sealRoute(services.methodConfigRoutes()) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
         }
-  }
-
-  it should "allow copy method configuration with library attributes in outputs by non-curator" in withTestDataApiServices {
-    services =>
-      revokeCuratorRole(services)
-
-      Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
-        }
+      }
   }
 
   val copyToMethodRepo = "/methodconfigs/copyToMethodRepo"
@@ -1234,25 +1165,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "not allow copy method configuration from repo with library attributes in outputs by curator" in withTestDataApiServices {
+  it should "allow copy method configuration from repo with library attributes in outputs" in withTestDataApiServices {
     services =>
       Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
         sealRoute(services.methodConfigRoutes()) ~>
         check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
-        }
-  }
-
-  it should "not allow copy method configuration from repo with library attributes in outputs by non-curator" in withTestDataApiServices {
-    services =>
-      revokeCuratorRole(services)
-
-      Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
+          assertResult(StatusCodes.Created) {
             status
           }
         }

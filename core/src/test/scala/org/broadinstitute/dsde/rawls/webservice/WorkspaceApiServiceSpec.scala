@@ -496,12 +496,12 @@ class WorkspaceApiServiceSpec
     val update: Seq[AttributeUpdateOperation] = Seq(
       AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation
     )
-    when(workspaceService.updateLibraryAttributes(workspaceName, update)).thenReturn(Future.successful(details))
+    when(workspaceService.updateWorkspace(workspaceName, update)).thenReturn(Future.successful(details))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
     )
-    Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/library", update.toJson) ~>
+    Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}", update.toJson) ~>
       service.testRoutes ~>
       check {
         status shouldBe StatusCodes.OK
@@ -509,7 +509,7 @@ class WorkspaceApiServiceSpec
         resp shouldBe details
       }
 
-    verify(workspaceService).updateLibraryAttributes(workspaceName, update)
+    verify(workspaceService).updateWorkspace(workspaceName, update)
   }
 
   it should "get the workspace catalog" in {

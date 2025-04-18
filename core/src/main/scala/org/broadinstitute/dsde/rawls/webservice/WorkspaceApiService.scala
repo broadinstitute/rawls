@@ -176,19 +176,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
               }
             }
         } ~
-        path("workspaces" / Segment / Segment / "library") { (workspaceNamespace, workspaceName) =>
-          patch {
-            entity(as[Array[AttributeUpdateOperation]]) { operations =>
-              complete {
-                workspaceServiceConstructor(ctx).updateLibraryAttributes(WorkspaceName(workspaceNamespace,
-                                                                                       workspaceName
-                                                                         ),
-                                                                         operations
-                )
-              }
-            }
-          }
-        } ~
         path("workspaces" / Segment / Segment / "catalog") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
