@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.client.{ApiClient, ApiException}
-import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoSourceRequest}
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest}
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -49,6 +49,17 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
   def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
     blocking {
       getTpsApi(ctx).mergePao(request, objectId)
+    }
+  }
+
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] = Future {
+    blocking {
+      val tpsApi = getTpsApi(ctx)
+      try
+        Option(tpsApi.getPao(objectId, false))
+      catch {
+        case ex: ApiException if ex.getCode == 404 => None
+      }
     }
   }
 

@@ -223,7 +223,7 @@ class WorkspaceService(
               newWorkspace <- createNewWorkspaceContext(workspaceRequest,
                                                         billingProject,
                                                         sourceBucketName = None,
-                                                        sourceWorkspaceId = None,
+                                                        sourceWorkspaceIdOpt = None,
                                                         dataAccess,
                                                         s
               )
@@ -744,7 +744,7 @@ class WorkspaceService(
                 ),
                 billingProject,
                 sourceBucketNameOption,
-                sourceWorkspaceId = Some(sourceWorkspaceContext.workspaceIdAsUUID),
+                sourceWorkspaceIdOpt = Some(sourceWorkspaceContext.workspaceIdAsUUID),
                 dataAccess,
                 s
               )
@@ -1959,7 +1959,7 @@ class WorkspaceService(
   private def createNewWorkspaceContext(workspaceRequest: WorkspaceRequest,
                                         billingProject: RawlsBillingProject,
                                         sourceBucketName: Option[String],
-                                        sourceWorkspaceId: Option[UUID],
+                                        sourceWorkspaceIdOpt: Option[UUID],
                                         dataAccess: DataAccess,
                                         parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
@@ -2029,11 +2029,18 @@ class WorkspaceService(
         )
       }
 
+      sourceWorkspacePaoOpt <-
+        if (sourceWorkspaceIdOpt.isDefined) {
+          traceDBIOWithParent("getSourcePao", parentContext) { span =>
+            DBIO.from(policyService.getPao(sourceWorkspaceIdOpt.get, span))
+          }
+        } else DBIO.successful(None)
+
       _ <-
-        if (sourceWorkspaceId.isDefined) {
+        if (sourceWorkspacePaoOpt.isDefined) {
           traceDBIOWithParent("mergeSourcePaoIntoDestPao", parentContext) { span =>
             DBIO.from(
-              policyService.mergeWorkspacePao(sourceWorkspaceId.get, UUID.fromString(workspaceId), span)
+              policyService.mergeWorkspacePao(sourceWorkspaceIdOpt.get, UUID.fromString(workspaceId), span)
             )
           }
         } else DBIO.successful(())

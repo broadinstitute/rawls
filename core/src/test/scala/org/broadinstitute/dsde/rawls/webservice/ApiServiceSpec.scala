@@ -9,6 +9,7 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActors, TestKitBase}
+import bio.terra.policy.model.TpsPaoGetResult
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
@@ -205,6 +206,7 @@ trait ApiServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
     when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(

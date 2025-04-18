@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.policy.model.TpsPaoGetResult
 import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
@@ -132,6 +133,7 @@ class FastPassMonitorSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
     when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     val notificationTopic = "test-notification-topic"

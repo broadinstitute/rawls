@@ -4,6 +4,7 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.policy.model.TpsPaoGetResult
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{
@@ -164,6 +165,7 @@ class WorkspaceServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
+    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
     when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     val notificationTopic = "test-notification-topic"
@@ -1995,6 +1997,30 @@ class WorkspaceServiceSpec
                                                        ArgumentMatchers.eq(UUID.fromString(newlyClonedWs.workspaceId)),
                                                        any()
       )
+  }
+
+  it should "still clone the workspace if the source workspace doesn't have a PAO" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest(baseWorkspace.namespace, "clone", Map.empty)
+    when(services.policyService.getPao(any(), any())).thenReturn(Future(None))
+
+    val newlyClonedWs =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    verify(services.policyService).createWorkspacePao(ArgumentMatchers.eq(UUID.fromString(newlyClonedWs.workspaceId)),
+                                                      any(),
+                                                      any()
+    )
+    verify(services.policyService, never).mergeWorkspacePao(
+      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
+      ArgumentMatchers.eq(UUID.fromString(newlyClonedWs.workspaceId)),
+      any()
+    )
   }
 
   it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
