@@ -765,6 +765,95 @@ class SubmissionSpec(_system: ActorSystem)
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
   }
 
+  it should "keep entity set if preserveSet is not specified" in withSubmissionsService { submissionsService =>
+    val sset = Entity(
+      "testset6",
+      "SampleSet",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("Sample", "sample1"),
+            AttributeEntityReference("Sample", "sample2"),
+            AttributeEntityReference("Sample", "sample3"),
+            AttributeEntityReference("Sample", "sample4"),
+            AttributeEntityReference("Sample", "sample5"),
+            AttributeEntityReference("Sample", "sample6")
+          )
+        )
+      )
+    )
+
+    runAndWait(entityQuery.save(testData.workspace, sset))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = "dsde",
+      methodConfigurationName = "GoodMethodConfig",
+      entityType = Option(sset.entityType),
+      entityName = Option(sset.name),
+      expression = Option("this.samples"),
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+    val newSubmissionReport =
+      Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+    assert(newSubmissionReport.workflows.size == 6)
+
+    checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+    val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+    assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+    assertResult(Some(sset)) {
+      runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+    }
+  }
+
+  it should "delete entity set if preserveSet is set to false" in withSubmissionsService { submissionsService =>
+    val sset = Entity(
+      "testset6",
+      "SampleSet",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("Sample", "sample1"),
+            AttributeEntityReference("Sample", "sample2"),
+            AttributeEntityReference("Sample", "sample3"),
+            AttributeEntityReference("Sample", "sample4"),
+            AttributeEntityReference("Sample", "sample5"),
+            AttributeEntityReference("Sample", "sample6")
+          )
+        )
+      )
+    )
+
+    runAndWait(entityQuery.save(testData.workspace, sset))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = "dsde",
+      methodConfigurationName = "GoodMethodConfig",
+      entityType = Option(sset.entityType),
+      entityName = Option(sset.name),
+      expression = Option("this.samples"),
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false,
+      preserveSet = false
+    )
+    val newSubmissionReport =
+      Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+    assert(newSubmissionReport.workflows.size == 6)
+
+    checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+    val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+    assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+    assertResult(None) {
+      runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+    }
+  }
+
   it should "return a successful Submission when given an wdl struct entity expression that evaluates to a set of entities" in withSubmissionsService {
     submissionsService =>
       val sample1 = Entity(
