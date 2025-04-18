@@ -159,11 +159,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   )(implicit ec: ExecutionContext): Future[Option[StorageObject]] = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("owner-access")
-  val curatorList = scala.collection.mutable.Set("owner-access")
 
   val googleGroups = TrieMap(
-    "fc-ADMINS@dev.test.firecloud.org" -> adminList,
-    "fc-CURATORS@dev.test.firecloud.org" -> curatorList
+    "fc-ADMINS@dev.test.firecloud.org" -> adminList
   )
 
   override def isAdmin(userEmail: String): Future[Boolean] =
@@ -175,22 +173,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
       Future.successful(())
     } else Future.failed(new RawlsException("Unable to remove user"))
 
-  override def isLibraryCurator(userEmail: String): Future[Boolean] =
-    hasGoogleRole("fc-CURATORS@dev.test.firecloud.org", userEmail)
-
   override def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean] =
     Future.successful(googleGroups(roleGroupName).contains(userEmail))
-
-  override def addLibraryCurator(userEmail: String): Future[Unit] = {
-    curatorList += userEmail
-    Future.successful(())
-  }
-
-  override def removeLibraryCurator(userEmail: String): Future[Unit] =
-    if (curatorList.contains(userEmail)) {
-      curatorList -= userEmail
-      Future.successful(())
-    } else Future.failed(new RawlsException("Unable to remove user"))
 
   def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
 
@@ -213,7 +197,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 
   def adminGroupName: String = s"$groupsPrefix-ADMINS@dev.firecloud.org"
-  def curatorGroupName: String = s"$groupsPrefix-CURATORS@dev.firecloud.org"
 
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(
     UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000"))

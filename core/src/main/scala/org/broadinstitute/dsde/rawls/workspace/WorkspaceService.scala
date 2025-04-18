@@ -42,7 +42,6 @@ import org.broadinstitute.dsde.rawls.util.{
   AttributeUpdateOperationException,
   BillingProjectSupport,
   JsonFilterUtils,
-  LibraryPermissionsSupport,
   UserUtils,
   UserWiths,
   WorkspaceSupport
@@ -177,7 +176,6 @@ class WorkspaceService(
   policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
-    with LibraryPermissionsSupport
     with UserWiths
     with UserUtils
     with RawlsInstrumented
@@ -606,26 +604,6 @@ class WorkspaceService(
     } yield ()
   }
 
-  def updateLibraryAttributes(workspaceName: WorkspaceName,
-                              operations: Seq[AttributeUpdateOperation]
-  ): Future[WorkspaceDetails] =
-    withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
-      for {
-        isCurator <- gcsDAO.isLibraryCurator(ctx.userInfo.userEmail.value) recoverWith { case t =>
-          throw new RawlsException("Unable to query for library curator status.", t)
-        }
-        workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
-          withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
-            dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-              dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
-              TransactionIsolation.ReadCommitted
-            ) // read committed to avoid deadlocks on workspace attr scratch table
-          }
-        }
-        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId)
-      } yield WorkspaceDetails(workspace, authDomain)
-    }
-
   def updateWorkspace(workspaceName: WorkspaceName,
                       operations: Seq[AttributeUpdateOperation]
   ): Future[WorkspaceDetails] =
@@ -688,12 +666,11 @@ class WorkspaceService(
         StatusCodes.BadRequest,
         """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
       )
-    val (libraryAttributeNames, workspaceAttributeNames) =
-      destWorkspaceRequest.attributes.keys.partition(_.namespace == AttributeName.libraryNamespace)
+    val workspaceAttributeNames =
+      destWorkspaceRequest.attributes.keys
 
     for {
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
-      _ <- withLibraryAttributeNamespaceCheck(libraryAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       _ <- failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)
       // if bucket location is specified, then we just use that for the destination workspace's bucket location.
@@ -2210,19 +2187,6 @@ class WorkspaceService(
         gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
       case (None, None) => Future(Some(config.defaultLocation))
     }
-
-  private def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
-    val namespaces = attributeNames.map(_.namespace).toSet
-
-    // only allow library namespace
-    val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
-    if (invalidNamespaces.isEmpty) op
-    else {
-      val err =
-        ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
-    }
-  }
 
   def addAuthDomainGroups(workspaceName: WorkspaceName,
                           newAuthDomainGroups: Set[String],

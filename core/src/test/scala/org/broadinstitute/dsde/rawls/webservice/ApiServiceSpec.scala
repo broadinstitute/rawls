@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.PoisonPill
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.server._
@@ -129,32 +129,6 @@ trait ApiServiceSpec
   def httpJsonStr(str: String) = HttpEntity(ContentTypes.`application/json`, str)
   def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = httpJsonStr(obj.toJson.toString())
   val httpJsonEmpty = httpJsonStr("[]")
-
-  def revokeCuratorRole(services: ApiServices, user: RawlsUser = testData.userOwner): Unit = {
-    Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-
-    Delete(s"/admin/user/role/curator/${user.userEmail.value}") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-
-    Get("/user/role/curator") ~>
-      sealRoute(services.userRoutes()) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   trait ApiServices

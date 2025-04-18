@@ -145,29 +145,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
-    val testUser = "foo@bar.com"
-    Put(s"/admin/user/role/curator/${testUser}") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-      }
-  }
-
-  it should "return 200 when removing a library curator" in withTestDataApiServices { services =>
-    val testUser = "foo@bar.com"
-    Put(s"/admin/user/role/curator/${testUser}") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-      }
-    Delete(s"/admin/user/role/curator/${testUser}") ~>
-      sealRoute(services.adminRoutes()) ~>
-      check {
-        assertResult(StatusCodes.OK)(status)
-      }
-  }
-
   it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
     Get(s"/admin/workspaces") ~>
       sealRoute(services.adminRoutes()) ~>
