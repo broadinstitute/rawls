@@ -176,22 +176,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
               }
             }
         } ~
-        path("workspaces" / Segment / Segment / "catalog") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).getCatalog(WorkspaceName(workspaceNamespace, workspaceName))
-            }
-          } ~
-            patch {
-              entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
-                complete {
-                  workspaceServiceConstructor(ctx).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                 catalogUpdate
-                  )
-                }
-              }
-            }
-        } ~
         path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
