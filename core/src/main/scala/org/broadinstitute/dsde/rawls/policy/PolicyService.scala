@@ -64,7 +64,10 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
   }
 
   def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] =
-    tpsDAO.getPao(objectId, ctx)
+    tpsDAO.getPao(objectId, ctx).map(Option.apply).recover {
+      case ex: ApiException if ex.getCode == 404 =>
+        None
+    }
 
   def deleteWorkspacePao(workspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] =
     tpsDAO.deletePao(workspaceId, ctx).recover { case ex: ApiException =>
