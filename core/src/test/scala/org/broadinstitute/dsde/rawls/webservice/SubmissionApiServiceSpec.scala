@@ -111,7 +111,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         CromwellBackend("GCPBatch"),
         methodConfigResolver,
         new MockBardService(),
-        new WorkspaceSettingRepository(slickDataSource)
+        new WorkspaceSettingRepository(slickDataSource),
+        useBatchAsDefaultBackend = false
       )
     )
 
