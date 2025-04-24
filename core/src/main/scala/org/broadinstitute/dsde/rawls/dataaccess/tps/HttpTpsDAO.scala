@@ -63,4 +63,14 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
       getTpsApi(ctx).deletePao(objectId)
     }
   }
+   /**
+      * Unlike mergePao, linkPao works as described by the documentation. It will link the source PAO
+      * to the target PAO, meaning that future changes to the source PAO will propagate to the target
+      * PAO. Changes to the target PAO will not propagate up the link to the source PAO.
+      */
+  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
+    blocking {
+      getTpsApi(ctx).linkPao(request, objectId)
+    }
+  }
 }

@@ -124,6 +124,54 @@ trait SnapshotApiService extends UserInfoDirectives {
                   }
               }
             }
+        } ~
+        path("workspaces" / Segment / Segment / "snapshots" / "v3" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
+          post {
+            complete {
+              snapshotServiceConstructor(ctx)
+                .createSnapshotByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName), UUID.fromString(snapshotId))
+                .map(_ => StatusCodes.NoContent)
+            }
+          } ~
+            get { // todo: convert to use paos to find snapshots
+              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+              // that method provides a 400 Bad Request response and nice error message
+              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+                (offset, limit, referencedSnapshotId) =>
+                  complete {
+                    snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
+                      workspaceName
+                    ),
+                      offset,
+                      limit,
+                      referencedSnapshotId
+                    )
+                  }
+              }
+            }
+        } ~
+        path("workspaces" / Segment / "snapshots" / "v3" / Segment) { (workspaceId, snapshotId) =>
+          post {
+            complete {
+              snapshotServiceConstructor(ctx)
+                .createSnapshotByWorkspaceIdV3(workspaceId, UUID.fromString(snapshotId))
+                .map(_ => StatusCodes.NoContent)
+            }
+          } ~
+            get { // todo: convert to use paos to find snapshots
+              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+              // that method provides a 400 Bad Request response and nice error message
+              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+                (offset, limit, referencedSnapshotId) =>
+                  complete {
+                    snapshotServiceConstructor(ctx).enumerateSnapshotsById(workspaceId,
+                      offset,
+                      limit,
+                      referencedSnapshotId
+                    )
+                  }
+              }
+            }
         }
     }
 }

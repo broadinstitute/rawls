@@ -490,7 +490,9 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         workspaceManagerDAO,
         appConfigManager.conf.getString("dataRepo.terraInstanceName"),
-        dataRepoDAO
+        dataRepoDAO,
+        workspaceServiceConstructor,
+        policyService
       )
 
       val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(

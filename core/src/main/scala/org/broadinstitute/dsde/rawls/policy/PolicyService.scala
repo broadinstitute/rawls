@@ -74,4 +74,14 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
       logger.error(s"Exception occurred while deleting PAO: ${ex.getMessage}", ex)
     // Ignore any exception
     }
+
+  def linkSnapshotPaoToWorkspacePao(
+    snapshotId: UUID,
+    workspaceId: UUID,
+    ctx: RawlsRequestContext
+  ): Future[Unit] = {
+    val req = new TpsPaoSourceRequest().sourceObjectId(snapshotId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+
+    tpsDAO.linkPao(req, workspaceId, ctx)
+  }
 }

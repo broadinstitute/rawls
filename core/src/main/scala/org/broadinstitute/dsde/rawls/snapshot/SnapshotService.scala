@@ -9,25 +9,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{
-  DataReferenceName,
-  ErrorReport,
-  NamedDataRepoSnapshot,
-  RawlsRequestContext,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  SnapshotListResponse,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceCloudPlatform,
-  WorkspaceName
-}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SnapshotListResponse, Workspace, WorkspaceAttributeSpecs, WorkspaceCloudPlatform, WorkspaceName}
+import org.broadinstitute.dsde.rawls.policy.{PolicyService, PolicyUtilities}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{
-  AggregateWorkspaceNotFoundException,
-  AggregatedWorkspaceService,
-  WorkspaceRepository
-}
+import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService, WorkspaceRepository, WorkspaceService}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -40,7 +25,9 @@ object SnapshotService {
                   samDAO: SamDAO,
                   workspaceManagerDAO: WorkspaceManagerDAO,
                   terraDataRepoUrl: String,
-                  dataRepoDAO: DataRepoDAO
+                  dataRepoDAO: DataRepoDAO,
+                  workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+                  policyService: PolicyService
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SnapshotService =
     new SnapshotService(ctx,
                         dataSource,
@@ -48,7 +35,9 @@ object SnapshotService {
                         workspaceManagerDAO,
                         terraDataRepoUrl,
                         dataRepoDAO,
-                        new AggregatedWorkspaceService(workspaceManagerDAO)
+                        new AggregatedWorkspaceService(workspaceManagerDAO),
+      workspaceServiceConstructor,
+      policyService
     )
 }
 
@@ -58,7 +47,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                       workspaceManagerDAO: WorkspaceManagerDAO,
                       terraDataRepoInstanceName: String,
                       dataRepoDAO: DataRepoDAO,
-                      aggregatedWorkspaceService: AggregatedWorkspaceService
+                      aggregatedWorkspaceService: AggregatedWorkspaceService,
+                      workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
+                      policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends FutureSupport
     with WorkspaceSupport
@@ -167,6 +158,51 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         )
     }
 
+  // Finds a workspace using the workspaceId then calls the createSnapshot method
+  def createSnapshotByWorkspaceIdV3(workspaceId: String,
+                                    snapshotId: UUID
+  ): Future[Unit] =
+    getV2WorkspaceContextAndPermissionsById(workspaceId,
+                                            SamWorkspaceActions.write,
+                                            Some(WorkspaceAttributeSpecs(all = false))
+    ).flatMap { rawlsWorkspace =>
+      createSnapshotV3(rawlsWorkspace, snapshotId)
+    }
+
+  // Find a workspace using the workspaceName then calls the createSnapshot method
+  def createSnapshotByWorkspaceNameV3(workspaceName: WorkspaceName,
+                                      snapshotId: UUID
+  ): Future[Unit] =
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
+    ).flatMap(rawlsWorkspace => createSnapshotV3(rawlsWorkspace, snapshotId))
+
+
+  // Link the snapshot pao to the workspace pao
+  private def createSnapshotV3(rawlsWorkspace: Workspace,
+                               snapshotId: UUID
+  ): Future[Unit] =
+    for {
+      snapshotFromDataRepo <- Future {
+        getSnapshotFromDataRepoWithId(snapshotId)
+      }
+      workspacePao <- policyService.getPao(rawlsWorkspace.workspaceIdAsUUID, ctx)
+      snapshotPao <- policyService.getPao(snapshotFromDataRepo.getId, ctx)
+
+      _ = if (PolicyUtilities.containsProtectedDataPolicy(snapshotPao) && !PolicyUtilities.containsProtectedDataPolicy(workspacePao)) { // todo: this still needs to do the right thing if there is no workspace or snapshot pao
+        throw new ProtectedDataException("Unable to add protected snapshot to unprotected workspace.")
+      }
+
+      newWorkspaceGroups = PolicyUtilities.getGroupConstraintGroups(snapshotPao) -- PolicyUtilities.getGroupConstraintGroups(workspacePao)
+      _ <- if (newWorkspaceGroups.nonEmpty) {
+        workspaceServiceConstructor(ctx).addAuthDomainGroups(rawlsWorkspace.toWorkspaceName, newWorkspaceGroups, ctx)
+      } else Future.unit
+
+      _ <- policyService.linkSnapshotPaoToWorkspacePao(snapshotFromDataRepo.getId, rawlsWorkspace.workspaceIdAsUUID, ctx)
+    } yield ()
+
+
   private def getSnapshotFromDataRepo(snapshotIdentifiers: NamedDataRepoSnapshot) =
     Try(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken)) match {
       case Success(snapshot) => snapshot
@@ -174,6 +210,25 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       case Failure(ex: ApiException) if ex.getCode == StatusCodes.NotFound.intValue =>
         throw new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest, s"Snapshot ${snapshotIdentifiers.snapshotId} not found.")
+        )
+      // on some other TDR API exception, strip the stack trace and propagate
+      case Failure(ex: ApiException) =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(ex.getCode, ex.getMessage)
+        )
+      // else, propagate by wrapping in an error report
+      case Failure(other) =>
+        logger.warn(s"Unexpected error when retrieving snapshot: ${other.getMessage}", other)
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, other.getMessage))
+    }
+
+  private def getSnapshotFromDataRepoWithId(snapshotId: UUID) =
+    Try(dataRepoDAO.getSnapshot(snapshotId, ctx.userInfo.accessToken)) match {
+      case Success(snapshot) => snapshot
+      // if snapshot not found in TDR, this is a bad request
+      case Failure(ex: ApiException) if ex.getCode == StatusCodes.NotFound.intValue =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Snapshot ${snapshotId} not found.")
         )
       // on some other TDR API exception, strip the stack trace and propagate
       case Failure(ex: ApiException) =>
