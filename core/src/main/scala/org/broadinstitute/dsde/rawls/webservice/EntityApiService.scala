@@ -360,6 +360,17 @@ trait EntityApiService extends UserInfoDirectives {
                   }
                 }
               }
+          } ~
+          path("workspaces" / Segment / Segment / "quicksilverMigration") { (workspaceNamespace, workspaceName) =>
+            get {
+              complete {
+                entityServiceConstructor(ctx)
+                  .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName))
+                  .map { migrationResults =>
+                    StatusCodes.OK -> migrationResults
+                  }
+              }
+            }
           }
       }
     }

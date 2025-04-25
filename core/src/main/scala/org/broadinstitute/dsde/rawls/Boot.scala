@@ -484,7 +484,8 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
         entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit")
+        appConfigManager.conf.getInt("entities.pageSizeLimit"),
+        Option(workspaceSettingServiceConstructor)
       )
 
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(

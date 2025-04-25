@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
@@ -15,11 +17,13 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
@@ -39,7 +43,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                     val samDAO: SamDAO,
                     entityManager: EntityManager,
                     override val workbenchMetricBaseName: String,
-                    pageSizeLimit: Int
+                    pageSizeLimit: Int,
+                    workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
+                      None // only used for Quicksilver migration
 )(implicit protected val executionContext: ExecutionContext)
     extends WorkspaceSupport
     with EntitySupport
@@ -540,4 +546,69 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
   }
 
+  def quicksilverMigration(workspaceName: WorkspaceName): Future[Map[String, Int]] = {
+    implicit val system: ActorSystem = ActorSystem("quicksilverMigration")
+    implicit val materializer: ActorMaterializer = ActorMaterializer()
+
+    for {
+      // verify owner of workspace. TODO: require some kind of admin permission via asFCAdmin or a resource type admin instead?
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.own,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+
+      // confirm if this is already a quicksilver workspace by checking settings
+      workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
+      settings <- workspaceSettingService.getWorkspaceSettings(workspaceName)
+      _ = if (
+        settings.find(_.isInstanceOf[CompactDataTablesSetting]).asInstanceOf[CompactDataTablesSetting].config.enabled
+      ) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
+      }
+
+      // get the local (legacy) provider
+      localProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+
+      // change the workspace to be quicksilver-enabled
+      _ <- workspaceSettingService.setWorkspaceSettings(
+        workspaceName,
+        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+      )
+
+      // get the compact (Quicksilver) provider
+      compactProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+
+      // get the list of entity types in this workspace
+      entityTypeMetadata <- localProvider.entityTypeMetadata(useCache = true, ctx)
+
+      // start a transaction; here's where we do a bunch of writes
+      allUpdates <- dataSource.inTransaction { dataAccess =>
+        // loop over entity types
+        val allTypesResult = entityTypeMetadata.map { case (entityType, metadata) =>
+          val thisTypeResult: Future[Done] = localProvider
+            .listEntities(entityType)
+            .map { entity =>
+              dataAccess.compactEntityQuery.getEntity(workspaceContext.workspaceIdAsUUID, "foo", "bar")
+              // TODO CORE-364: update the existing row in the ENTITY table; only change the attributes column, nothing else
+              //    need to write this SQL query
+            }
+            .run()
+
+          val typeTypeDB: DBIOAction[Done, NoStream, Effect] = DBIO.from(thisTypeResult)
+          typeTypeDB
+
+        }
+        val allTypesDB = DBIO.sequence(allTypesResult)
+        allTypesDB
+      }
+
+      // TODO CORE-364: insert into ENTITY_REFS (from_id, to_id) select from ENTITY_ATTRIBUTES ... where workspace_id is correct
+      //    need to write this SQL query
+
+      // TODO CORE-364: delete from ENTITY_ATTRIBUTES ...
+      //    need to write this SQL query
+
+      // return a count of entities updated
+    } yield entityTypeMetadata.map { case (entityType, metadata) => (entityType, metadata.count) }
+  }
 }
