@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
@@ -125,7 +126,23 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
-  ): Future[Map[String, EntityTypeMetadata]] = ???
+  ): Future[Map[String, EntityTypeMetadata]] =
+    repository.dataSource.inTransaction(ReadOnly) { _ =>
+      for {
+        entityTypeAndKeys <- repository.queries.listEntityKeys(workspaceId)
+        entityTypeAndCounts <- repository.queries.countEntitiesGroupedByType(workspaceId)
+      } yield {
+        // note that entityTypeAndKeys only contains entity types that have at least one key
+        // and that entityTypeAndCounts contains all entity types, even those with zero keys
+        val keysByType = entityTypeAndKeys.groupMap(_.entityType)(_.attributeKey)
+        entityTypeAndCounts.map { case EntityTypeAndCount(entityType, count) =>
+          entityType -> EntityTypeMetadata(count,
+                                           entityType + Attributable.entityIdAttributeSuffix,
+                                           keysByType.getOrElse(entityType, Seq.empty)
+          )
+        }.toMap
+      }
+    }
 
   override def evaluateExpression(entityType: String,
                                   entityName: String,

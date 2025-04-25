@@ -45,6 +45,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
   implicit val getKeysRecord: GetResult[KeysRecord] =
     GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
+  implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
+    GetResult(r => EntityTypeAndAttributeKey(r.<<, r.<<))
+
+  implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
+    GetResult(r => EntityTypeAndCount(r.<<, r.<<))
+
   /**
     * Insert a single entity to the db.
     *
@@ -175,6 +181,24 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
 
     query.asUpdate
   }
+
+  /**
+   * Get all entity attribute keys for a workspace.
+   */
+  def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
+    sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
+
+  /**
+   * Gets the count of entities in a workspace, grouped by entity type.
+   */
+  def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
+    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
+    sql"""SELECT entity_type, COUNT(*)
+      FROM ENTITY_KEYS
+      WHERE workspace_id = $workspaceId
+      GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   // ====================================================================================================
   //  testing helpers

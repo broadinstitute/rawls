@@ -166,6 +166,101 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
   }
 
+  behavior of "listEntityKeys"
+
+  it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
+    // create 2 entity types with different attributes
+    val entityType1AttributeNames = List("red", "green", "blue", "orange", "yellow", "purple")
+    val entityType1 = "entityType1"
+    createEntitiesWithKeys(entityType1AttributeNames, entityType1, wsid)
+
+    val entityType2AttributeNames = List("circle", "square", "triangle", "rectangle", "oval", "hexagon")
+    val entityType2 = "entityType2"
+    createEntitiesWithKeys(entityType2AttributeNames, entityType2, wsid)
+
+    // create an entity with no attributes to make sure it does not break anything
+    insertAndGet(
+      Entity(
+        UUID.randomUUID().toString,
+        "noAttributes",
+        Map.empty
+      )
+    )
+
+    // create entities in a different workspace to make sure they are not included
+    createEntitiesWithKeys(entityType1AttributeNames, entityType2, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    val actual = runAndWait(q.listEntityKeys(wsid))
+    actual should contain theSameElementsAs entityType1AttributeNames.map {
+      EntityTypeAndAttributeKey(entityType1, _)
+    } ++ entityType2AttributeNames.map {
+      EntityTypeAndAttributeKey(entityType2, _)
+    }
+  }
+
+  /**
+   * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
+   */
+  private def createEntitiesWithKeys(entityType1AttributeNames: List[String],
+                                     entityType1: String,
+                                     workspaceId: UUID
+  ): Unit = {
+    val half = entityType1AttributeNames.size / 2
+    insertAndGet(
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        entityType1AttributeNames
+          .take(half)
+          .map { attrName =>
+            AttributeName.fromDelimitedName(attrName) -> AttributeNumber(System.currentTimeMillis())
+          }
+          .toMap
+      ),
+      workspaceId
+    )
+    insertAndGet(
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        entityType1AttributeNames
+          .drop(half)
+          .map { attrName =>
+            AttributeName.fromDelimitedName(attrName) -> AttributeNumber(System.currentTimeMillis())
+          }
+          .toMap
+      ),
+      workspaceId
+    )
+    insertAndGet(Entity(
+                   UUID.randomUUID().toString,
+                   entityType1,
+                   Map.empty
+                 ),
+                 workspaceId
+    )
+  }
+
+  behavior of "countEntitiesGroupedByType"
+
+  it should "return the count of entities grouped by type" in withMinimalTestDatabase { _ =>
+    // insert an entity with attributes
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    // get the count of entities grouped by type
+    val actual = runAndWait(q.countEntitiesGroupedByType(wsid))
+    actual should contain theSameElementsAs List(EntityTypeAndCount(entityType1, 2), EntityTypeAndCount(entityType2, 1))
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================

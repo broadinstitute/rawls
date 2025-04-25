@@ -54,3 +54,13 @@ case class CompactEntityRefRecord(id: Long, name: String, entityType: String)
 case class RefPointerRecord(fromId: Long, toId: Long)
 
 case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
+
+case class EntityTypeAndAttributeKey(
+  entityType: String,
+  attributeKey: String
+)
+
+case class EntityTypeAndCount(
+  entityType: String,
+  count: Int
+)

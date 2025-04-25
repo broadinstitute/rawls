@@ -5,18 +5,22 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   CompactEntityQuery,
   CompactEntityRecord,
+  EntityTypeAndAttributeKey,
+  EntityTypeAndCount,
   ReadWriteAction,
   TestDriverComponentWithFlatSpecAndMatchers
 }
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
   AttributeString,
   Entity,
+  EntityTypeMetadata,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -339,7 +343,55 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   "deleteEntities" should "have tests" is pending
   "deleteEntitiesOfType" should "have tests" is pending
   "deleteEntityAttributes" should "have tests" is pending
-  "entityTypeMetadata" should "have tests" is pending
+
+  behavior of "entityTypeMetadata"
+
+  it should "return empty map when no entities exist" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.listEntityKeys(any[UUID]))
+      .thenReturn(DBIO.successful(Seq.empty))
+    when(mockQuery.countEntitiesGroupedByType(any[UUID]))
+      .thenReturn(DBIO.successful(Seq.empty))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+
+    actual shouldBe Map()
+  }
+
+  it should "return map with entity type and count when entities exist" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    // type1 and type2 have keys, type3 has no keys
+    when(mockQuery.listEntityKeys(any[UUID]))
+      .thenReturn(
+        DBIO.successful(
+          Seq(EntityTypeAndAttributeKey("type1", "keyA"),
+              EntityTypeAndAttributeKey("type2", "keyB"),
+              EntityTypeAndAttributeKey("type2", "keyC")
+          )
+        )
+      )
+    when(mockQuery.countEntitiesGroupedByType(any[UUID]))
+      .thenReturn(
+        DBIO.successful(
+          Seq(EntityTypeAndCount("type1", 1), EntityTypeAndCount("type2", 2), EntityTypeAndCount("type3", 3))
+        )
+      )
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+
+    actual shouldBe Map(
+      "type1" -> EntityTypeMetadata(1, "type1" + Attributable.entityIdAttributeSuffix, Seq("keyA")),
+      "type2" -> EntityTypeMetadata(2, "type2" + Attributable.entityIdAttributeSuffix, Seq("keyB", "keyC")),
+      "type3" -> EntityTypeMetadata(3, "type3" + Attributable.entityIdAttributeSuffix, Seq())
+    )
+  }
+
   "evaluateExpression" should "have tests" is pending
   "evaluateExpressions" should "have tests" is pending
   "expressionValidator" should "have tests" is pending
