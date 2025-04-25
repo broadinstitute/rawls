@@ -8,12 +8,12 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 // allow for static access to methods from classes that don't want to mix in the trait
-object CompactEntityUtils extends CompactEntityUtils
+object CompactEntitySerialization extends CompactEntitySerialization
 
 /**
   * Utilities for working with compact entities, including methods to serialize to/deserialize from the database
   */
-trait CompactEntityUtils {
+trait CompactEntitySerialization {
 
   // serialization format for translating to/from SQL
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
