@@ -48,7 +48,8 @@ object WorkflowSubmissionActor {
             gcpBatchBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver,
             bardService: BardService,
-            workspaceSettingRepository: WorkspaceSettingRepository
+            workspaceSettingRepository: WorkspaceSettingRepository,
+            useBatchAsDefaultBackend: Boolean
   ): Props =
     Props(
       new WorkflowSubmissionActor(
@@ -74,7 +75,8 @@ object WorkflowSubmissionActor {
         gcpBatchBackend,
         methodConfigResolver,
         bardService,
-        workspaceSettingRepository
+        workspaceSettingRepository,
+        useBatchAsDefaultBackend
       )
     )
 
@@ -111,7 +113,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val gcpBatchBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver,
                               val bardService: BardService,
-                              val workspaceSettingRepository: WorkspaceSettingRepository
+                              val workspaceSettingRepository: WorkspaceSettingRepository,
+                              val useBatchAsDefaultBackend: Boolean
 ) extends Actor
     with WorkflowSubmission
     with LazyLogging {
@@ -167,6 +170,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val methodConfigResolver: MethodConfigResolver
   val bardService: BardService
   val workspaceSettingRepository: WorkspaceSettingRepository
+  val useBatchAsDefaultBackend: Boolean
 
   import dataSource.dataAccess.driver.api._
 
@@ -306,10 +310,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
-      useCromwellGcpBatchBackend: Boolean = currentSettings.exists {
-        case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled
-        case _                                                 => false
-      }
+      // Note: Usage of 'useBatchAsDefaultBackend' and 'highSecurityNetworkCromwellBackend' will be removed as part of
+      // https://broadworkbench.atlassian.net/browse/AN-518 when GCP Batch becomes the default backend.
+      useCromwellGcpBatchBackend: Boolean = currentSettings
+        .collectFirst { case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled }
+        .getOrElse(useBatchAsDefaultBackend)
+
       cromwellSubmissionBackend =
         if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
 
