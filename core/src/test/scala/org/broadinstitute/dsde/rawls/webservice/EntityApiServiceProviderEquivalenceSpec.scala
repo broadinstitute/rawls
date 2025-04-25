@@ -18,12 +18,15 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValueRawJson,
   CompactDataTablesSetting,
   Entity,
+  EntityTypeMetadata,
   ErrorReport,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import spray.json.DefaultJsonProtocol._
 import spray.json.{JsArray, JsNumber, JsObject, JsString}
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 
@@ -59,16 +62,17 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
 
   // define different entities for use in tests
   private val entityTestCases = Map(
-    "no attributes" -> Entity("myName", "myType", Map()),
-    "simple attributes" -> Entity("myName",
-                                  "myType",
-                                  Map(
-                                    AttributeName.withDefaultNS("str") -> AttributeString("hello"),
-                                    AttributeName.withDefaultNS("num") -> AttributeNumber(42)
-                                  )
+    "no attributes" -> Entity(UUID.randomUUID().toString, "myType", Map()),
+    "simple attributes" -> Entity(
+      UUID.randomUUID().toString,
+      "myType",
+      Map(
+        AttributeName.withDefaultNS("str") -> AttributeString("hello"),
+        AttributeName.withDefaultNS("num") -> AttributeNumber(42)
+      )
     ),
     "namespaced attributes" -> Entity(
-      "myName",
+      UUID.randomUUID().toString,
       "myType",
       Map(
         AttributeName.fromDelimitedName("pfb:str") -> AttributeString("hello"),
@@ -76,7 +80,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
       )
     ),
     "attribute value lists" -> Entity(
-      "myName",
+      UUID.randomUUID().toString,
       "myType",
       Map(
         AttributeName.withDefaultNS("str") -> AttributeString("hello"),
@@ -90,7 +94,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
       )
     ),
     "raw json attributes" -> Entity(
-      "myName",
+      UUID.randomUUID().toString,
       "myType",
       Map(
         AttributeName.withDefaultNS("str") -> AttributeString("hello"),
@@ -159,6 +163,26 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     legacy shouldBe entity
   }
 
+  behavior of "GET entity type metadata"
+
+  it should "work for legacy and compact workspaces" in withProviderEquivalenceApiServices { services =>
+    entityTestCases.foreach { case (_, entity) =>
+      // create entities; this validates the POST api
+      createEntity(compactWs, entity, services)
+      createEntity(legacyWs, entity, services)
+    }
+
+    // sort the attribute names to ensure that the order of attributes doesn't affect the comparison
+    val compactMetadata = getEntityTypeMetadata(compactWs, services).map { case (k, v) =>
+      k -> v.copy(attributeNames = v.attributeNames.sorted)
+    }
+    val legacyMetadata = getEntityTypeMetadata(legacyWs, services).map { case (k, v) =>
+      k -> v.copy(attributeNames = v.attributeNames.sorted)
+    }
+
+    compactMetadata shouldBe legacyMetadata
+  }
+
   behavior of "test assumptions via setupProviders helper"
 
   // this verifies that setup is correct; compactWs should use CompactEntityProvider and legacyWs should use
@@ -224,6 +248,18 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
         check {
           status shouldBe StatusCodes.OK
           val retrieved = responseAs[Entity]
+          retrieved
+        }
+    }
+
+  /* get entity type metadata for a workspace */
+  private def getEntityTypeMetadata(ws: Workspace, services: TestApiService): Map[String, EntityTypeMetadata] =
+    withClue(s"getEntityTypeMetadata helper for workspace ${ws.toWorkspaceName}") {
+      Get(s"/workspaces/${ws.namespace}/${ws.name}/entities") ~>
+        withHandlers(services.entityRoutes()) ~>
+        check {
+          status shouldBe StatusCodes.OK
+          val retrieved = responseAs[Map[String, EntityTypeMetadata]]
           retrieved
         }
     }
