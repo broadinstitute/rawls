@@ -172,13 +172,8 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
       createEntity(legacyWs, entity, services)
     }
 
-    // sort the attribute names to ensure that the order of attributes doesn't affect the comparison
-    val compactMetadata = getEntityTypeMetadata(compactWs, services).map { case (k, v) =>
-      k -> v.copy(attributeNames = v.attributeNames.sorted)
-    }
-    val legacyMetadata = getEntityTypeMetadata(legacyWs, services).map { case (k, v) =>
-      k -> v.copy(attributeNames = v.attributeNames.sorted)
-    }
+    val compactMetadata = getEntityTypeMetadata(compactWs, services)
+    val legacyMetadata = getEntityTypeMetadata(legacyWs, services)
 
     compactMetadata shouldBe legacyMetadata
   }

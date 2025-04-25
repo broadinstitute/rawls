@@ -138,7 +138,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         entityTypeAndCounts.map { case EntityTypeAndCount(entityType, count) =>
           entityType -> EntityTypeMetadata(count,
                                            entityType + Attributable.entityIdAttributeSuffix,
-                                           keysByType.getOrElse(entityType, Seq.empty)
+                                           keysByType.getOrElse(entityType, Seq.empty).sortBy(_.toLowerCase)
           )
         }.toMap
       }
