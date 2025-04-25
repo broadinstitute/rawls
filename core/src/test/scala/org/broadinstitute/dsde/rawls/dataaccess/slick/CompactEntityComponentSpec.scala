@@ -170,11 +170,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
     // create 2 entity types with different attributes
-    val entityType1AttributeNames = List("red", "green", "blue", "orange", "yellow", "purple").map(AttributeName.withDefaultNS)
+    val entityType1AttributeNames =
+      List("red", "green", "blue", "orange", "yellow", "purple").map(AttributeName.withDefaultNS)
     val entityType1 = "entityType1"
     createEntitiesWithKeys(entityType1AttributeNames, entityType1, wsid)
 
-    val entityType2AttributeNames = List("circle", "square", "triangle", "rectangle", "oval", "hexagon").map(AttributeName.withDefaultNS)
+    val entityType2AttributeNames =
+      List("circle", "square", "triangle", "rectangle", "oval", "hexagon").map(AttributeName.withDefaultNS)
     val entityType2 = "entityType2"
     createEntitiesWithKeys(entityType2AttributeNames, entityType2, wsid)
 
@@ -224,11 +226,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
     insertAndGet(
       Entity(
-                   UUID.randomUUID().toString,
-                   entityType1,
-                   Map.empty
-                 ),
-                 workspaceId
+        UUID.randomUUID().toString,
+        entityType1,
+        Map.empty
+      ),
+      workspaceId
     )
   }
 

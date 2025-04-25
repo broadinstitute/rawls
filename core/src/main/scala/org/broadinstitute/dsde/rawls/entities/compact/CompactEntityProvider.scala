@@ -136,9 +136,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         // and that entityTypeAndCounts contains all entity types, even those with zero keys
         val keysByType = entityTypeAndKeys.groupMap(_.entityType)(_.attributeKey)
         entityTypeAndCounts.map { case EntityTypeAndCount(entityType, count) =>
-          entityType -> EntityTypeMetadata(count,
-                                           entityType + Attributable.entityIdAttributeSuffix,
-                                           keysByType.getOrElse(entityType, Seq.empty).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)
+          entityType -> EntityTypeMetadata(
+            count,
+            entityType + Attributable.entityIdAttributeSuffix,
+            keysByType.getOrElse(entityType, Seq.empty).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)
           )
         }.toMap
       }
