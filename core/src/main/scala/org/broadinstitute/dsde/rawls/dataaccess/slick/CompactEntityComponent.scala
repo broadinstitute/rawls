@@ -197,7 +197,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
          and e.deleted = 0""".asUpdate
 
   // note this cleans up legacy attributes for soft-deleted entities as well as active entities
-  def deleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+  def migrationDeleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
     sql"""delete ea
          from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
          where ea.owner_id = e.id

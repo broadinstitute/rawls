@@ -1,9 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import akka.{Done, NotUsed}
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
@@ -23,7 +22,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
+import slick.dbio.DBIO
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
@@ -546,12 +545,18 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
   }
 
+  /**
+    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to compact (Quicksilver) format.
+    *
+    * This migration method is unoptimized and in flux; use at your own risk
+    *
+    */
   def quicksilverMigration(workspaceName: WorkspaceName): Future[Map[String, Int]] = {
     implicit val system: ActorSystem = ActorSystem("quicksilverMigration")
-    implicit val materializer: ActorMaterializer = ActorMaterializer()
 
     for {
-      // verify owner of workspace. TODO: require some kind of admin permission via asFCAdmin or a resource type admin instead?
+      // verify owner of workspace.
+      // TODO CORE-364: require some kind of admin permission via asFCAdmin or a resource type admin instead?
       workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
                                                               SamWorkspaceActions.own,
                                                               Some(WorkspaceAttributeSpecs(all = false))
@@ -588,7 +593,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             // retrieve all active entities of this type, as a streamable Source
             localProvider
               .listEntities(entityType)
-              // for each entity ...
+              // stream over each entity and ...
               .map { entity =>
                 // ... update the existing row in the ENTITY table to populate the attributes column
                 dataAccess.compactEntityQuery.migrationUpdateAttributes(workspaceContext.workspaceIdAsUUID, entity)
@@ -603,7 +608,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           // populate the ENTITY_REFS table for this workspace
           _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
           // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
-          _ <- dataAccess.compactEntityQuery.deleteLegacyReferences(workspaceContext.workspaceIdAsUUID, shardId)
+          _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
+                                                                             shardId
+          )
         } yield ()
       }
 
