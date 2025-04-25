@@ -367,9 +367,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     when(mockQuery.listEntityKeys(any[UUID]))
       .thenReturn(
         DBIO.successful(
-          Seq(EntityTypeAndAttributeKey("type1", "keyA"),
-              EntityTypeAndAttributeKey("type2", "keyB"),
-              EntityTypeAndAttributeKey("type2", "keyC")
+          Seq(EntityTypeAndAttributeKey("type1", AttributeName.withDefaultNS("keyA")),
+              EntityTypeAndAttributeKey("type2", AttributeName.withDefaultNS("keyB")),
+              EntityTypeAndAttributeKey("type2", AttributeName.withDefaultNS("keyC"))
           )
         )
       )

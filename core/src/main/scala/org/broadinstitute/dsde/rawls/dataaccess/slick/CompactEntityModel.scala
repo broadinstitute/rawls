@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeFormat, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeFormat, AttributeName, Entity}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -57,7 +57,7 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
 
 case class EntityTypeAndAttributeKey(
   entityType: String,
-  attributeKey: String
+  attributeKey: AttributeName
 )
 
 case class EntityTypeAndCount(

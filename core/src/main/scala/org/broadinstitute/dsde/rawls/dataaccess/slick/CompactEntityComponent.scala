@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import spray.json.DefaultJsonProtocol._
@@ -46,7 +46,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
     GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
   implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
-    GetResult(r => EntityTypeAndAttributeKey(r.<<, r.<<))
+    GetResult(r => EntityTypeAndAttributeKey(r.<<, AttributeName.fromDelimitedName(r.<<)))
 
   implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
     GetResult(r => EntityTypeAndCount(r.<<, r.<<))
@@ -184,6 +184,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
 
   /**
    * Get all entity attribute keys for a workspace.
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
     sql"""SELECT distinct entity_type, attribute_key
@@ -192,6 +194,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
     // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities

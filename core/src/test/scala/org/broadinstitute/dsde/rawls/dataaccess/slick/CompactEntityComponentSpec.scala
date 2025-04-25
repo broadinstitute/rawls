@@ -170,11 +170,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
     // create 2 entity types with different attributes
-    val entityType1AttributeNames = List("red", "green", "blue", "orange", "yellow", "purple")
+    val entityType1AttributeNames = List("red", "green", "blue", "orange", "yellow", "purple").map(AttributeName.withDefaultNS)
     val entityType1 = "entityType1"
     createEntitiesWithKeys(entityType1AttributeNames, entityType1, wsid)
 
-    val entityType2AttributeNames = List("circle", "square", "triangle", "rectangle", "oval", "hexagon")
+    val entityType2AttributeNames = List("circle", "square", "triangle", "rectangle", "oval", "hexagon").map(AttributeName.withDefaultNS)
     val entityType2 = "entityType2"
     createEntitiesWithKeys(entityType2AttributeNames, entityType2, wsid)
 
@@ -201,7 +201,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   /**
    * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
    */
-  private def createEntitiesWithKeys(entityType1AttributeNames: List[String],
+  private def createEntitiesWithKeys(entityType1AttributeNames: List[AttributeName],
                                      entityType1: String,
                                      workspaceId: UUID
   ): Unit = {
@@ -210,12 +210,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Entity(
         UUID.randomUUID().toString,
         entityType1,
-        entityType1AttributeNames
-          .take(half)
-          .map { attrName =>
-            AttributeName.fromDelimitedName(attrName) -> AttributeNumber(System.currentTimeMillis())
-          }
-          .toMap
+        entityType1AttributeNames.take(half).map(_ -> AttributeNumber(System.currentTimeMillis())).toMap
       ),
       workspaceId
     )
@@ -223,16 +218,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Entity(
         UUID.randomUUID().toString,
         entityType1,
-        entityType1AttributeNames
-          .drop(half)
-          .map { attrName =>
-            AttributeName.fromDelimitedName(attrName) -> AttributeNumber(System.currentTimeMillis())
-          }
-          .toMap
+        entityType1AttributeNames.drop(half).map(_ -> AttributeNumber(System.currentTimeMillis())).toMap
       ),
       workspaceId
     )
-    insertAndGet(Entity(
+    insertAndGet(
+      Entity(
                    UUID.randomUUID().toString,
                    entityType1,
                    Map.empty
