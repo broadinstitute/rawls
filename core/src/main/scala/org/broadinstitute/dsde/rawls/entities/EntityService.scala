@@ -575,38 +575,37 @@ class EntityService(protected val ctx: RawlsRequestContext,
         List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
       )
 
-      // get the compact (Quicksilver) provider
-      compactProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
-
       // get the list of entity types in this workspace
       entityTypeMetadata <- localProvider.entityTypeMetadata(useCache = true, ctx)
 
       // start a transaction; here's where we do a bunch of writes
-      allUpdates <- dataSource.inTransaction { dataAccess =>
+      _ <- dataSource.inTransaction { dataAccess =>
+        val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
+
         // loop over entity types
         val allTypesResult = entityTypeMetadata.map { case (entityType, metadata) =>
-          val thisTypeResult: Future[Done] = localProvider
-            .listEntities(entityType)
-            .map { entity =>
-              dataAccess.compactEntityQuery.getEntity(workspaceContext.workspaceIdAsUUID, "foo", "bar")
-              // TODO CORE-364: update the existing row in the ENTITY table; only change the attributes column, nothing else
-              //    need to write this SQL query
-            }
-            .run()
-
-          val typeTypeDB: DBIOAction[Done, NoStream, Effect] = DBIO.from(thisTypeResult)
-          typeTypeDB
-
+          DBIO.from(
+            // retrieve all active entities of this type, as a streamable Source
+            localProvider
+              .listEntities(entityType)
+              // for each entity ...
+              .map { entity =>
+                // ... update the existing row in the ENTITY table to populate the attributes column
+                dataAccess.compactEntityQuery.migrationUpdateAttributes(workspaceContext.workspaceIdAsUUID, entity)
+              }
+              .run()
+          )
         }
-        val allTypesDB = DBIO.sequence(allTypesResult)
-        allTypesDB
+
+        for {
+          // migrate all attribute data from ENTITY_ATTRIBUTES_xx_xx to ENTITY.attributes
+          _ <- DBIO.sequence(allTypesResult)
+          // populate the ENTITY_REFS table for this workspace
+          _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+          // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
+          _ <- dataAccess.compactEntityQuery.deleteLegacyReferences(workspaceContext.workspaceIdAsUUID, shardId)
+        } yield ()
       }
-
-      // TODO CORE-364: insert into ENTITY_REFS (from_id, to_id) select from ENTITY_ATTRIBUTES ... where workspace_id is correct
-      //    need to write this SQL query
-
-      // TODO CORE-364: delete from ENTITY_ATTRIBUTES ...
-      //    need to write this SQL query
 
       // return a count of entities updated
     } yield entityTypeMetadata.map { case (entityType, metadata) => (entityType, metadata.count) }

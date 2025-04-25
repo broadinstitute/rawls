@@ -174,6 +174,36 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   // ====================================================================================================
+  //  migration helpers
+  //      methods in this section are only used for migrating data from legacy->compact format
+  // ====================================================================================================
+
+  // do not use this outside migrations; it does not change the record_version
+  def migrationUpdateAttributes(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
+    val attrsJson = toSql(entity.attributes)
+    sql"""update ENTITY set attributes = $attrsJson
+            where workspace_id = $workspaceId
+              where workspace_id = $workspaceId
+              and entity_type = ${entity.entityType}
+              and name = ${entity.name}""".asUpdate
+  }
+
+  def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+    sql"""insert into ENTITY_REFS(from_id, to_id)
+         select e.id, ea.value_entity_ref
+         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
+         where ea.owner_id = e.id
+         and e.workspace_id = $workspaceId
+         and e.deleted = 0""".asUpdate
+
+  // note this cleans up legacy attributes for soft-deleted entities as well as active entities
+  def deleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+    sql"""delete ea
+         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
+         where ea.owner_id = e.id
+         and e.workspace_id = $workspaceId""".asUpdate
+
+  // ====================================================================================================
   //  testing helpers
   // ====================================================================================================
 
