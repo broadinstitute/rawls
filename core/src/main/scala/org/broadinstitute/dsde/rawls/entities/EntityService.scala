@@ -32,9 +32,18 @@ object EntityService {
                   samDAO: SamDAO,
                   workbenchMetricBaseName: String,
                   entityManager: EntityManager,
-                  pageSizeLimit: Int
+                  pageSizeLimit: Int,
+                  workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
+                    None // only used for Quicksilver migration
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): EntityService =
-    new EntityService(ctx, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
+    new EntityService(ctx,
+                      dataSource,
+                      samDAO,
+                      entityManager,
+                      workbenchMetricBaseName,
+                      pageSizeLimit,
+                      workspaceSettingServiceConstructor
+    )
 }
 
 class EntityService(protected val ctx: RawlsRequestContext,
