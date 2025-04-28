@@ -18,6 +18,7 @@ tags:
   - name: notifications
   - name: servicePerimeters
   - name: snapshots_v2
+  - name: snapshots_v3
   - name: status
   - name: submissions
   - name: users
@@ -4013,6 +4014,69 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v3:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    post:
+      tags:
+        - snapshots_v3
+      summary: Add references to snapshots in the Terra Data Repo
+      description: Add references to snapshots in the Terra Data Repo
+      operationId: createSnapshotsByWorkspaceName
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              type: array
+              description: List of snapshot IDs to add to the workspace
+              items:
+                type: string
+                format: uuid
+        required: true
+      responses:
+        204:
+          description: Created
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceId}/snapshots/v3:
+    parameters:
+      - $ref: '#/components/parameters/workspaceIdPathParam'
+    post:
+      tags:
+        - snapshots_v3
+      summary: Add references to snapshots in the Terra Data Repo
+      description: Add references to snapshots in the Terra Data Repo
+      operationId: createSnapshotsByWorkspaceId
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              type: array
+              description: List of snapshot IDs to add to the workspace
+              items:
+                type: string
+                format: uuid
+        required: true
+      responses:
+        204:
+          description: Created
         404:
           description: Workspace or snapshot not found
           content:

@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
 import bio.terra.policy.client.ApiClient
-import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest}
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest, TpsPaoUpdateResult}
+import com.typesafe.scalalogging.LazyLogging
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -13,9 +14,9 @@ import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 
-class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
+class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO with LazyLogging {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
@@ -68,7 +69,7 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
       * to the target PAO, meaning that future changes to the source PAO will propagate to the target
       * PAO. Changes to the target PAO will not propagate up the link to the source PAO.
       */
-  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit] = Future {
+  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoUpdateResult] = Future {
     blocking {
       getTpsApi(ctx).linkPao(request, objectId)
     }

@@ -1,21 +1,12 @@
 package org.broadinstitute.dsde.rawls.policy
 
 import bio.terra.policy.client.ApiException
-import bio.terra.policy.model.{
-  TpsComponent,
-  TpsObjectType,
-  TpsPaoCreateRequest,
-  TpsPaoGetResult,
-  TpsPaoSourceRequest,
-  TpsPolicyInput,
-  TpsPolicyInputs,
-  TpsPolicyPair,
-  TpsUpdateMode
-}
+import bio.terra.policy.model.{TpsComponent, TpsObjectType, TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair, TpsUpdateMode}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -69,6 +60,27 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
         None
     }
 
+  /**
+    * Retrieves the snapshot PAO for the given snapshotId. If it does not exist, it creates a new one with no policies.
+    */
+  def getOrCreateSnapshotPao(snapshotId: UUID, ctx: RawlsRequestContext): Future[TpsPaoGetResult] = {
+    for {
+      snapshotPaoOpt <- getPao(snapshotId, ctx)
+      snapshotPao <- if (snapshotPaoOpt.isEmpty) {
+        logger.info(s"pao not found, creating new one [snapshotId: $snapshotId]")
+        val req = new TpsPaoCreateRequest()
+          .objectType(TpsObjectType.SNAPSHOT)
+          .objectId(snapshotId)
+          .component(TpsComponent.TDR)
+
+        tpsDAO.createPao(req, ctx).flatMap(_ => tpsDAO.getPao(snapshotId, ctx))
+      } else {
+        Future.successful(snapshotPaoOpt.get)
+      }
+    } yield snapshotPao
+  }
+
+
   def deleteWorkspacePao(workspaceId: UUID, ctx: RawlsRequestContext): Future[Unit] =
     tpsDAO.deletePao(workspaceId, ctx).recover { case ex: ApiException =>
       logger.error(s"Exception occurred while deleting PAO: ${ex.getMessage}", ex)
@@ -78,10 +90,20 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
   def linkSnapshotPaoToWorkspacePao(
     snapshotId: UUID,
     workspaceId: UUID,
+    dryRun: Boolean,
     ctx: RawlsRequestContext
   ): Future[Unit] = {
-    val req = new TpsPaoSourceRequest().sourceObjectId(snapshotId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+    val req = new TpsPaoSourceRequest().sourceObjectId(snapshotId)
 
-    tpsDAO.linkPao(req, workspaceId, ctx)
+    if (dryRun)
+      req.setUpdateMode(TpsUpdateMode.DRY_RUN)
+    else
+      req.setUpdateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+
+    tpsDAO.linkPao(req, workspaceId, ctx).map { res =>
+      if (res.getConflicts.asScala.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(s"${if (dryRun) "Dry run" else "Link"} failed: ${res.getConflicts.asScala.mkString(",")}"))
+      }
+    }
   }
 }

@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SnapshotListResponse, Workspace, WorkspaceAttributeSpecs, WorkspaceCloudPlatform, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SnapshotListResponse, SnapshotListResponseV3, Workspace, WorkspaceAttributeSpecs, WorkspaceCloudPlatform, WorkspaceName}
 import org.broadinstitute.dsde.rawls.policy.{PolicyService, PolicyUtilities}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService, WorkspaceRepository, WorkspaceService}
@@ -159,47 +159,74 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     }
 
   // Finds a workspace using the workspaceId then calls the createSnapshot method
-  def createSnapshotByWorkspaceIdV3(workspaceId: String,
-                                    snapshotId: UUID
+  def createSnapshotsByWorkspaceIdV3(workspaceId: String,
+                                     snapshotIds: Set[UUID]
   ): Future[Unit] =
     getV2WorkspaceContextAndPermissionsById(workspaceId,
                                             SamWorkspaceActions.write,
                                             Some(WorkspaceAttributeSpecs(all = false))
     ).flatMap { rawlsWorkspace =>
-      createSnapshotV3(rawlsWorkspace, snapshotId)
+      createSnapshots(rawlsWorkspace, snapshotIds)
     }
 
   // Find a workspace using the workspaceName then calls the createSnapshot method
-  def createSnapshotByWorkspaceNameV3(workspaceName: WorkspaceName,
-                                      snapshotId: UUID
+  def createSnapshotsByWorkspaceNameV3(workspaceName: WorkspaceName,
+                                       snapshotIds: Set[UUID]
   ): Future[Unit] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
-    ).flatMap(rawlsWorkspace => createSnapshotV3(rawlsWorkspace, snapshotId))
+    ).flatMap(rawlsWorkspace => createSnapshots(rawlsWorkspace, snapshotIds))
 
 
   // Link the snapshot pao to the workspace pao
-  private def createSnapshotV3(rawlsWorkspace: Workspace,
-                               snapshotId: UUID
+  private def createSnapshots(rawlsWorkspace: Workspace,
+                               snapshotIds: Set[UUID]
   ): Future[Unit] =
     for {
-      snapshotFromDataRepo <- Future {
-        getSnapshotFromDataRepoWithId(snapshotId)
+      snapshotsFromDataRepo <- Future {
+        snapshotIds.map(getSnapshotFromDataRepoWithId)
       }
-      workspacePao <- policyService.getPao(rawlsWorkspace.workspaceIdAsUUID, ctx)
-      snapshotPao <- policyService.getPao(snapshotFromDataRepo.getId, ctx)
+      workspacePaoOpt <- policyService.getPao(rawlsWorkspace.workspaceIdAsUUID, ctx)
+      workspacePao = workspacePaoOpt.getOrElse(throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.NotFound, s"Workspace PAO not found for workspace ${rawlsWorkspace.workspaceIdAsUUID}"))
+      )
 
-      _ = if (PolicyUtilities.containsProtectedDataPolicy(snapshotPao) && !PolicyUtilities.containsProtectedDataPolicy(workspacePao)) { // todo: this still needs to do the right thing if there is no workspace or snapshot pao
+      snapshotPaos <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
+        policyService.getOrCreateSnapshotPao(snapshot.getId, ctx)
+      }
+
+      _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
+        policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId, rawlsWorkspace.workspaceIdAsUUID, dryRun = true, ctx)
+      }
+
+      // if any snapshots contain protected data, the workspace must be protected
+      _ = if (snapshotPaos.exists(PolicyUtilities.containsProtectedDataPolicy) && !PolicyUtilities.containsProtectedDataPolicy(workspacePao)) {
         throw new ProtectedDataException("Unable to add protected snapshot to unprotected workspace.")
       }
 
-      newWorkspaceGroups = PolicyUtilities.getGroupConstraintGroups(snapshotPao) -- PolicyUtilities.getGroupConstraintGroups(workspacePao)
+      // Region constraints can cause conflicts when combining PAOs. We check that no individual
+      // snapshot PAO will conflict with the workspace PAO above, but there's no easy way to check
+      // that all of the snapshot PAOs will combine together cleanly when they're all linked to
+      // the same workspace. Snapshots shouldn't have region constraint policies, but throw here
+      // just in case.
+      _ = if (snapshotPaos.exists(PolicyUtilities.containsRegionConstraintPolicy)) {
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "Unable to add snapshot with region constraint to workspace.")
+        )
+      }
+
+      snapshotGroups = snapshotPaos.flatMap { snapshotPao =>
+        PolicyUtilities.getGroupConstraintGroups(snapshotPao)
+      }
+      newWorkspaceGroups = snapshotGroups -- PolicyUtilities.getGroupConstraintGroups(workspacePao)
       _ <- if (newWorkspaceGroups.nonEmpty) {
         workspaceServiceConstructor(ctx).addAuthDomainGroups(rawlsWorkspace.toWorkspaceName, newWorkspaceGroups, ctx)
       } else Future.unit
 
-      _ <- policyService.linkSnapshotPaoToWorkspacePao(snapshotFromDataRepo.getId, rawlsWorkspace.workspaceIdAsUUID, ctx)
+      _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
+        policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId, rawlsWorkspace.workspaceIdAsUUID, dryRun = false, ctx)
+      }
     } yield ()
 
 

@@ -17,6 +17,7 @@ case class NamedDataRepoSnapshot(name: DataReferenceName,
                                  properties: Option[Map[String, String]] = None
 )
 case class SnapshotListResponse(gcpDataRepoSnapshots: Seq[DataRepoSnapshotResource])
+case class SnapshotListResponseV3(snapshotIds: List[UUID])
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
@@ -245,4 +246,5 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     ValueObjectFormat(DataReferenceDescriptionField)
   implicit val NamedDataRepoSnapshotFormat: RootJsonFormat[NamedDataRepoSnapshot] = jsonFormat5(NamedDataRepoSnapshot)
   implicit val SnapshotListResponseFormat: RootJsonFormat[SnapshotListResponse] = jsonFormat1(SnapshotListResponse)
+  implicit val SnapshotListResponseV3Format: RootJsonFormat[SnapshotListResponseV3] = jsonFormat1(SnapshotListResponseV3)
 }
