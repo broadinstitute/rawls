@@ -139,4 +139,5 @@
     <include file="changesets/20250401_drop_cromwell_backend_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250331_drop_audit_workflow_and_submission_status_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250401_entity_json_support.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250425_entity_json_serdes_format.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

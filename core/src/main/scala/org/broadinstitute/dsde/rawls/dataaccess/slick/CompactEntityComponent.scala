@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityUtils
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
@@ -18,7 +18,7 @@ trait CompactEntityComponent extends LazyLogging {
   object compactEntityQuery extends CompactEntityQuery(this)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntityUtils {
+class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
