@@ -812,7 +812,7 @@ class SubmissionSpec(_system: ActorSystem)
   it should "delete entity set if preserveSet is set to false" in withSubmissionsService { submissionsService =>
     val sset = Entity(
       "testset6",
-      "SampleSet",
+      "Sample_set",
       Map(
         AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
           Seq(
