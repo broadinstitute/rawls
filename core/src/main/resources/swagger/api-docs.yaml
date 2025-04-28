@@ -2419,7 +2419,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
-        description: New attribute name
+        description: Consent to execute
         content:
           text/plain:
             schema:
