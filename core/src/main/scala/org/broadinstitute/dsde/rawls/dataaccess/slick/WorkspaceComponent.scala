@@ -4,6 +4,7 @@ import cats.implicits.catsSyntaxOptionId
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
+import com.google.common.annotations.VisibleForTesting
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
@@ -255,6 +256,7 @@ trait WorkspaceComponent {
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
 
+    @VisibleForTesting
     def listAll(): ReadAction[Seq[Workspace]] =
       loadWorkspaces(workspaceQuery)
 
@@ -287,9 +289,6 @@ trait WorkspaceComponent {
         WorkspaceTag(rec._1, rec._2)
       })
     }
-
-    def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] =
-      loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
 
     /**
       * Creates or updates the provided Workspace.  First queries the database to see if a Workspace record already
@@ -444,22 +443,6 @@ trait WorkspaceComponent {
 
     def getV2WorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
       uniqueResult(workspaceQuery.findV2WorkspaceByNameQuery(workspaceName).result).map(x => x.map(_.id))
-
-    /**
-      * Lists all workspaces with a particular attribute name/value pair.
-      *
-      * ** Note: This is an inefficient query.  It performs a full scan of the attribute table since
-      *    there is no index on attribute name and/or value.  This method is only being used in one
-      *    place; if you find yourself needing this for other things, consider adding such an index.
-      * @param attrName
-      * @param attrValue
-      * @return
-      */
-    def getWorkspacesWithAttribute(attrName: AttributeName, attrValue: AttributeValue) =
-      for {
-        attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
-        workspace <- workspaceQuery if workspace.id === attribute.ownerId
-      } yield workspace
 
     def getWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): ReadAction[Seq[Workspace]] = {
       val workspaces = for {

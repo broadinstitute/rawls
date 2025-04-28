@@ -2,11 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, Entity}
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
-import spray.json.DefaultJsonProtocol._
+
 import spray.json._
 
 import java.util.UUID
@@ -18,12 +18,9 @@ trait CompactEntityComponent extends LazyLogging {
   object compactEntityQuery extends CompactEntityQuery(this)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
+class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
-
-  // json codec for entity attributes
-  implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
 
   // read a json column from the db and translate into a JsValue
   implicit val GetJsValueResult: GetResult[JsValue] = GetResult(r => r.nextString().parseJson)
@@ -53,7 +50,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
-    val attributesJson: JsValue = entity.attributes.toJson
+    val attributesJson: JsValue = toSql(entity.attributes)
 
     sqlu"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
           values (${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""

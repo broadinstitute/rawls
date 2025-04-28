@@ -506,16 +506,6 @@ trait AttributeComponent {
     def findByOwnerQuery(ownerIds: Seq[OWNER_ID]) =
       filter(_.ownerId inSetBind ownerIds)
 
-    def queryByAttribute(attrName: AttributeName, attrValue: AttributeValue) =
-      findByNameQuery(attrName).filter { rec =>
-        attrValue match {
-          case AttributeString(s)  => rec.valueString === s
-          case AttributeNumber(n)  => rec.valueNumber === n.doubleValue
-          case AttributeBoolean(b) => rec.valueBoolean === b
-          case _                   => throw new RawlsException("Unsupported attribute type")
-        }
-      }
-
     val caseSensitiveCollate = SimpleExpression.unary[Option[String], Option[String]] { (value, qb) =>
       qb.expr(value)
       qb.sqlBuilder += " collate utf8_bin"

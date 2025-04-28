@@ -1,11 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeFormat, Entity}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
+import org.broadinstitute.dsde.rawls.model.Entity
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -27,12 +25,8 @@ case class CompactEntityRecord(id: Long,
                                deleted: Boolean,
                                attributes: Option[String]
 ) {
-
-  // json codec for entity attributes
-  implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
-
   def toEntity: Entity = {
-    val attrs: AttributeMap = Try(attributes.getOrElse("{}").parseJson.convertTo[AttributeMap]) match {
+    val attrs: AttributeMap = Try(CompactEntitySerialization.fromSql(attributes)) match {
       case Success(attrMap) => attrMap
       case Failure(ex)      =>
         // best-effort attempt to sanely truncate the error message and not include the entire payload

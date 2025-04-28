@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
@@ -73,6 +74,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.scalatestplus.mockito.MockitoSugar.mock
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
@@ -164,6 +166,7 @@ class WorkspaceServiceSpec
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
+    when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
@@ -600,94 +603,6 @@ class WorkspaceServiceSpec
       assertResult(false) {
         rqComplete
       }
-  }
-
-  behavior of "WorkspaceService catalog methods"
-
-  it should "retrieve catalog permission" in withTestDataServicesCustomSam { services =>
-    val populateAcl = for {
-      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
-
-      _ <- services.samDAO.overwritePolicy(
-        SamResourceTypeNames.workspace,
-        testData.workspace.workspaceId,
-        SamWorkspacePolicyNames.canCatalog,
-        SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.catalog), Set.empty),
-        testContext
-      )
-    } yield ()
-
-    Await.result(populateAcl, Duration.Inf)
-
-    val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-    assertResult(Set.empty) {
-      vComplete.filter(wc => wc.catalog)
-    }
-  }
-
-  it should "add catalog permissions" in withTestDataServicesCustomSam { services =>
-    populateWorkspacePolicies(services)
-
-    val user1 = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-
-    Await.result(for {
-                   _ <- services.samDAO.registerUser(toRawlsRequestContext(user1))
-                 } yield (),
-                 Duration.Inf
-    )
-
-    // add catalog perm
-    val catalogUpdateResponse =
-      Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-                                                           Seq(WorkspaceCatalog("obama@whitehouse.gov", true))
-                   ),
-                   Duration.Inf
-      )
-    val expectedResponse =
-      WorkspaceCatalogUpdateResponseList(Seq(WorkspaceCatalogResponse("obama@whitehouse.gov", true)), Seq.empty)
-
-    assertResult(expectedResponse) {
-      catalogUpdateResponse
-    }
-
-    // check result
-    services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq(
-      (SamResourceTypeNames.workspace,
-       testData.workspace.workspaceId,
-       SamWorkspacePolicyNames.canCatalog,
-       user1.userEmail.value
-      )
-    )
-  }
-
-  it should "remove catalog permissions" in withTestDataServicesCustomSam { services =>
-    populateWorkspacePolicies(services)
-
-    // remove catalog perm
-    val catalogRemoveResponse = Await.result(
-      services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-                                              Seq(WorkspaceCatalog(testData.userOwner.userEmail.value, false))
-      ),
-      Duration.Inf
-    )
-
-    val expectedResponse =
-      WorkspaceCatalogUpdateResponseList(Seq(WorkspaceCatalogResponse(testData.userOwner.userEmail.value, false)),
-                                         Seq.empty
-      )
-
-    assertResult(expectedResponse) {
-      catalogRemoveResponse
-    }
-
-    // check result
-    services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq(
-      (SamResourceTypeNames.workspace,
-       testData.workspace.workspaceId,
-       SamWorkspacePolicyNames.canCatalog,
-       testData.userOwner.userEmail.value
-      )
-    )
   }
 
   behavior of "WorkspaceService workspace locking and unlocking"
@@ -1131,6 +1046,26 @@ class WorkspaceServiceSpec
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
+  }
+
+  it should "delete a workspace when PAO exists or has exceptions" in withTestDataServices { services =>
+    // Check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    // Mock the PAO deletion [ignores any exceptions]
+    when(services.policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
+
+    // Delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    // Verify that the PAO deletion was called
+    verify(services.policyService)
+      .deleteWorkspacePao(ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceIdAsUUID), any())
+
+    // Check that the workspace has been deleted
+    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
   }
 
   behavior of "getTags"

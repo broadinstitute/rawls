@@ -512,57 +512,6 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).updateWorkspace(workspaceName, update)
   }
 
-  it should "get the workspace catalog" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
-    val workspaceService = mock[WorkspaceService]
-    val workspaceName = testData.workspace.toWorkspaceName
-    val response = Set(
-      WorkspaceCatalog("email1@test.com", true),
-      WorkspaceCatalog("email2@test.com", false)
-    )
-    when(workspaceService.getCatalog(workspaceName)).thenReturn(Future.successful(response))
-    val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
-    )
-    Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/catalog") ~>
-      service.testRoutes ~>
-      check {
-        status shouldBe StatusCodes.OK
-        val resp = responseAs[Set[WorkspaceCatalog]]
-        resp shouldBe response
-      }
-
-    verify(workspaceService).getCatalog(workspaceName)
-  }
-
-  it should "update the workspace catalog" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
-    val workspaceService = mock[WorkspaceService]
-    val workspaceName = testData.workspace.toWorkspaceName
-    val update: Seq[WorkspaceCatalog] = Seq(
-      WorkspaceCatalog("email@test.com", true)
-    )
-    val response = WorkspaceCatalogUpdateResponseList(
-      Seq(WorkspaceCatalogResponse(UUID.randomUUID().toString, true)),
-      Seq("email1@test.com")
-    )
-    when(workspaceService.updateCatalog(workspaceName, update)).thenReturn(Future.successful(response))
-    val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
-    )
-    Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/catalog", update.toJson) ~>
-      service.testRoutes ~>
-      check {
-        status shouldBe StatusCodes.OK
-        val resp = responseAs[WorkspaceCatalogUpdateResponseList]
-        resp shouldBe response
-      }
-
-    verify(workspaceService).updateCatalog(workspaceName, update)
-  }
-
   it should "check the bucket read access" in
     forAll(
       Table[Option[RawlsException], StatusCode](

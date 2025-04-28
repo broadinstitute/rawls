@@ -21,12 +21,6 @@ case class WorkspaceACLUpdateResponseList(usersUpdated: Set[WorkspaceACLUpdate],
                                           usersNotFound: Set[WorkspaceACLUpdate]
 )
 
-case class WorkspaceCatalog(email: String, catalog: Boolean)
-
-case class WorkspaceCatalogResponse(subjectId: String, catalog: Boolean)
-
-case class WorkspaceCatalogUpdateResponseList(usersUpdated: Seq[WorkspaceCatalogResponse], emailsNotFound: Seq[String])
-
 object WorkspaceAccessLevels {
   sealed trait WorkspaceAccessLevel extends RawlsEnumeration[WorkspaceAccessLevel] with Ordered[WorkspaceAccessLevel] {
     def compare(that: WorkspaceAccessLevel) = all.indexOf(this).compare(all.indexOf(that))
@@ -112,14 +106,6 @@ class WorkspaceACLJsonSupport extends JsonSupport {
     WorkspaceACLUpdateResponseList
   )
 
-  implicit val WorkspaceCatalogFormat: RootJsonFormat[WorkspaceCatalog] = jsonFormat2(WorkspaceCatalog)
-
-  implicit val WorkspaceCatalogResponseFormat: RootJsonFormat[WorkspaceCatalogResponse] = jsonFormat2(
-    WorkspaceCatalogResponse
-  )
-
-  implicit val WorkspaceCatalogUpdateResponseListFormat: RootJsonFormat[WorkspaceCatalogUpdateResponseList] =
-    jsonFormat2(WorkspaceCatalogUpdateResponseList)
 }
 
 object WorkspaceACLJsonSupport extends WorkspaceACLJsonSupport
