@@ -602,7 +602,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
 
         // loop over entity types
-        def allTypesResult: Iterable[ReadWriteAction[Seq[Int]]] =
+        def allTypesResult: Iterable[ReadWriteAction[Iterator[Int]]] =
           entityTypeMetadata.map { case (entityType, metadata) =>
             logger.info(s"Quicksilver migration:     - $entityType (${metadata.count}) ...")
 
@@ -612,11 +612,13 @@ class EntityService(protected val ctx: RawlsRequestContext,
                 .runWith(Sink.seq)
             )
 
-            val thisTypeInserts: ReadWriteAction[Seq[Int]] = thisTypeList flatMap { entities =>
-              DBIO.sequence(entities.map { entity =>
-                // ... insert into the temp table
-                // TODO CORE-364: batch these inserts?
-                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(entity)
+            val thisTypeInserts: ReadWriteAction[Iterator[Int]] = thisTypeList flatMap { entities =>
+              // batch inserts into chunks of 200 entities at a time
+              val batches = entities.grouped(200)
+
+              DBIO.sequence(batches.map { batch =>
+                // ... insert each batch into the temp table
+                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(batch)
               })
             }
 

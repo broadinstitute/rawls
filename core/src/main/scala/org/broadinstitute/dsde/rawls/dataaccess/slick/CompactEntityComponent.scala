@@ -217,11 +217,16 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def migrationDeleteTempTable: ReadWriteAction[Int] =
     sql"""drop temporary table ENTITY_MIGRATION_TEMP  ;""".asUpdate
 
-  def migrationInsertAttributesToTempTable(entity: Entity): ReadWriteAction[Int] = {
-    val attrsJson = toSql(entity.attributes)
-    sql"""insert into ENTITY_MIGRATION_TEMP(name, entity_type, attributes)
-          values (${entity.name}, ${entity.entityType}, $attrsJson);""".asUpdate
+  def migrationInsertAttributesToTempTable(entities: Seq[Entity]): ReadWriteAction[Int] = {
+    val values = entities.map { entity =>
+      val attrsJson = toSql(entity.attributes)
+      sql"(${entity.name}, ${entity.entityType}, $attrsJson)"
+    }
 
+    val insertBase = sql"""insert into ENTITY_MIGRATION_TEMP(name, entity_type, attributes)
+          values """
+
+    concatSqlActions(insertBase, reduceSqlActionsWithDelim(values, sql",")).asUpdate
   }
 
   def migrationUpdateFromTempTable(workspaceId: UUID): ReadWriteAction[Int] =
