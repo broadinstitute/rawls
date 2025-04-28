@@ -362,13 +362,19 @@ trait EntityApiService extends UserInfoDirectives {
               }
           } ~
           path("workspaces" / Segment / Segment / "quicksilverMigration") { (workspaceNamespace, workspaceName) =>
-            get {
-              complete {
-                entityServiceConstructor(ctx)
-                  .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName))
-                  .map { migrationResults =>
-                    StatusCodes.OK -> migrationResults
+            post {
+              entity(as[String]) { postBody =>
+                if (postBody != "I understand that this API will delete all my data tables") {
+                  complete(StatusCodes.BadRequest -> "You must consent to use this API.")
+                } else {
+                  complete {
+                    entityServiceConstructor(ctx)
+                      .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName))
+                      .map { migrationResults =>
+                        StatusCodes.OK -> migrationResults
+                      }
                   }
+                }
               }
             }
           }

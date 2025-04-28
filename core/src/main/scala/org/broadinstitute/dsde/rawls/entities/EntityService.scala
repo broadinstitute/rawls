@@ -3,10 +3,11 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
@@ -22,9 +23,10 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
 import java.sql.SQLException
+import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 
 object EntityService {
@@ -575,7 +577,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
       workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
       settings <- workspaceSettingService.getWorkspaceSettings(workspaceName)
       _ = if (
-        settings.find(_.isInstanceOf[CompactDataTablesSetting]).asInstanceOf[CompactDataTablesSetting].config.enabled
+        settings
+          .find(_.isInstanceOf[CompactDataTablesSetting])
+          .asInstanceOf[Option[CompactDataTablesSetting]]
+          .exists(_.config.enabled)
       ) {
         throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
       }
@@ -597,29 +602,50 @@ class EntityService(protected val ctx: RawlsRequestContext,
         val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
 
         // loop over entity types
-        val allTypesResult = entityTypeMetadata.map { case (entityType, metadata) =>
-          DBIO.from(
-            // retrieve all active entities of this type, as a streamable Source
-            localProvider
-              .listEntities(entityType)
-              // stream over each entity and ...
-              .map { entity =>
-                // ... update the existing row in the ENTITY table to populate the attributes column
-                dataAccess.compactEntityQuery.migrationUpdateAttributes(workspaceContext.workspaceIdAsUUID, entity)
-              }
-              .run()
-          )
-        }
+        def allTypesResult: Iterable[ReadWriteAction[Seq[Int]]] =
+          entityTypeMetadata.map { case (entityType, metadata) =>
+            logger.info(s"Quicksilver migration:     - $entityType (${metadata.count}) ...")
+
+            val thisTypeList: ReadAction[Seq[Entity]] = DBIO.from(
+              localProvider
+                .listEntities(entityType)
+                .runWith(Sink.seq)
+            )
+
+            val thisTypeInserts: ReadWriteAction[Seq[Int]] = thisTypeList flatMap { entities =>
+              DBIO.sequence(entities.map { entity =>
+                // ... insert into the temp table
+                // TODO CORE-364: batch these inserts?
+                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(entity)
+              })
+            }
+
+            thisTypeInserts
+          }
 
         for {
-          // migrate all attribute data from ENTITY_ATTRIBUTES_xx_xx to ENTITY.attributes
+          // create temp table
+          _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
+          // insert entity name, entity type, and attributes to the temp table
+          _ = logger.info(s"Quicksilver migration: inserting to temp table ...")
           _ <- DBIO.sequence(allTypesResult)
+          // update ENTITY from the contents of the temp table
+          _ = logger.info(s"Quicksilver migration: updating ENTITY from temp table ...")
+          _ <- dataAccess.compactEntityQuery.migrationUpdateFromTempTable(workspaceContext.workspaceIdAsUUID)
           // populate the ENTITY_REFS table for this workspace
+          _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
           _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
           // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
+          _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
           _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
                                                                              shardId
           )
+          // delete the all_attribute_values column for this workspace
+          _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
+          _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+
+          _ <- dataAccess.compactEntityQuery.migrationDeleteTempTable
+          _ = logger.info(s"Quicksilver migration: done!")
         } yield ()
       }
 

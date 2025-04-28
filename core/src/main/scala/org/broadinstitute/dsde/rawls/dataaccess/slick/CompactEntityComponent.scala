@@ -178,15 +178,33 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   //      methods in this section are only used for migrating data from legacy->compact format
   // ====================================================================================================
 
-  // do not use this outside migrations; it does not change the record_version
-  def migrationUpdateAttributes(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
+  def migrationCreateTempTable: ReadWriteAction[Int] =
+    sql"""create temporary table ENTITY_MIGRATION_TEMP(
+                name varchar(254) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
+                entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+                attributes json,
+                UNIQUE KEY `idx_temp_entity_type_name` (entity_type,name));""".asUpdate
+
+  def migrationDeleteTempTable: ReadWriteAction[Int] =
+    sql"""drop temporary table ENTITY_MIGRATION_TEMP  ;""".asUpdate
+
+  def migrationInsertAttributesToTempTable(entity: Entity): ReadWriteAction[Int] = {
     val attrsJson = toSql(entity.attributes)
-    sql"""update ENTITY set attributes = $attrsJson
-            where workspace_id = $workspaceId
-              where workspace_id = $workspaceId
-              and entity_type = ${entity.entityType}
-              and name = ${entity.name}""".asUpdate
+    sql"""insert into ENTITY_MIGRATION_TEMP(name, entity_type, attributes)
+          values (${entity.name}, ${entity.entityType}, $attrsJson);""".asUpdate
+
   }
+
+  def migrationUpdateFromTempTable(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update ENTITY e
+          join ENTITY_MIGRATION_TEMP tmp
+          on e.name = tmp.name and e.entity_type = tmp.entity_type and e.workspace_id = $workspaceId
+          set e.attributes = tmp.attributes;""".asUpdate
+
+  def migrationClearAllAttributesString(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update ENTITY
+          set all_attribute_values = null
+          where workspace_id = $workspaceId;""".asUpdate
 
   def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
     sql"""insert into ENTITY_REFS(from_id, to_id)
@@ -194,7 +212,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
          from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
          where ea.owner_id = e.id
          and e.workspace_id = $workspaceId
-         and e.deleted = 0""".asUpdate
+         and e.deleted = 0
+         and ea.value_entity_ref is not null;""".asUpdate
 
   // note this cleans up legacy attributes for soft-deleted entities as well as active entities
   def migrationDeleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
