@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   SubmissionCostService
 }
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -29,7 +29,9 @@ import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureM
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{
   ActiveSubmission,
+  AttributeBoolean,
   AttributeEntityReference,
+  AttributeName,
   AttributeString,
   AttributeValue,
   ErrorReport,
@@ -71,7 +73,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
   extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate
+  getTerminalStatusDate,
+  terraCreatedSetToDeleteAttribute
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
@@ -103,7 +106,8 @@ object SubmissionsService {
     genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
     config: WorkspaceServiceConfig,
     workspaceRepository: WorkspaceRepository,
-    workspaceSettingRepository: WorkspaceSettingRepository
+    workspaceSettingRepository: WorkspaceSettingRepository,
+    entityServiceConstructor: RawlsRequestContext => EntityService
   )(
     ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): SubmissionsService =
@@ -124,8 +128,11 @@ object SubmissionsService {
       genomicsServiceConstructor,
       config,
       workspaceRepository,
-      workspaceSettingRepository
+      workspaceSettingRepository,
+      entityServiceConstructor
     )
+
+  final val terraCreatedSetToDeleteAttribute = AttributeName("default", "deleteTerraCreatedSet")
 
   def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
     case class Call(jobId: Option[String])
@@ -178,7 +185,8 @@ class SubmissionsService(
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
   config: WorkspaceServiceConfig,
   val workspaceRepository: WorkspaceRepository,
-  workspaceSettingRepository: WorkspaceSettingRepository
+  workspaceSettingRepository: WorkspaceSettingRepository,
+  entityServiceConstructor: RawlsRequestContext => EntityService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -537,17 +545,10 @@ class SubmissionsService(
         ps.failureMode,
         ps.header
       )
-      _ <- getSetToDelete(submissionRequest)
-        .map { setToDelete =>
-          entityManager
-            .resolveProviderFuture(
-              EntityRequestArguments(ps.workspace, ctx, None, None)
-            )
-            .flatMap { entityProvider =>
-              entityProvider.deleteEntities(Seq(setToDelete), ctx)
-            }
+      _ <- getSetToDelete(workspaceName, submissionRequest)
+        .flatMap { setToDelete =>
+          entityServiceConstructor(ctx).deleteEntities(workspaceName, setToDelete.toSeq, None, None)
         }
-        .getOrElse(Future.successful(()))
     } yield SubmissionReport(
       submissionRequest,
       submission.submissionId,
@@ -558,15 +559,23 @@ class SubmissionsService(
       ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
 
-  def getSetToDelete(submissionRequest: SubmissionRequest): Option[AttributeEntityReference] =
+  def getSetToDelete(workspaceName: WorkspaceName,
+                     submissionRequest: SubmissionRequest
+  ): Future[Option[AttributeEntityReference]] =
     if (!submissionRequest.preserveSet) {
-      submissionRequest.entityType match {
-        case Some(value) if value.endsWith("_set") =>
-          Some(AttributeEntityReference(value, submissionRequest.entityName.get))
-        case _ => None
+      entityServiceConstructor(ctx).getEntity(workspaceName,
+                                              submissionRequest.entityType.get,
+                                              submissionRequest.entityName.get,
+                                              None,
+                                              None
+      ) map { entity =>
+        entity.attributes.get(terraCreatedSetToDeleteAttribute) match {
+          case Some(AttributeBoolean(true)) => Some(entity.toReference)
+          case _                            => None
+        }
       }
     } else {
-      None
+      Future.successful(None)
     }
 
   @VisibleForTesting

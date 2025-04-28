@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -30,6 +30,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.terraCreatedSetToDeleteAttribute
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
@@ -537,6 +538,9 @@ class SubmissionSpec(_system: ActorSystem)
         workbenchMetricBaseName
       )
 
+      val entityServiceConstructor =
+        EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
+
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
       val resourceBufferService = new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig)
@@ -576,7 +580,8 @@ class SubmissionSpec(_system: ActorSystem)
         genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
-        workspaceSettingRepository
+        workspaceSettingRepository,
+        entityServiceConstructor
       ) _
       lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(testContext)
       try
@@ -823,7 +828,8 @@ class SubmissionSpec(_system: ActorSystem)
             AttributeEntityReference("Sample", "sample5"),
             AttributeEntityReference("Sample", "sample6")
           )
-        )
+        ),
+        terraCreatedSetToDeleteAttribute -> AttributeBoolean(true)
       )
     )
 
@@ -854,7 +860,7 @@ class SubmissionSpec(_system: ActorSystem)
     }
   }
 
-  it should "not delete entity if not a set even if preserveSet is set to false" in withSubmissionsService {
+  it should "not delete entity if terraCreatedSetToDeleteAttribute not set even if preserveSet is set to false" in withSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",

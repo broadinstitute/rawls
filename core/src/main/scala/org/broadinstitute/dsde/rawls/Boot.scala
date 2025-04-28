@@ -460,6 +460,14 @@ object Boot extends IOApp with LazyLogging {
           workbenchMetricBaseName = metricsPrefix
         )
 
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit")
+      )
+
       val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
         slickDataSource,
         entityManager,
@@ -476,15 +484,8 @@ object Boot extends IOApp with LazyLogging {
         genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
-        new WorkspaceSettingRepository(slickDataSource)
-      )
-
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
-        slickDataSource,
-        samDAO,
-        workbenchMetricBaseName = metricsPrefix,
-        entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit")
+        new WorkspaceSettingRepository(slickDataSource),
+        entityServiceConstructor
       )
 
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
