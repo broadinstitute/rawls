@@ -9,10 +9,28 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceTypeNames, SamWorkspaceActions, SnapshotListResponse, SnapshotListResponseV3, Workspace, WorkspaceAttributeSpecs, WorkspaceCloudPlatform, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceName,
+  ErrorReport,
+  NamedDataRepoSnapshot,
+  RawlsRequestContext,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  SnapshotListResponse,
+  SnapshotListResponseV3,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceCloudPlatform,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.rawls.policy.{PolicyService, PolicyUtilities}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AggregateWorkspaceNotFoundException, AggregatedWorkspaceService, WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  AggregateWorkspaceNotFoundException,
+  AggregatedWorkspaceService,
+  WorkspaceRepository,
+  WorkspaceService
+}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -29,13 +47,14 @@ object SnapshotService {
                   workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
                   policyService: PolicyService
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SnapshotService =
-    new SnapshotService(ctx,
-                        dataSource,
-                        samDAO,
-                        workspaceManagerDAO,
-                        terraDataRepoUrl,
-                        dataRepoDAO,
-                        new AggregatedWorkspaceService(workspaceManagerDAO),
+    new SnapshotService(
+      ctx,
+      dataSource,
+      samDAO,
+      workspaceManagerDAO,
+      terraDataRepoUrl,
+      dataRepoDAO,
+      new AggregatedWorkspaceService(workspaceManagerDAO),
       workspaceServiceConstructor,
       policyService
     )
@@ -159,9 +178,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     }
 
   // Finds a workspace using the workspaceId then calls the createSnapshot method
-  def createSnapshotsByWorkspaceIdV3(workspaceId: String,
-                                     snapshotIds: Set[UUID]
-  ): Future[Unit] =
+  def createSnapshotsByWorkspaceIdV3(workspaceId: String, snapshotIds: Set[UUID]): Future[Unit] =
     getV2WorkspaceContextAndPermissionsById(workspaceId,
                                             SamWorkspaceActions.write,
                                             Some(WorkspaceAttributeSpecs(all = false))
@@ -170,26 +187,25 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     }
 
   // Find a workspace using the workspaceName then calls the createSnapshot method
-  def createSnapshotsByWorkspaceNameV3(workspaceName: WorkspaceName,
-                                       snapshotIds: Set[UUID]
-  ): Future[Unit] =
+  def createSnapshotsByWorkspaceNameV3(workspaceName: WorkspaceName, snapshotIds: Set[UUID]): Future[Unit] =
     getV2WorkspaceContextAndPermissions(workspaceName,
                                         SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
     ).flatMap(rawlsWorkspace => createSnapshots(rawlsWorkspace, snapshotIds))
 
-
   // Link the snapshot pao to the workspace pao
-  private def createSnapshots(rawlsWorkspace: Workspace,
-                               snapshotIds: Set[UUID]
-  ): Future[Unit] =
+  private def createSnapshots(rawlsWorkspace: Workspace, snapshotIds: Set[UUID]): Future[Unit] =
     for {
       snapshotsFromDataRepo <- Future {
         snapshotIds.map(getSnapshotFromDataRepoWithId)
       }
       workspacePaoOpt <- policyService.getPao(rawlsWorkspace.workspaceIdAsUUID, ctx)
-      workspacePao = workspacePaoOpt.getOrElse(throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.NotFound, s"Workspace PAO not found for workspace ${rawlsWorkspace.workspaceIdAsUUID}"))
+      workspacePao = workspacePaoOpt.getOrElse(
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound,
+                      s"Workspace PAO not found for workspace ${rawlsWorkspace.workspaceIdAsUUID}"
+          )
+        )
       )
 
       snapshotPaos <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
@@ -197,11 +213,18 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       }
 
       _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
-        policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId, rawlsWorkspace.workspaceIdAsUUID, dryRun = true, ctx)
+        policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
+                                                    rawlsWorkspace.workspaceIdAsUUID,
+                                                    dryRun = true,
+                                                    ctx
+        )
       }
 
       // if any snapshots contain protected data, the workspace must be protected
-      _ = if (snapshotPaos.exists(PolicyUtilities.containsProtectedDataPolicy) && !PolicyUtilities.containsProtectedDataPolicy(workspacePao)) {
+      _ = if (
+        snapshotPaos.exists(PolicyUtilities.containsProtectedDataPolicy) && !PolicyUtilities
+          .containsProtectedDataPolicy(workspacePao)
+      ) {
         throw new ProtectedDataException("Unable to add protected snapshot to unprotected workspace.")
       }
 
@@ -220,15 +243,19 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         PolicyUtilities.getGroupConstraintGroups(snapshotPao)
       }
       newWorkspaceGroups = snapshotGroups -- PolicyUtilities.getGroupConstraintGroups(workspacePao)
-      _ <- if (newWorkspaceGroups.nonEmpty) {
-        workspaceServiceConstructor(ctx).addAuthDomainGroups(rawlsWorkspace.toWorkspaceName, newWorkspaceGroups, ctx)
-      } else Future.unit
+      _ <-
+        if (newWorkspaceGroups.nonEmpty) {
+          workspaceServiceConstructor(ctx).addAuthDomainGroups(rawlsWorkspace.toWorkspaceName, newWorkspaceGroups, ctx)
+        } else Future.unit
 
       _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
-        policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId, rawlsWorkspace.workspaceIdAsUUID, dryRun = false, ctx)
+        policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
+                                                    rawlsWorkspace.workspaceIdAsUUID,
+                                                    dryRun = false,
+                                                    ctx
+        )
       }
     } yield ()
-
 
   private def getSnapshotFromDataRepo(snapshotIdentifiers: NamedDataRepoSnapshot) =
     Try(dataRepoDAO.getSnapshot(snapshotIdentifiers.snapshotId, ctx.userInfo.accessToken)) match {

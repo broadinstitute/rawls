@@ -7,7 +7,15 @@ import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, RawlsRequestContext, UserInfo, Workspace, WorkspaceFieldSpecs, WorkspaceName, WorkspaceResponse}
+import org.broadinstitute.dsde.rawls.model.{
+  NamedDataRepoSnapshot,
+  RawlsRequestContext,
+  UserInfo,
+  Workspace,
+  WorkspaceFieldSpecs,
+  WorkspaceName,
+  WorkspaceResponse
+}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -30,13 +38,15 @@ trait SnapshotApiService extends UserInfoDirectives {
           entity(as[Set[String]]) { snapshotIds =>
             complete {
               snapshotServiceConstructor(ctx)
-                .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName), snapshotIds.map(UUID.fromString))
+                .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName),
+                                                  snapshotIds.map(UUID.fromString)
+                )
                 .map(_ => StatusCodes.NoContent)
             }
           }
         }
       } ~
-        path("workspaces" / Segment / "snapshots" / "v3") { (workspaceId) =>
+        path("workspaces" / Segment / "snapshots" / "v3") { workspaceId =>
           post {
             entity(as[Set[String]]) { snapshotIds =>
               complete {
@@ -47,33 +57,35 @@ trait SnapshotApiService extends UserInfoDirectives {
             }
           }
         } ~
-      path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
-        post {
-          entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
-            complete {
-              snapshotServiceConstructor(ctx)
-                .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
-                .map(StatusCodes.Created -> _)
-            }
-          }
-        } ~
-          get {
-            // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
-            // that method provides a 400 Bad Request response and nice error message
-            parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
-              (offset, limit, referencedSnapshotId) =>
-                complete {
-                  snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
-                                                                                                  workspaceName
-                                                                                    ),
-                                                                                    offset,
-                                                                                    limit,
-                                                                                    referencedSnapshotId
+        path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
+          post {
+            entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+              complete {
+                snapshotServiceConstructor(ctx)
+                  .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName),
+                                                 namedDataRepoSnapshot
                   )
-                }
+                  .map(StatusCodes.Created -> _)
+              }
             }
-          }
-      } ~
+          } ~
+            get {
+              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+              // that method provides a 400 Bad Request response and nice error message
+              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+                (offset, limit, referencedSnapshotId) =>
+                  complete {
+                    snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
+                                                                                                    workspaceName
+                                                                                      ),
+                                                                                      offset,
+                                                                                      limit,
+                                                                                      referencedSnapshotId
+                    )
+                  }
+              }
+            }
+        } ~
         path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) {
           (workspaceNamespace, workspaceName, snapshotId) =>
             get {
@@ -145,13 +157,15 @@ trait SnapshotApiService extends UserInfoDirectives {
             entity(as[Set[String]]) { snapshotIds =>
               complete {
                 snapshotServiceConstructor(ctx)
-                  .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName), snapshotIds.map(UUID.fromString))
+                  .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName),
+                                                    snapshotIds.map(UUID.fromString)
+                  )
                   .map(_ => StatusCodes.NoContent)
               }
             }
           }
         } ~
-        path("workspaces" / Segment / "snapshots" / "v3") { (workspaceId) =>
+        path("workspaces" / Segment / "snapshots" / "v3") { workspaceId =>
           post {
             entity(as[Set[String]]) { snapshotIds =>
               complete {

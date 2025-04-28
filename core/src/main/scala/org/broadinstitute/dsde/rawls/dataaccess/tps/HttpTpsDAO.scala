@@ -14,9 +14,11 @@ import org.glassfish.jersey.jnh.connector.JavaNetHttpConnectorProvider
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
-class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO with LazyLogging {
+class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext)
+    extends TpsDAO
+    with LazyLogging {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
@@ -64,14 +66,16 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
       getTpsApi(ctx).deletePao(objectId)
     }
   }
-   /**
+
+  /**
       * Unlike mergePao, linkPao works as described by the documentation. It will link the source PAO
       * to the target PAO, meaning that future changes to the source PAO will propagate to the target
       * PAO. Changes to the target PAO will not propagate up the link to the source PAO.
       */
-  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoUpdateResult] = Future {
-    blocking {
-      getTpsApi(ctx).linkPao(request, objectId)
+  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoUpdateResult] =
+    Future {
+      blocking {
+        getTpsApi(ctx).linkPao(request, objectId)
+      }
     }
-  }
 }

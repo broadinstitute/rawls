@@ -246,5 +246,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     ValueObjectFormat(DataReferenceDescriptionField)
   implicit val NamedDataRepoSnapshotFormat: RootJsonFormat[NamedDataRepoSnapshot] = jsonFormat5(NamedDataRepoSnapshot)
   implicit val SnapshotListResponseFormat: RootJsonFormat[SnapshotListResponse] = jsonFormat1(SnapshotListResponse)
-  implicit val SnapshotListResponseV3Format: RootJsonFormat[SnapshotListResponseV3] = jsonFormat1(SnapshotListResponseV3)
+  implicit val SnapshotListResponseV3Format: RootJsonFormat[SnapshotListResponseV3] = jsonFormat1(
+    SnapshotListResponseV3
+  )
 }
