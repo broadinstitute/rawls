@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+
+    <!-- update the ENTITY triggers which populate ENTITY_KEYS to reflect the latest ENTITY.attributes format -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="update_entity_keys_triggers_for_serdes">
+        <sql stripComments="true" endDelimiter="~">
+            DROP TRIGGER IF EXISTS after_entity_insert ~
+            DROP TRIGGER IF EXISTS after_entity_update ~
+
+            CREATE TRIGGER after_entity_insert AFTER INSERT ON ENTITY
+                FOR EACH ROW
+                -- if attributes is null, this is a legacy entity; ignore it
+                if new.attributes is not null then
+                    INSERT INTO ENTITY_KEYS
+                        (id, workspace_id, entity_type, attribute_keys, last_updated)
+                    VALUES
+                        (new.id, new.workspace_id, new.entity_type, JSON_KEYS(new.attributes, '$.attrs'), now(3));
+                end if ~
+
+            CREATE TRIGGER after_entity_update AFTER UPDATE ON ENTITY
+                FOR EACH ROW
+                BEGIN
+                    -- is this row soft-deleted?
+                    if old.deleted = 0 and new.deleted = 1 then
+                        DELETE FROM ENTITY_KEYS WHERE id = new.id;
+                    elseif new.attributes is not null then
+                        -- compare old keys to new keys; update the ENTITY_KEYS table only if they are different
+                        set @new_keys := JSON_KEYS(new.attributes, '$.attrs');
+                        set @old_keys := JSON_KEYS(old.attributes, '$.attrs');
+                        if JSON_LENGTH(@new_keys) != JSON_LENGTH(@old_keys) OR JSON_CONTAINS(@new_keys, @old_keys) = 0 then
+                            UPDATE ENTITY_KEYS SET attribute_keys=@new_keys, last_updated=now(3)
+                            WHERE id = new.id;
+                        end if;
+                    end if;
+                END ~
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

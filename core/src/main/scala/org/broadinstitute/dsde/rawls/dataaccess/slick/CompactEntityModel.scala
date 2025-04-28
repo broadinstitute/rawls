@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityUtils
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{AttributeFormat, AttributeName, Entity}
@@ -29,7 +29,7 @@ case class CompactEntityRecord(id: Long,
                                attributes: Option[String]
 ) {
   def toEntity: Entity = {
-    val attrs: AttributeMap = Try(CompactEntityUtils.fromSql(attributes)) match {
+    val attrs: AttributeMap = Try(CompactEntitySerialization.fromSql(attributes)) match {
       case Success(attrMap) => attrMap
       case Failure(ex)      =>
         // best-effort attempt to sanely truncate the error message and not include the entire payload
