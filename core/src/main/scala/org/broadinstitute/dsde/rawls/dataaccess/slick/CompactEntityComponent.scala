@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 
@@ -41,6 +42,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   implicit val getKeysRecord: GetResult[KeysRecord] =
     GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
+
+  implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
+    GetResult(r => EntityTypeAndAttributeKey(r.<<, AttributeName.fromDelimitedName(r.<<)))
+
+  implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
+    GetResult(r => EntityTypeAndCount(r.<<, r.<<))
 
   /**
     * Insert a single entity to the db.
@@ -172,6 +179,28 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     query.asUpdate
   }
+
+  /**
+   * Get all entity attribute keys for a workspace.
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
+   */
+  def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
+    sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
+
+  /**
+   * Gets the count of entities in a workspace, grouped by entity type.
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
+   */
+  def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
+    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
+    sql"""SELECT entity_type, COUNT(*)
+      FROM ENTITY_KEYS
+      WHERE workspace_id = $workspaceId
+      GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   // ====================================================================================================
   //  migration helpers
