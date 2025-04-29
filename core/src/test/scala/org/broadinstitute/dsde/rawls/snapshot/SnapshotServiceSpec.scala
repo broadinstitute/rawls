@@ -12,8 +12,7 @@ import bio.terra.datarepo.model.{
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -28,11 +27,11 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeName,
   SamResourceTypeNames,
   SamUserStatusResponse,
-  Workspace,
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._

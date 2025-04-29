@@ -1,17 +1,7 @@
 package org.broadinstitute.dsde.rawls.policy
 
 import bio.terra.policy.client.ApiException
-import bio.terra.policy.model.{
-  TpsComponent,
-  TpsObjectType,
-  TpsPaoCreateRequest,
-  TpsPaoGetResult,
-  TpsPaoSourceRequest,
-  TpsPolicyInput,
-  TpsPolicyInputs,
-  TpsPolicyPair,
-  TpsUpdateMode
-}
+import bio.terra.policy.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
