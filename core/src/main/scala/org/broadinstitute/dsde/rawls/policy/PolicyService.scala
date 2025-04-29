@@ -101,6 +101,11 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
     // Ignore any exception
     }
 
+  /**
+    * Unlike mergePao, linkPao works as described by the documentation. It will link the source PAO
+    * to the target PAO, meaning that future changes to the source PAO will propagate to the target
+    * PAO. Changes to the target PAO will not propagate up the link to the source PAO.
+    */
   def linkSnapshotPaoToWorkspacePao(
     snapshotId: UUID,
     workspaceId: UUID,
