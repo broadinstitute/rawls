@@ -485,8 +485,12 @@ object Boot extends IOApp with LazyLogging {
         appConfigManager.conf.getInt("entities.pageSizeLimit")
       )
 
+      val billingRepository = new BillingRepository(slickDataSource)
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+      val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
+
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
-        slickDataSource,
+        workspaceRepository,
         samDAO,
         workspaceManagerDAO,
         appConfigManager.conf.getString("dataRepo.terraInstanceName"),
@@ -508,9 +512,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
-      val billingRepository = new BillingRepository(slickDataSource)
-      val workspaceRepository = new WorkspaceRepository(slickDataSource)
-      val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
+
       val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(

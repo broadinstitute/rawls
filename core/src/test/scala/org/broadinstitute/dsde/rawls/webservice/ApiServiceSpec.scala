@@ -253,11 +253,13 @@ trait ApiServiceSpec
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
-      slickDataSource,
+      new WorkspaceRepository(slickDataSource),
       samDAO,
       workspaceManagerDAO,
       mockServer.mockServerBaseUrl,
-      dataRepoDAO
+      dataRepoDAO,
+      _ => mock[WorkspaceService](RETURNS_SMART_NULLS),
+      policyService
     )
 
     override val genomicsServiceConstructor = GenomicsServiceImpl.constructor(

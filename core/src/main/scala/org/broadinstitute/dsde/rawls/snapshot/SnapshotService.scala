@@ -39,7 +39,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
-  def constructor(dataSource: SlickDataSource,
+  def constructor(workspaceRepository: WorkspaceRepository,
                   samDAO: SamDAO,
                   workspaceManagerDAO: WorkspaceManagerDAO,
                   terraDataRepoUrl: String,
@@ -49,7 +49,7 @@ object SnapshotService {
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SnapshotService =
     new SnapshotService(
       ctx,
-      dataSource,
+      workspaceRepository,
       samDAO,
       workspaceManagerDAO,
       terraDataRepoUrl,
@@ -61,7 +61,7 @@ object SnapshotService {
 }
 
 class SnapshotService(protected val ctx: RawlsRequestContext,
-                      val dataSource: SlickDataSource,
+                      val workspaceRepository: WorkspaceRepository,
                       val samDAO: SamDAO,
                       workspaceManagerDAO: WorkspaceManagerDAO,
                       terraDataRepoInstanceName: String,
@@ -73,9 +73,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     extends FutureSupport
     with WorkspaceSupport
     with LazyLogging {
-
-  // used by WorkspaceSupport - in future refactoring, this can be moved into the constructor for better mocking
-  val workspaceRepository: WorkspaceRepository = new WorkspaceRepository(dataSource)
 
   // Finds a workspace using the workspaceId then calls the createSnapshot method
   def createSnapshotByWorkspaceId(workspaceId: String,
@@ -212,6 +209,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         policyService.getOrCreateSnapshotPao(snapshot.getId, ctx)
       }
 
+      // todo: this doesn't seem worth the time. we may not see any conflicts here
       _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
         policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
                                                     rawlsWorkspace.workspaceIdAsUUID,
