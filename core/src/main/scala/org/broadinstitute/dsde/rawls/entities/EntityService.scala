@@ -607,8 +607,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
             )
 
             val thisTypeInserts: ReadWriteAction[Iterator[Int]] = thisTypeList flatMap { entities =>
-              // batch inserts into chunks of 200 entities at a time
-              val batches = entities.grouped(200)
+              // batch inserts into chunks of 400 entities at a time
+              val batches = entities.grouped(400)
 
               DBIO.sequence(batches.map { batch =>
                 // ... insert each batch into the temp table
