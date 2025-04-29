@@ -30,7 +30,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.terraCreatedSetToDeleteAttribute
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
@@ -828,8 +827,7 @@ class SubmissionSpec(_system: ActorSystem)
             AttributeEntityReference("Sample", "sample5"),
             AttributeEntityReference("Sample", "sample6")
           )
-        ),
-        terraCreatedSetToDeleteAttribute -> AttributeBoolean(true)
+        )
       )
     )
 
@@ -843,7 +841,8 @@ class SubmissionSpec(_system: ActorSystem)
       expression = Option("this.samples"),
       useCallCache = false,
       deleteIntermediateOutputFiles = false,
-      preserveSet = false
+      deleteEntityType = Option(sset.entityType),
+      deleteEntityName = Option(sset.name)
     )
     val newSubmissionReport =
       Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
@@ -870,7 +869,8 @@ class SubmissionSpec(_system: ActorSystem)
         expression = None,
         useCallCache = false,
         deleteIntermediateOutputFiles = false,
-        preserveSet = false
+        deleteEntityType = Option("Sample"),
+        deleteEntityName = Option("sample1")
       )
       val newSubmissionReport =
         Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)

@@ -29,9 +29,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureM
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{
   ActiveSubmission,
-  AttributeBoolean,
   AttributeEntityReference,
-  AttributeName,
   AttributeString,
   AttributeValue,
   ErrorReport,
@@ -73,8 +71,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
   extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate,
-  terraCreatedSetToDeleteAttribute
+  getTerminalStatusDate
 }
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
@@ -131,8 +128,6 @@ object SubmissionsService {
       workspaceSettingRepository,
       entityServiceConstructor
     )
-
-  final val terraCreatedSetToDeleteAttribute = AttributeName("default", "deleteTerraCreatedSet")
 
   def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
     case class Call(jobId: Option[String])
@@ -545,10 +540,11 @@ class SubmissionsService(
         ps.failureMode,
         ps.header
       )
-      _ <- getSetToDelete(workspaceName, submissionRequest)
-        .flatMap { setToDelete =>
-          entityServiceConstructor(ctx).deleteEntities(workspaceName, setToDelete.toSeq, None, None)
+      _ <- getSetToDelete(submissionRequest)
+        .map { setToDelete =>
+          entityServiceConstructor(ctx).deleteEntities(workspaceName, Seq(setToDelete), None, None)
         }
+        .getOrElse(Future.successful(()))
     } yield SubmissionReport(
       submissionRequest,
       submission.submissionId,
@@ -559,23 +555,16 @@ class SubmissionsService(
       ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
 
-  def getSetToDelete(workspaceName: WorkspaceName,
-                     submissionRequest: SubmissionRequest
-  ): Future[Option[AttributeEntityReference]] =
-    if (!submissionRequest.preserveSet) {
-      entityServiceConstructor(ctx).getEntity(workspaceName,
-                                              submissionRequest.entityType.get,
-                                              submissionRequest.entityName.get,
-                                              None,
-                                              None
-      ) map { entity =>
-        entity.attributes.get(terraCreatedSetToDeleteAttribute) match {
-          case Some(AttributeBoolean(true)) => Some(entity.toReference)
-          case _                            => None
+  def getSetToDelete(
+    submissionRequest: SubmissionRequest
+  ): Option[AttributeEntityReference] =
+    submissionRequest.deleteEntityType match {
+      case Some(value) if value == submissionRequest.entityType.get =>
+        submissionRequest.deleteEntityName match {
+          case Some(name) if name == submissionRequest.entityName.get => Some(AttributeEntityReference(value, name))
+          case _                                                      => None
         }
-      }
-    } else {
-      Future.successful(None)
+      case _ => None
     }
 
   @VisibleForTesting
