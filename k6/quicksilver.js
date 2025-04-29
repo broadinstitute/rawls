@@ -42,8 +42,28 @@ export const options = {
       duration: '20s',
       startTime: '22s',
     },
+    // getEntityMetadata baseline and test run in parallel; each has three virtual users and makes as many requests as possible
+    // within 20 seconds. The getEntityMetadata scenarios start after the getEntity scenarios finish, by specifying startTime.
+    getEntityMetadataBaseline: {
+      exec: 'getEntityMetadata',
+      tags: { rawlsApi: 'getEntityMetadata' },
+      env: { TEST_GROUP: 'baseline' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '44s'
+    },
+    getEntityMetadataTest: {
+      exec: 'getEntityMetadata',
+      tags: { rawlsApi: 'getEntityMetadata' },
+      env: { TEST_GROUP: 'test' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '44s',
+    },
     // putEntity baseline and test run in parallel; each makes a total of 20 requests, using 2 virtual users.
-    // The putEntity scenarios start after the getEntity scenarios finish, by specifying startTime.
+    // The putEntity scenarios start after the getEntityMetadata scenarios finish, by specifying startTime.
     putEntityBaseline: {
       exec: 'putEntity',
       tags: { rawlsApi: 'putEntity' },
@@ -51,7 +71,7 @@ export const options = {
       executor: 'shared-iterations',
       vus: 2,
       iterations: 20,
-      startTime: '44s'
+      startTime: '66s'
     },
     putEntityTest: {
       exec: 'putEntity',
@@ -60,7 +80,7 @@ export const options = {
       executor: 'shared-iterations',
       vus: 2,
       iterations: 20,
-      startTime: '44s',
+      startTime: '66s',
     },
   }
 }
@@ -122,6 +142,17 @@ export function putEntity() {
       JSON.stringify(entity),
       defaultParams);
     check(res, { "status is 201": (res) => res.status === 201 });
+    sleep(.1);
+  });
+}
+
+// get a single entity
+export function getEntityMetadata() {
+  group(`${__ENV.TEST_GROUP}`, function() {
+    let res = http.get(
+        `${workspaceRoot(__ENV.TEST_GROUP)}/entities`,
+        defaultParams);
+    check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
   });
 }
