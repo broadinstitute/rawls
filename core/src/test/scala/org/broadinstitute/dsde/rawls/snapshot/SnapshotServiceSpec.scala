@@ -1435,6 +1435,46 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       )
     }
 
+    "create multiple snapshot references when called with a workspace id" in {
+      val workspace = minimalTestData.workspace
+      val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
+
+      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
+      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.workspaceIdAsUUID), any()))
+        .thenReturn(Future.successful(Option(workspace)))
+
+      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
+
+      val policyService = mock[PolicyService]
+      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
+      when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(emptyPao))
+      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
+
+      val dataRepo = defaultDataRepoDao()
+      snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
+
+      val snapshotService = SnapshotService.constructor(
+        mockWorkspaceRepository,
+        defaultMockSamDao(),
+        defaultMockWorkspaceManagerDao(),
+        "fake-terra-data-repo-dev",
+        dataRepo,
+        defaultWorkspaceServiceConstructor,
+        policyService
+      )(testContext)
+
+      Await.result(snapshotService.createSnapshotsByWorkspaceIdV3(workspace.workspaceIdAsUUID.toString, snapshotIds),
+                   Duration.Inf
+      )
+      snapshotIds.map(id =>
+        verify(policyService).linkSnapshotPaoToWorkspacePao(mockitoEq(id),
+                                                            mockitoEq(workspace.workspaceIdAsUUID),
+                                                            mockitoEq(false),
+                                                            any()
+        )
+      )
+    }
+
     "fail to create multiple snapshot references if the workspace does not have a PAO" in {
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
