@@ -588,12 +588,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
       // get the local (legacy) provider
       localProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
 
-      // change the workspace to be quicksilver-enabled
-      _ <- workspaceSettingService.setWorkspaceSettings(
-        workspaceName,
-        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-      )
-
       // get the list of entity types in this workspace
       entityTypeMetadata <- localProvider.entityTypeMetadata(useCache = true, ctx)
 
@@ -650,6 +644,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
           _ = logger.info(s"Quicksilver migration: done!")
         } yield ()
       }
+
+      // finally, change the workspace to be quicksilver-enabled
+      _ <- workspaceSettingService.setWorkspaceSettings(
+        workspaceName,
+        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+      )
 
       // return a count of entities updated
     } yield entityTypeMetadata.map { case (entityType, metadata) => (entityType, metadata.count) }
