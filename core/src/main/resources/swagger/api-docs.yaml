@@ -2414,6 +2414,7 @@ paths:
       description: |
         Compact data entities are not fully supported at this time. Calling this API
         will cause you to lose access to all of your data tables. This is not reversible.
+        This API may be changed at any time, without warning.
       operationId: quicksilver_migration
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
