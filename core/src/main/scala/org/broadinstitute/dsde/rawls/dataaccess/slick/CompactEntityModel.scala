@@ -3,7 +3,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.Entity
+import org.broadinstitute.dsde.rawls.model.{AttributeFormat, AttributeName, Entity}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -48,3 +51,13 @@ case class CompactEntityRefRecord(id: Long, name: String, entityType: String)
 case class RefPointerRecord(fromId: Long, toId: Long)
 
 case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
+
+case class EntityTypeAndAttributeKey(
+  entityType: String,
+  attributeKey: AttributeName
+)
+
+case class EntityTypeAndCount(
+  entityType: String,
+  count: Int
+)
