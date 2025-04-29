@@ -84,7 +84,6 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
       snapshotPaoOpt <- getPao(snapshotId, ctx)
       snapshotPao <-
         if (snapshotPaoOpt.isEmpty) {
-          logger.info(s"pao not found, creating new one [snapshotId: $snapshotId]")
           val req = new TpsPaoCreateRequest()
             .objectType(TpsObjectType.SNAPSHOT)
             .objectId(snapshotId)

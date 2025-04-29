@@ -209,7 +209,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         policyService.getOrCreateSnapshotPao(snapshot.getId, ctx)
       }
 
-      // todo: this doesn't seem worth the time. we may not see any conflicts here
       _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
         policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
                                                     rawlsWorkspace.workspaceIdAsUUID,
