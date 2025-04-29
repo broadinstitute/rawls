@@ -151,30 +151,6 @@ trait SnapshotApiService extends UserInfoDirectives {
                   }
               }
             }
-        } ~
-        path("workspaces" / Segment / Segment / "snapshots" / "v3") { (workspaceNamespace, workspaceName) =>
-          post {
-            entity(as[Set[String]]) { snapshotIds =>
-              complete {
-                snapshotServiceConstructor(ctx)
-                  .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName),
-                                                    snapshotIds.map(UUID.fromString)
-                  )
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
-        } ~
-        path("workspaces" / Segment / "snapshots" / "v3") { workspaceId =>
-          post {
-            entity(as[Set[String]]) { snapshotIds =>
-              complete {
-                snapshotServiceConstructor(ctx)
-                  .createSnapshotsByWorkspaceIdV3(workspaceId, snapshotIds.map(UUID.fromString))
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
         }
     }
 }
