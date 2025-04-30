@@ -83,6 +83,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -181,7 +182,11 @@ trait ApiServiceSpec
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.getPao(any(), any()))
-      .thenReturn(Future.successful(Option(new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs()))))
+      .thenReturn(
+        Future.successful(
+          Option(new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs()).sourcesObjectIds(List[UUID]().asJava))
+        )
+      )
     when(policyService.getOrCreateSnapshotPao(any(), any()))
       .thenReturn(Future.successful(new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())))
     when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
