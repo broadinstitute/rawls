@@ -196,12 +196,11 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
             post {
               withSizeLimit(batchUpsertMaxBytes) {
-                //
-                entity(asSourceOf[EntityUpdateDefinition]) { entityUpdateStream =>
+                entity(asSourceOf[EntityUpdateDefinition]) { operations =>
                   complete {
                     entityServiceConstructor(ctx)
                       .batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                           entityUpdateStream,
+                                           operations,
                                            dataReference,
                                            billingProject
                       )
@@ -214,11 +213,11 @@ trait EntityApiService extends UserInfoDirectives {
           } ~
           path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
             post {
-              entity(asSourceOf[EntityUpdateDefinition]) { entityUpdateStream =>
+              entity(asSourceOf[EntityUpdateDefinition]) { operations =>
                 complete {
                   entityServiceConstructor(ctx)
                     .batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                         entityUpdateStream,
+                                         operations,
                                          dataReference,
                                          billingProject
                     )

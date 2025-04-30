@@ -4,7 +4,6 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
-import akka.util.ByteString
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
@@ -25,11 +24,9 @@ import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, Json
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.dbio.DBIO
-import spray.json._
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource,
@@ -444,7 +441,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
-                                  entityUpdateStream: Source[EntityUpdateDefinition, _],
+                                  entityUpdates: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId],
@@ -466,35 +463,35 @@ class EntityService(protected val ctx: RawlsRequestContext,
         entities <-
           if (upsert) {
             traceFutureWithParent("EntityProvider.batchUpsertEntities", parentContext) { s =>
-              entityProvider.batchUpsertEntities(entityUpdateStream, s)
+              entityProvider.batchUpsertEntities(entityUpdates, s)
             }
           } else {
             traceFutureWithParent("EntityProvider.batchUpdateEntities", parentContext) { s =>
-              entityProvider.batchUpdateEntities(entityUpdateStream, s)
+              entityProvider.batchUpdateEntities(entityUpdates, s)
             }
           }
       } yield entities
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName,
-                          entityUpdateStream: Source[EntityUpdateDefinition, _],
+                          entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, entityUpdateStream, upsert = false, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
         .recover(
           sqlLoggingRecover(s"batchUpdateEntities: $workspaceName")
         )
     }
 
   def batchUpsertEntities(workspaceName: WorkspaceName,
-                          entityUpdateStream: Source[EntityUpdateDefinition, _],
+                          entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, entityUpdateStream, upsert = true, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
         .recover(
           sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )

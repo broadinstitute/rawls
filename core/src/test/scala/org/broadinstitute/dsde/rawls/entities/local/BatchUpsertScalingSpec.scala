@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.util.ByteString
 import breeze.linalg._
 import breeze.stats._
 import com.typesafe.config.ConfigFactory
