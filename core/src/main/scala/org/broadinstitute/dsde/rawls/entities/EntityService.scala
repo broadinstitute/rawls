@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities
 
 import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
+import akka.util.ByteString
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
@@ -20,9 +22,11 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
+import spray.json._
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource,
@@ -30,7 +34,7 @@ object EntityService {
                   workbenchMetricBaseName: String,
                   entityManager: EntityManager,
                   pageSizeLimit: Int
-  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): EntityService =
+  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext, system: ActorSystem): EntityService =
     new EntityService(ctx, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
 }
 
@@ -40,7 +44,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                     entityManager: EntityManager,
                     override val workbenchMetricBaseName: String,
                     pageSizeLimit: Int
-)(implicit protected val executionContext: ExecutionContext)
+)(implicit protected val executionContext: ExecutionContext, system: ActorSystem)
     extends WorkspaceSupport
     with EntitySupport
     with AttributeSupport
@@ -426,7 +430,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
-                                  entityUpdates: Seq[EntityUpdateDefinition],
+                                  inputStream: Source[ByteString, _],
                                   upsert: Boolean,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId],
@@ -444,40 +448,51 @@ class EntityService(protected val ctx: RawlsRequestContext,
             EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
           )
         }
+        // parse the input Source[ByteString ...] into Source[EntityUpdateDefinition ...]
+        entityUpdateStream = inputStream.map(_.utf8String).map { jsonStr =>
+          Try(jsonStr.parseJson.convertTo[EntityUpdateDefinition]) match {
+            case Success(obj) => obj
+            case Failure(ex) =>
+              throw new RawlsExceptionWithErrorReport(
+                ErrorReport(s"Invalid JSON in entity update definitions: ${ex.getMessage}")
+              )
+          }
+        }
+
         entities <-
           if (upsert) {
             traceFutureWithParent("EntityProvider.batchUpsertEntities", parentContext) { s =>
-              entityProvider.batchUpsertEntities(entityUpdates, s)
+              entityProvider.batchUpsertEntities(entityUpdateStream, s)
             }
           } else {
             traceFutureWithParent("EntityProvider.batchUpdateEntities", parentContext) { s =>
-              entityProvider.batchUpdateEntities(entityUpdates, s)
+              entityProvider.batchUpdateEntities(entityUpdateStream, s)
             }
           }
       } yield entities
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Seq[EntityUpdateDefinition],
+                          inputStream: Source[ByteString, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, inputStream, upsert = false, dataReference, billingProject, s)
         .recover(
-          sqlLoggingRecover(s"batchUpdateEntities: $workspaceName ${entityUpdates.size} updates")
+          sqlLoggingRecover(s"batchUpdateEntities: $workspaceName")
         )
     }
 
   def batchUpsertEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Seq[EntityUpdateDefinition],
+                          inputStream: Source[ByteString, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, inputStream, upsert = true, dataReference, billingProject, s)
         .recover(
-          sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
+          sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )
     }
 

@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.util.ByteString
 import breeze.linalg._
 import breeze.stats._
 import com.typesafe.config.ConfigFactory
@@ -148,6 +149,7 @@ class BatchUpsertScalingSpec
 
       // parse into EntityUpdateDefinition. This is our initial load file, as if the user had an empty workspace
       // and uploaded a TSV to create a new data table.
+      val initialUpsertByteSource = akka.stream.scaladsl.Source.single(ByteString(batchUpsertFile))
       val initialUpsert: Seq[EntityUpdateDefinition] = batchUpsertFile.parseJson.convertTo[Seq[EntityUpdateDefinition]]
 
       // copy the initial upsert, but change one value. This is as if the user downloaded a data table to TSV,
@@ -196,13 +198,21 @@ class BatchUpsertScalingSpec
         } else {
           val (loadDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsert, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName,
+                                                               initialUpsertByteSource,
+                                                               None,
+                                                               None
+              ),
               waitDuration
             )
           }
           val (changeDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, modifiedUpsert, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName,
+                                                               initialUpsertByteSource,
+                                                               None,
+                                                               None
+              ),
               waitDuration
             )
           }

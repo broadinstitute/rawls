@@ -34,11 +34,11 @@ trait EntityProvider {
 
   // ----- implementation methods follow:
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+  def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                           parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+  def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                           parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]]
 

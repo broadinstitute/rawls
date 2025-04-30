@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.stream.scaladsl.Source
 import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
@@ -92,7 +93,7 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
         val attrUpdate = AddUpdateAttribute(AttributeName.withDefaultNS("newAttr"), AttributeString("whatever"))
         val entityUpdate =
           EntityUpdateDefinition(name = "deleteTimeoutTest", entityType = "unitTestType", Seq(attrUpdate))
-        localEntityProvider.batchUpsertEntities(Seq(entityUpdate), testContext)
+        localEntityProvider.batchUpsertEntities(Source.single(entityUpdate), testContext)
       }
     }
 
@@ -101,7 +102,7 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
         val attrUpdate = AddUpdateAttribute(AttributeName.withDefaultNS("newAttr"), AttributeString("whatever"))
         val entityUpdate =
           EntityUpdateDefinition(name = "deleteTimeoutTest", entityType = "unitTestType", Seq(attrUpdate))
-        localEntityProvider.batchUpdateEntities(Seq(entityUpdate), testContext)
+        localEntityProvider.batchUpdateEntities(Source.single(entityUpdate), testContext)
       }
     }
 //    "enforce on batchUpdateEntitiesImpl" ignore fail()

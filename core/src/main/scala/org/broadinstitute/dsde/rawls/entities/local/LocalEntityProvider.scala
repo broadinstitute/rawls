@@ -90,6 +90,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
 
   final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
 
+  // TODO CORE-427: don't create a brand new ActorSystem; see if we can get the one from Boot.scala
+  implicit private val actorSystem: ActorSystem = ActorSystem("LocalEntityProvider")
+
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
   ): Future[Map[String, EntityTypeMetadata]] =
@@ -523,102 +526,105 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  private def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition],
-                                      upsert: Boolean,
-                                      parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] = {
-    val namesToCheck = for {
-      update <- entityUpdates
-      operation <- update.operations
-    } yield operation.name
+  private def batchUpdateEntitiesImpl(
+    updateStream: Source[EntityUpdateDefinition, _],
+    upsert: Boolean,
+    parentContext: RawlsRequestContext
+  ): Future[Traversable[Entity]] =
+    // immediately materialize the updateStream for backwards compatibility
+    updateStream.runWith(Sink.seq).flatMap { entityUpdates =>
+      val namesToCheck = for {
+        update <- entityUpdates
+        operation <- update.operations
+      } yield operation.name
 
-    traceFutureWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", parentContext) { localContext =>
-      setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
-      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("upsert"), java.lang.Boolean.valueOf(upsert))
-      setTraceSpanAttribute(localContext,
-                            AttributeKey.longKey("entityUpdatesCount"),
-                            java.lang.Long.valueOf(entityUpdates.length)
-      )
-      setTraceSpanAttribute(localContext,
-                            AttributeKey.longKey("entityOperationsCount"),
-                            java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
-      )
+      traceFutureWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", parentContext) { localContext =>
+        setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
+        setTraceSpanAttribute(localContext, AttributeKey.booleanKey("upsert"), java.lang.Boolean.valueOf(upsert))
+        setTraceSpanAttribute(localContext,
+                              AttributeKey.longKey("entityUpdatesCount"),
+                              java.lang.Long.valueOf(entityUpdates.length)
+        )
+        setTraceSpanAttribute(localContext,
+                              AttributeKey.longKey("entityOperationsCount"),
+                              java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
+        )
 
-      withAttributeNamespaceCheck(namesToCheck) {
-        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", localContext)(_ =>
-            dataAccess.entityQuery.getActiveEntities(
-              workspaceContext,
-              entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))
-            )
-          ) map { entities =>
-            val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
-            entityUpdates.map { entityUpdate =>
-              entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
-                case Some(e) =>
-                  Try(applyOperationsToEntity(e, entityUpdate.operations))
-                case None =>
-                  if (upsert) {
-                    Try(
-                      applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty),
-                                              entityUpdate.operations
-                      )
-                    )
-                  } else {
-                    Failure(new RuntimeException("Entity does not exist"))
-                  }
-              })
-            }
-          }
-
-          val saveAction = updateTrialsAction flatMap { updateTrials =>
-            val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
-              ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
-            }
-            if (errorReports.nonEmpty) {
-              DBIO.failed(
-                new RawlsExceptionWithErrorReport(
-                  ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)
-                )
+        withAttributeNamespaceCheck(namesToCheck) {
+          dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
+            val updateTrialsAction = traceDBIOWithParent("getActiveEntities", localContext)(_ =>
+              dataAccess.entityQuery.getActiveEntities(
+                workspaceContext,
+                entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))
               )
-            } else {
-              val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
-
-              traceDBIOWithParent("saveAction", localContext) { subContext =>
-                dataAccess.entityQuery
-                  .save(workspaceContext, t, subContext.toTracingContext)
-                  .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
+            ) map { entities =>
+              val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+              entityUpdates.map { entityUpdate =>
+                entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
+                  case Some(e) =>
+                    Try(applyOperationsToEntity(e, entityUpdate.operations))
+                  case None =>
+                    if (upsert) {
+                      Try(
+                        applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty),
+                                                entityUpdate.operations
+                        )
+                      )
+                    } else {
+                      Failure(new RuntimeException("Entity does not exist"))
+                    }
+                })
               }
             }
-          }
 
-          saveAction
-        } recover {
-          case icve: java.sql.SQLIntegrityConstraintViolationException =>
-            val userMessage =
-              s"Database error occurred. Check if you are uploading entity names that differ only in case " +
-                s"from pre-existing entities."
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, icve))
-          case bue: java.sql.BatchUpdateException =>
-            val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
-            val userMessage = if (maybeCaseIssue) {
-              s"Database error occurred. Check if you are uploading entity names that differ only in case " +
-                s"from pre-existing entities."
-            } else {
-              s"Database error occurred. Underlying error message: ${bue.getMessage}"
+            val saveAction = updateTrialsAction flatMap { updateTrials =>
+              val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
+                ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+              }
+              if (errorReports.nonEmpty) {
+                DBIO.failed(
+                  new RawlsExceptionWithErrorReport(
+                    ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)
+                  )
+                )
+              } else {
+                val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
+
+                traceDBIOWithParent("saveAction", localContext) { subContext =>
+                  dataAccess.entityQuery
+                    .save(workspaceContext, t, subContext.toTracingContext)
+                    .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
+                }
+              }
             }
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, bue))
+
+            saveAction
+          } recover {
+            case icve: java.sql.SQLIntegrityConstraintViolationException =>
+              val userMessage =
+                s"Database error occurred. Check if you are uploading entity names that differ only in case " +
+                  s"from pre-existing entities."
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, icve))
+            case bue: java.sql.BatchUpdateException =>
+              val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
+              val userMessage = if (maybeCaseIssue) {
+                s"Database error occurred. Check if you are uploading entity names that differ only in case " +
+                  s"from pre-existing entities."
+              } else {
+                s"Database error occurred. Underlying error message: ${bue.getMessage}"
+              }
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, bue))
+          }
         }
       }
     }
-  }
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+  override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = false, parentContext)
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+  override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = true, parentContext)

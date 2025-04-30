@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.model.StatusCodes.BadRequest
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import akka.stream.alpakka.json.scaladsl.JsonReader
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import io.opentelemetry.context.Context
@@ -193,27 +194,35 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
             post {
               withSizeLimit(batchUpsertMaxBytes) {
-                entity(as[Array[EntityUpdateDefinition]]) { operations =>
+                //
+                extractRequestEntity { requestEntity =>
+                  val inputStream: Source[ByteString, _] =
+                    requestEntity.dataBytes.via(JsonReader.select("$.[]")) // entity updates are in a top-level array
+
                   complete {
                     entityServiceConstructor(ctx)
                       .batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                           operations,
+                                           inputStream,
                                            dataReference,
                                            billingProject
                       )
                       .map(_ => StatusCodes.NoContent)
                   }
                 }
+
               }
             }
           } ~
           path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
             post {
-              entity(as[Array[EntityUpdateDefinition]]) { operations =>
+              extractRequestEntity { requestEntity =>
+                val inputStream: Source[ByteString, _] =
+                  requestEntity.dataBytes.via(JsonReader.select("$.[]")) // entity updates are in a top-level array
+
                 complete {
                   entityServiceConstructor(ctx)
                     .batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                         operations,
+                                         inputStream,
                                          dataReference,
                                          billingProject
                     )

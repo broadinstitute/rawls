@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.stream.scaladsl.Source
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
@@ -347,7 +348,7 @@ class LocalEntityProviderSpec
                                  Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeString("222")))
           )
         )
-        val writes = localEntityProvider.batchUpsertEntities(multiUpsert, testContext).futureValue
+        val writes = localEntityProvider.batchUpsertEntities(Source(multiUpsert), testContext).futureValue
 
         writes.size shouldBe 2
 
@@ -1045,13 +1046,13 @@ class LocalEntityProviderSpec
 
         // create the first entity with name "myname"
         val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
-        val created1 = localEntityProvider.batchUpsertEntities(upsert1, testContext).futureValue
+        val created1 = localEntityProvider.batchUpsertEntities(Source(upsert1), testContext).futureValue
         created1.size shouldBe 1
 
         // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
         val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))
         val ex = recoverToExceptionIf[Exception] {
-          localEntityProvider.batchUpsertEntities(upsert2, testContext)
+          localEntityProvider.batchUpsertEntities(Source(upsert2), testContext)
         }.futureValue
 
         ex match {
