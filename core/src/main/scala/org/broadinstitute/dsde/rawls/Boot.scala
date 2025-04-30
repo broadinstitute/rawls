@@ -558,6 +558,15 @@ object Boot extends IOApp with LazyLogging {
                                     appDependencies.googleStorageService
         )(implicitly, IORuntime.global)
 
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit"),
+        Option(workspaceSettingServiceConstructor)
+      )
+
       val googleProjectRegistrationServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService =
         new GoogleProjectRegistrationService(_, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)
 
