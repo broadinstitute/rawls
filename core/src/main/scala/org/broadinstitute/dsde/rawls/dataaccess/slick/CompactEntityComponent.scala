@@ -2,11 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
-import spray.json.DefaultJsonProtocol._
+
 import spray.json._
 
 import java.util.UUID
@@ -18,12 +19,9 @@ trait CompactEntityComponent extends LazyLogging {
   object compactEntityQuery extends CompactEntityQuery(this)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
+class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
-
-  // json codec for entity attributes
-  implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
 
   // read a json column from the db and translate into a JsValue
   implicit val GetJsValueResult: GetResult[JsValue] = GetResult(r => r.nextString().parseJson)
@@ -45,6 +43,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
   implicit val getKeysRecord: GetResult[KeysRecord] =
     GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
+  implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
+    GetResult(r => EntityTypeAndAttributeKey(r.<<, AttributeName.fromDelimitedName(r.<<)))
+
+  implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
+    GetResult(r => EntityTypeAndCount(r.<<, r.<<))
+
   /**
     * Insert a single entity to the db.
     *
@@ -53,7 +57,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
-    val attributesJson: JsValue = entity.attributes.toJson
+    val attributesJson: JsValue = toSql(entity.attributes)
 
     sqlu"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
           values (${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
@@ -175,6 +179,82 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery {
 
     query.asUpdate
   }
+
+  /**
+   * Get all entity attribute keys for a workspace.
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
+   */
+  def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
+    sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
+
+  /**
+   * Gets the count of entities in a workspace, grouped by entity type.
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
+   */
+  def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
+    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
+    sql"""SELECT entity_type, COUNT(*)
+      FROM ENTITY_KEYS
+      WHERE workspace_id = $workspaceId
+      GROUP BY entity_type;""".as[EntityTypeAndCount]
+
+  // ====================================================================================================
+  //  migration helpers
+  //      methods in this section are only used for migrating data from legacy->compact format
+  // ====================================================================================================
+
+  def migrationCreateTempTable: ReadWriteAction[Int] =
+    sql"""create temporary table ENTITY_MIGRATION_TEMP(
+                name varchar(254) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
+                entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+                attributes json,
+                UNIQUE KEY `idx_temp_entity_type_name` (entity_type,name));""".asUpdate
+
+  def migrationDeleteTempTable: ReadWriteAction[Int] =
+    sql"""drop temporary table ENTITY_MIGRATION_TEMP  ;""".asUpdate
+
+  def migrationInsertAttributesToTempTable(entities: Seq[Entity]): ReadWriteAction[Int] = {
+    val values = entities.map { entity =>
+      val attrsJson = toSql(entity.attributes)
+      sql"(${entity.name}, ${entity.entityType}, $attrsJson)"
+    }
+
+    val insertBase = sql"""insert into ENTITY_MIGRATION_TEMP(name, entity_type, attributes)
+          values """
+
+    concatSqlActions(insertBase, reduceSqlActionsWithDelim(values, sql",")).asUpdate
+  }
+
+  def migrationUpdateFromTempTable(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update ENTITY e
+          join ENTITY_MIGRATION_TEMP tmp
+          on e.name = tmp.name and e.entity_type = tmp.entity_type and e.workspace_id = $workspaceId
+          set e.attributes = tmp.attributes;""".asUpdate
+
+  def migrationClearAllAttributesString(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update ENTITY
+          set all_attribute_values = null
+          where workspace_id = $workspaceId;""".asUpdate
+
+  def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+    sql"""insert into ENTITY_REFS(from_id, to_id)
+         select e.id, ea.value_entity_ref
+         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
+         where ea.owner_id = e.id
+         and e.workspace_id = $workspaceId
+         and e.deleted = 0
+         and ea.value_entity_ref is not null;""".asUpdate
+
+  // note this cleans up legacy attributes for soft-deleted entities as well as active entities
+  def migrationDeleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+    sql"""delete ea
+         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
+         where ea.owner_id = e.id
+         and e.workspace_id = $workspaceId""".asUpdate
 
   // ====================================================================================================
   //  testing helpers

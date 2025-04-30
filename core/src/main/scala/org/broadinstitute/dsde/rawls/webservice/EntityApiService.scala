@@ -118,7 +118,7 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
             get {
               // if useCache param is unset or set to a value that won't coerce to a boolean, default to true
-              parameters('useCache.?) { useCache =>
+              parameters("useCache".?) { useCache =>
                 val useCacheBool = Try(useCache.getOrElse("true").toBoolean).getOrElse(true)
                 complete {
                   entityServiceConstructor(ctx).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName),
@@ -360,6 +360,23 @@ trait EntityApiService extends UserInfoDirectives {
                   }
                 }
               }
+          } ~
+          path("workspaces" / Segment / Segment / "quicksilverMigration") { (workspaceNamespace, workspaceName) =>
+            post {
+              entity(as[String]) { postBody =>
+                if (postBody != "I understand that this API will delete all my data tables.") {
+                  complete(StatusCodes.BadRequest -> "You must consent to use this API.")
+                } else {
+                  complete {
+                    entityServiceConstructor(ctx)
+                      .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName))
+                      .map { migrationResults =>
+                        StatusCodes.OK -> migrationResults
+                      }
+                  }
+                }
+              }
+            }
           }
       }
     }
