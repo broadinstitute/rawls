@@ -7,10 +7,6 @@ import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, Tps
 import scala.jdk.CollectionConverters._
 
 object PolicyUtilities {
-
-  def containsProtectedDataPolicy(tpsPaoGetResult: TpsPaoGetResult): Boolean =
-    containsPolicy(tpsPaoGetResult, TpsPolicies.ProtectedData)
-
   def getGroupConstraintGroups(tpsPaoGetResult: TpsPaoGetResult): Set[String] =
     tpsPaoGetResult.getEffectiveAttributes.getInputs.asScala
       .find(p => p.getNamespace == TERRA_POLICY_NAMESPACE && p.getName == TpsPolicies.GroupConstraint.name)
@@ -19,9 +15,6 @@ object PolicyUtilities {
       }
       .getOrElse(Set.empty)
 
-  def containsRegionConstraintPolicy(tpsPaoGetResult: TpsPaoGetResult): Boolean =
-    containsPolicy(tpsPaoGetResult, TpsPolicies.RegionConstraint)
-
-  private def containsPolicy(tpsPaoGetResult: TpsPaoGetResult, tpsPolicy: TpsPolicy): Boolean =
+  def containsPolicy(tpsPaoGetResult: TpsPaoGetResult, tpsPolicy: TpsPolicy): Boolean =
     tpsPaoGetResult.getEffectiveAttributes.getInputs.asScala.exists(_.getName == tpsPolicy.name)
 }

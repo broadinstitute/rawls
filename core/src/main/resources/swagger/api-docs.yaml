@@ -4041,7 +4041,7 @@ paths:
       description: Add references to snapshots in the Terra Data Repo
       operationId: createSnapshotsByWorkspaceName
       requestBody:
-        description: Reference to the Data Repo snapshot
+        description: References to the Data Repo snapshot
         content:
           'application/json':
             schema:
@@ -4072,7 +4072,7 @@ paths:
       description: Add references to snapshots in the Terra Data Repo
       operationId: createSnapshotsByWorkspaceId
       requestBody:
-        description: Reference to the Data Repo snapshot
+        description: References to the Data Repo snapshot
         content:
           'application/json':
             schema:

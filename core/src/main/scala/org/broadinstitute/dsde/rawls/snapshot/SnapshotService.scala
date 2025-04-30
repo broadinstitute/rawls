@@ -219,8 +219,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
 
       // if any snapshots contain protected data, the workspace must be protected
       _ = if (
-        snapshotPaos.exists(PolicyUtilities.containsProtectedDataPolicy) && !PolicyUtilities
-          .containsProtectedDataPolicy(workspacePao)
+        snapshotPaos.exists(PolicyUtilities.containsPolicy(_, TpsPolicies.ProtectedData)) && !PolicyUtilities
+          .containsPolicy(workspacePao, TpsPolicies.ProtectedData)
       ) {
         throw new ProtectedDataException("Unable to add protected snapshot to unprotected workspace.")
       }
@@ -230,7 +230,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       // that all of the snapshot PAOs will combine together cleanly when they're all linked to
       // the same workspace. Snapshots shouldn't have region constraint policies, but throw here
       // just in case.
-      _ = if (snapshotPaos.exists(PolicyUtilities.containsRegionConstraintPolicy)) {
+      _ = if (snapshotPaos.exists(PolicyUtilities.containsPolicy(_, TpsPolicies.RegionConstraint))) {
         throw new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest, "Unable to add snapshot with region constraint to workspace.")
         )
