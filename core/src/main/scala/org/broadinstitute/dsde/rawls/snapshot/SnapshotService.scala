@@ -205,11 +205,16 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         )
       )
 
-      snapshotPaos <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
+      // filter out any snapshots that are already linked to the workspace
+      unlinkedSnapshots = snapshotsFromDataRepo.filterNot(snapshot =>
+        workspacePao.getSourcesObjectIds.asScala.toSet.contains(snapshot.getId)
+      )
+
+      snapshotPaos <- Future.traverse(unlinkedSnapshots) { snapshot =>
         policyService.getOrCreateSnapshotPao(snapshot.getId, ctx)
       }
 
-      _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
+      _ <- Future.traverse(unlinkedSnapshots) { snapshot =>
         policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
                                                     rawlsWorkspace.workspaceIdAsUUID,
                                                     dryRun = true,
@@ -245,7 +250,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
           workspaceServiceConstructor(ctx).addAuthDomainGroups(rawlsWorkspace.toWorkspaceName, newWorkspaceGroups, ctx)
         } else Future.unit
 
-      _ <- Future.traverse(snapshotsFromDataRepo) { snapshot =>
+      _ <- Future.traverse(unlinkedSnapshots) { snapshot =>
         policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
                                                     rawlsWorkspace.workspaceIdAsUUID,
                                                     dryRun = false,

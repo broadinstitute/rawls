@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeName,
   SamResourceTypeNames,
   SamUserStatusResponse,
+  Workspace,
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.policy.PolicyService
@@ -125,10 +126,28 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     mockDataRepoDAO
   }
 
-  private def defaultWorkspaceServiceConstructor(ctx: RawlsRequestContext = testContext) =
+  private def defaultMockWorkspaceRepository(workspace: Workspace): WorkspaceRepository = {
+    val mockWorkspaceRepository = mock[WorkspaceRepository]
+    when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.workspaceIdAsUUID), any()))
+      .thenReturn(Future.successful(Option(workspace)))
+    when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.toWorkspaceName), any()))
+      .thenReturn(Future.successful(Option(workspace)))
+    mockWorkspaceRepository
+  }
+
+  private def defaultWorkspaceServiceConstructor(ctx: RawlsRequestContext = testContext): WorkspaceService =
     mock[WorkspaceService](RETURNS_SMART_NULLS)
 
-  private def defaultPolicyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS)
+  private def defaultPolicyService: PolicyService = {
+    val emptyPao =
+      new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs()).sourcesObjectIds(List[UUID]().asJava)
+
+    val policyService = mock[PolicyService]
+    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
+    when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(emptyPao))
+    when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
+    policyService
+  }
 
   "SnapshotService" should {
     "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { _ =>
@@ -1398,22 +1417,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
 
-      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.toWorkspaceName), any()))
-        .thenReturn(Future.successful(Option(workspace)))
-
-      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
-
-      val policyService = mock[PolicyService]
-      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
-      when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(emptyPao))
-      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
+      val policyService = defaultPolicyService
 
       val dataRepo = defaultDataRepoDao()
       snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
 
       val snapshotService = SnapshotService.constructor(
-        mockWorkspaceRepository,
+        defaultMockWorkspaceRepository(workspace),
         defaultMockSamDao(),
         defaultMockWorkspaceManagerDao(),
         "fake-terra-data-repo-dev",
@@ -1438,22 +1448,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
 
-      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.workspaceIdAsUUID), any()))
-        .thenReturn(Future.successful(Option(workspace)))
-
-      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
-
-      val policyService = mock[PolicyService]
-      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
-      when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(emptyPao))
-      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
+      val policyService = defaultPolicyService
 
       val dataRepo = defaultDataRepoDao()
       snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
 
       val snapshotService = SnapshotService.constructor(
-        mockWorkspaceRepository,
+        defaultMockWorkspaceRepository(workspace),
         defaultMockSamDao(),
         defaultMockWorkspaceManagerDao(),
         "fake-terra-data-repo-dev",
@@ -1478,22 +1479,14 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
 
-      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.toWorkspaceName), any()))
-        .thenReturn(Future.successful(Option(workspace)))
-
-      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
-
-      val policyService = mock[PolicyService]
-      when(policyService.getPao(any(), any())).thenReturn(Future.successful(None))
-      when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(emptyPao))
-      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
+      val policyService = defaultPolicyService
+      when(policyService.getPao(mockitoEq(workspace.workspaceIdAsUUID), any())).thenReturn(Future.successful(None))
 
       val dataRepo = defaultDataRepoDao()
       snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
 
       val snapshotService = SnapshotService.constructor(
-        mockWorkspaceRepository,
+        defaultMockWorkspaceRepository(workspace),
         defaultMockSamDao(),
         defaultMockWorkspaceManagerDao(),
         "fake-terra-data-repo-dev",
@@ -1521,16 +1514,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
 
-      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.toWorkspaceName), any()))
-        .thenReturn(Future.successful(Option(workspace)))
-
-      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
-
-      val policyService = mock[PolicyService]
-      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
-      when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(emptyPao))
-      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
+      val policyService = defaultPolicyService
 
       val dataRepo = defaultDataRepoDao()
       snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
@@ -1538,7 +1522,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         throw new client.ApiException(StatusCodes.NotFound.intValue, "not found")
       )
       val snapshotService = SnapshotService.constructor(
-        mockWorkspaceRepository,
+        defaultMockWorkspaceRepository(workspace),
         defaultMockSamDao(),
         defaultMockWorkspaceManagerDao(),
         "fake-terra-data-repo-dev",
@@ -1566,26 +1550,19 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
 
-      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.toWorkspaceName), any()))
-        .thenReturn(Future.successful(Option(workspace)))
-
-      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
       val protectedDataPao = new TpsPaoGetResult().effectiveAttributes(
         new TpsPolicyInputs().inputs(
           List(new TpsPolicyInput().namespace(TERRA_POLICY_NAMESPACE).name(TpsPolicies.ProtectedData.name)).asJava
         )
       )
 
-      val policyService = mock[PolicyService]
-      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
+      val policyService = defaultPolicyService
       when(policyService.getOrCreateSnapshotPao(any(), any())).thenReturn(Future.successful(protectedDataPao))
-      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
 
       val dataRepo = defaultDataRepoDao()
       snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
       val snapshotService = SnapshotService.constructor(
-        mockWorkspaceRepository,
+        defaultMockWorkspaceRepository(workspace),
         defaultMockSamDao(),
         defaultMockWorkspaceManagerDao(),
         "fake-terra-data-repo-dev",
@@ -1612,11 +1589,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val workspace = minimalTestData.workspace
       val snapshotIds = Set(UUID.randomUUID(), UUID.randomUUID())
 
-      val mockWorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS)
-      when(mockWorkspaceRepository.getWorkspace(mockitoEq(workspace.toWorkspaceName), any()))
-        .thenReturn(Future.successful(Option(workspace)))
-
-      val emptyPao = new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())
       val snapshotPao1 = new TpsPaoGetResult().effectiveAttributes(
         new TpsPolicyInputs().inputs(
           List(
@@ -1642,12 +1614,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         )
       )
 
-      val policyService = mock[PolicyService]
-      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(emptyPao)))
+      val policyService = defaultPolicyService
       when(policyService.getOrCreateSnapshotPao(any(), any()))
         .thenReturn(Future.successful(snapshotPao1))
         .thenReturn(Future.successful(snapshotPao2))
-      when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
 
       val dataRepo = defaultDataRepoDao()
       snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
@@ -1661,7 +1631,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       ).thenReturn(Future.unit)
 
       val snapshotService = SnapshotService.constructor(
-        mockWorkspaceRepository,
+        defaultMockWorkspaceRepository(workspace),
         defaultMockSamDao(),
         defaultMockWorkspaceManagerDao(),
         "fake-terra-data-repo-dev",
@@ -1683,6 +1653,47 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
                                                             mockitoEq(false),
                                                             any()
         )
+      )
+    }
+
+    "not try to link snapshots that are already linked to the workspace" in {
+      val workspace = minimalTestData.workspace
+      val newSnapshotId = UUID.randomUUID
+      val existingSnapshotId = UUID.randomUUID
+      val snapshotIds = Set(newSnapshotId, existingSnapshotId)
+
+      val workspacePao = new TpsPaoGetResult()
+        .effectiveAttributes(new TpsPolicyInputs())
+        .sourcesObjectIds(List(existingSnapshotId).asJava)
+
+      val policyService = defaultPolicyService
+      when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(workspacePao)))
+
+      val dataRepo = defaultDataRepoDao()
+      snapshotIds.map(id => when(dataRepo.getSnapshot(mockitoEq(id), any())).thenReturn(emptySnapshot(id)))
+
+      val snapshotService = SnapshotService.constructor(
+        defaultMockWorkspaceRepository(workspace),
+        defaultMockSamDao(),
+        defaultMockWorkspaceManagerDao(),
+        "fake-terra-data-repo-dev",
+        dataRepo,
+        defaultWorkspaceServiceConstructor,
+        policyService
+      )(testContext)
+
+      Await.result(snapshotService.createSnapshotsByWorkspaceIdV3(workspace.workspaceIdAsUUID.toString, snapshotIds),
+                   Duration.Inf
+      )
+      verify(policyService).linkSnapshotPaoToWorkspacePao(mockitoEq(newSnapshotId),
+                                                          mockitoEq(workspace.workspaceIdAsUUID),
+                                                          mockitoEq(false),
+                                                          any()
+      )
+      verify(policyService, never).linkSnapshotPaoToWorkspacePao(mockitoEq(existingSnapshotId),
+                                                                 mockitoEq(workspace.workspaceIdAsUUID),
+                                                                 mockitoEq(false),
+                                                                 any()
       )
     }
   }
