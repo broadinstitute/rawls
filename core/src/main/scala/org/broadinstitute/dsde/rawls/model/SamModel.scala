@@ -76,8 +76,6 @@ object SamWorkspaceActions {
   val updateAuthDomain = SamResourceAction("update_auth_domain")
   val readSettings = SamResourceAction("read_settings")
   val writeSettings = SamResourceAction("write_settings")
-  val lock = SamResourceAction("lock")
-  val unlock = SamResourceAction("unlock")
 }
 
 object SamBillingProjectActions {
