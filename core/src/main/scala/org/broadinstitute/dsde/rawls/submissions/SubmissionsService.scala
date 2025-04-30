@@ -558,12 +558,13 @@ class SubmissionsService(
   def getSetToDelete(
     submissionRequest: SubmissionRequest
   ): Option[AttributeEntityReference] =
-    submissionRequest.deleteEntityType match {
-      case Some(value) if value == submissionRequest.entityType.get =>
-        submissionRequest.deleteEntityName match {
-          case Some(name) if name == submissionRequest.entityName.get => Some(AttributeEntityReference(value, name))
-          case _                                                      => None
-        }
+    submissionRequest.deleteEntity match {
+      case Some(value) =>
+        for {
+          entityType <- submissionRequest.entityType
+          entityName <- submissionRequest.entityName
+          if value == s"$entityType/$entityName"
+        } yield AttributeEntityReference(entityType, entityName)
       case _ => None
     }
 

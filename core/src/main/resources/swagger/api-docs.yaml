@@ -5146,12 +5146,9 @@ components:
           minimum: 0.01
           maximum: 9999999999.99
           multipleOf: 0.01
-        deleteEntityType:
+        deleteEntity:
           type: string
-          description: Type of root entity to delete after submission.  If it matches the submission entity, will delete intermediate set entity created for submission.
-        deleteEntityName:
-          type: string
-          description: Name of root entity to delete after submission.  If it matches the submission entity, will delete intermediate set entity created for submission..
+          description: Root entity to delete after submission in the form [entityType]/[entityName].  If it matches the submission entity, will delete intermediate set entity created for submission.
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
