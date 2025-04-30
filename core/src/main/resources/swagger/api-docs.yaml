@@ -3791,6 +3791,7 @@ paths:
       summary: List snapshots
       description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
       operationId: enumerateDataRepoSnapshot_v2
+      deprecated: true
       parameters:
         - name: offset
           in: query
@@ -3834,6 +3835,7 @@ paths:
       summary: Create a snapshot
       description: Add a reference to a snapshot in the Terra Data Repo
       operationId: createDataRepoSnapshot_v2
+      deprecated: true
       requestBody:
         description: Reference to the Data Repo snapshot
         content:
@@ -3867,6 +3869,7 @@ paths:
       summary: Get a snapshot
       description: Get a reference to a snapshot in the Terra Data Repo
       operationId: getDataRepoSnapshot_v2
+      deprecated: true
       responses:
         200:
           description: OK
@@ -3885,6 +3888,7 @@ paths:
     patch:
       summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
       operationId: updateDataRepoSnapshot_v2
+      deprecated: true
       tags:
         - snapshots_v2
       requestBody:
@@ -3911,6 +3915,7 @@ paths:
       description: Delete a workspace's reference to a snapshot in the Terra Data
         Repo
       operationId: deleteDataRepoSnapshot_v2
+      deprecated: true
       responses:
         204:
           description: Successful Request
@@ -3933,6 +3938,7 @@ paths:
       summary: Get a snapshot by name
       description: Get a reference to a snapshot in the Terra Data Repo by its name
       operationId: getDataRepoSnapshotByName_v2
+      deprecated: true
       responses:
         200:
           description: OK
@@ -3957,6 +3963,7 @@ paths:
       summary: List snapshots
       description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
       operationId: enumerateDataRepoSnapshotByWorkspaceId
+      deprecated: true
       parameters:
         - name: offset
           in: query
@@ -4000,6 +4007,7 @@ paths:
       summary: Create a snapshot
       description: Add a reference to a snapshot in the Terra Data Repo
       operationId: createDataRepoSnapshotByWorkspaceId
+      deprecated: true
       requestBody:
         description: Reference to the Data Repo snapshot
         content:
