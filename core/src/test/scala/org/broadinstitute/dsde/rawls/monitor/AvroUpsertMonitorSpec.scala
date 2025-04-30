@@ -197,7 +197,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     when(
       mockEntityService.batchUpdateEntitiesInternal(
         any[WorkspaceName],
-        any[Source[ByteString, _]],
+        any[Source[EntityUpdateDefinition, _]],
         any[Boolean],
         any[Option[DataReferenceName]],
         any[Option[GoogleProjectId]],
@@ -1096,7 +1096,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       eventually[Unit](Timeout(timeout), Interval(interval)) {
         verify(mockEntityService, times(1)).batchUpdateEntitiesInternal(
           any[WorkspaceName],
-          any[Source[ByteString, _]],
+          any[Source[EntityUpdateDefinition, _]],
           ArgumentMatchers.eq(expectation.isUpsert),
           any[Option[DataReferenceName]],
           any[Option[GoogleProjectId]],

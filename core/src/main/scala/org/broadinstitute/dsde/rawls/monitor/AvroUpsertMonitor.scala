@@ -451,14 +451,14 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
 
         // translate the upsertBatch back into a stream of json.
         // TODO CORE-427: rewrite this monitor to fully stream, instead of stream->materialize->stream
-        val inputStream: Source[ByteString, _] = Source.single(ByteString(upsertBatch.toJson.prettyPrint))
+        val entityUpdateStream: Source[EntityUpdateDefinition, _] = Source(upsertBatch)
 
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
           requestContext = RawlsRequestContext(petUserInfo)
           upsertResults <- entityService(requestContext).batchUpdateEntitiesInternal(
             workspace.toWorkspaceName,
-            inputStream,
+            entityUpdateStream,
             upsert = isUpsert,
             None,
             None,

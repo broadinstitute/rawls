@@ -6,7 +6,6 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.model.StatusCodes.BadRequest
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.stream.alpakka.json.scaladsl.JsonReader
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import io.opentelemetry.context.Context
@@ -23,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
+import spray.json._
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -37,6 +37,8 @@ trait EntityApiService extends UserInfoDirectives {
 
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val batchUpsertMaxBytes: Long
+
+  implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
 
   def entityRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
@@ -195,14 +197,11 @@ trait EntityApiService extends UserInfoDirectives {
             post {
               withSizeLimit(batchUpsertMaxBytes) {
                 //
-                extractRequestEntity { requestEntity =>
-                  val inputStream: Source[ByteString, _] =
-                    requestEntity.dataBytes.via(JsonReader.select("$.[]")) // entity updates are in a top-level array
-
+                entity(asSourceOf[EntityUpdateDefinition]) { entityUpdateStream =>
                   complete {
                     entityServiceConstructor(ctx)
                       .batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                           inputStream,
+                                           entityUpdateStream,
                                            dataReference,
                                            billingProject
                       )
@@ -215,14 +214,11 @@ trait EntityApiService extends UserInfoDirectives {
           } ~
           path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
             post {
-              extractRequestEntity { requestEntity =>
-                val inputStream: Source[ByteString, _] =
-                  requestEntity.dataBytes.via(JsonReader.select("$.[]")) // entity updates are in a top-level array
-
+              entity(asSourceOf[EntityUpdateDefinition]) { entityUpdateStream =>
                 complete {
                   entityServiceConstructor(ctx)
                     .batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                         inputStream,
+                                         entityUpdateStream,
                                          dataReference,
                                          billingProject
                     )
@@ -283,10 +279,6 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / Segment) {
             (workspaceNamespace, workspaceName, entityType) =>
               get {
-                // if any other APIs adopt streaming, move this implicit val higher up in the EntityApiService trait
-                implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
-                import spray.json._
-
                 // listEntities returns a source of Entity. We will stream-output each successful entity to the user,
                 // and if an exception occurs midstream we want to output the exception (wrapped in an ErrorReport)
                 // as the final element. Akka and Spray have a hard time with the mixed element types in the stream,

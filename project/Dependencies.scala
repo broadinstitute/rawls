@@ -30,9 +30,6 @@ object Dependencies {
   val akkaTestKit: ModuleID =           "com.typesafe.akka" %% "akka-testkit"             % akkaV     % "test"
   val akkaHttpTestKit: ModuleID =       "com.typesafe.akka" %% "akka-http-testkit"        % akkaHttpV % "test"
 
-  // this is the alpakka version compatible with our current akkaV
-  val alpakkaJsonStream: ModuleID =     "com.lightbend.akka" %% "akka-stream-alpakka-json-streaming" % "4.0.0"
-
   // This version of `cromwell-client` was packaged by `sbt` running on Scala 2.12 but actually contains only Java
   // classes (generated from OpenAPI YAML) that were not compiled against any version of the Scala library.
   // `cromwell-client` is therefore referenced here as a Java artifact with "_2.12" incorporated into its name,
@@ -241,7 +238,6 @@ object Dependencies {
     slickHikariCP,
     akkaHttp,
     akkaStream,
-    alpakkaJsonStream,
     webjarsLocator,
     circeYAML,
     commonsJEXL,

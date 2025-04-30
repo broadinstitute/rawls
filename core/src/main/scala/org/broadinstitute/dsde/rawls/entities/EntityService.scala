@@ -444,7 +444,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
-                                  inputStream: Source[ByteString, _],
+                                  entityUpdateStream: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId],
@@ -462,16 +462,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
             EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
           )
         }
-        // parse the input Source[ByteString ...] into Source[EntityUpdateDefinition ...]
-        entityUpdateStream = inputStream.map(_.utf8String).map { jsonStr =>
-          Try(jsonStr.parseJson.convertTo[EntityUpdateDefinition]) match {
-            case Success(obj) => obj
-            case Failure(ex) =>
-              throw new RawlsExceptionWithErrorReport(
-                ErrorReport(s"Invalid JSON in entity update definitions: ${ex.getMessage}")
-              )
-          }
-        }
 
         entities <-
           if (upsert) {
@@ -487,24 +477,24 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName,
-                          inputStream: Source[ByteString, _],
+                          entityUpdateStream: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, inputStream, upsert = false, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, entityUpdateStream, upsert = false, dataReference, billingProject, s)
         .recover(
           sqlLoggingRecover(s"batchUpdateEntities: $workspaceName")
         )
     }
 
   def batchUpsertEntities(workspaceName: WorkspaceName,
-                          inputStream: Source[ByteString, _],
+                          entityUpdateStream: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, inputStream, upsert = true, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, entityUpdateStream, upsert = true, dataReference, billingProject, s)
         .recover(
           sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )
