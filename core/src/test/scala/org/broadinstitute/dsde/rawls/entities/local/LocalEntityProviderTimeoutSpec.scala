@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -21,6 +22,8 @@ import scala.concurrent.Future
 class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent {
 
   import driver.api._
+
+  implicit private val system: ActorSystem = ActorSystem("LocalEntityProviderTimeoutSpec")
 
   /** Locks all rows of the ENTITY table for ${lockSeconds} seconds. Use this to simulate database contention. */
   private def lockAllEntities(dataSource: SlickDataSource, lockSeconds: Int): Future[Unit] = {

@@ -74,7 +74,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                           cacheEnabled: Boolean,
                           queryTimeout: Duration,
                           override val workbenchMetricBaseName: String
-)(implicit protected val executionContext: ExecutionContext)
+)(implicit protected val executionContext: ExecutionContext, actorSystem: ActorSystem)
     extends EntityProvider
     with LazyLogging
     with EntitySupport
@@ -89,9 +89,6 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override val workspaceContext = requestArguments.workspace
 
   final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
-
-  // TODO CORE-427: don't create a brand new ActorSystem; see if we can get the one from Boot.scala
-  implicit private val actorSystem: ActorSystem = ActorSystem("LocalEntityProvider")
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext

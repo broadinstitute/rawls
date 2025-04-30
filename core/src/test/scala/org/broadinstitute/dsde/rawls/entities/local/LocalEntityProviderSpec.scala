@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
@@ -51,6 +52,8 @@ class LocalEntityProviderSpec
   import driver.api._
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(3000, Millis)))
+
+  implicit private val system: ActorSystem = ActorSystem("LocalEntityProviderSpec")
 
   val testConf = ConfigFactory.load()
 
