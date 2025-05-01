@@ -560,12 +560,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
 
   override def copyEntities(sourceWorkspaceContext: Workspace,

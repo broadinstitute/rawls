@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
@@ -456,7 +456,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
           requestContext = RawlsRequestContext(petUserInfo)
-          upsertResults <- entityService(requestContext).batchUpdateEntitiesInternal(
+          upsertResultsSource <- entityService(requestContext).batchUpdateEntitiesInternal(
             workspace.toWorkspaceName,
             entityUpdateStream,
             upsert = isUpsert,
@@ -464,7 +464,8 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
             None,
             requestContext
           )
-        } yield upsertResults
+          upsertResults <- upsertResultsSource.runWith(Sink.seq)
+        } yield upsertResults.toTraversable
       }
 
       // create our pause signal. We use this to control when the stream should pause and resume.
