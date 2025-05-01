@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
-import akka.util.ByteString
 import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._

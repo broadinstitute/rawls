@@ -38,6 +38,8 @@ trait EntityApiService extends UserInfoDirectives {
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val batchUpsertMaxBytes: Long
 
+  // the Int.MaxValue defines the size allowed by JsonEntityStreamingSupport. We set this to the max allowable,
+  // then have more fine-grained size validation using withSizeLimit specifically for the batchUpsert API
   implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json(Int.MaxValue)
 
   def entityRoutes(otelContext: Context = Context.root()): server.Route = {

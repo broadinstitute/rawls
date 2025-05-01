@@ -528,7 +528,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     upsert: Boolean,
     parentContext: RawlsRequestContext
   ): Future[Traversable[Entity]] =
-    // immediately materialize the updateStream for backwards compatibility
+    // immediately materialize the updateStream so existing code can work with a Seq
     updateStream.runWith(Sink.seq).flatMap { entityUpdates =>
       val namesToCheck = for {
         update <- entityUpdates
