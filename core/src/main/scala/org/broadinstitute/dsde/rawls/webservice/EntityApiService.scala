@@ -38,7 +38,7 @@ trait EntityApiService extends UserInfoDirectives {
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val batchUpsertMaxBytes: Long
 
-  implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json(batchUpsertMaxBytes.toInt)
+  implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json(Int.MaxValue)
 
   def entityRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
