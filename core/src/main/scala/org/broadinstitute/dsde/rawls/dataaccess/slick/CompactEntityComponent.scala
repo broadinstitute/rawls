@@ -56,12 +56,28 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: single-row insert`
     */
-  def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
-    val attributesJson: JsValue = toSql(entity.attributes)
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity]): ReadWriteAction[Int] = {
+    val baseSql =
+      sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
-    sqlu"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
-          values (${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
+    val values = entities.map { entity =>
+      val attributesJson: JsValue = toSql(entity.attributes)
+
+      sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
+    }
+
+    concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql",")).asUpdate
   }
+
+  /**
+    * Insert a single entity to the db.
+    *
+    * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
+    *
+    * `execution plan: single-row insert`
+    */
+  def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
+    batchCreateEntities(workspaceId, Seq(entity))
 
   /**
     * Read a single entity from the db
@@ -79,6 +95,46 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
+
+  /** Given a set of entity type/name pairs, return the ids for those pairs.
+    *
+    * `execution plan: ???`
+    */
+  // TODO CORE-427: unit tests
+  def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
+    // short-circuit
+    if (refs.isEmpty) {
+      DBIO.successful(Seq())
+    } else {
+      // group the entity type/name pairs by type
+      val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
+
+      // build clauses for the type/name pairs
+      val clauses: Iterable[SQLActionBuilder] = groupedReferences.map {
+        case (entityType: String, entityNames: Set[String]) =>
+          // build the "IN" clause values
+          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
+          concatSqlActions(
+            sql""" (entity_type = $entityType and name in (""",
+            entityNamesSql,
+            sql")) "
+          )
+      }
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select id, entity_type, name
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+        reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[CompactEntityRefRecord]
+    }
 
   /** Given a set of entity references, return the ids being referenced.
     * Ignores deleted entities.

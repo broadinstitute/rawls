@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
@@ -42,6 +43,7 @@ import scala.concurrent.{Await, Future}
 class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatchers with MockitoTestUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+  implicit val system: ActorSystem = ActorSystem("CompactEntityProviderSpec")
 
   // private val slickDataSource = DbResource.dataSource // needed for transactions in the provider
   private val atMost = Duration("60 seconds") // timeout for Await() in tests
@@ -469,7 +471,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   // tests for CompactEntityProvider helper methods
   // ====================================================================================================
 
-  behavior of "findAllReferences"
+  behavior of "findAllReferences(Entity)"
 
   it should "return nothing if entity has no references" in {
     val attributes = Map(
@@ -508,6 +510,86 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
           AttributeEntityReference("refTypeB", "refName2"),
           AttributeEntityReference("refTypeB", "refName3")
         )
+    )
+
+    actual shouldBe expected
+  }
+
+  behavior of "findAllReferences(Seq[Entity])"
+
+  it should "return an empty Map when fed an empty Seq" in {
+    val input = Seq()
+
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
+
+    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(input)
+
+    actual shouldBe empty
+  }
+
+  it should "return nothing if entities have no references" in {
+    val attributes = Map(
+      AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+      AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+    )
+    val entity1 = Entity("name1", "type", attributes)
+    val entity2 = Entity("name2", "type", attributes)
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
+
+    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+      provider.findAllReferences(Seq(entity1, entity2))
+
+    actual shouldBe empty
+  }
+
+  it should "find references in the entity's attributes" in {
+    // entity1 has multiple references
+    val entity1 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+        AttributeName.withDefaultNS("baz") -> AttributeNumber(42),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference("refTypeA", "refName1"),
+        AttributeName.withDefaultNS("reflist") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("refTypeB", "refName2"),
+            AttributeEntityReference("refTypeB", "refName3")
+          )
+        )
+      )
+    )
+    // entity2 has no references
+    val entity2 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+                         )
+    )
+    // entity3 has a single reference
+    val entity3 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+        AttributeName.withDefaultNS("baz") -> AttributeNumber(42),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference("refTypeC", "refName4")
+      )
+    )
+
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
+
+    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+      provider.findAllReferences(Seq(entity1, entity2, entity3))
+
+    val expected = Map(
+      entity1.toReference -> Seq(
+        AttributeEntityReference("refTypeA", "refName1"),
+        AttributeEntityReference("refTypeB", "refName2"),
+        AttributeEntityReference("refTypeB", "refName3")
+      ),
+      entity3.toReference -> Seq(AttributeEntityReference("refTypeC", "refName4"))
     )
 
     actual shouldBe expected
@@ -673,6 +755,6 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   private def providerWithMocks(repository: CompactEntityRepository,
                                 requestArguments: EntityRequestArguments
   ): CompactEntityProvider =
-    new CompactEntityProvider(requestArguments, repository)(ec)
+    new CompactEntityProvider(requestArguments, repository)(ec, system)
 
 }

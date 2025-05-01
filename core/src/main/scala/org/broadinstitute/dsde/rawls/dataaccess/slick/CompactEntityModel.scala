@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeFormat, AttributeName, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -43,7 +43,9 @@ case class CompactEntityRecord(id: Long,
 /**
   * abbreviated model for rows in the ENTITY table when we don't need all the columns
   */
-case class CompactEntityRefRecord(id: Long, name: String, entityType: String)
+case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
+  def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
+}
 
 /**
   * model class for rows in the ENTITY_REFS table
