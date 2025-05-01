@@ -1167,12 +1167,12 @@ class WorkspaceService(
     }
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
-    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own, ignoreLock = true)
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.lock, ignoreLock = true)
     locked <- workspaceRepository.lockWorkspace(workspace)
   } yield locked
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
-    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own, ignoreLock = true)
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.unlock, ignoreLock = true)
     unlocked <- workspaceRepository.unlockWorkspace(workspace)
   } yield unlocked
 
