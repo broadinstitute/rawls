@@ -77,7 +77,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
-  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.18.0"
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.19.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.3.0" exclude("com.google.protobuf", "protobuf-java")
