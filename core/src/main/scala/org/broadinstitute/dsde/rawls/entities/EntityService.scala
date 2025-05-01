@@ -459,7 +459,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
             EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
           )
         }
-
         entities <-
           if (upsert) {
             traceFutureWithParent("EntityProvider.batchUpsertEntities", parentContext) { s =>
