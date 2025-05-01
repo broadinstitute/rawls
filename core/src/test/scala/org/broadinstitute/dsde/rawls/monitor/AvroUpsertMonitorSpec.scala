@@ -202,7 +202,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         any[Option[GoogleProjectId]],
         any[RawlsRequestContext]
       )
-    ).thenReturn(Future(Seq.empty[Entity]))
+    ).thenReturn(Future(Source.empty[Entity]))
 
     val mockEntityServiceConstructor: RawlsRequestContext => EntityService = _ => mockEntityService
 

@@ -36,11 +36,11 @@ trait EntityProvider {
 
   def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                           parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]]
+  ): Future[Source[Entity, _]]
 
   def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                           parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]]
+  ): Future[Source[Entity, _]]
 
   def copyEntities(sourceWorkspaceContext: Workspace,
                    destWorkspaceContext: Workspace,
