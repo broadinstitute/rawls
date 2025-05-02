@@ -81,6 +81,17 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
+  def getEntitiesOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[CompactEntityRecord]] = {
+    val selectStatement: SQLActionBuilder =
+      sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
+              from ENTITY
+              where workspace_id = $workspaceId
+              and entity_type = $entityType
+              and deleted = 0;"""
+
+    selectStatement.as[CompactEntityRecord]
+  }
+
   /** Given a set of entity references, return the ids being referenced.
     * Ignores deleted entities.
     *
@@ -155,16 +166,13 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   /**
-   * Delete all rows in ENTITY_REFS for the specified "from" id
+   * Delete all rows in ENTITY_REFS for the specified "from" ids
    *
-   * Delete from ENTITY_REFS where to_id not in (toIds) and from_id = ?
+   * Delete from ENTITY_REFS where to_id not in (toIds) and from_id in ?
    *
    * Returns the number of rows deleted.
    *
-   * `execution plan: Index range scan; using where. Possible indexes: unq_from_to,idx_to; actual index: unq_from_to.`
    */
-  // The index range scan is caused by the "not in" clause. I believe this is still optimal as compared to
-  // performing a select, performing a diff in the Scala layer, then sending an optimized delete query back to MySQL
   def deleteAllReferences(fromIds: Set[Long]): ReadWriteAction[Int] = {
     val fromIdsList = reduceSqlActionsWithDelim(fromIds.map(id => sql"$id").toSeq, sql",")
     val query =

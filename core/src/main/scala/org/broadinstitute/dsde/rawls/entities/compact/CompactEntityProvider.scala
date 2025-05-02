@@ -135,7 +135,30 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
       } yield res.sum
     }
 
-  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] = ???
+  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
+    repository.dataSource.inTransaction { _ =>
+      for {
+        entities: Seq[CompactEntityRecord] <- repository.queries.getEntitiesOfType(workspaceId, entityType)
+        entityIds = entities.map(_.id).toSet
+        // check if any of these entities are referenced by someone else
+        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
+        referencingEntityTypes: Seq[String] = referencingEntities
+          .groupBy(_.entityType)
+          .keys
+          .filterNot(_ == entityType)
+          .toSeq
+        // Since we're removing all entities of entityType, we only need to check whether there are any other types included
+        _ = if (referencingEntityTypes.size > 0) {
+          throw new DeleteEntitiesConflictException(referencingEntities.toSet)
+        }
+        // remove all references from these entities
+        _ <- repository.queries.deleteAllReferences(entityIds)
+        res <- repository.queries.batchHide(
+          workspaceId,
+          entities.map(entity => AttributeEntityReference(entity.entityType, entity.name))
+        )
+      } yield res.sum
+    }
 
   override def deleteEntityAttributes(entityType: String,
                                       attributeNames: Set[AttributeName],

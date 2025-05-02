@@ -355,6 +355,26 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
+  behavior of "getEntitiesOfType"
+
+  it should "find entities" in withMinimalTestDatabase { _ =>
+    // insert an entity with attributes
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+    runAndWait(q.getEntitiesOfType(wsid, entityType1)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
+                                                                                                            entity3
+    )
+
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================
