@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
@@ -340,7 +341,81 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     }
   }
 
-  "deleteEntities" should "have tests" is pending
+  behavior of "deleteEntities"
+
+  it should "remove entities" in {
+    val entity1 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                         )
+    )
+    val createdEntityRec1 =
+      CompactEntityRecord(42,
+                          entity1.name,
+                          entity1.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":123,"foo":"bar"}""")
+      )
+
+    val entity2 = Entity("name2",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("boo"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(456)
+                         )
+    )
+    val createdEntityRec2 =
+      CompactEntityRecord(41,
+                          entity2.name,
+                          entity2.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":456,"foo":"boo"}""")
+      )
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec1.entityType),
+                          ArgumentMatchers.eq(createdEntityRec1.name)
+      )
+    )
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec1))) // second request finds the entity we saved
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec2.entityType),
+                          ArgumentMatchers.eq(createdEntityRec2.name)
+      )
+    )
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec2))) // second request finds the entity we saved
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual1 = Await.result(provider.createEntity(entity1, defaultRequestContext), atMost)
+    val actual2 = Await.result(provider.createEntity(entity2, defaultRequestContext), atMost)
+
+    actual1 shouldBe entity1
+    actual2 shouldBe entity2
+
+    Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext), atMost)
+
+    verify(mockQuery, times(1)).getReferencingEntities(Set(createdEntityRec1.id, createdEntityRec2.id))
+    verify(mockQuery, times(1)).deleteAllReferences(Set(createdEntityRec1.id, createdEntityRec2.id))
+    verify(mockQuery, times(1)).batchHide(defaultWorkspace.workspaceIdAsUUID,
+                                          Seq(entity1.toReference, entity2.toReference)
+    )
+  }
+
   "deleteEntitiesOfType" should "have tests" is pending
   "deleteEntityAttributes" should "have tests" is pending
 

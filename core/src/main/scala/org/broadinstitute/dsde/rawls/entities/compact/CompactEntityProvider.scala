@@ -5,11 +5,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, EntityTypeAndCount, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
+  DeleteEntitiesConflictException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
@@ -38,6 +39,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 
+import java.util
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -115,7 +117,23 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
                               parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] =
+    repository.dataSource.inTransaction { _ =>
+      for {
+        entities: Seq[Option[CompactEntityRecord]] <- DBIO.sequence(
+          entityRefs.map(ref => repository.queries.getEntity(workspaceId, ref.entityType, ref.entityName))
+        )
+        entityIds = entities.flatten.map(_.id).toSet
+        // check if any of these entities are referenced by someone else
+        referencingEntities: Set[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
+        _ = if (referencingEntities.diff(entityRefs.toSet).size != 0) {
+          throw new DeleteEntitiesConflictException(referencingEntities)
+        }
+        // remove all references from these entities
+        _ <- repository.queries.deleteAllReferences(entityIds)
+        res <- repository.queries.batchHide(workspaceId, entityRefs)
+      } yield res.sum
+    }
 
   override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] = ???
 

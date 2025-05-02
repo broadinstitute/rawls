@@ -3,14 +3,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
-
 import spray.json._
-
-import java.util.UUID
+import java.sql.Timestamp
+import java.util.{Date, UUID}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -154,6 +153,29 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   /**
+   * Delete all rows in ENTITY_REFS for the specified "from" id
+   *
+   * Delete from ENTITY_REFS where to_id not in (toIds) and from_id = ?
+   *
+   * Returns the number of rows deleted.
+   *
+   * `execution plan: Index range scan; using where. Possible indexes: unq_from_to,idx_to; actual index: unq_from_to.`
+   */
+  // The index range scan is caused by the "not in" clause. I believe this is still optimal as compared to
+  // performing a select, performing a diff in the Scala layer, then sending an optimized delete query back to MySQL
+  def deleteAllReferences(fromIds: Set[Long]): ReadWriteAction[Int] = {
+    val fromIdsList = reduceSqlActionsWithDelim(fromIds.map(id => sql"$id").toSeq, sql",")
+    val query =
+      concatSqlActions(
+        sql"""delete from ENTITY_REFS where from_id in (""",
+        fromIdsList,
+        sql""");"""
+      )
+
+    query.asUpdate
+  }
+
+  /**
     * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
     *
     * Returns the number of rows upserted.
@@ -201,6 +223,57 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       FROM ENTITY_KEYS
       WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
+
+  // copied from EntityComponent
+  def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
+    // get unique suffix for renaming
+    val renameSuffix = "_" + driverComponent.getSufficientlyRandomSuffix(1000000000) // 1 billion
+    val deletedDate = new Timestamp(new Date().getTime)
+
+    // start of the SQL statement:
+    val baseUpdateSql =
+      sql"""update ENTITY set deleted=1, attributes=null, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix)
+           where deleted=0 AND workspace_id=$workspaceId """
+
+    // optimize for the common case where all entities being deleted have the same type
+    val distinctTypes = entities.map(_.entityType).distinct
+
+    val criteriaSql = if (distinctTypes.size == 1) {
+      // and entity_type='mytype' and name in ('foo', 'bar', 'baz')
+      val matchers = sql"""and entity_type=${distinctTypes.head} and name in ("""
+      val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map(ref => sql"${ref.entityName}"))
+      concatSqlActions(matchers, entityTypeNameTuples, sql")")
+    } else {
+      // and ( (entity_type='mytype1' and name='foo') or (entity_type='mytype2' and name='bar') or (entity_type='mytype3' and name='baz') )
+      val matchers = sql"""and ("""
+      val entityTypeNameTuples = reduceSqlActionsWithDelim(
+        entities.map { ref =>
+          sql"(entity_type = ${ref.entityType} and name = ${ref.entityName})"
+        },
+        sql" OR "
+      )
+      concatSqlActions(matchers, entityTypeNameTuples, sql")")
+    }
+
+    concatSqlActions(baseUpdateSql, criteriaSql).as[Int]
+  }
+
+  // Gets any entities that have references to the ids in the given list
+  def getReferencingEntities(toIds: Set[Long]): ReadAction[Set[AttributeEntityReference]] = {
+    val toIdsList = reduceSqlActionsWithDelim(toIds.map(id => sql"$id").toSeq, sql",")
+    val query =
+      concatSqlActions(
+        sql"""select e.entity_type, e.name from ENTITY_REFS er join ENTITY e on er.from_id = e.id where er.to_id in (""",
+        toIdsList,
+        sql""");"""
+      )
+
+    query.as[(String, String)].map { results =>
+      results.map { case (entityType, name) =>
+        AttributeEntityReference(entityType, name)
+      }.toSet
+    }
+  }
 
   // ====================================================================================================
   //  migration helpers
@@ -274,6 +347,22 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
             from ENTITY_KEYS
             where id = $entityId;""".as[KeysRecord]
     uniqueResult(query)
+  }
+
+  @VisibleForTesting
+  protected[slick] def getDeletedEntity(workspaceId: UUID,
+                                        entityType: String,
+                                        entityName: String
+  ): ReadAction[Option[CompactEntityRecord]] = {
+    val likeEntityName = s"%$entityName%"
+    val selectStatement: SQLActionBuilder =
+      sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
+              from ENTITY
+              where workspace_id = $workspaceId
+              and entity_type = $entityType
+              and name like $likeEntityName;"""
+
+    uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
 }
