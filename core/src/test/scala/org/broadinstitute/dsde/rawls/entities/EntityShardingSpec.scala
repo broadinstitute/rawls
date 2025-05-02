@@ -66,6 +66,8 @@ class EntityShardingSpec
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
+    implicit private val system: ActorSystem = ActorSystem("EntityShardingSpec")
+
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,

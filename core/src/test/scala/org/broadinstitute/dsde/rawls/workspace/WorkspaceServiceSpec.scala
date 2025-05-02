@@ -449,7 +449,12 @@ class WorkspaceServiceSpec
         SamWorkspacePolicyNames.owner,
         SamPolicy(
           Set(WorkbenchEmail(testData.userOwner.userEmail.value)),
-          Set(SamWorkspaceActions.own, SamWorkspaceActions.write, SamWorkspaceActions.read),
+          Set(SamWorkspaceActions.own,
+              SamWorkspaceActions.write,
+              SamWorkspaceActions.read,
+              SamWorkspaceActions.lock,
+              SamWorkspaceActions.unlock
+          ),
           Set(SamWorkspaceRoles.owner)
         ),
         testContext

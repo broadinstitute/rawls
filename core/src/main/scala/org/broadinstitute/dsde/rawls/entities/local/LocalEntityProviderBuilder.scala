@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
+import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
@@ -17,7 +18,8 @@ class LocalEntityProviderBuilder(dataSource: SlickDataSource,
                                  queryTimeout: Duration,
                                  metricsPrefix: String
 )(implicit
-  protected val executionContext: ExecutionContext
+  protected val executionContext: ExecutionContext,
+  system: ActorSystem
 ) extends EntityProviderBuilder[LocalEntityProvider] {
 
   override def builds: TypeTag[LocalEntityProvider] = typeTag[LocalEntityProvider]

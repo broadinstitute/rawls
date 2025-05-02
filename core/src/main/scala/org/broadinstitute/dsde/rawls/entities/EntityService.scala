@@ -23,10 +23,9 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
+import slick.dbio.DBIO
 
 import java.sql.SQLException
-import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 
 object EntityService {
@@ -37,7 +36,7 @@ object EntityService {
                   pageSizeLimit: Int,
                   workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
                     None // only used for Quicksilver migration
-  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): EntityService =
+  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext, system: ActorSystem): EntityService =
     new EntityService(ctx,
                       dataSource,
                       samDAO,
@@ -56,7 +55,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                     pageSizeLimit: Int,
                     workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
                       None // only used for Quicksilver migration
-)(implicit protected val executionContext: ExecutionContext)
+)(implicit protected val executionContext: ExecutionContext, system: ActorSystem)
     extends WorkspaceSupport
     with EntitySupport
     with AttributeSupport
@@ -442,12 +441,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
-                                  entityUpdates: Seq[EntityUpdateDefinition],
+                                  entityUpdates: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId],
                                   parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext) { _ =>
       getV2WorkspaceContextAndPermissions(workspaceName,
                                           SamWorkspaceActions.write,
@@ -474,26 +473,26 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Seq[EntityUpdateDefinition],
+                          entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
         .recover(
-          sqlLoggingRecover(s"batchUpdateEntities: $workspaceName ${entityUpdates.size} updates")
+          sqlLoggingRecover(s"batchUpdateEntities: $workspaceName")
         )
     }
 
   def batchUpsertEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Seq[EntityUpdateDefinition],
+                          entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
         .recover(
-          sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
+          sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )
     }
 

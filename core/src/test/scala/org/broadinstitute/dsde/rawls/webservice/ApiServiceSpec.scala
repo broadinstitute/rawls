@@ -9,7 +9,7 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.{TestActors, TestKitBase}
-import bio.terra.policy.model.TpsPaoGetResult
+import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInputs}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
@@ -83,6 +83,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.DurationConverters.JavaDurationOps
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -180,7 +181,15 @@ trait ApiServiceSpec
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
-    when(policyService.getPao(any(), any())).thenReturn(Future.successful(Option(new TpsPaoGetResult())))
+    when(policyService.getPao(any(), any()))
+      .thenReturn(
+        Future.successful(
+          Option(new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs()).sourcesObjectIds(List[UUID]().asJava))
+        )
+      )
+    when(policyService.getOrCreateSnapshotPao(any(), any()))
+      .thenReturn(Future.successful(new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())))
+    when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
     when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
@@ -253,11 +262,13 @@ trait ApiServiceSpec
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
-      slickDataSource,
+      new WorkspaceRepository(slickDataSource),
       samDAO,
       workspaceManagerDAO,
       mockServer.mockServerBaseUrl,
-      dataRepoDAO
+      dataRepoDAO,
+      _ => mock[WorkspaceService](RETURNS_SMART_NULLS),
+      policyService
     )
 
     override val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
