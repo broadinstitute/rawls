@@ -227,27 +227,31 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: batched insert (one statement, multiple rows)`
     */
-  def upsertReferences(references: Set[(Long, Set[Long])]): ReadWriteAction[Int] = {
-    val insertValues: Iterable[SQLActionBuilder] = references.flatMap { case (fromId, toIds) =>
-      toIds.map { toId =>
-        sql"($fromId,$toId)"
+  def upsertReferences(references: Set[(Long, Set[Long])]): ReadWriteAction[Int] =
+    // short-circuit
+    if (references.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val insertValues: Iterable[SQLActionBuilder] = references.flatMap { case (fromId, toIds) =>
+        toIds.map { toId =>
+          sql"($fromId,$toId)"
+        }
       }
-    }
-    val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
+      val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
 
-    val query = concatSqlActions(
-      sql"""insert into ENTITY_REFS(from_id, to_id)
+      val query = concatSqlActions(
+        sql"""insert into ENTITY_REFS(from_id, to_id)
               values
               """,
-      allInsertValues,
-      sql"""
+        allInsertValues,
+        sql"""
               on duplicate key update from_id=from_id;"""
-    )
-    // The `on duplicate key update ...` makes this `insert` an upsert, not throwing errors on any
-    // pre-existing rows. The `update from_id=from_id` is a noop update, saying "leave this row alone"
+      )
+      // The `on duplicate key update ...` makes this `insert` an upsert, not throwing errors on any
+      // pre-existing rows. The `update from_id=from_id` is a noop update, saying "leave this row alone"
 
-    query.asUpdate
-  }
+      query.asUpdate
+    }
 
   /**
    * Get all entity attribute keys for a workspace.
@@ -332,7 +336,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // return all reference targets for a given reference source
   // `execution plan: non-unique key lookup; fully indexed by unq_from_to`
   @VisibleForTesting
-  protected[slick] def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
+  def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
     sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
 
   // return the ENTITY_KEYS row for a given entity

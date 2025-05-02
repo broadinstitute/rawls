@@ -153,12 +153,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
       Source.future(repository.dataSource.inTransaction(_ => dbAction).map(_.flatten))
     })
 
-    // flatten
-    val flattenedResults: Source[Entity, _] = executedSource.flatMapConcat(seq => Source(seq))
+    // ignore
+    val ignoredResults: Future[Done] = executedSource.runWith(Sink.ignore)
 
     // TODO CORE-427: do we need to return results at all, beyond success/failure???
     // and return
-    Future(flattenedResults)
+    ignoredResults map { _ => Source.empty[Entity] }
   }
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
