@@ -54,7 +54,10 @@ import scala.util.{Failure, Success, Try}
   *
   * @param executionContext scala concurrency context
   */
-class CompactEntityProvider(requestArguments: EntityRequestArguments, repository: CompactEntityRepository)(implicit
+class CompactEntityProvider(requestArguments: EntityRequestArguments,
+                            repository: CompactEntityRepository,
+                            config: CompactEntityProviderConfig = CompactEntityProviderConfig()
+)(implicit
   protected val executionContext: ExecutionContext,
   actorSystem: ActorSystem
 ) extends EntityProvider
@@ -63,10 +66,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   override def entityStoreId: Option[String] = None // unused
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
-
-  // TODO CORE-427: move to config? This could easily change in CORE-428
-  private val maxSqlBatchSizeBytes: Int =
-    100 * 1024 * 1024 // 100 Mb, well under the 1Gb packet size we have set for MySQL
 
   override def batchUpdateEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
@@ -134,7 +133,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
     }
 
     // group the entities-to-be-saved into batches to optimize our SQL interactions
-    val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(maxSqlBatchSizeBytes)(calculateEntitySize)
+    val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(config.maxSqlBatchSizeBytes)(calculateEntitySize)
 
     // for each batch, generate the db action to write it to the database
     val batchActionsSource: Source[ReadWriteAction[Seq[Entity]], _] = batches

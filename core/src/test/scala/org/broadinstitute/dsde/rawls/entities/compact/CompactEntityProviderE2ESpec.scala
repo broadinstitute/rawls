@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
+  AttributeString,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -140,6 +141,35 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       name2Id
     )
 
+  }
+
+  it should "create entities across multiple batches" in withMinimalTestDatabase { _ =>
+    val repository = new CompactEntityRepository(slickDataSource)
+    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 2048) // pretty small to force batching
+
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // define 1000 entities, each with a text attribute ranging from 8 to 24 bytes
+    val updates: Seq[EntityUpdateDefinition] = Range(0, 1000) map { idx =>
+      EntityUpdateDefinition(s"name$idx",
+                             "typeA",
+                             Seq(
+                               AddUpdateAttribute(AttributeName.withDefaultNS("sometext"),
+                                                  AttributeString(idx.toString * 8)
+                               )
+                             )
+      )
+    }
+
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfter.size shouldBe 1
+    metadataAfter.keys should contain theSameElementsAs Seq("typeA")
+    metadataAfter("typeA").count shouldBe 1000
   }
 
   // ====================================================================================================
