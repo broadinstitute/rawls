@@ -142,6 +142,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
     // for each batch, generate the db action to write it to the database
     val batchActionsSource: Source[ReadWriteAction[Seq[Entity]], _] = batches
       .map { batch =>
+        logger.info(s"batch upsert: batch of ${batch.size} entities")
         insertBatch(batch)
       }
 
@@ -151,13 +152,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
       .map(DBIO.sequence(_))
 
     // convert the Future[ReadWriteAction] to a Source[Entity]
-    // TODO CORE-427: do we need to return results at all, beyond success/failure???
-    val executedSource = Source.futureSource(batchActionsF.map { dbAction =>
+    val executedSource: Source[Seq[Entity], _] = Source.futureSource(batchActionsF.map { dbAction =>
       Source.future(repository.dataSource.inTransaction(_ => dbAction).map(_.flatten))
     })
 
-    // TODO CORE-427: fix; this is blatantly incorrect
-    Future(executedSource map { seq => seq.head })
+    // flatten
+    val flattenedResults: Source[Entity, _] = executedSource.flatMapConcat(seq => Source(seq))
+
+    // TODO CORE-427: do we need to return results at all, beyond success/failure???
+    // and return
+    Future(flattenedResults)
   }
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
@@ -182,7 +186,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
             )
           )
         // find all references in this entity
-        refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
+        refs: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = findAllReferences(entity)
         // find all unique references in this entity
         uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
         // verify that all references in the entity-to-be-saved actually exist
@@ -303,17 +307,11 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   //  helper methods
   // ====================================================================================================
 
-  // given an entity, finds all references in that entity, grouped by their attribute names
-  // TODO CORE-427: remove this in favor of findAllReferences(Seq[Entity])
-  protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
-    entity.attributes
-      .collect {
-        case (name: AttributeName, ref: AttributeEntityReference)         => Seq((name, ref))
-        case (name: AttributeName, refList: AttributeEntityReferenceList) => refList.list.map(ref => (name, ref))
-      }
-      .flatten
-      .toSeq
-      .groupMap(_._1)(_._2)
+  // Given an entity, finds all references in that entity. Returns a map of source entity -> target entities
+  protected[compact] def findAllReferences(
+    entity: Entity
+  ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    findAllReferences(Seq(entity))
 
   // Given a Seq of entities, finds all references in those entities. Returns a map of source entity -> target entities
   // representing all references.
