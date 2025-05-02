@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.common.{EntityStreamingSupport, JsonEntityStreamingSupport}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.model.{ContentTypes, EntityStreamSizeException, HttpEntity, StatusCodes}
 import akka.http.scaladsl.model.StatusCodes.BadRequest
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
+import spray.json._
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -36,6 +37,10 @@ trait EntityApiService extends UserInfoDirectives {
 
   val entityServiceConstructor: RawlsRequestContext => EntityService
   val batchUpsertMaxBytes: Long
+
+  // the Int.MaxValue defines the size allowed by JsonEntityStreamingSupport. We set this to the max allowable,
+  // then have more fine-grained size validation using withSizeLimit specifically for the batchUpsert API
+  implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json(Int.MaxValue)
 
   def entityRoutes(otelContext: Context = Context.root()): server.Route = {
     requireUserInfo(Option(otelContext)) { userInfo =>
@@ -193,7 +198,7 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
             post {
               withSizeLimit(batchUpsertMaxBytes) {
-                entity(as[Array[EntityUpdateDefinition]]) { operations =>
+                entity(asSourceOf[EntityUpdateDefinition]) { operations =>
                   complete {
                     entityServiceConstructor(ctx)
                       .batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName),
@@ -202,14 +207,18 @@ trait EntityApiService extends UserInfoDirectives {
                                            billingProject
                       )
                       .map(_ => StatusCodes.NoContent)
+                      .recover { case _: EntityStreamSizeException =>
+                        StatusCodes.PayloadTooLarge
+                      }
                   }
                 }
+
               }
             }
           } ~
           path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
             post {
-              entity(as[Array[EntityUpdateDefinition]]) { operations =>
+              entity(asSourceOf[EntityUpdateDefinition]) { operations =>
                 complete {
                   entityServiceConstructor(ctx)
                     .batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName),
@@ -274,10 +283,6 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / Segment) {
             (workspaceNamespace, workspaceName, entityType) =>
               get {
-                // if any other APIs adopt streaming, move this implicit val higher up in the EntityApiService trait
-                implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
-                import spray.json._
-
                 // listEntities returns a source of Entity. We will stream-output each successful entity to the user,
                 // and if an exception occurs midstream we want to output the exception (wrapped in an ErrorReport)
                 // as the final element. Akka and Spray have a hard time with the mixed element types in the stream,

@@ -149,6 +149,7 @@ class BatchUpsertScalingSpec
       // parse into EntityUpdateDefinition. This is our initial load file, as if the user had an empty workspace
       // and uploaded a TSV to create a new data table.
       val initialUpsert: Seq[EntityUpdateDefinition] = batchUpsertFile.parseJson.convertTo[Seq[EntityUpdateDefinition]]
+      val initialUpsertSource = akka.stream.scaladsl.Source(initialUpsert)
 
       // copy the initial upsert, but change one value. This is as if the user downloaded a data table to TSV,
       // modified one cell, and re-uploaded the entire TSV.
@@ -196,13 +197,13 @@ class BatchUpsertScalingSpec
         } else {
           val (loadDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsert, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
               waitDuration
             )
           }
           val (changeDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, modifiedUpsert, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
               waitDuration
             )
           }

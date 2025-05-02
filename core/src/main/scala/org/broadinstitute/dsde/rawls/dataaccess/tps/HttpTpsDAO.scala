@@ -16,8 +16,7 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
 
-class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext)
-    extends TpsDAO {
+class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
