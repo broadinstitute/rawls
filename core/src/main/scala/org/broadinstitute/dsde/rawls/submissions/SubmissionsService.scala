@@ -542,7 +542,11 @@ class SubmissionsService(
       )
       _ <- getSetToDelete(submissionRequest)
         .map { setToDelete =>
-          entityServiceConstructor(ctx).deleteEntities(workspaceName, Seq(setToDelete), None, None)
+          entityServiceConstructor(ctx)
+            .deleteEntities(workspaceName, Seq(setToDelete), None, None)
+            .recover { case e =>
+              logger.error(s"Failed to delete entities: ", e)
+            }
         }
         .getOrElse(Future.successful(()))
     } yield SubmissionReport(
