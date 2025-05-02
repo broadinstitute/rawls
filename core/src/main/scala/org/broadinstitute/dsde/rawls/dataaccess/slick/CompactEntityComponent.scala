@@ -270,10 +270,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         sql""");"""
       )
 
-//    query.as[(String, String)].map { results =>
-//      results.map { case (entityType, name) =>
-//        AttributeEntityReference(entityType, name)
-//      }.toSet
     query.as[AttributeEntityReference]
   }
 

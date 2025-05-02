@@ -308,45 +308,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
-  it should "delete references from entity_ref table" in withMinimalTestDatabase { _ =>
-    // create the entity to "delete"
-    val targetType = "targetType"
-    val targetEntity1 = Entity("target1", targetType, Map())
-    val targetEntity2 = Entity("target2", targetType, Map())
-    val targetEntity3 = Entity("target3", targetType, Map())
-    val entity = Entity(
-      "entityName",
-      "entityType",
-      Map(
-        AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
-        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType, "target1"),
-        AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
-          Seq(
-            AttributeEntityReference(targetType, "target2"),
-            AttributeEntityReference(targetType, "target3")
-          )
-        )
-      )
-    )
-    val target1 = insertAndGet(targetEntity1)
-    val target2 = insertAndGet(targetEntity2)
-    val target3 = insertAndGet(targetEntity3)
-    val insertedEntity = insertAndGet(entity)
-    // Insert references
-    runAndWait(q.upsertReferences(insertedEntity.id, Set(target1.id, target2.id, target3.id)))
-    val references = runAndWait(q.getReferencedIds(insertedEntity.id))
-
-    references should not be empty
-
-    runAndWait(q.batchHide(wsid, Seq(entity.toReference)))
-    val actual = runAndWait(q.getEntity(wsid, entity.entityType, entity.name))
-    actual shouldBe empty
-
-    val deletedReferences = runAndWait(q.getReferencedIds(insertedEntity.id))
-    deletedReferences.size shouldBe 0
-
-  }
-
   behavior of "getReferencingEntities"
 
   it should "find entities" in withMinimalTestDatabase { _ =>
@@ -390,7 +351,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
     runAndWait(
       q.getReferencingEntities(Set(target1.id, target2.id))
-    ) shouldBe expected
+    ) should contain theSameElementsAs expected
 
   }
 

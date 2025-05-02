@@ -125,9 +125,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         )
         entityIds = entities.flatten.map(_.id).toSet
         // check if any of these entities are referenced by someone else
-        referencingEntities: Set[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
-        _ = if (referencingEntities.diff(entityRefs.toSet).size != 0) {
-          throw new DeleteEntitiesConflictException(referencingEntities)
+        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
+        _ = if (referencingEntities.toSet.diff(entityRefs.toSet).size != 0) {
+          throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities
         _ <- repository.queries.deleteAllReferences(entityIds)

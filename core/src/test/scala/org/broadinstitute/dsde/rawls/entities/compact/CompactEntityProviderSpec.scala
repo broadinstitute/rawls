@@ -11,7 +11,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   TestDriverComponentWithFlatSpecAndMatchers
 }
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DeleteEntitiesConflictException,
+  EntityNotFoundException,
+  EntityReferenceNotFoundException
+}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -379,8 +383,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
 
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencingEntities(any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteAllReferences(any())).thenReturn(DBIO.successful(1))
     when(
       mockQuery.getEntity(any[UUID],
                           ArgumentMatchers.eq(createdEntityRec1.entityType),
@@ -397,6 +403,171 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     )
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec2))) // second request finds the entity we saved
+    when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(Seq(1)))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual1 = Await.result(provider.createEntity(entity1, defaultRequestContext), atMost)
+    val actual2 = Await.result(provider.createEntity(entity2, defaultRequestContext), atMost)
+
+    actual1 shouldBe entity1
+    actual2 shouldBe entity2
+
+    Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext), atMost)
+
+    verify(mockQuery, times(1)).getReferencingEntities(Set(createdEntityRec1.id, createdEntityRec2.id))
+    verify(mockQuery, times(1)).deleteAllReferences(Set(createdEntityRec1.id, createdEntityRec2.id))
+    verify(mockQuery, times(1)).batchHide(defaultWorkspace.workspaceIdAsUUID,
+                                          Seq(entity1.toReference, entity2.toReference)
+    )
+  }
+
+  it should "throw error if entities are referenced" in {
+    val entity1 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                         )
+    )
+    val createdEntityRec1 =
+      CompactEntityRecord(42,
+                          entity1.name,
+                          entity1.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":123,"foo":"bar"}""")
+      )
+
+    val entity2 = Entity("name2",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("boo"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(456)
+                         )
+    )
+    val createdEntityRec2 =
+      CompactEntityRecord(41,
+                          entity2.name,
+                          entity2.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":456,"foo":"boo"}""")
+      )
+
+    val referencingEntity =
+      Entity("ref",
+             "refType",
+             Map(
+               AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencingEntities(any())).thenReturn(DBIO.successful(Seq(referencingEntity.toReference)))
+    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteAllReferences(any())).thenReturn(DBIO.successful(1))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec1.entityType),
+                          ArgumentMatchers.eq(createdEntityRec1.name)
+      )
+    )
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec1))) // second request finds the entity we saved
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec2.entityType),
+                          ArgumentMatchers.eq(createdEntityRec2.name)
+      )
+    )
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec2))) // second request finds the entity we saved
+    when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(Seq(1)))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual1 = Await.result(provider.createEntity(entity1, defaultRequestContext), atMost)
+    val actual2 = Await.result(provider.createEntity(entity2, defaultRequestContext), atMost)
+
+    actual1 shouldBe entity1
+    actual2 shouldBe entity2
+
+    val actual = intercept[DeleteEntitiesConflictException] {
+      Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext),
+                   atMost
+      )
+    }
+    actual shouldBe a[DeleteEntitiesConflictException]
+
+    verify(mockQuery, times(0)).deleteAllReferences(Set(createdEntityRec1.id, createdEntityRec2.id))
+    verify(mockQuery, times(0)).batchHide(defaultWorkspace.workspaceIdAsUUID,
+                                          Seq(entity1.toReference, entity2.toReference)
+    )
+  }
+
+  it should "succeed if referencing entities are among those being deleted" in {
+    val entity1 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                         )
+    )
+    val createdEntityRec1 =
+      CompactEntityRecord(42,
+                          entity1.name,
+                          entity1.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":123,"foo":"bar"}""")
+      )
+
+    val entity2 = Entity("name2",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("boo"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(456)
+                         )
+    )
+    val createdEntityRec2 =
+      CompactEntityRecord(41,
+                          entity2.name,
+                          entity2.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":456,"foo":"boo"}""")
+      )
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencingEntities(any())).thenReturn(DBIO.successful(Seq(entity2.toReference)))
+    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteAllReferences(any())).thenReturn(DBIO.successful(1))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec1.entityType),
+                          ArgumentMatchers.eq(createdEntityRec1.name)
+      )
+    )
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec1))) // second request finds the entity we saved
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec2.entityType),
+                          ArgumentMatchers.eq(createdEntityRec2.name)
+      )
+    )
+      .thenReturn(DBIO.successful(None)) // first request finds nothing
+      .thenReturn(DBIO.successful(Some(createdEntityRec2))) // second request finds the entity we saved
+    when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(Seq(1)))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
