@@ -2,10 +2,12 @@ package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   CompactEntityQuery,
   CompactEntityRecord,
+  CompactEntityRefRecord,
   EntityTypeAndAttributeKey,
   EntityTypeAndCount,
   ReadWriteAction,
@@ -13,6 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -30,7 +33,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers.{any, anyString}
+import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
+import org.mockito.Mockito
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -77,7 +81,116 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   // ====================================================================================================
 
   "batchUpdateEntities" should "have tests" is pending
-  "batchUpsertEntities" should "have tests" is pending
+
+  behavior of "batchUpsertEntities"
+
+  it should "issue one insert statement for multiple entities" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition("name2", "typeA", Seq()),
+      EntityUpdateDefinition("name3", "typeB", Seq())
+    )
+
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // should have called one batch-insert to write the entities
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    // entities have no references, so the input to upsertReferences should be empty
+    verify(mockQuery, times(1)).upsertReferences(Set())
+  }
+
+  it should "issue multiple insert statements when given large batches" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
+
+    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 2048) // pretty small to force batching
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery, config = config)
+
+    // define 100 entities, each with a text attribute ranging from 8 to 24 bytes
+    val updates: Seq[EntityUpdateDefinition] = Range(0, 100) map { idx =>
+      EntityUpdateDefinition(s"name$idx",
+                             "typeA",
+                             Seq(
+                               AddUpdateAttribute(AttributeName.withDefaultNS("sometext"),
+                                                  AttributeString(idx.toString * 8)
+                               )
+                             )
+      )
+    }
+
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // should have called batchCreateEntities multiple times to write the entities
+    verify(mockQuery, Mockito.atLeast(2)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    // entities have no references, so the input to upsertReferences should be empty
+    verify(mockQuery, Mockito.atLeast(2)).upsertReferences(Set())
+
+  }
+
+  it should "ask to insert references" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(-1))
+    // this response must be exactly what is expected from the input to batchUpsertEntities
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
+      DBIO.successful(
+        Seq(
+          CompactEntityRefRecord(2, "name2", "typeA"),
+          CompactEntityRefRecord(3, "name3", "typeB"),
+          CompactEntityRefRecord(4, "targetName", "targetType")
+        )
+      )
+    )
+    when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("ref"), AttributeEntityReference("targetType", "targetName"))
+        )
+      ),
+      EntityUpdateDefinition(
+        "name3",
+        "typeB",
+        Seq(
+          AddUpdateAttribute(
+            AttributeName.withDefaultNS("refs"),
+            AttributeEntityReferenceList(
+              Seq(
+                AttributeEntityReference("targetType", "targetName")
+              )
+            )
+          )
+        )
+      )
+    )
+
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // should have called one batch-insert to write the entities
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    // entities found references, so should ask to upsert those.
+    // given the mock response defined above, we expect references from 2->4 and 3->4
+    verify(mockQuery, times(1)).upsertReferences(Set((2, Set(4)), (3, Set(4))))
+  }
+
   "copyEntities" should "have tests" is pending
 
   behavior of "createEntity"
@@ -725,7 +838,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         DBIO.failed(new RuntimeException("withWorkspaceLastModified intentional failure in updateLastModified"))
       )
     // provider using mocks
-    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+    val provider = providerWithMocks(mockRepository, requestArguments = defaultEntityRequestArguments)
 
     val original = Future.successful(123)
     // we have not yet called updateLastModified
@@ -742,15 +855,22 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   //  helper methods
   // ====================================================================================================
   private def providerWithMocks(queries: CompactEntityQuery,
-                                requestArguments: EntityRequestArguments = defaultEntityRequestArguments
+                                requestArguments: EntityRequestArguments = defaultEntityRequestArguments,
+                                config: CompactEntityProviderConfig = CompactEntityProviderConfig()
   ): CompactEntityProvider = {
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries)
       .thenReturn(queries)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
 
-    providerWithMocks(mockRepository, requestArguments)
+    providerWithMocks(mockRepository, requestArguments, config)
   }
+
+  private def providerWithMocks(repository: CompactEntityRepository,
+                                requestArguments: EntityRequestArguments,
+                                config: CompactEntityProviderConfig
+  ): CompactEntityProvider =
+    new CompactEntityProvider(requestArguments, repository, config)(ec, system)
 
   private def providerWithMocks(repository: CompactEntityRepository,
                                 requestArguments: EntityRequestArguments
