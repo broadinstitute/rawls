@@ -64,7 +64,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
 
-  // TODO: move to config? This could easily change in CORE-428
+  // TODO CORE-427: move to config? This could easily change in CORE-428
   private val maxSqlBatchSizeBytes: Int =
     100 * 1024 * 1024 // 100 Mb, well under the 1Gb packet size we have set for MySQL
 
@@ -112,14 +112,11 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         val toIds = tos.map(idLookup).toSet
         (idLookup(from), toIds)
       }.toSet
-      // TODO CORE-427: modify upsertReferences so we don't have to loop over it
-      refUpserts: Seq[ReadWriteAction[Int]] = referencesToInsert.toSeq map { case (fromId, toIds) =>
-        repository.queries.upsertReferences(fromId, toIds)
-      }
-      _ <- DBIO.sequence(refUpserts)
-
+      // insert the references into the ENTITY_REFS table.
+      _ <- repository.queries.upsertReferences(referencesToInsert)
     } yield batch
 
+  // TODO CORE-427: unit tests
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext

@@ -54,8 +54,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
     *
-    * `execution plan: single-row insert`
+    * `execution plan: ???`
     */
+  // TODO CORE-427: execution plan
   def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity]): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
@@ -100,7 +101,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: ???`
     */
-  // TODO CORE-427: unit tests
+  // TODO CORE-427: execution plan
   def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
     // short-circuit
     if (refs.isEmpty) {
@@ -123,7 +124,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
       // build the overall query
       val query = concatSqlActions(
-        sql"""select id, entity_type, name
+        sql"""select id, name, entity_type
                from ENTITY
                where workspace_id = $workspaceId
                and deleted = 0
@@ -216,9 +217,21 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: batched insert (one statement, multiple rows)`
     */
-  def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
-    val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
-      sql"($fromId,$toId)"
+  def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] =
+    upsertReferences(Set((fromId, toIds)))
+
+  /**
+    * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
+    *
+    * Returns the number of rows upserted.
+    *
+    * `execution plan: batched insert (one statement, multiple rows)`
+    */
+  def upsertReferences(references: Set[(Long, Set[Long])]): ReadWriteAction[Int] = {
+    val insertValues: Iterable[SQLActionBuilder] = references.flatMap { case (fromId, toIds) =>
+      toIds.map { toId =>
+        sql"($fromId,$toId)"
+      }
     }
     val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
 

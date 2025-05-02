@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
@@ -18,6 +19,74 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   // shorthand vars for tests below to enhance readability
   private val wsid = minimalTestData.workspace.workspaceIdAsUUID
   private val q = compactEntityQuery
+
+  behavior of "batchCreateEntities and getEntity"
+
+  // tests both batchCreateEntities and getEntity
+  it should "handle entities with no attributes" in withMinimalTestDatabase { _ =>
+    val entities = Seq(
+      Entity("entityName1", "entityType1", Map()),
+      Entity("entityName2", "entityType2", Map()),
+      Entity("entityName3", "entityType3", Map())
+    )
+    insertAndGetAll(entities)
+  }
+
+  it should "handle entities with simple attributes" in withMinimalTestDatabase { _ =>
+    val entities = Seq(
+      Entity("entityName1",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      ),
+      Entity("entityName2",
+             "entityType2",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      ),
+      Entity("entityName3",
+             "entityType3",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      )
+    )
+    insertAndGetAll(entities)
+  }
+
+  // TODO CORE-428: behavior of this test will change once batch updates are implemented
+  it should "make no db changes if any of the entities exist" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGet(entity2)
+
+    val entities = Seq(entity1, entity2, entity3)
+
+    // should throw a primary key violation error
+    intercept[SQLIntegrityConstraintViolationException](runAndWait(q.batchCreateEntities(wsid, entities)))
+
+    // entity 2 should still exist
+    val rec2 = runAndWait(q.getEntity(wsid, entity2.entityType, entity2.name))
+    rec2 shouldBe defined
+    rec2.get.toEntity shouldBe entity2
+
+    // entities 1 and 3 should not exist
+    runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name)) shouldBe empty
+    runAndWait(q.getEntity(wsid, entity3.entityType, entity3.name)) shouldBe empty
+  }
+
+  // TODO CORE-428: behavior of this test will change once batch updates are implemented
+  it should "make no db changes if input contains repeated entities" in withMinimalTestDatabase { _ =>
+    val entities = Seq(
+      Entity("entityName1", "entityType1", Map()),
+      Entity("entityName2", "entityType2", Map()),
+      Entity("entityName1", "entityType1", Map()) // duplicate of the first entity
+    )
+
+    // should throw a primary key violation error
+    intercept[SQLIntegrityConstraintViolationException](insertAndGetAll(entities))
+
+    runAndWait(q.getEntity(wsid, "entityType1", "entityName1")) shouldBe empty
+    runAndWait(q.getEntity(wsid, "entityType2", "entityName2")) shouldBe empty
+  }
 
   behavior of "createEntity and getEntity"
 
@@ -54,6 +123,57 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
     insertAndGet(entity)
+  }
+
+  behavior of "getEntityRefs"
+
+  it should "return nothing if asked for nothing" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(q.getEntityRefs(wsid, Set.empty))
+    actual shouldBe empty
+  }
+
+  it should "return existent entities" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(q.getEntityRefs(wsid, Set(entity1.toReference, entity2.toReference)))
+
+    val expected = Set(entity1.toReference, entity2.toReference)
+
+    // map CompactEntityRefRecord to AttributeEntityReference when comparing, since
+    // CompactEntityRefRecord contains an id which can be different every time
+    actual.map(_.toAttributeEntityReference) should contain theSameElementsAs expected
+  }
+
+  it should "return what it found even if not all entities exist" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(
+      q.getEntityRefs(wsid,
+                      Set(entity1.toReference,
+                          AttributeEntityReference(entity2.entityType, "nonexistent-2"),
+                          entity2.toReference
+                      )
+      )
+    )
+    val expected = Set(entity1.toReference, entity2.toReference)
+
+    // map CompactEntityRefRecord to AttributeEntityReference when comparing, since
+    // CompactEntityRefRecord contains an id which can be different every time
+    actual.map(_.toAttributeEntityReference) should contain theSameElementsAs expected
   }
 
   behavior of "ENTITY_KEYS population triggers"
@@ -166,6 +286,22 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
   }
 
+  it should "upsert for multiple source entities" in withMinimalTestDatabase { _ =>
+    val fromIdOne: Long = 1 // id of the entity doing the referencing: the "source"
+    val fromIdTwo: Long = 2 // id of the entity doing the referencing: the "source"
+    val toIdsOne: Set[Long] = Set(101, 102, 103, 104, 105) // ids of entities being referenced: the "targets"
+    val toIdsTwo: Set[Long] = Set(201, 202, 203, 104) // notice the overlap for target 104
+    // sources should have no rows in ENTITY_REFS table
+    runAndWait(q.getReferencedIds(fromIdOne)) shouldBe empty
+    runAndWait(q.getReferencedIds(fromIdTwo)) shouldBe empty
+    // insert
+    runAndWait(
+      q.upsertReferences(Set((fromIdOne, toIdsOne), (fromIdTwo, toIdsTwo)))
+    ) shouldBe toIdsOne.size + toIdsTwo.size
+    runAndWait(q.getReferencedIds(fromIdOne)) should contain theSameElementsAs toIdsOne
+    runAndWait(q.getReferencedIds(fromIdTwo)) should contain theSameElementsAs toIdsTwo
+  }
+
   behavior of "listEntityKeys"
 
   it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
@@ -258,12 +394,15 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   //  helpers for tests
   // ====================================================================================================
 
+  // this does NOT delegate to insertAndGetAll. This helper uses createEntity.
   private def insertAndGet(entity: Entity, workspaceId: UUID = wsid): CompactEntityRecord = {
     // row should not exist before inserting
     runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
-    // insert the entity
+
+    // insert the entities
     runAndWait(q.createEntity(workspaceId, entity)) shouldBe 1
-    // retrieve the entity; retrieved value includes its id
+    // retrieve the entities; retrieved value includes its id
+
     val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
     actual should not be empty
     val rec = actual.get
@@ -274,6 +413,30 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     rec.recordVersion shouldBe 0
 
     rec
+  }
+
+  // This helper uses batchCreateEntities.
+  private def insertAndGetAll(entities: Seq[Entity], workspaceId: UUID = wsid): Seq[CompactEntityRecord] = {
+    // rows should not exist before inserting
+    entities.foreach { entity =>
+      runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
+    }
+
+    // insert the entities
+    runAndWait(q.batchCreateEntities(workspaceId, entities)) shouldBe entities.size
+    // retrieve the entities; retrieved value includes its id
+    entities.map { entity =>
+      val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
+      actual should not be empty
+      val rec = actual.get
+      // check entityType, name, and attributes
+      rec.toEntity shouldBe entity
+      // check other db columns which are not present in the Entity object
+      rec.deleted shouldBe false
+      rec.recordVersion shouldBe 0
+
+      rec
+    }
   }
 
 }
