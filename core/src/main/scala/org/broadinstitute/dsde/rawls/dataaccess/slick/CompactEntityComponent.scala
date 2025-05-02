@@ -9,7 +9,6 @@ import slick.jdbc._
 import spray.json._
 import java.sql.Timestamp
 import java.util.{Date, UUID}
-import scala.concurrent.ExecutionContext.Implicits.global
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -47,6 +46,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
     GetResult(r => EntityTypeAndCount(r.<<, r.<<))
+
+  implicit val getAttributeEntityReference: GetResult[AttributeEntityReference] =
+    GetResult(r => AttributeEntityReference(r.<<, r.<<))
 
   /**
     * Insert a single entity to the db.
@@ -259,7 +261,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   // Gets any entities that have references to the ids in the given list
-  def getReferencingEntities(toIds: Set[Long]): ReadAction[Set[AttributeEntityReference]] = {
+  def getReferencingEntities(toIds: Set[Long]): ReadAction[Seq[AttributeEntityReference]] = {
     val toIdsList = reduceSqlActionsWithDelim(toIds.map(id => sql"$id").toSeq, sql",")
     val query =
       concatSqlActions(
@@ -268,11 +270,11 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         sql""");"""
       )
 
-    query.as[(String, String)].map { results =>
-      results.map { case (entityType, name) =>
-        AttributeEntityReference(entityType, name)
-      }.toSet
-    }
+//    query.as[(String, String)].map { results =>
+//      results.map { case (entityType, name) =>
+//        AttributeEntityReference(entityType, name)
+//      }.toSet
+    query.as[AttributeEntityReference]
   }
 
   // ====================================================================================================
