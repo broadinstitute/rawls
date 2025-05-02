@@ -64,7 +64,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
 
-  // TODO: move to config?
+  // TODO: move to config? This could easily change in CORE-428
   private val maxSqlBatchSizeBytes: Int =
     100 * 1024 * 1024 // 100 Mb, well under the 1Gb packet size we have set for MySQL
 
@@ -123,31 +123,42 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] =
+  ): Future[Source[Entity, _]] = {
 
-    repository.dataSource.inTransaction { _ =>
-      // translate the input stream entityUpdates to a stream of Entity by applying the updates to
-      // a pre-existing entity (for updates) or a blank entity (for inserts)
-      val entitySource: Source[Entity, _] = entityUpdates.map { updateDefinition =>
-        // TODO CORE-428: for updates, look ahead (some quantity) in the update definitions and
-        //   retrieve the existing entities from the db
-        // for inserts, start with an empty entity
-        val baseEntity = Entity(updateDefinition.name, updateDefinition.entityType, Map())
-        // update the starting entity with the user's operations
-        applyOperationsToEntity(baseEntity, updateDefinition.operations)
+    // translate the input stream entityUpdates to a stream of Entity by applying the updates to
+    // a pre-existing entity (for updates) or a blank entity (for inserts)
+    val entitySource: Source[Entity, _] = entityUpdates.map { updateDefinition =>
+      // TODO CORE-428: for updates, look ahead (some quantity) in the update definitions and
+      //   retrieve the existing entities from the db
+      // for inserts, start with an empty entity
+      val baseEntity = Entity(updateDefinition.name, updateDefinition.entityType, Map())
+      // update the starting entity with the user's operations
+      applyOperationsToEntity(baseEntity, updateDefinition.operations)
+    }
+
+    // group the entities-to-be-saved into batches to optimize our SQL interactions
+    val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(maxSqlBatchSizeBytes)(calculateEntitySize)
+
+    // for each batch, generate the db action to write it to the database
+    val batchActionsSource: Source[ReadWriteAction[Seq[Entity]], _] = batches
+      .map { batch =>
+        insertBatch(batch)
       }
 
-      // group the entities-to-be-saved into batches to optimize our SQL interactions
-      val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(maxSqlBatchSizeBytes)(calculateEntitySize)
+    // materialize the batch actions into a sequence and convert to a single DBIO action
+    val batchActionsF: Future[ReadWriteAction[Seq[Seq[Entity]]]] = batchActionsSource
+      .runWith(Sink.seq)
+      .map(DBIO.sequence(_))
 
-      val batchResults: Source[ReadWriteAction[Seq[Entity]], _] = batches
-        .map { batch =>
-          insertBatch(batch)
-        }
+    // convert the Future[ReadWriteAction] to a Source[Entity]
+    // TODO CORE-427: do we need to return results at all, beyond success/failure???
+    val executedSource = Source.futureSource(batchActionsF.map { dbAction =>
+      Source.future(repository.dataSource.inTransaction(_ => dbAction).map(_.flatten))
+    })
 
-      // TODO CORE-427: do we need to return results at all, beyond success/failure???
-      DBIO.from(batchResults.runWith(Sink.fu).map(_ => Source.empty[Entity]))
-    }
+    // TODO CORE-427: fix; this is blatantly incorrect
+    Future(executedSource map { seq => seq.head })
+  }
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
