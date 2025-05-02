@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.tps
 
 import bio.terra.policy.api.TpsApi
-import bio.terra.policy.client.{ApiClient, ApiException}
-import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest}
+import bio.terra.policy.client.ApiClient
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest, TpsPaoUpdateResult}
+import com.typesafe.scalalogging.LazyLogging
 import jakarta.ws.rs.client.ClientBuilder
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -15,7 +16,8 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
 
-class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
+class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext)
+    extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
     val client: ApiClient = new ApiClient()
 
@@ -52,14 +54,9 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
     }
   }
 
-  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]] = Future {
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoGetResult] = Future {
     blocking {
-      val tpsApi = getTpsApi(ctx)
-      try
-        Option(tpsApi.getPao(objectId, false))
-      catch {
-        case ex: ApiException if ex.getCode == 404 => None
-      }
+      getTpsApi(ctx).getPao(objectId, false)
     }
   }
 
@@ -68,4 +65,11 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
       getTpsApi(ctx).deletePao(objectId)
     }
   }
+
+  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoUpdateResult] =
+    Future {
+      blocking {
+        getTpsApi(ctx).linkPao(request, objectId)
+      }
+    }
 }

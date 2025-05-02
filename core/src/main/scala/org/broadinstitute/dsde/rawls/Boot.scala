@@ -479,12 +479,18 @@ object Boot extends IOApp with LazyLogging {
         new WorkspaceSettingRepository(slickDataSource)
       )
 
+      val billingRepository = new BillingRepository(slickDataSource)
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+      val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
+
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
-        slickDataSource,
+        workspaceRepository,
         samDAO,
         workspaceManagerDAO,
         appConfigManager.conf.getString("dataRepo.terraInstanceName"),
-        dataRepoDAO
+        dataRepoDAO,
+        workspaceServiceConstructor,
+        policyService
       )
 
       val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(
@@ -500,9 +506,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
-      val billingRepository = new BillingRepository(slickDataSource)
-      val workspaceRepository = new WorkspaceRepository(slickDataSource)
-      val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
+
       val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(

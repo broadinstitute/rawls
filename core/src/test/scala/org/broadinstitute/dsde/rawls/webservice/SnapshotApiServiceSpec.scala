@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import spray.json.DefaultJsonProtocol.listFormat
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -19,6 +20,8 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   val v2BaseSnapshotsPath = s"${testData.wsName.path}/snapshots/v2"
   val v2WorkspaceIdBaseSnapshotsPath = s"/workspaces/${testData.workspace.workspaceIdAsUUID}/snapshots/v2"
+  val v3BaseSnapshotsPath = s"${testData.wsName.path}/snapshots/v3"
+  val v3WorkspaceIdBaseSnapshotsPath = s"/workspaces/${testData.workspace.workspaceIdAsUUID}/snapshots/v3"
 
   val defaultNamedSnapshotJson = httpJson(
     NamedDataRepoSnapshot(
@@ -580,4 +583,23 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         }
     }
 
+  it should "return 204 when creating multiple snapshots using workspaceName" in withTestDataApiServices { services =>
+    Post(v3BaseSnapshotsPath, List(UUID.randomUUID, UUID.randomUUID)) ~>
+      sealRoute(services.snapshotRoutes()) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
+
+  it should "return 204 when creating multiple snapshots using workspaceId" in withTestDataApiServices { services =>
+    Post(v3WorkspaceIdBaseSnapshotsPath, List(UUID.randomUUID, UUID.randomUUID)) ~>
+      sealRoute(services.snapshotRoutes()) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
 }
