@@ -4,19 +4,22 @@ import bio.terra.policy.client.ApiException
 import bio.terra.policy.model.{
   TpsComponent,
   TpsObjectType,
+  TpsPaoConflict,
   TpsPaoCreateRequest,
+  TpsPaoGetResult,
   TpsPaoSourceRequest,
+  TpsPaoUpdateResult,
   TpsPolicyInput,
   TpsPolicyInputs,
   TpsPolicyPair,
   TpsUpdateMode
 }
-import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model.{ManagedGroupRef, RawlsGroupName, RawlsRequestContext, WorkspaceRequest}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{never, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.matchers.should.Matchers._
@@ -157,5 +160,175 @@ class PolicyServiceSpec extends AnyFlatSpec {
 
     noException should be thrownBy
       Await.result(policyService.deleteWorkspacePao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
+  }
+
+  behavior of "getPao"
+
+  it should "wrap the PAO TPS returns in an Option" in {
+    val workspaceId = UUID.randomUUID
+    val emptyPao = new TpsPaoGetResult()
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.getPao(mockitoEq(workspaceId), any())).thenReturn(Future.successful(emptyPao))
+    val policyService = new PolicyService(tpsDAO)
+
+    val res = Await.result(policyService.getPao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
+    res shouldBe Option(emptyPao)
+  }
+
+  it should "return None if TPS returns a 404" in {
+    val workspaceId = UUID.randomUUID
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.getPao(mockitoEq(workspaceId), any())).thenReturn(Future.failed(new ApiException(404, "pao not found")))
+    val policyService = new PolicyService(tpsDAO)
+
+    val res = Await.result(policyService.getPao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
+    res shouldBe None
+  }
+
+  it should "throw for other TPS exceptions" in {
+    val workspaceId = UUID.randomUUID
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.getPao(mockitoEq(workspaceId), any())).thenReturn(Future.failed(new ApiException(500, "disaster")))
+    val policyService = new PolicyService(tpsDAO)
+
+    val exception = intercept[ApiException] {
+      Await.result(policyService.getPao(workspaceId, mock[RawlsRequestContext]), Duration.Inf)
+    }
+    exception.getCode shouldBe 500
+  }
+
+  behavior of "getOrCreateSnapshotPao"
+
+  it should "return existing PAOs" in {
+    val snapshotId = UUID.randomUUID
+    val emptyPao = new TpsPaoGetResult()
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.getPao(mockitoEq(snapshotId), any())).thenReturn(Future.successful(emptyPao))
+    val policyService = new PolicyService(tpsDAO)
+
+    val res = Await.result(policyService.getOrCreateSnapshotPao(snapshotId, mock[RawlsRequestContext]), Duration.Inf)
+    res shouldBe emptyPao
+    verify(tpsDAO, never).createPao(any(), any())
+  }
+
+  it should "create an empty PAO if the snapshot doesn't have a PAO already" in {
+    val snapshotId = UUID.randomUUID
+    val emptyPao = new TpsPaoGetResult()
+
+    val expectedCreateRequest =
+      new TpsPaoCreateRequest().objectType(TpsObjectType.SNAPSHOT).component(TpsComponent.TDR).objectId(snapshotId)
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.getPao(mockitoEq(snapshotId), any()))
+      .thenReturn(Future.failed(new ApiException(404, "pao not found")))
+      .thenReturn(Future.successful(emptyPao))
+    when(tpsDAO.createPao(mockitoEq(expectedCreateRequest), any())).thenReturn(Future.unit)
+    val policyService = new PolicyService(tpsDAO)
+
+    val res = Await.result(policyService.getOrCreateSnapshotPao(snapshotId, mock[RawlsRequestContext]), Duration.Inf)
+    res shouldBe emptyPao
+    verify(tpsDAO).createPao(mockitoEq(expectedCreateRequest), any())
+  }
+
+  behavior of "linkSnapshotPaoToWorkspacePao"
+
+  it should "support dry runs" in {
+    val snapshotId = UUID.randomUUID
+    val workspaceId = UUID.randomUUID
+
+    val expectedUpdateRequest = new TpsPaoSourceRequest().sourceObjectId(snapshotId).updateMode(TpsUpdateMode.DRY_RUN)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())).thenReturn(
+      Future.successful(
+        new TpsPaoUpdateResult()
+          .updateApplied(false)
+          .resultingPao(new TpsPaoGetResult())
+          .conflicts(List.empty[TpsPaoConflict].asJava)
+      )
+    )
+    val policyService = new PolicyService(tpsDAO)
+
+    Await.result(policyService.linkSnapshotPaoToWorkspacePao(snapshotId, workspaceId, true, mock[RawlsRequestContext]),
+                 Duration.Inf
+    )
+    verify(tpsDAO).linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())
+  }
+
+  it should "link PAOs" in {
+    val snapshotId = UUID.randomUUID
+    val workspaceId = UUID.randomUUID
+
+    val expectedUpdateRequest =
+      new TpsPaoSourceRequest().sourceObjectId(snapshotId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())).thenReturn(
+      Future.successful(
+        new TpsPaoUpdateResult()
+          .updateApplied(true)
+          .resultingPao(new TpsPaoGetResult())
+          .conflicts(List.empty[TpsPaoConflict].asJava)
+      )
+    )
+    val policyService = new PolicyService(tpsDAO)
+
+    Await.result(policyService.linkSnapshotPaoToWorkspacePao(snapshotId, workspaceId, false, mock[RawlsRequestContext]),
+                 Duration.Inf
+    )
+    verify(tpsDAO).linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())
+  }
+
+  it should "throw if there are any conflicts during a dry run" in {
+    val snapshotId = UUID.randomUUID
+    val workspaceId = UUID.randomUUID
+
+    val expectedUpdateRequest = new TpsPaoSourceRequest().sourceObjectId(snapshotId).updateMode(TpsUpdateMode.DRY_RUN)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())).thenReturn(
+      Future.successful(
+        new TpsPaoUpdateResult()
+          .updateApplied(false)
+          .resultingPao(new TpsPaoGetResult())
+          .conflicts(List(new TpsPaoConflict()).asJava)
+      )
+    )
+    val policyService = new PolicyService(tpsDAO)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        policyService.linkSnapshotPaoToWorkspacePao(snapshotId, workspaceId, true, mock[RawlsRequestContext]),
+        Duration.Inf
+      )
+    }
+    verify(tpsDAO).linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())
+  }
+
+  it should "throw if there are any conflicts when linking" in {
+    val snapshotId = UUID.randomUUID
+    val workspaceId = UUID.randomUUID
+
+    val expectedUpdateRequest =
+      new TpsPaoSourceRequest().sourceObjectId(snapshotId).updateMode(TpsUpdateMode.FAIL_ON_CONFLICT)
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())).thenReturn(
+      Future.successful(
+        new TpsPaoUpdateResult()
+          .updateApplied(true)
+          .resultingPao(new TpsPaoGetResult())
+          .conflicts(List(new TpsPaoConflict()).asJava)
+      )
+    )
+    val policyService = new PolicyService(tpsDAO)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        policyService.linkSnapshotPaoToWorkspacePao(snapshotId, workspaceId, false, mock[RawlsRequestContext]),
+        Duration.Inf
+      )
+    }
+    verify(tpsDAO).linkPao(mockitoEq(expectedUpdateRequest), mockitoEq(workspaceId), any())
   }
 }
