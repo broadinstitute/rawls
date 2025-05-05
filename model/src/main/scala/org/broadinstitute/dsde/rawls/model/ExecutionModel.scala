@@ -37,7 +37,8 @@ case class SubmissionRequest(
   monitoringScript: Option[String] = None,
   monitoringImage: Option[String] = None,
   monitoringImageScript: Option[String] = None,
-  perWorkflowCostCap: Option[BigDecimal] = None
+  perWorkflowCostCap: Option[BigDecimal] = None,
+  deleteEntity: Option[String] = None
 )
 
 // This class contains values from the submission REST request
@@ -427,7 +428,8 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("monitoringScript" -> obj.monitoringScript.toJson),
           Option("monitoringImage" -> obj.monitoringImage.toJson),
           Option("monitoringImageScript" -> obj.monitoringImageScript.toJson),
-          obj.perWorkflowCostCap.map("perWorkflowCostCap" -> _.toJson)
+          obj.perWorkflowCostCap.map("perWorkflowCostCap" -> _.toJson),
+          obj.deleteEntity.map("deleteEntity" -> _.toJson)
         ).flatten: _*
       )
 
@@ -455,7 +457,8 @@ trait ExecutionJsonSupport extends JsonSupport {
         monitoringScript = fields.get("monitoringScript").flatMap(_.convertTo[Option[String]]),
         monitoringImage = fields.get("monitoringImage").flatMap(_.convertTo[Option[String]]),
         monitoringImageScript = fields.get("monitoringImageScript").flatMap(_.convertTo[Option[String]]),
-        perWorkflowCostCap = fields.get("perWorkflowCostCap").map(_.convertTo[BigDecimal])
+        perWorkflowCostCap = fields.get("perWorkflowCostCap").map(_.convertTo[BigDecimal]),
+        deleteEntity = fields.get("deleteEntity").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
