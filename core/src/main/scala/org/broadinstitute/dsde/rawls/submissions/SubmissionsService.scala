@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   SubmissionCostService
 }
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -103,7 +103,8 @@ object SubmissionsService {
     genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
     config: WorkspaceServiceConfig,
     workspaceRepository: WorkspaceRepository,
-    workspaceSettingRepository: WorkspaceSettingRepository
+    workspaceSettingRepository: WorkspaceSettingRepository,
+    entityServiceConstructor: RawlsRequestContext => EntityService
   )(
     ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): SubmissionsService =
@@ -124,7 +125,8 @@ object SubmissionsService {
       genomicsServiceConstructor,
       config,
       workspaceRepository,
-      workspaceSettingRepository
+      workspaceSettingRepository,
+      entityServiceConstructor
     )
 
   def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
@@ -178,7 +180,8 @@ class SubmissionsService(
   val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
   config: WorkspaceServiceConfig,
   val workspaceRepository: WorkspaceRepository,
-  workspaceSettingRepository: WorkspaceSettingRepository
+  workspaceSettingRepository: WorkspaceSettingRepository,
+  entityServiceConstructor: RawlsRequestContext => EntityService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -537,6 +540,15 @@ class SubmissionsService(
         ps.failureMode,
         ps.header
       )
+      _ <- getSetToDelete(submissionRequest)
+        .map { setToDelete =>
+          entityServiceConstructor(ctx)
+            .deleteEntities(workspaceName, Seq(setToDelete), None, None)
+            .recover { case e =>
+              logger.error(s"Failed to delete entities: ", e)
+            }
+        }
+        .getOrElse(Future.successful(()))
     } yield SubmissionReport(
       submissionRequest,
       submission.submissionId,
@@ -546,6 +558,19 @@ class SubmissionsService(
       ps.header,
       ps.inputs.filter(_.inputResolutions.forall(_.error.isEmpty))
     )
+
+  def getSetToDelete(
+    submissionRequest: SubmissionRequest
+  ): Option[AttributeEntityReference] =
+    submissionRequest.deleteEntity match {
+      case Some(value) =>
+        for {
+          entityType <- submissionRequest.entityType
+          entityName <- submissionRequest.entityName
+          if value == s"$entityType/$entityName"
+        } yield AttributeEntityReference(entityType, entityName)
+      case _ => None
+    }
 
   @VisibleForTesting
   def validateCostCap(costCap: Option[BigDecimal]): Unit = {

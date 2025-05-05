@@ -460,6 +460,14 @@ object Boot extends IOApp with LazyLogging {
           workbenchMetricBaseName = metricsPrefix
         )
 
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit")
+      )
+
       val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
         slickDataSource,
         entityManager,
@@ -476,7 +484,8 @@ object Boot extends IOApp with LazyLogging {
         genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
-        new WorkspaceSettingRepository(slickDataSource)
+        new WorkspaceSettingRepository(slickDataSource),
+        entityServiceConstructor
       )
 
       val billingRepository = new BillingRepository(slickDataSource)
@@ -552,15 +561,6 @@ object Boot extends IOApp with LazyLogging {
                                     samDAO,
                                     appDependencies.googleStorageService
         )(implicitly, IORuntime.global)
-
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
-        slickDataSource,
-        samDAO,
-        workbenchMetricBaseName = metricsPrefix,
-        entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Option(workspaceSettingServiceConstructor)
-      )
 
       val googleProjectRegistrationServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService =
         new GoogleProjectRegistrationService(_, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)

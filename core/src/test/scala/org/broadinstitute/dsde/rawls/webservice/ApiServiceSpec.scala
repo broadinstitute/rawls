@@ -334,6 +334,9 @@ trait ApiServiceSpec
       workbenchMetricBaseName
     )
 
+    val entityServiceConstructor =
+      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
+
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig)
@@ -451,15 +454,8 @@ trait ApiServiceSpec
       genomicsServiceConstructor,
       workspaceServiceConfig,
       new WorkspaceRepository(slickDataSource),
-      new WorkspaceSettingRepository(slickDataSource)
-    ) _
-
-    override val entityServiceConstructor = EntityService.constructor(
-      slickDataSource,
-      samDAO,
-      workbenchMetricBaseName,
-      entityManager,
-      1000
+      new WorkspaceSettingRepository(slickDataSource),
+      entityServiceConstructor
     ) _
 
     override val googleProjectRegServiceConstructor =
