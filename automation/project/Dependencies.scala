@@ -57,7 +57,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "v0.0.327-SNAP"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "v0.0.382-SNAP"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),
@@ -71,5 +71,10 @@ object Dependencies {
     dataRepo,
     dataRepoJersey,
     workspaceManager
+  )
+
+  val transitiveDependencyOverrides = Seq(
+    // override cats-parse to address conflicting dependency versions for scala-uri
+    "org.typelevel" %% "cats-parse" % "1.1.0"
   )
 }
