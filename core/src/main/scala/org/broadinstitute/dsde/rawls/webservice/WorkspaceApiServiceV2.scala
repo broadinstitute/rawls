@@ -127,6 +127,19 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                   }
                 }
               }
+            } ~
+            pathPrefix("billingProject") {
+              pathEndOrSingleSlash {
+                patch {
+                  entity(as[WorkspaceRequestUpdateBilling]) { updateRequest =>
+                    complete {
+                      workspaceServiceConstructor(ctx)
+                        .updateWorkspaceBillingProject(workspaceName, updateRequest.newBillingProjectName)
+                        .map(_ => StatusCodes.NoContent)
+                    }
+                  }
+                }
+              }
             }
         } ~
           pathPrefix("bucketMigration") {
