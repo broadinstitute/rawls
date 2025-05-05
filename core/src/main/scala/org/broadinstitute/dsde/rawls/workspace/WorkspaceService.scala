@@ -706,6 +706,7 @@ class WorkspaceService(
           )
       }
 
+      // Destination billing/namespace must not contain a workspace with the same workspace name
       workspaceWithNameExists <- workspaceRepository.getWorkspace(
         WorkspaceName(newBillingProjectName, workspaceName.name)
       )
@@ -720,34 +721,46 @@ class WorkspaceService(
           )
         case None => Future.successful()
       }
-    } yield true // Call updateWorkspaceBillingProject
-  }
 
-  def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
-                                    destBillingProject: RawlsBillingProject
-  ): Future[Unit] =
-    for {
+      // Source workspace must exist
       workspace <- workspaceRepository.getWorkspace(workspaceName)
       _ = workspace match {
-        case Some(ws) =>
-          // change billing account for the workspace google project
-          if (ws.currentBillingAccountOnGoogleProject != destBillingProject.billingAccount) {
-            gcsDAO.setBillingAccount(ws.googleProjectId, destBillingProject.billingAccount, ctx.toTracingContext)
-          }
-          // TODO: change IAM permissions (on bucket) --> if failure, change billing back to original
-
-          // TODO: change SAM permissions --> if failure, change IAM and billing back??
-
-          // update DB record for the workspace (namespace and currentBillingAccount)
-          workspaceRepository.updateBilling(ws.workspaceIdAsUUID, destBillingProject.projectName.value)
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
-            )
+        case Some(ws) => Future.successful() // Call updateWorkspaceBillingProject??
+        case None => Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
           )
+        )
       }
+
+    } yield true
+  }
+
+  def updateWorkspaceBillingProject(workspace: Workspace,
+                                    destBillingProject: RawlsBillingProject
+                                   ): Future[Unit] = {
+    for {
+      // Check if billing is enabled
+      billingInfo <- gcsDAO.getBillingInfoForGoogleProject(workspace.googleProjectId)
+      _ <- if (!billingInfo.getBillingEnabled) {
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Billing is not enabled for project ${workspace.googleProjectId}")
+          )
+        )
+      } else Future.successful(())
+
+      // Change billing account
+      _ <- gcsDAO.setBillingAccount(workspace.googleProjectId, destBillingProject.billingAccount, ctx.toTracingContext)
+
+      // TODO: change IAM permissions (on bucket) --> if failure, change billing back to original
+      // TODO: change SAM permissions --> if failure, change IAM and billing back??
+
+      // Update DB record for the workspace
+      _ <- workspaceRepository.updateBilling(workspace.workspaceIdAsUUID, destBillingProject.projectName.value)
+
     } yield ()
+  }
 
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     for {
