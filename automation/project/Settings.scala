@@ -40,8 +40,9 @@ object Settings {
     organization  := "org.broadinstitute.dsde.firecloud",
     scalaVersion  := "2.13.16",
     resolvers ++= commonResolvers,
-    scalacOptions ++= commonCompilerSettings
-  )
+    scalacOptions ++= commonCompilerSettings,
+      dependencyOverrides ++= transitiveDependencyOverrides
+    )
 
   //the full list of settings for the root project that's ultimately the one we build into a fat JAR and run
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
