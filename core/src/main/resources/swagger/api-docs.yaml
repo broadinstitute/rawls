@@ -18,6 +18,7 @@ tags:
   - name: notifications
   - name: servicePerimeters
   - name: snapshots_v2
+  - name: snapshots_v3
   - name: status
   - name: submissions
   - name: users
@@ -2406,6 +2407,34 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: renameEntityAttribute
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/quicksilverMigration:
+    post:
+      tags:
+        - entities
+      summary: DO NOT USE. Migrates legacy data entities to compact data entities.
+      description: |
+        Compact data entities are not fully supported at this time. Calling this API
+        will cause you to lose access to all of your data tables. This is not reversible.
+        This API may be changed at any time, without warning.
+      operationId: quicksilver_migration
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: Consent to execute
+        content:
+          text/plain:
+            schema:
+              description: Enter your consent for executing this API.
+              type: string
+        required: true
+      responses:
+        200:
+          description: Migration complete.
+          content: { }
+        204:
+          description: No migration performed.
+          content: { }
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
     get:
       tags:
@@ -3790,6 +3819,7 @@ paths:
       summary: List snapshots
       description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
       operationId: enumerateDataRepoSnapshot_v2
+      deprecated: true
       parameters:
         - name: offset
           in: query
@@ -3833,6 +3863,7 @@ paths:
       summary: Create a snapshot
       description: Add a reference to a snapshot in the Terra Data Repo
       operationId: createDataRepoSnapshot_v2
+      deprecated: true
       requestBody:
         description: Reference to the Data Repo snapshot
         content:
@@ -3866,6 +3897,7 @@ paths:
       summary: Get a snapshot
       description: Get a reference to a snapshot in the Terra Data Repo
       operationId: getDataRepoSnapshot_v2
+      deprecated: true
       responses:
         200:
           description: OK
@@ -3884,6 +3916,7 @@ paths:
     patch:
       summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
       operationId: updateDataRepoSnapshot_v2
+      deprecated: true
       tags:
         - snapshots_v2
       requestBody:
@@ -3910,6 +3943,7 @@ paths:
       description: Delete a workspace's reference to a snapshot in the Terra Data
         Repo
       operationId: deleteDataRepoSnapshot_v2
+      deprecated: true
       responses:
         204:
           description: Successful Request
@@ -3932,6 +3966,7 @@ paths:
       summary: Get a snapshot by name
       description: Get a reference to a snapshot in the Terra Data Repo by its name
       operationId: getDataRepoSnapshotByName_v2
+      deprecated: true
       responses:
         200:
           description: OK
@@ -3956,6 +3991,7 @@ paths:
       summary: List snapshots
       description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
       operationId: enumerateDataRepoSnapshotByWorkspaceId
+      deprecated: true
       parameters:
         - name: offset
           in: query
@@ -3999,6 +4035,7 @@ paths:
       summary: Create a snapshot
       description: Add a reference to a snapshot in the Terra Data Repo
       operationId: createDataRepoSnapshotByWorkspaceId
+      deprecated: true
       requestBody:
         description: Reference to the Data Repo snapshot
         content:
@@ -4013,6 +4050,69 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v3:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    post:
+      tags:
+        - snapshots_v3
+      summary: Add references to snapshots in the Terra Data Repo
+      description: Add references to snapshots in the Terra Data Repo
+      operationId: createSnapshotsByWorkspaceName
+      requestBody:
+        description: References to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              type: array
+              description: List of snapshot IDs to add to the workspace
+              items:
+                type: string
+                format: uuid
+        required: true
+      responses:
+        204:
+          description: Created
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/{workspaceId}/snapshots/v3:
+    parameters:
+      - $ref: '#/components/parameters/workspaceIdPathParam'
+    post:
+      tags:
+        - snapshots_v3
+      summary: Add references to snapshots in the Terra Data Repo
+      description: Add references to snapshots in the Terra Data Repo
+      operationId: createSnapshotsByWorkspaceId
+      requestBody:
+        description: References to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              type: array
+              description: List of snapshot IDs to add to the workspace
+              items:
+                type: string
+                format: uuid
+        required: true
+      responses:
+        204:
+          description: Created
         404:
           description: Workspace or snapshot not found
           content:
@@ -5146,6 +5246,9 @@ components:
           minimum: 0.01
           maximum: 9999999999.99
           multipleOf: 0.01
+        deleteEntity:
+          type: string
+          description: Root entity to delete after submission in the form [entityType]/[entityName].  If it matches the submission entity, will delete intermediate set entity created for submission.
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:

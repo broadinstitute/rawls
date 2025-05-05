@@ -558,14 +558,14 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def expressionValidator: ExpressionValidator = new DataRepoEntityExpressionValidator(snapshotModel)
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition],
+  override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition],
+  override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] =
+  ): Future[Source[Entity, _]] =
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
 
   override def copyEntities(sourceWorkspaceContext: Workspace,

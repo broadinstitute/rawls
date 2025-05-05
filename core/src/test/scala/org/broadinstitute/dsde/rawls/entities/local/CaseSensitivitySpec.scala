@@ -2,8 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.ConfigFactory
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
@@ -485,7 +484,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             )
             val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
             // perform upsert
-            provider.batchUpsertEntities(Seq(upsert), testContext).futureValue
+            provider.batchUpsertEntities(Source.single(upsert), testContext).futureValue
 
             // get database-level entity record for the entity containing the reference
             val entityRecordContainingReference = runAndWait(
@@ -534,7 +533,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val op = AddUpdateAttribute(fooAttribute, AttributeString("updated"))
             val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
             // perform upsert
-            provider.batchUpsertEntities(Seq(upsert), testContext).futureValue
+            provider.batchUpsertEntities(Source.single(upsert), testContext).futureValue
 
             // get actual entities, after upsert
             val entitiesAfterUpsert = getAllEntities(testWorkspace.workspace)
@@ -578,7 +577,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             val op = AddUpdateAttribute(fooAttribute, AttributeString("updated"))
             val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
             // perform upsert
-            provider.batchUpdateEntities(Seq(upsert), testContext).futureValue
+            provider.batchUpdateEntities(Source.single(upsert), testContext).futureValue
 
             // get actual entities, after upsert
             val entitiesAfterUpdate = getAllEntities(testWorkspace.workspace)
@@ -824,7 +823,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
-        provider.batchUpsertEntities(updateDefinition, testContext).futureValue
+        provider.batchUpsertEntities(Source(updateDefinition), testContext).futureValue
 
         // get our entity
         val entity = provider.getEntity("cat", "005", testContext).futureValue
@@ -853,7 +852,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
-        provider.batchUpdateEntities(updateDefinition, testContext).futureValue
+        provider.batchUpdateEntities(Source(updateDefinition), testContext).futureValue
 
         // get our entity
         val entity = provider.getEntity("cat", "005", testContext).futureValue
