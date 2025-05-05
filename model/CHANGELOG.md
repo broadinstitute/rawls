@@ -12,5 +12,6 @@ Added:
 - Added `id` field to `RawlsBillingProjectResponse` response
 - Added `getBillingProjectById` API
 - Removed `BucketUsageResponse` response
+- Added `deleteEntity` field to `SubmissionRequest`
 
-SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.327-SNAP"`
+SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "v0.0.382-SNAP"`
