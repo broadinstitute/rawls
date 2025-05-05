@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -111,12 +112,16 @@ object EntityManager {
                            cacheEnabled: Boolean,
                            queryTimeout: Duration,
                            metricsPrefix: String
-  )(implicit ec: ExecutionContext): EntityManager = {
+  )(implicit ec: ExecutionContext, system: ActorSystem): EntityManager = {
     // create the EntityManager along with its associated provider-builders. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder =
-      new LocalEntityProviderBuilder(dataSource, cacheEnabled, queryTimeout, metricsPrefix) // implicit executionContext
+      new LocalEntityProviderBuilder(dataSource,
+                                     cacheEnabled,
+                                     queryTimeout,
+                                     metricsPrefix
+      ) // implicit executionContext, system
     val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO,
                                                                           dataRepoDAO,
                                                                           samDAO,

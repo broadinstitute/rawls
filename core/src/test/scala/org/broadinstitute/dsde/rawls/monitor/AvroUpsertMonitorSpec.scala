@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
+import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -195,13 +196,13 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     when(
       mockEntityService.batchUpdateEntitiesInternal(
         any[WorkspaceName],
-        any[Seq[EntityUpdateDefinition]],
+        any[Source[EntityUpdateDefinition, _]],
         any[Boolean],
         any[Option[DataReferenceName]],
         any[Option[GoogleProjectId]],
         any[RawlsRequestContext]
       )
-    ).thenReturn(Future(Seq.empty[Entity]))
+    ).thenReturn(Future(Source.empty[Entity]))
 
     val mockEntityServiceConstructor: RawlsRequestContext => EntityService = _ => mockEntityService
 
@@ -1094,7 +1095,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       eventually[Unit](Timeout(timeout), Interval(interval)) {
         verify(mockEntityService, times(1)).batchUpdateEntitiesInternal(
           any[WorkspaceName],
-          any[Seq[EntityUpdateDefinition]],
+          any[Source[EntityUpdateDefinition, _]],
           ArgumentMatchers.eq(expectation.isUpsert),
           any[Option[DataReferenceName]],
           any[Option[GoogleProjectId]],

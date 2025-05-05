@@ -460,6 +460,14 @@ object Boot extends IOApp with LazyLogging {
           workbenchMetricBaseName = metricsPrefix
         )
 
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit")
+      )
+
       val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
         slickDataSource,
         entityManager,
@@ -476,15 +484,22 @@ object Boot extends IOApp with LazyLogging {
         genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
-        new WorkspaceSettingRepository(slickDataSource)
+        new WorkspaceSettingRepository(slickDataSource),
+        entityServiceConstructor
       )
 
+      val billingRepository = new BillingRepository(slickDataSource)
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+      val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
+
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
-        slickDataSource,
+        workspaceRepository,
         samDAO,
         workspaceManagerDAO,
         appConfigManager.conf.getString("dataRepo.terraInstanceName"),
-        dataRepoDAO
+        dataRepoDAO,
+        workspaceServiceConstructor,
+        policyService
       )
 
       val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(
@@ -500,9 +515,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
-      val billingRepository = new BillingRepository(slickDataSource)
-      val workspaceRepository = new WorkspaceRepository(slickDataSource)
-      val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
+
       val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
@@ -548,15 +561,6 @@ object Boot extends IOApp with LazyLogging {
                                     samDAO,
                                     appDependencies.googleStorageService
         )(implicitly, IORuntime.global)
-
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
-        slickDataSource,
-        samDAO,
-        workbenchMetricBaseName = metricsPrefix,
-        entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Option(workspaceSettingServiceConstructor)
-      )
 
       val googleProjectRegistrationServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService =
         new GoogleProjectRegistrationService(_, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)

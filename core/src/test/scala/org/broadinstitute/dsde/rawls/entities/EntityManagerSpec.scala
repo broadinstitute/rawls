@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -31,6 +32,7 @@ import scala.concurrent.{Await, Future}
 class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+  implicit private val system: ActorSystem = ActorSystem("EntityManagerSpec")
 
   val defaultRequestContext: RawlsRequestContext =
     RawlsRequestContext(

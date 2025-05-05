@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -60,14 +61,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
 
   override def batchUpdateEntities(
-    entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition],
+    entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] = ???
+  ): Future[Source[Entity, _]] = ???
 
   override def batchUpsertEntities(
-    entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition],
+    entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] = ???
+  ): Future[Source[Entity, _]] = ???
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
