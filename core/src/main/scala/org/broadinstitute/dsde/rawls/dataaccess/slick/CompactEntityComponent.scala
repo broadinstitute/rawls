@@ -81,6 +81,11 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
+  /**
+   * Get all entities of the given type in workspace
+   *
+   * `execution plan: simple select; indexed by idx_entity_type_name; using where`
+   */
   def getEntitiesOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[CompactEntityRecord]] = {
     val selectStatement: SQLActionBuilder =
       sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
@@ -168,9 +173,11 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   /**
    * Delete all rows in ENTITY_REFS for the specified "from" ids
    *
-   * Delete from ENTITY_REFS where to_id not in (toIds) and from_id in ?
+   * Delete from ENTITY_REFS where from_id in ?
    *
    * Returns the number of rows deleted.
+   *
+   * `execution plan: Index range scan; using where. indexed by unq_from_to`
    *
    */
   def deleteAllReferences(fromIds: Set[Long]): ReadWriteAction[Int] = {
@@ -234,7 +241,13 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
-  // copied from EntityComponent
+  /**
+   * Soft-deletes the given entities: removes their attributes and sets deleted=1 and deletedDate=now
+   * Does not remove rows from ENTITY_REFS table
+   *
+   * `execution plan: Index range scan; using where. Index: idx_entity_type_name.`
+   */
+  // the only difference between this and the method in EntityComponent is that this method also sets attributes=null
   def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
     // get unique suffix for renaming
     val renameSuffix = "_" + driverComponent.getSufficientlyRandomSuffix(1000000000) // 1 billion
@@ -269,6 +282,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   // Gets any entities that have references to the ids in the given list
+  // `execution plan: nested loop; using where. Index: idx_to.`
   def getReferencingEntities(toIds: Set[Long]): ReadAction[Seq[AttributeEntityReference]] = {
     val toIdsList = reduceSqlActionsWithDelim(toIds.map(id => sql"$id").toSeq, sql",")
     val query =
