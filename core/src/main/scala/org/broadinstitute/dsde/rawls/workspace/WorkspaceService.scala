@@ -643,6 +643,112 @@ class WorkspaceService(
       }
     }
 
+  def updateWorkspaceBillingProject(workspaceName: WorkspaceName, newBillingProjectName: String): Future[Boolean] = {
+    if (workspaceName.namespace == newBillingProjectName) {
+      RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, s"Workspace billing is already set to $newBillingProjectName")
+      )
+    }
+    val sourceBillingProjectName = RawlsBillingProjectName(workspaceName.namespace)
+    val destBillingProjectName = RawlsBillingProjectName(newBillingProjectName)
+    for {
+      // User must be an owner of both the source and destination billing projects
+      _ <- requireBillingProjectOwnerAccess(sourceBillingProjectName, ctx)
+      _ <- requireBillingProjectOwnerAccess(destBillingProjectName, ctx)
+
+      sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
+      destBillingProject <- getBillingProjectContext(destBillingProjectName)
+
+      // Validate servicePerimeter
+      _ <-
+        if (sourceBillingProject.servicePerimeter != destBillingProject.servicePerimeter) {
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Source and destination billing must have the same service perimeter, if any"
+              )
+            )
+          )
+        } else Future.successful(())
+      // The source and destination billing projects must exist
+      sourceBilling = billingRepository.getBillingProject(sourceBillingProjectName).flatMap {
+        case Some(billing) =>
+          if (billing.landingZoneId.nonEmpty) {
+            Future.failed(
+              RawlsExceptionWithErrorReport(
+                ErrorReport(StatusCodes.NotFound, s"Billing profile ${workspaceName.namespace} must be GCP")
+              )
+            )
+          } else Future.successful()
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Billing project ${workspaceName.namespace} not found")
+            )
+          )
+      }
+
+      destBilling = billingRepository.getBillingProject(destBillingProjectName).flatMap {
+        case Some(billing) =>
+          if (billing.landingZoneId.nonEmpty) {
+            Future.failed(
+              RawlsExceptionWithErrorReport(
+                ErrorReport(StatusCodes.NotFound, s"Billing profile ${workspaceName.namespace} must be GCP")
+              )
+            )
+          } else Future.successful()
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Billing project $newBillingProjectName not found")
+            )
+          )
+      }
+
+      workspaceWithNameExists <- workspaceRepository.getWorkspace(
+        WorkspaceName(newBillingProjectName, workspaceName.name)
+      )
+      _ = workspaceWithNameExists match {
+        case Some(ws) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound,
+                          s"Workspace ${workspaceName.name} already exists under billing project $newBillingProjectName"
+              )
+            )
+          )
+        case None => Future.successful()
+      }
+    } yield true // Call updateWorkspaceBillingProject
+  }
+
+  def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
+                                    destBillingProject: RawlsBillingProject
+  ): Future[Unit] =
+    for {
+      workspace <- workspaceRepository.getWorkspace(workspaceName)
+      _ = workspace match {
+        case Some(ws) =>
+          // change billing account for the workspace google project
+          if (ws.currentBillingAccountOnGoogleProject != destBillingProject.billingAccount) {
+            gcsDAO.setBillingAccount(ws.googleProjectId, destBillingProject.billingAccount, ctx.toTracingContext)
+          }
+          // TODO: change IAM permissions (on bucket) --> if failure, change billing back to original
+
+          // TODO: change SAM permissions --> if failure, change IAM and billing back??
+
+          // update DB record for the workspace (namespace and currentBillingAccount)
+          workspaceRepository.updateBilling(ws.workspaceIdAsUUID, destBillingProject.projectName.value)
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+            )
+          )
+      }
+    } yield ()
+
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     for {
       workspacesForUser <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)

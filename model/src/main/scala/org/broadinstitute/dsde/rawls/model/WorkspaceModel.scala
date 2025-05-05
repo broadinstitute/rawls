@@ -201,6 +201,12 @@ case class WorkspaceRequest(
   def path: String = toWorkspaceName.path
 }
 
+case class WorkspaceRequestUpdateBilling(
+  namespace: String,
+  name: String,
+  newBillingProjectName: String
+)
+
 case class GoogleProjectId(value: String) extends ValueObject
 
 // Google folder identifiers of the form "folders/123456789"
